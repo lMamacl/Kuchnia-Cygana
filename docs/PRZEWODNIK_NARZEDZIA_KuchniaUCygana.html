@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KuchniaUCygana - Przewodnik narzedzi i uruchomienia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1115;
+    --bg2:#171a21;
+    --panel:#1f2430;
+    --ink:#e8ecf2;
+    --muted:#a8b0bf;
+    --line:#30384a;
+    --accent:#5cc8ff;
+    --ok:#62d26f;
+    --warn:#ffcc66;
+    --bad:#ff7b7b;
+    --sidebar:290px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Geist,system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;line-height:1.65}
+  code,pre{font-family:"Geist Mono",monospace}
+  #sidebar{position:fixed;left:0;top:0;width:var(--sidebar);height:100vh;overflow:auto;background:var(--bg2);border-right:1px solid var(--line);padding:22px 16px}
+  #sidebar h1{font-size:15px;line-height:1.35;color:var(--accent);margin-bottom:6px}
+  #sidebar p{font-size:12px;color:var(--muted);margin-bottom:16px}
+  #sidebar a{display:block;color:#c7d0e0;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
+  #sidebar a:hover{background:rgba(92,200,255,.08)}
+  #main{margin-left:var(--sidebar);width:100%;padding:34px 42px 90px;max-width:1200px}
+  .hero{background:linear-gradient(120deg,#1b2130,#152635);border:1px solid var(--line);border-radius:12px;padding:24px 26px;margin-bottom:26px}
+  .hero h2{font-size:30px;line-height:1.2;margin-bottom:8px}
+  .hero p{color:var(--muted)}
+  .section{margin-top:36px}
+  .section h3{font-size:23px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:14px}
+  .section h4{font-size:17px;margin:20px 0 10px;color:#d5e8ff}
+  .section p{margin-bottom:10px;color:#d7ddeb}
+  .list{padding-left:20px}
+  .list li{margin:6px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+  .tag{display:inline-block;font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:#c9d7ed;margin-bottom:8px}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  .grid{display:grid;gap:12px}
+  @media (min-width:960px){.grid.cols2{grid-template-columns:1fr 1fr}}
+  .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}
+  table{width:100%;border-collapse:collapse;background:var(--panel)}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:#252b3a;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#bcd5ef}
+  .cb{background:#11151f;border:1px solid var(--line);border-radius:10px;overflow:auto;margin:10px 0}
+  .cb .head{font-size:12px;padding:8px 10px;border-bottom:1px solid var(--line);color:#9eb4cf;background:#1a2130}
+  .cb pre{padding:10px 12px;font-size:12.5px;line-height:1.6;white-space:pre-wrap}
+  .check li{list-style:none;padding-left:26px;position:relative}
+  .check li::before{content:"[ ]";position:absolute;left:0;color:var(--muted)}
+  .note{border-left:3px solid var(--accent);padding:10px 12px;background:rgba(92,200,255,.07);border-radius:8px;margin:10px 0}
+  .foot{margin-top:45px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+  <aside id="sidebar">
+    <h1>KuchniaUCygana</h1>
+    <p>Przewodnik narzedzi, konfiguracji i uruchamiania projektu</p>
+    <a href="#cel">01. Cel dokumentu</a>
+    <a href="#stack">02. Narzedzia i role</a>
+    <a href="#repo">03. Co gdzie trafia</a>
+    <a href="#instalacja">04. Instalacja krok po kroku</a>
+    <a href="#sekrety">05. Dane i sekrety</a>
+    <a href="#uruchamianie">06. Jak uruchamiac</a>
+    <a href="#db">07. Baza, OrmLite, Migrator</a>
+    <a href="#workflow">08. Workflow codzienny</a>
+    <a href="#troubleshoot">09. Najczestsze problemy</a>
+    <a href="#checklisty">10. Checklisty gotowosci</a>
+  </aside>
+
+  <main id="main">
+    <section class="hero">
+      <h2>Superdokladny przewodnik projektu</h2>
+      <p>Ten dokument prowadzi od zera do uruchomienia projektu w Visual Studio i Docker Desktop. Bez skrotow myslowych: co zainstalowac, gdzie wpisac dane, jak dziala baza i jak pracowac w zespole.</p>
+    </section>
+
+    <section id="cel" class="section">
+      <h3>01. Cel dokumentu</h3>
+      <p>Celem jest ujednolicenie sposobu pracy zespolu: kazdy developer ma identyczne kroki setupu, rozumie narzedzia i wie gdzie umieszczac kod, konfiguracje i dane.</p>
+      <div class="card">
+        <span class="tag">Dla kogo</span>
+        <ul class="list">
+          <li>Developer .NET pracujacy w <strong>Visual Studio</strong>.</li>
+          <li>Osoba uruchamiajaca aplikacje przez <strong>Docker Desktop</strong>.</li>
+          <li>Czlonek zespolu, ktory musi skonfigurowac lokalne sekrety i baze.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="stack" class="section">
+      <h3>02. Narzedzia i role</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Narzedzie</th><th>Do czego sluzy</th><th>Gdzie uzywasz</th><th>Co trzeba uzupelnic</th></tr></thead>
+          <tbody>
+            <tr><td>Visual Studio 2022</td><td>Edycja, debug, uruchamianie projektu .NET</td><td>Kod i testy</td><td>Workload ASP.NET + .NET 8 SDK</td></tr>
+            <tr><td>.NET SDK 8</td><td>Build, restore, test, run</td><td>Terminal / CI</td><td>Wersja zgodna z projektem</td></tr>
+            <tr><td>Git + GitHub</td><td>Wersjonowanie i PR</td><td>Codzienna praca</td><td>Dostep do repo, branch workflow</td></tr>
+            <tr><td>Docker Desktop</td><td>Uruchomienie aplikacji w kontenerze</td><td>Lokalny run przez compose</td><td>Plik <code>.env</code></td></tr>
+            <tr><td>SQLite</td><td>Lokalna baza danych (plik)</td><td>Lokalnie i w kontenerze</td><td>Connection string</td></tr>
+            <tr><td>ServiceStack OrmLite</td><td>DML (CRUD, zapytania)</td><td>Warstwa Infrastructure</td><td>ConnectionFactory</td></tr>
+            <tr><td>FluentMigrator</td><td>DDL (schemat tabel, wersjonowanie)</td><td>Migracje przy starcie app</td><td>Pliki migracji z numerami</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><strong>Wazne:</strong> W projekcie zakladamy podzial: <code>FluentMigrator = schema (DDL)</code>, <code>OrmLite = dane (DML)</code>.</div>
+    </section>
+
+    <section id="repo" class="section">
+      <h3>03. Co gdzie trafia w repo</h3>
+      <div class="cb">
+        <div class="head">Mapa katalogow</div>
+<pre>KuchniaUCygana/
+|- src/
+|  |- KuchniaUCygana.Web/              # MVC, Program.cs, appsettings
+|  |- KuchniaUCygana.Application/      # use-case, DTO, serwisy
+|  |- KuchniaUCygana.Domain/           # encje i kontrakty domenowe
+|  |- KuchniaUCygana.Infrastructure/   # OrmLite, migracje, integracje
+|- tests/KuchniaUCygana.Tests/         # testy unit/integration
+|- docker/Dockerfile
+|- docker-compose.yml
+|- .github/workflows/ci.yml
+|- Directory.Build.props
+|- .editorconfig
+|- stylecop.json</pre>
+      </div>
+      <div class="grid cols2">
+        <div class="card">
+          <span class="tag">Gdzie wpisujesz dane lokalne</span>
+          <ul class="list">
+            <li><code>src/KuchniaUCygana.Web/appsettings.Development.json</code></li>
+            <li><code>.env</code> (dla Docker Compose)</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag">Czego nie commitowac</span>
+          <ul class="list">
+            <li>Plikow <code>*.db</code></li>
+            <li>Plikow <code>.env</code> i <code>appsettings.Development.json</code></li>
+            <li>Uploadow z <code>wwwroot/uploads</code></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="instalacja" class="section">
+      <h3>04. Instalacja krok po kroku</h3>
+      <h4>Krok 1 - Visual Studio</h4>
+      <ul class="list">
+        <li>Zainstaluj Visual Studio 2022.</li>
+        <li>W instalatorze zaznacz workload <strong>ASP.NET and web development</strong>.</li>
+        <li>Sprawdz, czy masz .NET SDK 8.x.</li>
+      </ul>
+      <div class="cb"><div class="head">Weryfikacja .NET</div><pre>dotnet --version</pre></div>
+
+      <h4>Krok 2 - Docker Desktop</h4>
+      <ul class="list">
+        <li>Zainstaluj Docker Desktop.</li>
+        <li>Uruchom i upewnij sie, ze status to <span class="ok">Running</span>.</li>
+      </ul>
+      <div class="cb"><div class="head">Weryfikacja Docker</div><pre>docker --version
+docker compose version</pre></div>
+
+      <h4>Krok 3 - Klonowanie i restore</h4>
+      <div class="cb"><div class="head">Pobranie repo</div><pre>git clone &lt;URL_REPO&gt;
+cd KuchniaUCygana
+dotnet restore</pre></div>
+    </section>
+
+    <section id="sekrety" class="section">
+      <h3>05. Dane i sekrety - co uzupelnic przed uruchomieniem</h3>
+      <h4>A. appsettings.Development.json (uruchamianie lokalne bez Dockera)</h4>
+      <p>Plik znajduje sie w <code>src/KuchniaUCygana.Web/</code>. Uzupelnij lokalne klucze testowe.</p>
+      <div class="cb"><div class="head">Przykladowe wartosci</div><pre>{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=kuchniaucygana_dev.db"
+  },
+  "JwtSettings": {
+    "SecretKey": "lokalny_klucz_min_32_znaki_do_testow",
+    "Issuer": "KuchniaUCygana",
+    "Audience": "KuchniaUCyganaUsers",
+    "ExpiryHours": 8
+  },
+  "Stripe": { "SecretKey": "sk_test_..." },
+  "OpenAI": { "ApiKey": "sk-..." }
+}</pre></div>
+
+      <h4>B. .env (uruchamianie przez Docker)</h4>
+      <p>Skopiuj <code>.env.example</code> do <code>.env</code> i uzupelnij wartosci.</p>
+      <div class="cb"><div class="head">Plik .env</div><pre>JWT_SECRET=min_32_znakowy_klucz
+STRIPE_SECRET=sk_test_...
+OPENAI_KEY=sk-...</pre></div>
+      <div class="note"><strong>Skad pozyskac dane:</strong> Stripe Dashboard (sekcja API keys), OpenAI Dashboard (API keys), JWT key generujesz lokalnie (losowy ciag min. 32 znaki).</div>
+    </section>
+
+    <section id="uruchamianie" class="section">
+      <h3>06. Jak uruchamiac projekt</h3>
+      <div class="grid cols2">
+        <div class="card">
+          <span class="tag">Tryb 1: Visual Studio / dotnet run</span>
+          <ol class="list">
+            <li>Otworz <code>KuchniaUCygana.sln</code> w VS.</li>
+            <li>Ustaw startup project: <code>KuchniaUCygana.Web</code>.</li>
+            <li>Sprawdz <code>appsettings.Development.json</code>.</li>
+            <li>Uruchom (F5 / Ctrl+F5).</li>
+          </ol>
+        </div>
+        <div class="card">
+          <span class="tag">Tryb 2: Docker Desktop</span>
+          <ol class="list">
+            <li>Utworz i uzupelnij <code>.env</code>.</li>
+            <li>W root repo uruchom <code>docker compose up --build</code>.</li>
+            <li>Aplikacja wystartuje na porcie <code>8080</code>.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="cb"><div class="head">Komendy szybkiego startu</div><pre># lokalnie:
+dotnet run --project src/KuchniaUCygana.Web
+
+# docker:
+docker compose up --build
+
+# zatrzymanie:
+docker compose down</pre></div>
+    </section>
+
+    <section id="db" class="section">
+      <h3>07. Baza danych, OrmLite i FluentMigrator</h3>
+      <h4>Jak to dziala technicznie</h4>
+      <ul class="list">
+        <li>Connection string jest pobierany z konfiguracji (appsettings/env).</li>
+        <li><strong>FluentMigrator</strong> odpala migracje automatycznie przy starcie aplikacji.</li>
+        <li><strong>OrmLite</strong> obsluguje zapisy/odczyty danych w repozytoriach.</li>
+      </ul>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Warstwa</th><th>Odpowiedzialnosc</th><th>Przyklad</th></tr></thead>
+          <tbody>
+            <tr><td>Migracje (DDL)</td><td>Tworzenie/zmiana tabel, indeksow, kluczy</td><td><code>001_CreateUsersTable.cs</code></td></tr>
+            <tr><td>Repozytoria (DML)</td><td>CRUD i zapytania danych</td><td><code>BaseRepository.cs</code></td></tr>
+            <tr><td>Runner</td><td>Uruchomienie migracji przy starcie app</td><td><code>MigrationRunner.RunMigrations()</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><strong>Tak, kazdy developer moze miec wlasna baze.</strong> Lokalnie jest osobny plik <code>.db</code>, a przy Dockerze oddzielny volume na maszynie developera.</div>
+    </section>
+
+    <section id="workflow" class="section">
+      <h3>08. Workflow codzienny w projekcie</h3>
+      <ul class="list">
+        <li>Pracujesz na branchu <code>feature/devX-modul</code>.</li>
+        <li>Na start dnia robisz synchronizacje z <code>develop</code>.</li>
+        <li>Wrzucasz PR: <code>feature -&gt; develop</code>.</li>
+        <li>Review robi osoba inna niz autor.</li>
+        <li>Do <code>main</code> trafia kod dopiero po przejsciu przez <code>develop</code>.</li>
+      </ul>
+      <div class="cb"><div class="head">Codzienny zestaw komend</div><pre>git checkout develop
+git pull origin develop
+git checkout feature/devX-modul
+git merge develop
+
+# po zmianach:
+git add .
+git commit -m "Opis zmian"
+git push</pre></div>
+    </section>
+
+    <section id="troubleshoot" class="section">
+      <h3>09. Najczestsze problemy i rozwiazania</h3>
+      <div class="card">
+        <h4 class="warn">Aplikacja nie startuje, blad connection string</h4>
+        <p>Sprawdz, czy uzupelniles <code>appsettings.Development.json</code> albo zmienne w <code>.env</code>. Upewnij sie, ze klucz to <code>ConnectionStrings__DefaultConnection</code> (Docker) lub sekcja <code>ConnectionStrings</code> (lokalnie).</p>
+      </div>
+      <div class="card">
+        <h4 class="warn">Migracje nie tworza tabel</h4>
+        <p>Sprawdz czy klasa migracji ma atrybut <code>[Migration(nr)]</code> i czy assembly z migracjami jest skanowane w DI.</p>
+      </div>
+      <div class="card">
+        <h4 class="warn">Docker uruchamia sie, ale brak danych po restarcie</h4>
+        <p>Zweryfikuj, czy volume jest podmontowany: <code>sqlite_data:/app/data</code>. Bez tego plik DB w kontenerze zniknie po usunieciu kontenera.</p>
+      </div>
+    </section>
+
+    <section id="checklisty" class="section">
+      <h3>10. Checklisty gotowosci</h3>
+      <h4>Przed pierwszym uruchomieniem</h4>
+      <ul class="check">
+        <li>Visual Studio i .NET 8 zainstalowane</li>
+        <li>Docker Desktop dziala</li>
+        <li>Repo sklonowane i <code>dotnet restore</code> wykonane</li>
+        <li><code>appsettings.Development.json</code> uzupelniony</li>
+        <li><code>.env</code> uzupelniony (dla Dockera)</li>
+      </ul>
+      <h4>Przed push do repo</h4>
+      <ul class="check">
+        <li>Build i testy lokalnie przechodza</li>
+        <li>Brak sekretow w commitach</li>
+        <li>Brak plikow <code>.db</code> i uploadow w zmianach</li>
+        <li>Opis PR zawiera zakres i powod zmiany</li>
+      </ul>
+      <p class="foot">Dokument przeznaczony dla zespolu KuchniaUCygana. Mozna rozszerzac o kolejne moduly i integracje bez zmiany glownej logiki setupu.</p>
+    </section>
+  </main>
+</body>
+</html>

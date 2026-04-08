@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kuchnia u Cygana — Plan Uruchomienia Projektu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@300;400;500;600&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:          #f5f2ed;
+  --bg-2:        #ede9e2;
+  --bg-dark:     #1a1814;
+  --ink:         #1a1814;
+  --ink-mid:     #4a4540;
+  --ink-soft:    #8a847c;
+  --ink-ghost:   #c8c2ba;
+  --accent:      #c0392b;
+  --accent-warm: #e67e22;
+  --accent-cool: #2c3e50;
+  --green:       #27ae60;
+  --border:      #d8d0c4;
+  --border-dark: #c0b8ac;
+  --sidebar-w:   280px;
+  --r:           6px;
+  --mono:        'Geist Mono', monospace;
+  --serif:       'Instrument Serif', Georgia, serif;
+  --sans:        'Geist', system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.72;
+  display: flex;
+}
+
+/* ── SIDEBAR ── */
+#sidebar {
+  position: fixed; top: 0; left: 0;
+  width: var(--sidebar-w); height: 100vh;
+  background: var(--bg-dark);
+  overflow-y: auto; overflow-x: hidden;
+  z-index: 100;
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
+  display: flex; flex-direction: column;
+}
+#sidebar::-webkit-scrollbar { width: 3px; }
+#sidebar::-webkit-scrollbar-thumb { background: #333; }
+
+.sb-top {
+  padding: 28px 24px 20px;
+  border-bottom: 1px solid #2a2724;
+}
+.sb-logo {
+  font-family: var(--serif);
+  font-size: 18px;
+  color: #f5f2ed;
+  line-height: 1.2;
+}
+.sb-logo em { color: var(--accent); font-style: italic; }
+.sb-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: #666;
+  margin-top: 4px;
+  letter-spacing: .06em;
+}
+
+.sb-phase {
+  padding: 20px 0 4px;
+}
+.sb-phase-label {
+  padding: 0 24px 6px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #444;
+}
+.sb-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 24px;
+  text-decoration: none;
+  color: #888;
+  font-size: 12.5px;
+  transition: all .15s;
+  border-left: 2px solid transparent;
+  font-family: var(--sans);
+}
+.sb-link:hover { color: #ccc; background: rgba(255,255,255,.03); border-left-color: #444; }
+.sb-link.active { color: #f5f2ed; background: rgba(192,57,43,.08); border-left-color: var(--accent); }
+.sb-step {
+  font-family: var(--mono); font-size: 10px;
+  color: #444; min-width: 22px; text-align: right;
+}
+
+#scroll-bar {
+  position: fixed; top: 0; left: var(--sidebar-w);
+  height: 2px; background: var(--accent); z-index: 200;
+  width: 0%; transition: width .08s;
+}
+
+/* ── MAIN ── */
+#main { margin-left: var(--sidebar-w); flex: 1; min-width: 0; }
+
+/* Hero */
+.hero {
+  background: var(--bg-dark);
+  padding: 64px 72px 56px;
+  position: relative; overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255,255,255,.012) 0px,
+    rgba(255,255,255,.012) 1px,
+    transparent 1px, transparent 32px
+  );
+  pointer-events: none;
+}
+.hero-eyebrow {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: .16em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 18px;
+  display: flex; align-items: center; gap: 10px;
+}
+.hero-eyebrow::before {
+  content: ''; width: 28px; height: 1px; background: var(--accent);
+}
+.hero h1 {
+  font-family: var(--serif);
+  font-size: clamp(32px, 5vw, 52px);
+  color: #f5f2ed; line-height: 1.1;
+  margin-bottom: 16px;
+}
+.hero h1 em { color: var(--accent); font-style: italic; }
+.hero-sub {
+  color: #888; font-size: 15px;
+  max-width: 560px; line-height: 1.65;
+}
+.hero-pills {
+  display: flex; gap: 10px; margin-top: 32px; flex-wrap: wrap;
+}
+.pill {
+  font-family: var(--mono); font-size: 11px;
+  border: 1px solid #333; color: #666;
+  padding: 5px 14px; border-radius: 20px;
+  letter-spacing: .04em;
+}
+.pill.hi { border-color: var(--accent); color: var(--accent); }
+
+/* Content */
+.content { padding: 0 72px 96px; max-width: 900px; }
+
+/* Sections */
+.section { padding-top: 64px; }
+
+.sec-head {
+  display: flex; align-items: baseline; gap: 16px;
+  margin-bottom: 28px; padding-bottom: 16px;
+  border-bottom: 2px solid var(--border-dark);
+}
+.sec-num {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--accent); letter-spacing: .06em;
+  background: rgba(192,57,43,.08);
+  border: 1px solid rgba(192,57,43,.2);
+  padding: 2px 10px; border-radius: 4px; flex-shrink: 0;
+}
+.sec-head h2 {
+  font-family: var(--serif); font-size: 26px;
+  color: var(--ink); font-weight: 400;
+}
+
+h3 {
+  font-family: var(--sans); font-weight: 600;
+  font-size: 13.5px; color: var(--ink);
+  text-transform: uppercase; letter-spacing: .08em;
+  margin: 36px 0 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+h3::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+p { color: var(--ink-mid); margin-bottom: 12px; }
+strong { color: var(--ink); font-weight: 600; }
+em { color: var(--accent); font-style: normal; font-weight: 600; }
+
+/* Phase banner */
+.phase-banner {
+  display: flex; align-items: center; gap: 0;
+  margin: 40px 0 8px;
+  border-radius: var(--r);
+  overflow: hidden;
+  border: 1px solid var(--border-dark);
+}
+.phase-num {
+  background: var(--ink); color: var(--bg);
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: .1em; padding: 10px 18px;
+  white-space: nowrap; flex-shrink: 0;
+}
+.phase-title {
+  background: var(--bg-2); padding: 10px 18px;
+  font-family: var(--serif); font-size: 16px;
+  color: var(--ink); flex: 1;
+}
+.phase-owner {
+  background: var(--bg-2); padding: 10px 18px;
+  font-family: var(--mono); font-size: 11px;
+  color: var(--ink-soft); border-left: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* Steps */
+.steps { margin: 0; padding: 0; list-style: none; }
+.step {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 0 16px;
+  margin-bottom: 6px;
+  position: relative;
+}
+.step::before {
+  content: '';
+  position: absolute;
+  left: 17px; top: 38px;
+  width: 2px; bottom: -6px;
+  background: var(--border);
+}
+.step:last-child::before { display: none; }
+
+.step-dot {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--border-dark);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px;
+  color: var(--ink-soft); flex-shrink: 0;
+  z-index: 1; position: relative;
+  margin-top: 2px;
+}
+.step-dot.done  { background: var(--green); border-color: var(--green); color: white; }
+.step-dot.warn  { background: var(--accent-warm); border-color: var(--accent-warm); color: white; }
+.step-dot.crit  { background: var(--accent); border-color: var(--accent); color: white; }
+
+.step-body { padding: 4px 0 20px; }
+.step-title {
+  font-family: var(--sans); font-weight: 600;
+  font-size: 14px; color: var(--ink);
+  margin-bottom: 6px;
+}
+.step-desc { font-size: 13.5px; color: var(--ink-mid); }
+.step-desc code {
+  font-family: var(--mono); font-size: 12px;
+  background: var(--bg-2); color: var(--accent-cool);
+  padding: 1px 6px; border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+/* Code blocks */
+.cb {
+  margin: 14px 0;
+  border-radius: var(--r);
+  border: 1px solid var(--border-dark);
+  overflow: hidden;
+}
+.cb-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 14px;
+  background: var(--bg-dark);
+  border-bottom: 1px solid #2a2724;
+}
+.cb-lang {
+  font-family: var(--mono); font-size: 10px;
+  color: #555; letter-spacing: .1em; text-transform: uppercase;
+}
+.cb-copy {
+  font-family: var(--mono); font-size: 10px;
+  background: none; border: 1px solid #333;
+  color: #555; padding: 2px 9px; border-radius: 3px;
+  cursor: pointer; transition: all .15s;
+}
+.cb-copy:hover { color: #ccc; border-color: #666; }
+.cb-copy.ok { color: var(--green); border-color: var(--green); }
+
+pre {
+  background: var(--bg-dark); padding: 18px 20px;
+  overflow-x: auto;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
+}
+pre::-webkit-scrollbar { height: 3px; }
+pre::-webkit-scrollbar-thumb { background: #333; }
+pre code {
+  font-family: var(--mono); font-size: 12.5px;
+  line-height: 1.7; color: #c8c2ba; white-space: pre;
+}
+
+.kw   { color: #e06c75; }
+.str  { color: #98c379; }
+.cm   { color: #5c6370; font-style: italic; }
+.cls  { color: #e5c07b; }
+.num  { color: #d19a66; }
+.prop { color: #61afef; }
+.op   { color: #c8c2ba; }
+.path { color: #56b6c2; }
+
+/* Tables */
+.tw { overflow-x: auto; margin: 14px 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+thead tr { border-bottom: 2px solid var(--ink); }
+th {
+  padding: 10px 14px; text-align: left;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-soft); font-weight: 500;
+}
+td {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  color: var(--ink-mid); vertical-align: top;
+}
+tr:hover td { background: var(--bg-2); }
+td:first-child { color: var(--ink); font-weight: 500; }
+td code {
+  font-family: var(--mono); font-size: 11.5px;
+  background: var(--bg-2); color: var(--accent-cool);
+  padding: 1px 6px; border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+/* Callouts */
+.note {
+  display: flex; gap: 12px; padding: 13px 16px;
+  border-radius: var(--r); margin: 14px 0;
+  font-size: 13.5px;
+}
+.note-warn { background: rgba(192,57,43,.06); border: 1px solid rgba(192,57,43,.2); color: #8b3030; }
+.note-info { background: rgba(44,62,80,.06); border: 1px solid rgba(44,62,80,.2); color: #2c3e50; }
+.note-ok   { background: rgba(39,174,96,.06); border: 1px solid rgba(39,174,96,.2); color: #1e6b3c; }
+.note-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+.note strong { color: inherit; font-weight: 700; }
+
+/* Owner tags */
+.owner {
+  display: inline-block;
+  font-family: var(--mono); font-size: 10px;
+  padding: 2px 8px; border-radius: 10px;
+  margin-right: 4px; margin-bottom: 2px;
+  border: 1px solid;
+}
+.o1 { background: rgba(192,57,43,.08);  border-color: rgba(192,57,43,.3);  color: #c0392b; }
+.o2 { background: rgba(39,174,96,.08);  border-color: rgba(39,174,96,.3);  color: #27ae60; }
+.o3 { background: rgba(52,152,219,.08); border-color: rgba(52,152,219,.3); color: #2980b9; }
+.o4 { background: rgba(155,89,182,.08); border-color: rgba(155,89,182,.3); color: #8e44ad; }
+.o5 { background: rgba(230,126,34,.08); border-color: rgba(230,126,34,.3); color: #d35400; }
+.oall { background: rgba(44,62,80,.08); border-color: rgba(44,62,80,.3);   color: #2c3e50; }
+
+/* Filesystem tree box */
+.tree-box {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--r);
+  overflow: hidden; margin: 14px 0;
+}
+.tree-head {
+  padding: 8px 14px;
+  background: #222;
+  border-bottom: 1px solid #2a2724;
+  font-family: var(--mono); font-size: 10px;
+  color: #555; letter-spacing: .1em; text-transform: uppercase;
+}
+.tree-body {
+  padding: 18px 20px;
+  font-family: var(--mono); font-size: 12.5px;
+  line-height: 1.85; color: #c8c2ba;
+  white-space: pre;
+  overflow-x: auto;
+}
+.t-root { color: #e5c07b; font-weight: 500; }
+.t-dir  { color: #61afef; }
+.t-file { color: #c8c2ba; }
+.t-cmnt { color: #5c6370; font-style: italic; }
+.t-imp  { color: #e06c75; font-weight: 500; }
+.t-note { color: #98c379; }
+
+/* Branch diagram */
+.branches { margin: 14px 0; }
+.branch-row {
+  display: flex; align-items: center; gap: 0;
+  margin-bottom: 4px;
+}
+.br-label {
+  font-family: var(--mono); font-size: 11px;
+  width: 220px; flex-shrink: 0; padding: 7px 12px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-right: none; border-radius: 4px 0 0 4px;
+  display: flex; align-items: center; gap: 8px;
+}
+.br-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.br-bar {
+  flex: 1; height: 36px; border: 1px solid var(--border);
+  border-radius: 0 4px 4px 0; position: relative;
+  display: flex; align-items: center; padding: 0 14px;
+  font-size: 12px; color: var(--ink-soft);
+  background: var(--bg);
+}
+.br-protected {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  font-family: var(--mono); font-size: 9px; letter-spacing: .08em;
+  border: 1px solid; padding: 1px 7px; border-radius: 10px;
+}
+
+/* Migration range table */
+.mig-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px; margin: 14px 0;
+}
+.mig-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.mig-head {
+  padding: 8px 12px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: .06em; text-align: center;
+}
+.mig-body {
+  padding: 8px 12px; text-align: center;
+}
+.mig-range {
+  font-family: var(--mono); font-size: 13px;
+  font-weight: 600; color: var(--ink);
+}
+.mig-desc {
+  font-size: 11px; color: var(--ink-soft); margin-top: 2px;
+}
+
+/* Conflict matrix */
+.matrix { margin: 14px 0; }
+.mx-row {
+  display: flex; border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.mx-row:first-child {
+  background: var(--bg-2); font-weight: 600;
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: .06em;
+}
+.mx-cell {
+  padding: 9px 14px; flex: 1;
+  border-right: 1px solid var(--border);
+}
+.mx-cell:last-child { border-right: none; }
+.mx-cell:first-child { flex: 0 0 200px; color: var(--ink); font-weight: 500; }
+.badge-safe { color: var(--green); font-weight: 600; }
+.badge-risk { color: var(--accent); font-weight: 600; }
+.badge-rule { color: var(--accent-warm); font-weight: 600; }
+
+/* Footer */
+.doc-footer {
+  margin-top: 72px; padding: 22px 72px;
+  border-top: 2px solid var(--border-dark);
+  font-family: var(--mono); font-size: 11px;
+  color: var(--ink-ghost);
+  display: flex; justify-content: space-between;
+}
+
+@media (max-width: 860px) {
+  #sidebar { transform: translateX(-100%); }
+  #main { margin-left: 0; }
+  .content, .hero { padding: 32px 24px; }
+  .mig-grid { grid-template-columns: 1fr 1fr; }
+  #scroll-bar { left: 0; }
+}
+</style>
+</head>
+<body>
+<div id="scroll-bar"></div>
+
+<!-- ── SIDEBAR ── -->
+<nav id="sidebar">
+  <div class="sb-top">
+    <div class="sb-logo">Kuchnia u <em>Cygana</em></div>
+    <div class="sb-tag">plan uruchomienia projektu</div>
+  </div>
+
+  <div class="sb-phase">
+    <div class="sb-phase-label">Fazy</div>
+    <a class="sb-link" href="#s0"><span class="sb-step">00</span>Zanim zaczniesz</a>
+    <a class="sb-link" href="#s1"><span class="sb-step">01</span>Filesystem — układ</a>
+    <a class="sb-link" href="#s2"><span class="sb-step">02</span>GitHub — repo i gałęzie</a>
+    <a class="sb-link" href="#s3"><span class="sb-step">03</span>Bootstrap (Dev 1)</a>
+    <a class="sb-link" href="#s4"><span class="sb-step">04</span>Visual Studio — solucja</a>
+    <a class="sb-link" href="#s5"><span class="sb-step">05</span>Docker i baza danych</a>
+    <a class="sb-link" href="#s6"><span class="sb-step">06</span>Pliki globalne</a>
+    <a class="sb-link" href="#s7"><span class="sb-step">07</span>Onboarding reszty zespołu</a>
+    <a class="sb-link" href="#s8"><span class="sb-step">08</span>Podział komponentów</a>
+    <a class="sb-link" href="#s9"><span class="sb-step">09</span>Migracje — rezerwacja</a>
+    <a class="sb-link" href="#s10"><span class="sb-step">10</span>Pliki konfliktowe</a>
+    <a class="sb-link" href="#s11"><span class="sb-step">11</span>Workflow codzienne</a>
+    <a class="sb-link" href="#s12"><span class="sb-step">12</span>Checklist przed startem</a>
+  </div>
+</nav>
+
+<!-- ── MAIN ── -->
+<main id="main">
+
+<div class="hero">
+  <div class="hero-eyebrow">plan uruchomienia projektu</div>
+  <h1>Jak postawić projekt<br>żeby <em>nie płakać</em> później</h1>
+  <p class="hero-sub">Krok po kroku — od pustego folderu do działającego repo z Dockerem, solucją w Visual Studio i jasnym podziałem pracy dla 5 deweloperów.</p>
+  <div class="hero-pills">
+    <span class="pill hi">5 developerów</span>
+    <span class="pill">Git + GitHub</span>
+    <span class="pill">Docker + SQLite</span>
+    <span class="pill">ASP.NET MVC 8</span>
+    <span class="pill">Clean Architecture</span>
+  </div>
+</div>
+
+<div class="content">
+
+<!-- ── S0 ── -->
+<section class="section" id="s0">
+  <div class="sec-head">
+    <span class="sec-num">00</span>
+    <h2>Zanim zaczniesz — decyzje których zmiana boli</h2>
+  </div>
+
+  <p>Te cztery decyzje musisz podjąć <strong>zanim</strong> ktokolwiek napisze linijkę kodu. Późniejsza zmiana kosztuje godziny.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Decyzja</th><th>Wybór</th><th>Dlaczego</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Gdzie leży <code>.sln</code>?</td>
+          <td>W katalogu <strong>głównym repo</strong> (nie w <code>src/</code>)</td>
+          <td>Visual Studio domyślnie szuka <code>.sln</code> na poziomie, który otwierasz. Umieszczenie w root eliminuje problemy z ścieżkami przy klonowaniu.</td>
+        </tr>
+        <tr>
+          <td>Gdzie leży <code>docker-compose.yml</code>?</td>
+          <td>W katalogu <strong>głównym repo</strong> (nie w <code>docker/</code>)</td>
+          <td><code>docker compose up</code> działa natychmiast po wejściu do repo. Dockerfile może być w <code>docker/</code>, compose musi być na górze.</td>
+        </tr>
+        <tr>
+          <td>Czy projekt i solucja są razem?</td>
+          <td>Solucja w root, projekty w <code>src/</code></td>
+          <td>Separacja kodu produkcyjnego (<code>src/</code>) od testów (<code>tests/</code>) i dokumentacji (<code>docs/</code>) — standard branżowy.</td>
+        </tr>
+        <tr>
+          <td>Czy baza danych jest w repo?</td>
+          <td><strong>Nigdy.</strong> Plik <code>.db</code> w <code>.gitignore</code></td>
+          <td>SQLite to plik binarny. W Git zbierałby konflikty przy każdej zmianie danych. Każdy dev ma lokalną kopię; migracje odtwarzają schemat.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note note-warn">
+    <span class="note-icon">🔥</span>
+    <div><strong>Krytyczne:</strong> Niech <strong>jedna osoba</strong> (Dev 1) zrobi cały bootstrap i wypchnie gotową strukturę do <code>main</code>. Reszta klonuje gotowe repo — nie konfiguruje od zera. To eliminuje 90% problemów na starcie.</div>
+  </div>
+</section>
+
+<!-- ── S1 ── -->
+<section class="section" id="s1">
+  <div class="sec-head">
+    <span class="sec-num">01</span>
+    <h2>Filesystem — pełny układ z uzasadnieniem</h2>
+  </div>
+
+  <p>Poniżej dokładna mapa katalogu repo z wyjaśnieniem <em>dlaczego</em> każdy element jest tam gdzie jest.</p>
+
+  <div class="tree-box">
+    <div class="tree-head">filesystem layout</div>
+    <div class="tree-body"><span class="t-root">KuchniaUCygana/</span>                         <span class="t-cmnt">← root repo, tutaj git clone</span>
+│
+├── <span class="t-imp">.sln</span>  <span class="t-cmnt">← KuchniaUCygana.sln — NA POZIOMIE ROOT</span>
+│
+├── <span class="t-imp">docker-compose.yml</span>           <span class="t-cmnt">← NA POZIOMIE ROOT (kluczowe!)</span>
+├── <span class="t-imp">docker-compose.override.yml</span>  <span class="t-cmnt">← dev overrides, w .gitignore lub nie</span>
+│
+├── <span class="t-dir">.github/</span>
+│   ├── <span class="t-dir">workflows/</span>
+│   │   └── ci.yml                   <span class="t-cmnt">← GitHub Actions</span>
+│   └── pull_request_template.md
+│
+├── <span class="t-dir">docker/</span>
+│   └── Dockerfile                   <span class="t-cmnt">← może tu, compose odwołuje się ścieżką</span>
+│
+├── <span class="t-dir">src/</span>                             <span class="t-cmnt">← TYLKO kod produkcyjny</span>
+│   ├── <span class="t-dir">KuchniaUCygana.Web/</span>
+│   │   ├── <span class="t-dir">Controllers/</span>
+│   │   ├── <span class="t-dir">Views/</span>
+│   │   ├── <span class="t-dir">ViewModels/</span>
+│   │   ├── <span class="t-dir">Filters/</span>
+│   │   ├── <span class="t-dir">Middleware/</span>
+│   │   ├── <span class="t-dir">Extensions/</span>
+│   │   ├── <span class="t-dir">wwwroot/</span>
+│   │   │   └── <span class="t-dir">uploads/</span>              <span class="t-cmnt">← w .gitignore (pliki użytkowników)</span>
+│   │   ├── appsettings.json
+│   │   ├── appsettings.Development.json  <span class="t-cmnt">← w .gitignore (sekrety)</span>
+│   │   └── Program.cs
+│   │
+│   ├── <span class="t-dir">KuchniaUCygana.Application/</span>
+│   ├── <span class="t-dir">KuchniaUCygana.Domain/</span>
+│   └── <span class="t-dir">KuchniaUCygana.Infrastructure/</span>
+│
+├── <span class="t-dir">tests/</span>                           <span class="t-cmnt">← TYLKO testy</span>
+│   └── <span class="t-dir">KuchniaUCygana.Tests/</span>
+│
+├── <span class="t-dir">docs/</span>
+│   ├── ARCHITEKTURA_KuchniaUCygana.html
+│   └── SETUP_PLAN.html               <span class="t-cmnt">← ten plik</span>
+│
+├── <span class="t-imp">.editorconfig</span>                    <span class="t-cmnt">← poziom root — obowiązuje wszystkie projekty</span>
+├── <span class="t-imp">.gitignore</span>
+├── <span class="t-imp">stylecop.json</span>
+├── <span class="t-imp">Directory.Build.props</span>            <span class="t-cmnt">← poziom root — NuGet + Analyzers dla wszystkich</span>
+└── README.md</div>
+  </div>
+
+  <h3>Dlaczego takie poziomy</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Plik/folder</th><th>Poziom</th><th>Uzasadnienie</th></tr></thead>
+      <tbody>
+        <tr><td><code>*.sln</code></td><td>root</td><td>VS otwiera folder root → natychmiast widzi solucję. W <code>src/</code> trzeba by kliknąć dwa razy więcej.</td></tr>
+        <tr><td><code>docker-compose.yml</code></td><td>root</td><td><code>docker compose up</code> bez podawania ścieżki. Kontekst build (<code>context: .</code>) wskazuje root — dostęp do całego <code>src/</code>.</td></tr>
+        <tr><td><code>Directory.Build.props</code></td><td>root</td><td>MSBuild przeszukuje katalogi od projektu w górę. Plik w root trafia do WSZYSTKICH projektów automatycznie — zero konfiguracji per projekt.</td></tr>
+        <tr><td><code>.editorconfig</code></td><td>root</td><td>Działa identycznie jak <code>Directory.Build.props</code> — obejmuje wszystkie pliki w drzewie poniżej.</td></tr>
+        <tr><td><code>stylecop.json</code></td><td>root</td><td>Ścieżka w <code>Directory.Build.props</code>: <code>$(MSBuildThisFileDirectory)stylecop.json</code> — musi być w tym samym katalogu co props.</td></tr>
+        <tr><td><code>docker/Dockerfile</code></td><td><code>docker/</code></td><td>Porządek — Dockerfile to szczegół implementacyjny, nie musi być na wierzchu. Compose go wyszuka przez <code>dockerfile: docker/Dockerfile</code>.</td></tr>
+        <tr><td><code>src/</code></td><td>root/src</td><td>Separuje kod od konfiguracji repo, Dockera, docs. Standard w projektach .NET Clean Architecture.</td></tr>
+        <tr><td><code>tests/</code></td><td>root/tests</td><td>Oddzielony od <code>src/</code> — CI może budować tylko <code>src/</code> do produkcji i osobno uruchamiać <code>tests/</code>.</td></tr>
+        <tr><td><code>*.db</code> (SQLite)</td><td>poza repo</td><td>Binarny plik z danymi. Gitignore. Każdy dev ma lokalny. Struktura odtwarza się z migracji przy <code>dotnet run</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── S2 ── -->
+<section class="section" id="s2">
+  <div class="sec-head">
+    <span class="sec-num">02</span>
+    <h2>GitHub — repo, gałęzie i ochrona</h2>
+  </div>
+
+  <h3>Model gałęzi dla 5 osób</h3>
+  <div class="branches">
+    <div class="branch-row">
+      <div class="br-label"><span class="br-dot" style="background:#c0392b"></span>main</div>
+      <div class="br-bar">Produkcja. Tylko PR z develop, po review. NIE commituj bezpośrednio.
+        <span class="br-protected" style="color:#c0392b;border-color:#c0392b">PROTECTED</span>
+      </div>
+    </div>
+    <div class="branch-row">
+      <div class="br-label"><span class="br-dot" style="background:#f39c12"></span>develop</div>
+      <div class="br-bar">Integracja. Stąd każdy dev bierze swoją gałąź.
+        <span class="br-protected" style="color:#f39c12;border-color:#f39c12">PROTECTED</span>
+      </div>
+    </div>
+    <div class="branch-row">
+      <div class="br-label"><span class="br-dot" style="background:#e06c75"></span>feature/dev1-ecommerce</div>
+      <div class="br-bar">Dev 1 — e-commerce i zamówienia</div>
+    </div>
+    <div class="branch-row">
+      <div class="br-label"><span class="br-dot" style="background:#98c379"></span>feature/dev2-catalog</div>
+      <div class="br-bar">Dev 2 — katalog diet i receptury</div>
+    </div>
+    <div class="branch-row">
+      <div class="br-label"><span class="br-dot" style="background:#61afef"></span>feature/dev3-production</div>
+      <div class="br-bar">Dev 3 — produkcja i magazyn</div>
+    </div>
+    <div class="branch-row">
+      <div class="br-label"><span class="br-dot" style="background:#c678dd"></span>feature/dev4-logistics</div>
+      <div class="br-bar">Dev 4 — logistyka i dostawy</div>
+    </div>
+    <div class="branch-row">
+      <div class="br-label"><span class="br-dot" style="background:#d19a66"></span>feature/dev5-admin</div>
+      <div class="br-bar">Dev 5 — administracja, HR, helpdesk</div>
+    </div>
+  </div>
+
+  <div class="note note-info">
+    <span class="note-icon">ℹ️</span>
+    <div><strong>Zasada merge:</strong> Każdy dev merguje <code>develop</code> do swojej gałęzi (nie odwrotnie) na początku każdego dnia pracy. PR z feature → develop robi jeden wyznaczony reviewer spoza autora.</div>
+  </div>
+
+  <h3>Branch protection rules (GitHub Settings)</h3>
+  <div class="cb">
+    <div class="cb-head"><span class="cb-lang">ustawienia github</span></div>
+    <pre><code><span class="cm"># Dla gałęzi: main i develop</span>
+✅ Require a pull request before merging
+✅ Require approvals: 1
+✅ Dismiss stale pull request approvals when new commits are pushed
+✅ Require status checks to pass (GitHub Actions: build + test)
+✅ Require branches to be up to date before merging
+❌ Allow force pushes  (wyłączone!)
+❌ Allow deletions    (wyłączone!)</code></pre>
+  </div>
+
+  <h3>Konfiguracja .gitignore</h3>
+  <div class="cb">
+    <div class="cb-head"><span class="cb-lang">.gitignore</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+    <pre><code><span class="cm"># Visual Studio / JetBrains</span>
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+bin/
+obj/
+
+<span class="cm"># SQLite — KRYTYCZNE, baza NIE idzie do repo</span>
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+<span class="cm"># Sekrety — NIE commituj kluczy API</span>
+appsettings.Development.json
+appsettings.*.json
+!appsettings.json
+secrets.json
+
+<span class="cm"># Pliki upload użytkowników</span>
+src/KuchniaUCygana.Web/wwwroot/uploads/
+
+<span class="cm"># Pokrycie testów</span>
+coverage/
+*.cobertura.xml
+TestResults/
+
+<span class="cm"># Docker override (opcjonalne — możesz commitować)</span>
+docker-compose.override.yml
+
+<span class="cm"># System</span>
+.DS_Store
+Thumbs.db</code></pre>
+  </div>
+</section>
+
+<!-- ── S3 ── -->
+<section class="section" id="s3">
+  <div class="sec-head">
+    <span class="sec-num">03</span>
+    <h2>Bootstrap — co robi Dev 1 jako pierwszy</h2>
+  </div>
+
+  <p><span class="owner o1">DEV 1</span> wykonuje poniższe kroki <strong>przed</strong> zaproszeniem reszty zespołu do repo.</p>
+
+  <ul class="steps">
+    <li class="step">
+      <div class="step-dot done">1</div>
+      <div class="step-body">
+        <div class="step-title">Utwórz repo na GitHub</div>
+        <div class="step-desc">GitHub → New repository → nazwa: <code>KuchniaUCygana</code> → Private → <strong>bez</strong> inicjalizacji (bez README, bez .gitignore). Inicjalizacja będzie ręczna żeby mieć pełną kontrolę.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">2</div>
+      <div class="step-body">
+        <div class="step-title">Inicjalizuj lokalne repo</div>
+        <div class="step-desc">
+          <div class="cb"><div class="cb-head"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code>mkdir KuchniaUCygana && cd KuchniaUCygana
+git init
+git branch -M main
+<span class="cm"># Dodaj remote</span>
+git remote add origin https://github.com/TWOJ-USER/KuchniaUCygana.git</code></pre></div>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">3</div>
+      <div class="step-body">
+        <div class="step-title">Utwórz strukturę katalogów</div>
+        <div class="step-desc">
+          <div class="cb"><div class="cb-head"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code><span class="cm"># Katalogi główne</span>
+mkdir -p src tests docs docker .github/workflows
+
+<span class="cm"># Projekty .NET (puste na razie, VS je wypełni)</span>
+mkdir -p src/KuchniaUCygana.Web
+mkdir -p src/KuchniaUCygana.Application
+mkdir -p src/KuchniaUCygana.Domain
+mkdir -p src/KuchniaUCygana.Infrastructure
+mkdir -p tests/KuchniaUCygana.Tests
+
+<span class="cm"># Placeholder żeby Git śledził puste foldery</span>
+touch src/KuchniaUCygana.Web/.gitkeep
+touch src/KuchniaUCygana.Application/.gitkeep
+touch src/KuchniaUCygana.Domain/.gitkeep
+touch src/KuchniaUCygana.Infrastructure/.gitkeep
+touch tests/KuchniaUCygana.Tests/.gitkeep
+touch docs/.gitkeep</code></pre></div>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">4</div>
+      <div class="step-body">
+        <div class="step-title">Dodaj pliki konfiguracyjne na poziomie root</div>
+        <div class="step-desc">Skopiuj lub utwórz: <code>.gitignore</code>, <code>.editorconfig</code>, <code>stylecop.json</code>, <code>Directory.Build.props</code>, <code>docker-compose.yml</code>, <code>docker/Dockerfile</code>, <code>README.md</code>. Treść z dokumentu architektonicznego.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">5</div>
+      <div class="step-body">
+        <div class="step-title">Pierwsze commit i push do main</div>
+        <div class="step-desc">
+          <div class="cb"><div class="cb-head"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code>git add .
+git commit -m "chore: initial project scaffold"
+git push -u origin main</code></pre></div>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">6</div>
+      <div class="step-body">
+        <div class="step-title">Utwórz gałąź develop i ustaw ochronę</div>
+        <div class="step-desc">
+          <div class="cb"><div class="cb-head"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code>git checkout -b develop
+git push -u origin develop</code></pre></div>
+          Następnie w GitHub: Settings → Branches → Add rule dla <code>main</code> i <code>develop</code>.
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot crit">7</div>
+      <div class="step-body">
+        <div class="step-title">Zaproś resztę zespołu jako Collaborators</div>
+        <div class="step-desc">GitHub → Settings → Collaborators → Add people → wpisz username każdego deva. Rola: <strong>Write</strong> (nie Admin). Każdy dostanie maila z zaproszeniem.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">8</div>
+      <div class="step-body">
+        <div class="step-title">Utwórz solucję w Visual Studio</div>
+        <div class="step-desc">Otwórz Visual Studio → File → New → Project → <em>puste rozwiązanie</em> → lokalizacja: folder repo, nazwa: <code>KuchniaUCygana</code>. VS utworzy <code>KuchniaUCygana.sln</code> w root. Szczegóły w sekcji 04.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">9</div>
+      <div class="step-body">
+        <div class="step-title">Dodaj 4 projekty do solucji</div>
+        <div class="step-desc">W Solution Explorer: Add → New Project dla każdego z projektów. Upewnij się że lądują w <code>src/</code> a testy w <code>tests/</code>. Commit: <code>chore: add solution with project structure</code>.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot warn">10</div>
+      <div class="step-body">
+        <div class="step-title">Zainstaluj NuGet i push do develop</div>
+        <div class="step-desc">Zainstaluj <strong>wszystkie</strong> pakiety NuGet z listy w dokumencie architektonicznym. Ustaw zależności między projektami (Web → Application → Domain ← Infrastructure). Commit + push do <code>develop</code>.</div>
+      </div>
+    </li>
+  </ul>
+</section>
+
+<!-- ── S4 ── -->
+<section class="section" id="s4">
+  <div class="sec-head">
+    <span class="sec-num">04</span>
+    <h2>Visual Studio — tworzenie solucji krok po kroku</h2>
+  </div>
+
+  <div class="note note-warn">
+    <span class="note-icon">⚠️</span>
+    <div><strong>Ważne:</strong> Nie twórz projektów przez <em>New Project</em> w Visual Studio bez otwartej solucji. Zawsze najpierw otwórz solucję, potem dodaj projekty do niej.</div>
+  </div>
+
+  <h3>Kolejność tworzenia projektów</h3>
+  <ul class="steps">
+    <li class="step">
+      <div class="step-dot done">1</div>
+      <div class="step-body">
+        <div class="step-title">Blank Solution w root repo</div>
+        <div class="step-desc">File → New → Project → "Blank Solution" → Location: <code>C:\...\KuchniaUCygana</code> → Name: <code>KuchniaUCygana</code> → <strong>odznacz "Create directory for solution"</strong> (bo już masz folder).</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">2</div>
+      <div class="step-body">
+        <div class="step-title">Projekt Domain (Class Library)</div>
+        <div class="step-desc">Solution Explorer → prawy klik na solucji → Add → New Project → <strong>Class Library (.NET 8)</strong> → Name: <code>KuchniaUCygana.Domain</code> → Location: <code>...\KuchniaUCygana\src\</code><br>Usuń domyślny <code>Class1.cs</code>.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">3</div>
+      <div class="step-body">
+        <div class="step-title">Projekt Application (Class Library)</div>
+        <div class="step-desc">Analogicznie → Name: <code>KuchniaUCygana.Application</code> → Location: <code>src/</code><br>Add Reference → Domain.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">4</div>
+      <div class="step-body">
+        <div class="step-title">Projekt Infrastructure (Class Library)</div>
+        <div class="step-desc">Name: <code>KuchniaUCygana.Infrastructure</code> → Location: <code>src/</code><br>Add Reference → Application + Domain.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">5</div>
+      <div class="step-body">
+        <div class="step-title">Projekt Web (ASP.NET MVC)</div>
+        <div class="step-desc">New Project → <strong>ASP.NET Core Web App (Model-View-Controller)</strong> → Name: <code>KuchniaUCygana.Web</code> → Location: <code>src/</code><br>Add Reference → Application + Infrastructure.<br>⚠️ Infrastructure dodajesz tylko żeby zarejestrować DI w <code>Program.cs</code> — nie używasz go bezpośrednio w kontrolerach.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">6</div>
+      <div class="step-body">
+        <div class="step-title">Projekt Tests (xUnit)</div>
+        <div class="step-desc">New Project → <strong>xUnit Test Project (.NET 8)</strong> → Name: <code>KuchniaUCygana.Tests</code> → Location: <code>tests/</code><br>Add Reference → Web + Application + Infrastructure + Domain.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">7</div>
+      <div class="step-body">
+        <div class="step-title">Zweryfikuj referencje</div>
+        <div class="step-desc">
+          <div class="cb"><div class="cb-head"><span class="cb-lang">schemat zależności</span></div>
+<pre><code><span class="cm"># Dozwolone zależności między projektami:</span>
+Web          → Application, Infrastructure   <span class="cm">(tylko DI w Program.cs)</span>
+Application  → Domain
+Infrastructure → Domain, Application
+Tests        → wszystkie
+
+<span class="cm"># ZABRONIONE:</span>
+Domain       → cokolwiek
+Application  → Infrastructure
+Web          → Domain (bezpośrednio w kontrolerach)</code></pre></div>
+        </div>
+      </div>
+    </li>
+  </ul>
+
+  <h3>Struktura Solution Folders (porządek w Solution Explorer)</h3>
+  <div class="cb">
+    <div class="cb-head"><span class="cb-lang">solution explorer</span></div>
+    <pre><code>📁 KuchniaUCygana [Solution]
+│
+├── 📁 src                           <span class="cm"># Solution Folder (nie fizyczny folder)</span>
+│   ├── 📦 KuchniaUCygana.Web
+│   ├── 📦 KuchniaUCygana.Application
+│   ├── 📦 KuchniaUCygana.Domain
+│   └── 📦 KuchniaUCygana.Infrastructure
+│
+├── 📁 tests
+│   └── 📦 KuchniaUCygana.Tests
+│
+└── 📁 config                        <span class="cm"># Solution Folder na pliki konfiguracyjne</span>
+    ├── 📄 Directory.Build.props
+    ├── 📄 .editorconfig
+    ├── 📄 stylecop.json
+    └── 📄 docker-compose.yml</code></pre>
+  </div>
+  <p>Solution Folders to foldery wirtualne widoczne tylko w VS — nie tworzą katalogów na dysku. Pomagają porządkować Solution Explorer.</p>
+</section>
+
+<!-- ── S5 ── -->
+<section class="section" id="s5">
+  <div class="sec-head">
+    <span class="sec-num">05</span>
+    <h2>Docker i baza danych — co gdzie i dlaczego</h2>
+  </div>
+
+  <div class="note note-ok">
+    <span class="note-icon">✅</span>
+    <div><strong>SQLite nie potrzebuje kontenera bazy danych.</strong> To plik na dysku. Docker jest tutaj tylko do uruchomienia aplikacji webowej — nie do bazy danych jak byłoby z PostgreSQL czy MySQL.</div>
+  </div>
+
+  <h3>Tryby uruchamiania — kiedy co</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Tryb</th><th>Komenda</th><th>Kiedy</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Dev lokalny</strong></td><td><code>dotnet run</code> w <code>src/KuchniaUCygana.Web/</code></td><td>Codziennie podczas rozwoju — najszybszy feedback loop, hot-reload działa</td></tr>
+        <tr><td><strong>Dev przez Docker</strong></td><td><code>docker compose up --build</code></td><td>Test że Docker działa, sprawdzenie środowiska produkcyjnego</td></tr>
+        <tr><td><strong>Produkcja</strong></td><td>CI/CD deploy na Azure/SmarterASP</td><td>Po merge do main</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Gdzie żyje plik .db</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Środowisko</th><th>Lokalizacja pliku .db</th><th>Konfiguracja</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Dev lokalny</strong></td><td><code>src/KuchniaUCygana.Web/kuchniaucygana.db</code></td><td><code>appsettings.Development.json</code>: <code>"Data Source=kuchniaucygana.db"</code></td></tr>
+        <tr><td><strong>Docker</strong></td><td><code>/app/data/kuchniaucygana.db</code> (w kontenerze) = volume <code>sqlite_data</code></td><td><code>docker-compose.yml</code> env: <code>ConnectionStrings__DefaultConnection</code></td></tr>
+        <tr><td><strong>Azure App Service</strong></td><td><code>/home/data/kuchniaucygana.db</code></td><td>App Service Persistent Storage + env variable</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>docker-compose.yml — szczegółowy</h3>
+  <div class="cb">
+    <div class="cb-head"><span class="cb-lang">yaml</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+    <pre><code><span class="cm"># PLIK: docker-compose.yml (NA POZIOMIE ROOT REPO)</span>
+version: <span class="str">"3.9"</span>
+
+services:
+  web:
+    build:
+      context: .                     <span class="cm"># context = root repo</span>
+      dockerfile: docker/Dockerfile  <span class="cm"># Dockerfile może być w podfolderze</span>
+    container_name: kuchnia_web
+    ports:
+      - <span class="str">"8080:8080"</span>               <span class="cm"># host:kontener</span>
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Data Source=/app/data/kuchniaucygana.db
+      - JwtSettings__SecretKey=${JWT_SECRET}     <span class="cm"># z pliku .env</span>
+      - Stripe__SecretKey=${STRIPE_SECRET}
+      - OpenAI__ApiKey=${OPENAI_KEY}
+    volumes:
+      - sqlite_data:/app/data        <span class="cm"># persystuje bazę między restartami</span>
+      - uploads_data:/app/wwwroot/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: [<span class="str">"CMD"</span>, <span class="str">"curl"</span>, <span class="str">"-f"</span>, <span class="str">"http://localhost:8080/health"</span>]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  sqlite_data:
+  uploads_data:</code></pre>
+  </div>
+
+  <h3>docker-compose.override.yml — dla devu lokalnego przez Docker</h3>
+  <div class="cb">
+    <div class="cb-head"><span class="cb-lang">yaml</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+    <pre><code><span class="cm"># docker-compose.override.yml — nadpisuje ustawienia dla dev</span>
+<span class="cm"># Ten plik możesz dodać do .gitignore jeśli chcesz indywidualne ustawienia</span>
+version: <span class="str">"3.9"</span>
+
+services:
+  web:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - <span class="str">"8080:8080"</span>
+      - <span class="str">"8081:8081"</span>              <span class="cm"># HTTPS jeśli skonfigurujesz</span></code></pre>
+  </div>
+
+  <h3>Plik .env — sekrety (NIE w repozytorium)</h3>
+  <div class="cb">
+    <div class="cb-head"><span class="cb-lang">.env (dodaj do .gitignore)</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+    <pre><code>JWT_SECRET=min_32_znakowy_klucz_do_podmiany
+STRIPE_SECRET=sk_test_...
+OPENAI_KEY=sk-...</code></pre>
+  </div>
+
+  <div class="note note-warn">
+    <span class="note-icon">⚠️</span>
+    <div><strong>Plik <code>.env</code> zawsze w <code>.gitignore</code>.</strong> Każdy dev tworzy go lokalnie ręcznie. Możesz commitować <code>.env.example</code> z pustymi wartościami jako wzór.</div>
+  </div>
+</section>
+
+<!-- ── S6 ── -->
+<section class="section" id="s6">
+  <div class="sec-head">
+    <span class="sec-num">06</span>
+    <h2>Pliki globalne — treść i konfiguracja</h2>
+  </div>
+
+  <h3>Directory.Build.props</h3>
+  <div class="cb">
+    <div class="cb-head"><span class="cb-lang">xml — Directory.Build.props (root)</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+    <pre><code><span class="op">&lt;</span>Project<span class="op">&gt;</span>
+  <span class="op">&lt;</span>PropertyGroup<span class="op">&gt;</span>
+    <span class="cm">&lt;!-- Standardowe ustawienia dla wszystkich projektów --&gt;</span>
+    <span class="op">&lt;</span>TargetFramework<span class="op">&gt;</span>net8.0<span class="op">&lt;/</span>TargetFramework<span class="op">&gt;</span>
+    <span class="op">&lt;</span>Nullable<span class="op">&gt;</span>enable<span class="op">&lt;/</span>Nullable<span class="op">&gt;</span>
+    <span class="op">&lt;</span>ImplicitUsings<span class="op">&gt;</span>enable<span class="op">&lt;/</span>ImplicitUsings<span class="op">&gt;</span>
+    <span class="op">&lt;</span>EnforceCodeStyleInBuild<span class="op">&gt;</span>true<span class="op">&lt;/</span>EnforceCodeStyleInBuild<span class="op">&gt;</span>
+    <span class="op">&lt;</span>AnalysisMode<span class="op">&gt;</span>Recommended<span class="op">&lt;/</span>AnalysisMode<span class="op">&gt;</span>
+    <span class="op">&lt;</span>TreatWarningsAsErrors<span class="op">&gt;</span>false<span class="op">&lt;/</span>TreatWarningsAsErrors<span class="op">&gt;</span>
+  <span class="op">&lt;/</span>PropertyGroup<span class="op">&gt;</span>
+
+  <span class="cm">&lt;!-- Analyzery dla wszystkich projektów --&gt;</span>
+  <span class="op">&lt;</span>ItemGroup<span class="op">&gt;</span>
+    <span class="op">&lt;</span>PackageReference Include=<span class="str">"StyleCop.Analyzers"</span> Version=<span class="str">"1.2.0-beta.556"</span><span class="op">&gt;</span>
+      <span class="op">&lt;</span>PrivateAssets<span class="op">&gt;</span>all<span class="op">&lt;/</span>PrivateAssets<span class="op">&gt;</span>
+      <span class="op">&lt;</span>IncludeAssets<span class="op">&gt;</span>runtime; build; native; contentfiles; analyzers<span class="op">&lt;/</span>IncludeAssets<span class="op">&gt;</span>
+    <span class="op">&lt;/</span>PackageReference<span class="op">&gt;</span>
+    <span class="op">&lt;</span>PackageReference Include=<span class="str">"Roslynator.Analyzers"</span> Version=<span class="str">"4.12.4"</span><span class="op">&gt;</span>
+      <span class="op">&lt;</span>PrivateAssets<span class="op">&gt;</span>all<span class="op">&lt;/</span>PrivateAssets<span class="op">&gt;</span>
+      <span class="op">&lt;</span>IncludeAssets<span class="op">&gt;</span>analyzers<span class="op">&lt;/</span>IncludeAssets<span class="op">&gt;</span>
+    <span class="op">&lt;/</span>PackageReference<span class="op">&gt;</span>
+    <span class="op">&lt;</span>AdditionalFiles Include=<span class="str">"$(MSBuildThisFileDirectory)stylecop.json"</span> /<span class="op">&gt;</span>
+  <span class="op">&lt;/</span>ItemGroup<span class="op">&gt;</span>
+<span class="op">&lt;/</span>Project<span class="op">&gt;</span></code></pre>
+  </div>
+
+  <h3>appsettings.json vs appsettings.Development.json</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Plik</th><th>Commitowany?</th><th>Zawartość</th></tr></thead>
+      <tbody>
+        <tr><td><code>appsettings.json</code></td><td>✅ TAK</td><td>Struktura kluczy z pustymi/placeholder wartościami. Brak sekretów.</td></tr>
+        <tr><td><code>appsettings.Development.json</code></td><td>❌ NIE</td><td>Sekrety lokalne, connection string z lokalną ścieżką .db</td></tr>
+        <tr><td><code>.env</code></td><td>❌ NIE</td><td>Sekrety dla Docker Compose</td></tr>
+        <tr><td><code>.env.example</code></td><td>✅ TAK</td><td>Wzór z pustymi wartościami — instrukcja dla nowych deweloperów</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── S7 ── -->
+<section class="section" id="s7">
+  <div class="sec-head">
+    <span class="sec-num">07</span>
+    <h2>Onboarding — co robi każdy dev po dołączeniu</h2>
+  </div>
+
+  <p>Po tym jak Dev 1 wypchnie gotową strukturę, każdy z pozostałych deweloperów wykonuje poniższe kroki <strong>raz</strong> na swoim komputerze.</p>
+
+  <ul class="steps">
+    <li class="step">
+      <div class="step-dot done">1</div>
+      <div class="step-body">
+        <div class="step-title">Sklonuj repozytorium</div>
+        <div class="step-desc">
+          <div class="cb"><div class="cb-head"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code>git clone https://github.com/ORGANIZACJA/KuchniaUCygana.git
+cd KuchniaUCygana
+<span class="cm"># Zainstaluj zależności .NET (VS zrobi to automatycznie, ale możesz ręcznie)</span>
+dotnet restore</code></pre></div>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">2</div>
+      <div class="step-body">
+        <div class="step-title">Utwórz lokalny appsettings.Development.json</div>
+        <div class="step-desc">
+          <div class="cb"><div class="cb-head"><span class="cb-lang">json — src/KuchniaUCygana.Web/appsettings.Development.json</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code>{
+  <span class="prop">"ConnectionStrings"</span>: {
+    <span class="prop">"DefaultConnection"</span>: <span class="str">"Data Source=kuchniaucygana_dev.db"</span>
+  },
+  <span class="prop">"JwtSettings"</span>: {
+    <span class="prop">"SecretKey"</span>: <span class="str">"lokalny_klucz_min_32_znaki_do_testow"</span>
+  },
+  <span class="prop">"Stripe"</span>: { <span class="prop">"SecretKey"</span>: <span class="str">"sk_test_..."</span> },
+  <span class="prop">"OpenAI"</span>:  { <span class="prop">"ApiKey"</span>: <span class="str">"sk-..."</span> }
+}</code></pre></div>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">3</div>
+      <div class="step-body">
+        <div class="step-title">Uruchom aplikację — migracje odtworzą bazę</div>
+        <div class="step-desc">
+          <div class="cb"><div class="cb-head"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code>cd src/KuchniaUCygana.Web
+dotnet run
+<span class="cm"># Przy pierwszym uruchomieniu MigrationRunner.RunMigrations() tworzy .db</span>
+<span class="cm"># i wykonuje wszystkie migracje z Infrastructure/Persistence/Migrations/</span></code></pre></div>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">4</div>
+      <div class="step-body">
+        <div class="step-title">Przełącz na swoją gałąź feature</div>
+        <div class="step-desc">
+          <div class="cb"><div class="cb-head"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code><span class="cm"># Upewnij się że jesteś na develop</span>
+git checkout develop
+git pull origin develop
+
+<span class="cm"># Utwórz swoją gałąź (zastąp X numerem deva i nazwą modułu)</span>
+git checkout -b feature/devX-module-name
+git push -u origin feature/devX-module-name</code></pre></div>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot done">5</div>
+      <div class="step-body">
+        <div class="step-title">Otwórz solucję w Visual Studio</div>
+        <div class="step-desc">Kliknij dwukrotnie plik <code>KuchniaUCygana.sln</code> w root repo — Visual Studio otworzy całą solucję z wszystkimi projektami.</div>
+      </div>
+    </li>
+  </ul>
+</section>
+
+<!-- ── S8 ── -->
+<section class="section" id="s8">
+  <div class="sec-head">
+    <span class="sec-num">08</span>
+    <h2>Podział komponentów — kto co posiada</h2>
+  </div>
+
+  <p>Każdy dev jest <strong>właścicielem</strong> konkretnych folderów. Oznacza to: tworzysz tam pliki samodzielnie, inni pytają o pozwolenie jeśli muszą coś tam zmienić.</p>
+
+  <h3>Własność folderów</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Folder / plik</th><th>Właściciel</th><th>Uwagi</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>Controllers/OrderController.cs</code><br><code>Views/Order/</code><br><code>ViewModels/Order/</code><br><code>DTOs/Order/</code><br><code>Services/OrderService.cs</code><br><code>Entities/Orders/</code><br><code>Repositories/OrderRepository.cs</code></td>
+          <td><span class="owner o1">DEV 1</span></td>
+          <td>E-commerce, koszyk, płatności Stripe, adresy, kalendarz dostaw</td>
+        </tr>
+        <tr>
+          <td><code>Controllers/DietController.cs</code><br><code>Views/Diet/</code><br><code>DTOs/Diet/</code><br><code>Services/DietService.cs</code><br><code>Entities/Catalog/</code><br><code>Repositories/DietRepository.cs</code><br><code>ExternalServices/AI/</code></td>
+          <td><span class="owner o2">DEV 2</span></td>
+          <td>Diety, posiłki, składniki, receptury (M2M), alergeny, OpenAI opisy</td>
+        </tr>
+        <tr>
+          <td><code>Controllers/ProductionController.cs</code><br><code>Views/Production/</code><br><code>DTOs/Production/</code><br><code>Services/ProductionService.cs</code><br><code>Entities/Production/</code><br><code>Repositories/WarehouseRepository.cs</code><br><code>Pdf/QuestPdfGenerator.cs</code></td>
+          <td><span class="owner o3">DEV 3</span></td>
+          <td>Plany produkcji, magazyn, food cost, generowanie PDF kart</td>
+        </tr>
+        <tr>
+          <td><code>Controllers/LogisticsController.cs</code><br><code>Views/Logistics/</code><br><code>DTOs/Logistics/</code><br><code>Services/LogisticsService.cs</code><br><code>Entities/Logistics/</code><br><code>ExternalServices/Maps/</code></td>
+          <td><span class="owner o4">DEV 4</span></td>
+          <td>Flota, trasy, kierowcy, geokodowanie, etykiety PDF, panel kierowcy</td>
+        </tr>
+        <tr>
+          <td><code>Controllers/AdminController.cs</code><br><code>Controllers/TicketController.cs</code><br><code>Views/Admin/</code><br><code>Views/Ticket/</code><br><code>DTOs/Ticket/</code><br><code>Services/TicketService.cs</code><br><code>Entities/Admin/</code><br><code>Auth/JwtService.cs</code></td>
+          <td><span class="owner o5">DEV 5</span></td>
+          <td>Role, użytkownicy, grafiki HR, helpdesk, attachmenty, dashboard</td>
+        </tr>
+        <tr>
+          <td><code>Controllers/AccountController.cs</code><br><code>Views/Account/</code><br><code>Entities/Auth/User.cs</code></td>
+          <td><span class="owner o1">DEV 1</span> <span class="owner o5">DEV 5</span></td>
+          <td>Współdzielony — Dev 1 robi rejestrację/logowanie, Dev 5 zarządzanie rolami. Komunikacja przez PR.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Pliki współdzielone — zasady dostępu</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Plik</th><th>Właściciel PR</th><th>Reguła</th></tr></thead>
+      <tbody>
+        <tr><td><code>Program.cs</code></td><td><span class="owner o1">DEV 1</span></td><td>Rejestracja nowego serwisu: napisz w PR opisie co chcesz zarejestrować, Dev 1 dodaje do pliku i pushuje.</td></tr>
+        <tr><td><code>Infrastructure/DependencyInjection.cs</code></td><td><span class="owner o1">DEV 1</span></td><td>Jak wyżej — tylko przez opis PR.</td></tr>
+        <tr><td><code>Application/DependencyInjection.cs</code></td><td><span class="owner o1">DEV 1</span></td><td>Jak wyżej.</td></tr>
+        <tr><td><code>Domain/Common/BaseEntity.cs</code></td><td><span class="oall">CAŁY TEAM</span></td><td>Zmiana tylko przez PR z review wszystkich. Każda zmiana tu wpływa na każdą encję.</td></tr>
+        <tr><td><code>Views/Shared/_Layout.cshtml</code></td><td><span class="owner o5">DEV 5</span></td><td>Zmiana menu/nawigacji przez Dev 5. Inni nie ruszają.</td></tr>
+        <tr><td><code>Directory.Build.props</code></td><td><span class="oall">CAŁY TEAM</span></td><td>Zmiana tylko przez PR z review wszystkich.</td></tr>
+        <tr><td><code>.editorconfig</code></td><td><span class="oall">CAŁY TEAM</span></td><td>Jak wyżej.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── S9 ── -->
+<section class="section" id="s9">
+  <div class="sec-head">
+    <span class="sec-num">09</span>
+    <h2>Migracje — rezerwacja zakresów numerów</h2>
+  </div>
+
+  <p>FluentMigrator wykonuje migracje <strong>w kolejności numeru</strong>. Dwa pliki z tym samym numerem powodują błąd przy starcie. Dlatego każdy dev dostaje własny zakres — <strong>z góry, przed startem projektu</strong>.</p>
+
+  <div class="mig-grid">
+    <div class="mig-card">
+      <div class="mig-head" style="background:rgba(192,57,43,.1);color:#c0392b">DEV 1</div>
+      <div class="mig-body">
+        <div class="mig-range">001 – 099</div>
+        <div class="mig-desc">Users, Orders, Addresses, DeliveryCalendar, OrderItems</div>
+      </div>
+    </div>
+    <div class="mig-card">
+      <div class="mig-head" style="background:rgba(39,174,96,.1);color:#27ae60">DEV 2</div>
+      <div class="mig-body">
+        <div class="mig-range">100 – 199</div>
+        <div class="mig-desc">Diets, Meals, Ingredients, Recipes, Allergens, MealAllergens, DietVariants</div>
+      </div>
+    </div>
+    <div class="mig-card">
+      <div class="mig-head" style="background:rgba(52,152,219,.1);color:#2980b9">DEV 3</div>
+      <div class="mig-body">
+        <div class="mig-range">200 – 299</div>
+        <div class="mig-desc">ProductionPlans, ProductionPlanItems, WarehouseEntries</div>
+      </div>
+    </div>
+    <div class="mig-card">
+      <div class="mig-head" style="background:rgba(155,89,182,.1);color:#8e44ad">DEV 4</div>
+      <div class="mig-body">
+        <div class="mig-range">300 – 399</div>
+        <div class="mig-desc">Vehicles, Drivers, DeliveryRoutes, DeliveryRouteStops</div>
+      </div>
+    </div>
+    <div class="mig-card">
+      <div class="mig-head" style="background:rgba(230,126,34,.1);color:#d35400">DEV 5</div>
+      <div class="mig-body">
+        <div class="mig-range">400 – 499</div>
+        <div class="mig-desc">Tickets, TicketAttachments, WorkSchedules, Roles</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note note-info">
+    <span class="note-icon">ℹ️</span>
+    <div><strong>Zakres 500+</strong> pozostaw wolny na migracje wspólne (np. seed danych, indeksy cross-modułowe). Decyzja wspólna całego teamu.</div>
+  </div>
+
+  <h3>Przykładowa konwencja nazwy pliku migracji</h3>
+  <div class="cb">
+    <div class="cb-head"><span class="cb-lang">konwencja nazewnictwa</span></div>
+    <pre><code><span class="cm"># Format: {NR}_{Akcja}{Tabela}.cs</span>
+001_CreateUsersTable.cs          <span class="cm"># Dev 1</span>
+002_CreateOrdersTable.cs         <span class="cm"># Dev 1</span>
+003_CreateOrderItemsTable.cs     <span class="cm"># Dev 1</span>
+100_CreateDietsTable.cs          <span class="cm"># Dev 2</span>
+101_CreateMealsTable.cs          <span class="cm"># Dev 2</span>
+102_CreateIngredientsTable.cs    <span class="cm"># Dev 2</span>
+103_CreateRecipesTable.cs        <span class="cm"># Dev 2 — ManyToMany</span>
+200_CreateProductionPlansTable.cs <span class="cm"># Dev 3</span>
+...</code></pre>
+  </div>
+</section>
+
+<!-- ── S10 ── -->
+<section class="section" id="s10">
+  <div class="sec-head">
+    <span class="sec-num">10</span>
+    <h2>Pliki konfliktowe — mapa ryzyka i zasady</h2>
+  </div>
+
+  <p>Poniżej analiza które pliki są <strong>najbardziej narażone na konflikty merge</strong> i jak im zapobiec.</p>
+
+  <div class="matrix">
+    <div class="mx-row">
+      <div class="mx-cell">Plik</div>
+      <div class="mx-cell">Ryzyko</div>
+      <div class="mx-cell">Strategia</div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-cell"><code>Program.cs</code></div>
+      <div class="mx-cell"><span class="badge-risk">WYSOKIE</span></div>
+      <div class="mx-cell">Jeden właściciel (Dev 1). Inni opisują potrzeby w komentarzu do PR.</div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-cell"><code>Infrastructure/DependencyInjection.cs</code></div>
+      <div class="mx-cell"><span class="badge-risk">WYSOKIE</span></div>
+      <div class="mx-cell">Jak Program.cs — jeden właściciel lub osobna metoda rozszerzająca per dev.</div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-cell">Migracje (numery)</div>
+      <div class="mx-cell"><span class="badge-safe">NISKIE</span></div>
+      <div class="mx-cell">Zarezerwowane zakresy eliminują konflikty całkowicie.</div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-cell"><code>Views/Shared/_Layout.cshtml</code></div>
+      <div class="mx-cell"><span class="badge-risk">WYSOKIE</span></div>
+      <div class="mx-cell">Dev 5 jest właścicielem. Inni zgłaszają żądania przez issue/PR.</div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-cell"><code>*.csproj</code> (każdego projektu)</div>
+      <div class="mx-cell"><span class="badge-rule">ŚREDNIE</span></div>
+      <div class="mx-cell">NuGet instaluje przez VS — generuje zmiany w <code>.csproj</code>. Jeden dev instaluje pakiet, commit, reszta robi <code>git pull + dotnet restore</code>.</div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-cell"><code>BaseEntity.cs</code></div>
+      <div class="mx-cell"><span class="badge-risk">WYSOKIE</span></div>
+      <div class="mx-cell">Zmiana dotyka wszystkich encji. Decyzja przez spotkanie, jeden commit, wszyscy pull.</div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-cell">Kontrolery</div>
+      <div class="mx-cell"><span class="badge-safe">NISKIE</span></div>
+      <div class="mx-cell">Każdy dev ma swój kontroler w osobnym pliku — brak konfliktów.</div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-cell">DTOs, Serwisy, Repozytoria</div>
+      <div class="mx-cell"><span class="badge-safe">NISKIE</span></div>
+      <div class="mx-cell">Każdy moduł w osobnym folderze i pliku — brak konfliktów.</div>
+    </div>
+    <div class="mx-row">
+      <div class="mx-cell"><code>README.md</code></div>
+      <div class="mx-cell"><span class="badge-rule">ŚREDNIE</span></div>
+      <div class="mx-cell">Dev 1 jest właścicielem sekcji głównych. Inni edytują wyłącznie własną sekcję modułu.</div>
+    </div>
+  </div>
+
+  <h3>Alternatywa dla DependencyInjection.cs — metody rozszerzające per dev</h3>
+  <p>Zamiast jednego pliku DI dla Infrastructure, każdy dev ma własny plik rozszerzający:</p>
+  <div class="cb">
+    <div class="cb-head"><span class="cb-lang">csharp</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+    <pre><code><span class="cm">// Infrastructure/DependencyInjection.cs — wspólny, Dev 1 go tworzy</span>
+<span class="kw">public static class</span> <span class="cls">DependencyInjection</span>
+{
+    <span class="kw">public static</span> <span class="cls">IServiceCollection</span> <span class="prop">AddInfrastructure</span>(
+        <span class="kw">this</span> <span class="cls">IServiceCollection</span> services, <span class="cls">IConfiguration</span> config)
+    {
+        services
+            .AddEcommerceInfrastructure(config)   <span class="cm">// Dev 1</span>
+            .AddCatalogInfrastructure(config)     <span class="cm">// Dev 2</span>
+            .AddProductionInfrastructure(config)  <span class="cm">// Dev 3</span>
+            .AddLogisticsInfrastructure(config)   <span class="cm">// Dev 4</span>
+            .AddAdminInfrastructure(config);      <span class="cm">// Dev 5</span>
+        <span class="kw">return</span> services;
+    }
+}
+
+<span class="cm">// Infrastructure/EcommerceInfrastructureExtensions.cs — Dev 1 TYLKO tu pisze</span>
+<span class="kw">public static class</span> <span class="cls">EcommerceInfrastructureExtensions</span>
+{
+    <span class="kw">public static</span> <span class="cls">IServiceCollection</span> <span class="prop">AddEcommerceInfrastructure</span>(
+        <span class="kw">this</span> <span class="cls">IServiceCollection</span> s, <span class="cls">IConfiguration</span> c)
+    {
+        s.AddScoped&lt;<span class="cls">IOrderRepository</span>, <span class="cls">OrderRepository</span>&gt;();
+        s.AddScoped&lt;<span class="cls">IAddressRepository</span>, <span class="cls">AddressRepository</span>&gt;();
+        s.AddScoped&lt;<span class="cls">IPaymentService</span>, <span class="cls">StripePaymentService</span>&gt;();
+        <span class="kw">return</span> s;
+    }
+}
+
+<span class="cm">// Infrastructure/CatalogInfrastructureExtensions.cs — Dev 2 TYLKO tu pisze</span>
+<span class="kw">public static class</span> <span class="cls">CatalogInfrastructureExtensions</span> { <span class="cm">/* ... */</span> }</code></pre>
+  </div>
+  <p>Dzięki temu każdy dev edytuje <strong>wyłącznie swój plik rozszerzający</strong>. Główny <code>DependencyInjection.cs</code> zmienia się tylko gdy dodajemy nowego deva — wtedy Dev 1 robi jeden commit.</p>
+</section>
+
+<!-- ── S11 ── -->
+<section class="section" id="s11">
+  <div class="sec-head">
+    <span class="sec-num">11</span>
+    <h2>Workflow codzienne — rytm pracy</h2>
+  </div>
+
+  <div class="phase-banner">
+    <div class="phase-num">RANO</div>
+    <div class="phase-title">Synchronizuj z develop przed pracą</div>
+  </div>
+  <div class="cb"><div class="cb-head"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code><span class="cm"># Zaktualizuj develop (pobierz zmiany innych)</span>
+git checkout develop
+git pull origin develop
+
+<span class="cm"># Przełącz na swoją gałąź i wpuść zmiany z develop</span>
+git checkout feature/devX-module-name
+git merge develop
+
+<span class="cm"># Jeśli są konflikty — rozwiąż je TERAZ, nie na końcu dnia</span>
+<span class="cm"># Po rozwiązaniu:</span>
+git add .
+git commit -m "merge: sync with develop"</code></pre></div>
+
+  <div class="phase-banner">
+    <div class="phase-num">W CIĄGU DNIA</div>
+    <div class="phase-title">Małe, częste commity z opisowymi wiadomościami</div>
+  </div>
+  <div class="cb"><div class="cb-head"><span class="cb-lang">konwencja commit messages</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code><span class="cm"># Format: {typ}({scope}): {opis}</span>
+feat(orders): add order creation endpoint
+feat(diet): implement ManyToMany recipe mapping
+fix(auth): fix claims helper null reference
+refactor(production): extract food cost calculator to service
+test(orders): add unit tests for OrderService
+chore(migrations): add 002_CreateOrdersTable migration
+docs(readme): update module description</code></pre></div>
+
+  <div class="phase-banner">
+    <div class="phase-num">PO PRACY</div>
+    <div class="phase-title">Push feature branch i opcjonalnie PR do develop</div>
+  </div>
+  <div class="cb"><div class="cb-head"><span class="cb-lang">bash</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+<pre><code><span class="cm"># Push swojej gałęzi (zawsze)</span>
+git push origin feature/devX-module-name
+
+<span class="cm"># Gdy feature jest gotowy do integracji → PR do develop</span>
+<span class="cm"># Na GitHub: New Pull Request → feature/devX-module-name → develop</span>
+<span class="cm"># Reviewer: dowolna osoba z zespołu (nie autor)</span></code></pre></div>
+
+  <div class="note note-info">
+    <span class="note-icon">💡</span>
+    <div><strong>Tip:</strong> Nie czekaj z PR do końca całego modułu. Rób PR po każdej zamkniętej funkcjonalności (np. "CRUD dla diet gotowy"). Mniejsze PR = mniejsze konflikty = szybsze review.</div>
+  </div>
+</section>
+
+<!-- ── S12 ── -->
+<section class="section" id="s12">
+  <div class="sec-head">
+    <span class="sec-num">12</span>
+    <h2>Checklist przed startem — wszystko gotowe?</h2>
+  </div>
+
+  <div class="phase-banner" style="margin-bottom:20px">
+    <div class="phase-num">DEV 1</div>
+    <div class="phase-title">Bootstrap repo</div>
+    <div class="phase-owner">Raz, przed resztą</div>
+  </div>
+
+  <ul class="steps">
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">GitHub repo utworzone i private</div>
+        <div class="step-desc">Wszyscy 5 deweloperów zaproszeni z rolą Write.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">Branch protection dla main i develop</div>
+        <div class="step-desc">Require PR + 1 review + status checks. Force push wyłączony.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">Struktura folderów i pliki konfiguracyjne</div>
+        <div class="step-desc"><code>src/</code>, <code>tests/</code>, <code>docs/</code>, <code>docker/</code>, <code>.github/workflows/</code> — wszystko w repo.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">Solucja i 4+1 projektów w VS</div>
+        <div class="step-desc"><code>KuchniaUCygana.sln</code> w root, projekty w <code>src/</code>, testy w <code>tests/</code>. Referencje ustawione poprawnie.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">Wszystkie pakiety NuGet zainstalowane</div>
+        <div class="step-desc">Pełna lista z dokumentu architektonicznego. <code>dotnet restore</code> działa bez błędów.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">Directory.Build.props i .editorconfig w root</div>
+        <div class="step-desc">StyleCop widać w Error List VS. Build nie ma błędów (lub tylko do zaakceptowania warnings).</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">Docker Compose działa</div>
+        <div class="step-desc"><code>docker compose build</code> kończy się sukcesem. <code>docker compose up</code> startuje i aplikacja odpowiada na porcie 8080.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">BaseEntity.cs, IRepository&lt;T&gt;, BaseRepository&lt;T&gt; — szkielet</div>
+        <div class="step-desc">Puste implementacje wystarczą — ważne żeby kompilowały. To fundament dla wszystkich deweloperów.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">Pierwsza migracja 001_CreateUsersTable.cs działa</div>
+        <div class="step-desc"><code>dotnet run</code> tworzy plik <code>.db</code> i wykonuje migrację. W DB widać tabelę <code>Users</code>.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">GitHub Actions CI działa</div>
+        <div class="step-desc">Push do develop → Actions → zielony build. Test failures blokują merge do main.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-dot">□</div>
+      <div class="step-body">
+        <div class="step-title">Każdy dev sklonował repo i dotnet run działa lokalnie</div>
+        <div class="step-desc">Każda osoba potwierdza: klonowanie, własna gałąź feature, appsettings.Development.json, <code>dotnet run</code> → aplikacja widoczna w przeglądarce.</div>
+      </div>
+    </li>
+  </ul>
+
+  <div class="note note-ok">
+    <span class="note-icon">🚀</span>
+    <div><strong>Jeśli wszystkie pola odhaczone</strong> — możecie startować z implementacją funkcjonalności. Każdy dev wchodzi na swoją gałąź <code>feature/devX-*</code> i implementuje moduł zgodnie z podziałem z sekcji 08.</div>
+  </div>
+
+  <h3>Szybki cheat-sheet — ściąga dla każdego deva</h3>
+  <div class="cb">
+    <div class="cb-head"><span class="cb-lang">bash — codzienne komendy</span><button class="cb-copy" onclick="cp(this)">copy</button></div>
+    <pre><code><span class="cm"># === RANO — synchronizacja ===</span>
+git checkout develop && git pull origin develop
+git checkout feature/devX-module && git merge develop
+
+<span class="cm"># === PRACA — commit co jakiś czas ===</span>
+git add src/KuchniaUCygana.Web/Controllers/MojController.cs
+git add src/KuchniaUCygana.Application/Services/MojService.cs
+git commit -m "feat(moj-modul): add XYZ endpoint"
+git push origin feature/devX-module
+
+<span class="cm"># === GOTOWA FUNKCJONALNOŚĆ — pull request ===</span>
+<span class="cm"># GitHub UI → Compare & pull request → feature/devX → develop</span>
+
+<span class="cm"># === MERGE CONFLIKT — jak rozwiązać ===</span>
+git status                    <span class="cm"># sprawdź które pliki mają konflikty</span>
+<span class="cm"># Otwórz w VS lub VS Code → Accept Current/Incoming/Both</span>
+git add .
+git commit -m "fix: resolve merge conflict with develop"
+
+<span class="cm"># === NOWY PAKIET NUGET ===</span>
+<span class="cm"># Zainstaluj w VS lub przez dotnet CLI</span>
+dotnet add src/KuchniaUCygana.Infrastructure/KuchniaUCygana.Infrastructure.csproj package NazwaPakietu
+git add src/KuchniaUCygana.Infrastructure/KuchniaUCygana.Infrastructure.csproj
+git commit -m "chore: add NazwaPakietu package"
+git push
+<span class="cm"># Reszta: git pull && dotnet restore</span></code></pre>
+  </div>
+</section>
+
+</div>
+
+<footer class="doc-footer">
+  <span>Kuchnia u Cygana · Plan Uruchomienia v1.0</span>
+  <span>2026-04-08 · ASP.NET MVC 8 · 5 deweloperów</span>
+</footer>
+
+</main>
+
+<script>
+// Scroll progress
+const bar = document.getElementById('scroll-bar');
+window.addEventListener('scroll', () => {
+  const pct = window.scrollY / (document.body.scrollHeight - window.innerHeight) * 100;
+  bar.style.width = pct + '%';
+}, { passive: true });
+
+// Active nav
+const secs = document.querySelectorAll('.section');
+const links = document.querySelectorAll('.sb-link');
+new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const a = document.querySelector(`.sb-link[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-25% 0px -65% 0px' }).observe
+? secs.forEach(s => new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const a = document.querySelector(`.sb-link[href="#${e.target.id}"]`);
+        if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-25% 0px -65% 0px' }).observe(s))
+: null;
+
+// Copy
+function cp(btn) {
+  const pre = btn.closest('.cb').querySelector('pre');
+  navigator.clipboard.writeText(pre.innerText).then(() => {
+    btn.textContent = 'copied!';
+    btn.classList.add('ok');
+    setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('ok'); }, 2000);
+  });
+}
+</script>
+</body>
+</html>

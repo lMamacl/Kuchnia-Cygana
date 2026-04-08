@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KuchniaUCygana - Instrukcja obslugi (czytelna, bez skrotow)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#f5f7fb;
+      --panel:#ffffff;
+      --ink:#1e2633;
+      --muted:#607089;
+      --line:#d8e0ed;
+      --accent:#2f80ed;
+      --accent-soft:#eaf3ff;
+      --ok:#219653;
+      --warn:#f2994a;
+      --danger:#eb5757;
+      --side:300px;
+      --radius:12px;
+      --shadow:0 8px 30px rgba(23,39,70,.08);
+    }
+
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{
+      font-family:Geist,system-ui,sans-serif;
+      color:var(--ink);
+      background:var(--bg);
+      line-height:1.7;
+      display:flex;
+    }
+
+    code, pre {font-family:"Geist Mono",Consolas,monospace}
+
+    #sidebar{
+      position:fixed;top:0;left:0;height:100vh;width:var(--side);
+      overflow:auto;background:#121a28;color:#d8e4ff;border-right:1px solid #24324a;
+      padding:22px 16px 30px;
+    }
+    #sidebar h1{font-size:16px;line-height:1.35;color:#7ec4ff;margin-bottom:6px}
+    #sidebar p{font-size:12px;color:#9fb1cc;margin-bottom:14px}
+    #sidebar a{
+      display:block;color:#d8e4ff;text-decoration:none;font-size:13px;padding:8px 10px;border-radius:8px;
+    }
+    #sidebar a:hover{background:rgba(126,196,255,.15)}
+    #sidebar .sub{padding-left:12px;font-size:12px;color:#b6c7df}
+
+    #main{
+      margin-left:var(--side);
+      width:100%;
+      max-width:1280px;
+      padding:34px 38px 100px;
+    }
+
+    .hero{
+      background:linear-gradient(120deg,#1e3b66,#325f9d);
+      color:#fff;border-radius:14px;padding:24px 26px;box-shadow:var(--shadow);
+      margin-bottom:24px;
+    }
+    .hero h2{font-size:32px;line-height:1.2;margin-bottom:8px}
+    .hero p{max-width:900px;color:#dbe9ff}
+    .hero .chips{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+    .chip{
+      background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);
+      border-radius:999px;padding:4px 10px;font-size:12px
+    }
+
+    .section{margin-top:34px}
+    .section h3{
+      font-size:25px;margin-bottom:12px;border-bottom:2px solid var(--line);padding-bottom:8px;
+    }
+    .section h4{font-size:18px;margin:20px 0 10px;color:#24487a}
+    p{margin-bottom:10px}
+    .muted{color:var(--muted)}
+
+    .box{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      padding:14px 16px;
+      margin:12px 0;
+      box-shadow:var(--shadow);
+    }
+
+    .note{background:var(--accent-soft);border-left:4px solid var(--accent)}
+    .ok{background:#ebf8f0;border-left:4px solid var(--ok)}
+    .warn{background:#fff6eb;border-left:4px solid var(--warn)}
+    .danger{background:#fff0f0;border-left:4px solid var(--danger)}
+
+    .steps{padding-left:22px}
+    .steps li{margin:7px 0}
+    .steps li strong{color:#15345f}
+
+    .tableWrap{overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+    th{background:#eef3fb;color:#2b4f7f;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+
+    .cb{
+      background:#111827;color:#e5ecff;border-radius:10px;overflow:auto;border:1px solid #2a3550;margin:10px 0;
+    }
+    .cb .head{
+      background:#1b2740;border-bottom:1px solid #2a3550;padding:7px 10px;font-size:12px;color:#a9c6ff;
+    }
+    .cb pre{padding:10px 12px;font-size:12.8px;white-space:pre-wrap}
+
+    .ui{
+      background:#fff;border:1px dashed #9ab5d8;border-radius:10px;padding:10px 12px;margin:10px 0;
+    }
+    .ui strong{color:#1f4272}
+
+    .checklist{list-style:none;padding-left:0}
+    .checklist li{position:relative;padding-left:28px;margin:7px 0}
+    .checklist li::before{content:"[ ]";position:absolute;left:0;color:#50698b}
+
+    .foot{margin-top:40px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <aside id="sidebar">
+    <h1>KuchniaUCygana</h1>
+    <p>Instrukcja obslugi: konfiguracja i uruchomienie</p>
+    <a href="#jak-czytac">01. Jak czytac te instrukcje</a>
+    <a href="#warianty">02. Wybierz 1 wariant konfiguracji</a>
+    <a href="#formaty">03. Format danych (dokladnie)</a>
+    <a href="#init-vs">04. Inicjalizacja w Visual Studio</a>
+    <a class="sub" href="#init-vs-open">3.1 Otwieranie solution</a>
+    <a class="sub" href="#init-vs-run">3.2 Pierwsze uruchomienie</a>
+    <a href="#docker-view">05. Uruchamianie przez Docker Desktop</a>
+    <a class="sub" href="#docker-view-containers">4.1 Widok kontenerow</a>
+    <a class="sub" href="#docker-view-volumes">4.2 Widok volume</a>
+    <a href="#gdzie-co">06. Co jest wymagane, a co opcjonalne</a>
+    <a href="#scenariusze">07. Scenariusze krok po kroku</a>
+    <a href="#problemy">08. Typowe problemy i rozwiazania</a>
+    <a href="#check">09. Checklisty gotowosci</a>
+  </aside>
+
+  <main id="main">
+    <section class="hero">
+      <h2>Instrukcja obslugi projektu (wersja uproszczona i jednoznaczna)</h2>
+      <p>Ta wersja usuwa niepotrzebne rzeczy i odpowiada konkretnie: <strong>ktory plik konfigurujesz</strong>, <strong>w jakim formacie</strong>, <strong>jakie klucze sa wymagane</strong> oraz <strong>co musi byc widoczne w Docker Desktop</strong>.</p>
+      <div class="chips">
+        <span class="chip">Visual Studio 2022</span>
+        <span class="chip">Docker Desktop</span>
+        <span class="chip">.NET 8</span>
+        <span class="chip">SQLite + OrmLite + FluentMigrator</span>
+      </div>
+    </section>
+
+    <section id="jak-czytac" class="section">
+      <h3>01. Jak czytac te instrukcje</h3>
+      <div class="box note">
+        <p><strong>Format kazdego kroku:</strong></p>
+        <ul class="steps">
+          <li><strong>Akcja:</strong> co kliknac lub wpisac.</li>
+          <li><strong>Widok:</strong> co powinienes zobaczyc na ekranie.</li>
+          <li><strong>Znaczenie:</strong> dlaczego to jest wazne.</li>
+          <li><strong>Nastepny krok:</strong> co robisz dalej.</li>
+        </ul>
+      </div>
+      <div class="box ok">
+        <p><strong>Cel:</strong> po przejsciu calej instrukcji masz dzialajacy projekt lokalnie i w Docker Desktop, z poprawna konfiguracja sekretow i bazy.</p>
+      </div>
+    </section>
+
+    <section id="warianty" class="section">
+      <h3>02. Wybierz 1 wariant konfiguracji (nie oba naraz)</h3>
+      <div class="box ok">
+        <p><strong>Zasada glowna:</strong> konfigurujesz <strong>jeden</strong> zestaw plikow zaleznie od sposobu uruchamiania.</p>
+      </div>
+      <div class="tableWrap">
+        <table>
+          <thead><tr><th>Jak uruchamiasz</th><th>Ktory plik konfigurujesz</th><th>Czy potrzebny .env</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Visual Studio (F5 / Ctrl+F5)</td>
+              <td><code>src/KuchniaUCygana.Web/appsettings.Development.json</code></td>
+              <td>Nie</td>
+            </tr>
+            <tr>
+              <td>Docker Desktop (docker compose)</td>
+              <td><code>.env</code></td>
+              <td>Tak</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="box warn">
+        <p><strong>Nie mieszaj scenariuszy:</strong> jesli testujesz przez Docker, priorytet ma konfiguracja z <code>.env</code> (przez zmienne srodowiskowe compose).</p>
+      </div>
+    </section>
+
+    <section id="formaty" class="section">
+      <h3>03. Format danych (dokladnie)</h3>
+      <h4>A. Format pliku appsettings.Development.json</h4>
+      <div class="cb">
+        <div class="head">JSON - przyklad poprawnego formatu</div>
+<pre>{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=kuchniaucygana_dev.db"
+  },
+  "JwtSettings": {
+    "SecretKey": "minimum_32_znaki_bez_spacji",
+    "Issuer": "KuchniaUCygana",
+    "Audience": "KuchniaUCyganaUsers",
+    "ExpiryHours": 8
+  }
+}</pre>
+      </div>
+      <h4>B. Format pliku .env (Docker)</h4>
+      <div class="cb">
+        <div class="head">ENV - jedna linia = jedna zmienna</div>
+<pre>JWT_SECRET=minimum_32_znaki_bez_spacji
+STRIPE_SECRET=
+OPENAI_KEY=</pre>
+      </div>
+      <div class="box note">
+        <p><strong>Wymagane minimum:</strong> w praktyce na start potrzebujesz <code>JWT_SECRET</code>. Klucze <code>STRIPE_SECRET</code> i <code>OPENAI_KEY</code> moga pozostac puste, jesli nie uruchamiasz funkcji tych integracji.</p>
+      </div>
+    </section>
+
+    <section id="init-vs" class="section">
+      <h3>04. Inicjalizacja w Visual Studio</h3>
+
+      <h4 id="init-vs-open">3.1 Otwieranie solution i pierwszy przeglad</h4>
+      <div class="ui">
+        <p><strong>Akcja:</strong> dwuklik na plik <code>KuchniaUCygana.sln</code> w root repo.</p>
+        <p><strong>Widok:</strong> po lewej <strong>Solution Explorer</strong> z projektami:</p>
+        <ul class="steps">
+          <li><code>KuchniaUCygana.Web</code></li>
+          <li><code>KuchniaUCygana.Application</code></li>
+          <li><code>KuchniaUCygana.Domain</code></li>
+          <li><code>KuchniaUCygana.Infrastructure</code></li>
+          <li><code>KuchniaUCygana.Tests</code></li>
+        </ul>
+        <p><strong>Znaczenie:</strong> to jest poprawna architektura warstwowa i punkt startu pracy.</p>
+      </div>
+
+      <h4>3.2 Uzupelnienie danych lokalnych (bez Dockera)</h4>
+      <div class="ui">
+        <p><strong>Akcja:</strong> otworz plik <code>src/KuchniaUCygana.Web/appsettings.Development.json</code>.</p>
+        <p><strong>Widok:</strong> sekcje <code>ConnectionStrings</code>, <code>JwtSettings</code>, <code>Stripe</code>, <code>OpenAI</code>.</p>
+        <p><strong>Co uzupelnic:</strong> lokalne wartosci testowe (nie produkcyjne).</p>
+      </div>
+      <div class="cb">
+        <div class="head">Przyklad danych do wpisania</div>
+<pre>{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=kuchniaucygana_dev.db"
+  },
+  "JwtSettings": {
+    "SecretKey": "lokalny_klucz_min_32_znaki_do_testow",
+    "Issuer": "KuchniaUCygana",
+    "Audience": "KuchniaUCyganaUsers",
+    "ExpiryHours": 8
+  },
+  "Stripe": { "SecretKey": "sk_test_..." },
+  "OpenAI": { "ApiKey": "sk-..." }
+}</pre>
+      </div>
+      <div class="box warn">
+        <p><strong>Wazne:</strong> ten plik jest lokalny. Nie commituj sekretow do repo.</p>
+      </div>
+
+      <h4 id="init-vs-run">3.3 Pierwsze uruchomienie z Visual Studio</h4>
+      <div class="ui">
+        <p><strong>Akcja:</strong> ustaw startup project na <code>KuchniaUCygana.Web</code>, kliknij <strong>Run</strong> (lub F5).</p>
+        <p><strong>Widok:</strong> uruchomiona aplikacja + okno Output/Debug.</p>
+        <p><strong>Znaczenie:</strong> przy starcie odpala sie migrator i tworzy baze SQLite.</p>
+      </div>
+      <div class="box note">
+        <p><strong>Co dzieje sie w tle:</strong> <code>Program.cs</code> wywoluje runner migracji, a warstwa Infrastructure konfiguruje FluentMigrator + OrmLite.</p>
+      </div>
+    </section>
+
+    <section id="docker-view" class="section">
+      <h3>05. Uruchamianie przez Docker Desktop (minimalne komendy)</h3>
+      <h4>5.1 Przygotowanie pliku .env</h4>
+      <ol class="steps">
+        <li>W root repo skopiuj <code>.env.example</code> do <code>.env</code>.</li>
+        <li>Uzupelnij minimum <code>JWT_SECRET</code>. Pozostale pola mozesz zostawic puste, jesli nie uzywasz tych integracji.</li>
+      </ol>
+      <div class="cb"><div class="head">Plik .env (minimalny)</div><pre>JWT_SECRET=min_32_znakowy_klucz
+STRIPE_SECRET=
+OPENAI_KEY=</pre></div>
+
+      <h4>5.2 Start kontenera (jedna komenda)</h4>
+      <div class="cb"><div class="head">Uruchomienie</div><pre>docker compose up --build</pre></div>
+
+      <h4 id="docker-view-containers">5.3 Co powinno pojawic sie w Docker Desktop - Containers</h4>
+      <div class="ui">
+        <p><strong>Akcja:</strong> otworz Docker Desktop - zakladka <strong>Containers</strong>.</p>
+        <p><strong>Widok oczekiwany:</strong> kontener <code>kuchnia_web</code> ze statusem <span class="ok">Running</span>.</p>
+        <p><strong>Dodatkowo:</strong> po wejsciu w kontener zobaczysz:</p>
+        <ul class="steps">
+          <li>Logs - logi aplikacji (debug bledow)</li>
+          <li>Exec - terminal wewnatrz kontenera</li>
+          <li>Inspect - parametry uruchomienia</li>
+        </ul>
+      </div>
+
+      <h4 id="docker-view-volumes">5.4 Co powinno pojawic sie w Docker Desktop - Volumes</h4>
+      <div class="ui">
+        <p><strong>Akcja:</strong> otworz zakladke <strong>Volumes</strong>.</p>
+        <p><strong>Widok oczekiwany:</strong> volume <code>sqlite_data</code> i <code>uploads_data</code>.</p>
+        <p><strong>Znaczenie:</strong> dane bazy i uploady sa trwale, nie znikaja po restarcie kontenera.</p>
+      </div>
+      <div class="box ok">
+        <p><strong>Kazdy developer ma swoja baze:</strong> kazdy ma osobne lokalne volume Dockera na swoim komputerze.</p>
+      </div>
+    </section>
+
+    <section id="gdzie-co" class="section">
+      <h3>06. Co jest wymagane, a co opcjonalne</h3>
+      <div class="tableWrap">
+        <table>
+          <thead><tr><th>Pole</th><th>Czy wymagane na start</th><th>Gdzie ustawic</th><th>Uwagi</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>ConnectionStrings:DefaultConnection</code></td>
+              <td>Tak (dla Visual Studio run)</td>
+              <td><code>appsettings.Development.json</code></td>
+              <td>Wskazuje lokalny plik SQLite</td>
+            </tr>
+            <tr>
+              <td><code>JwtSettings:SecretKey</code> / <code>JWT_SECRET</code></td>
+              <td>Tak</td>
+              <td>VS: <code>appsettings.Development.json</code>, Docker: <code>.env</code></td>
+              <td>Minimum 32 znaki</td>
+            </tr>
+            <tr>
+              <td><code>STRIPE_SECRET</code></td>
+              <td>Nie</td>
+              <td><code>.env</code> lub appsettings</td>
+              <td>Potrzebne dopiero przy module platnosci</td>
+            </tr>
+            <tr>
+              <td><code>OPENAI_KEY</code></td>
+              <td>Nie</td>
+              <td><code>.env</code> lub appsettings</td>
+              <td>Potrzebne dopiero przy module AI</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="box danger">
+        <p><strong>Nie wrzucaj do repo:</strong> <code>.env</code>, <code>appsettings.Development.json</code>, pliki <code>.db</code>, sekrety API.</p>
+      </div>
+    </section>
+
+    <section id="scenariusze" class="section">
+      <h3>07. Scenariusze pracy (dokladnie)</h3>
+      <h4>Scenariusz A - "Chce tylko uruchomic aplikacje i zobaczyc czy dziala"</h4>
+      <ol class="steps">
+        <li>Otworz <code>KuchniaUCygana.sln</code> w VS.</li>
+        <li>Uzupelnij <code>appsettings.Development.json</code>.</li>
+        <li>Uruchom startup project <code>KuchniaUCygana.Web</code>.</li>
+        <li>Sprawdz, czy strona laduje sie w przegladarce.</li>
+      </ol>
+
+      <h4>Scenariusz B - "Chce uruchomic przez Docker Desktop"</h4>
+      <ol class="steps">
+        <li>Utworz i uzupelnij plik <code>.env</code>.</li>
+        <li>Uruchom <code>docker compose up --build</code>.</li>
+        <li>W Docker Desktop sprawdz status kontenera na <strong>Running</strong>.</li>
+        <li>Otworz aplikacje na <code>http://localhost:8080</code>.</li>
+      </ol>
+
+      <h4>Scenariusz C - "Nowy developer dolacza do zespolu"</h4>
+      <ol class="steps">
+        <li>Klonuje repo i otwiera solution w Visual Studio.</li>
+        <li>Ustawia lokalne sekrety w swoim pliku deweloperskim.</li>
+        <li>Uruchamia app i sprawdza, czy migracje tworza baze.</li>
+        <li>Tworzy wlasny branch feature i zaczyna prace.</li>
+      </ol>
+    </section>
+
+    <section id="problemy" class="section">
+      <h3>08. Typowe problemy i rozwiazania</h3>
+      <div class="box warn">
+        <h4>Problem: aplikacja nie startuje, blad konfiguracji JWT</h4>
+        <p><strong>Co sprawdzic:</strong> czy <code>SecretKey</code> ma minimum 32 znaki i jest uzupelniony w odpowiednim pliku.</p>
+      </div>
+      <div class="box warn">
+        <h4>Problem: brak tabel po starcie</h4>
+        <p><strong>Co sprawdzic:</strong> logi aplikacji i czy migracje sa uruchamiane przy starcie (Program.cs -> MigrationRunner).</p>
+      </div>
+      <div class="box warn">
+        <h4>Problem: Docker kontener sie zatrzymuje</h4>
+        <p><strong>Co zrobic:</strong> wejdz w Docker Desktop -> Containers -> <code>kuchnia_web</code> -> Logs i sprawdz pierwsze czerwone bledy.</p>
+      </div>
+      <div class="box warn">
+        <h4>Problem: nie wiem czy mam konfigurowac appsettings czy .env</h4>
+        <p><strong>Regula:</strong> Visual Studio run = <code>appsettings.Development.json</code>. Docker run = <code>.env</code>. Wybierasz jeden wariant dla konkretnego uruchomienia.</p>
+      </div>
+    </section>
+
+    <section id="check" class="section">
+      <h3>09. Checklisty gotowosci</h3>
+      <h4>Checklist - gotowy do pierwszego uruchomienia</h4>
+      <ul class="checklist">
+        <li>Visual Studio + .NET 8 gotowe</li>
+        <li>Docker Desktop uruchomiony</li>
+        <li>Repo sklonowane i solution otwarte</li>
+        <li>Wybrany 1 wariant konfiguracji (VS albo Docker)</li>
+        <li>Dla VS: uzupelniony appsettings.Development.json</li>
+        <li>Dla Dockera: uzupelniony .env (minimum JWT_SECRET)</li>
+      </ul>
+
+      <h4>Checklist - gotowy do pracy developerskiej</h4>
+      <ul class="checklist">
+        <li>Aplikacja startuje lokalnie</li>
+        <li>Aplikacja startuje przez Docker</li>
+        <li>Migracje tworza baze automatycznie</li>
+        <li>Wiesz, ktore klucze sa wymagane, a ktore opcjonalne</li>
+        <li>Masz swoj branch roboczy</li>
+      </ul>
+      <p class="foot">Dokument jest instrukcja obslugi. Ma byc czytany liniowo przez nowego uzytkownika, bez zakladania wiedzy wstepnej.</p>
+    </section>
+  </main>
+</body>
+</html>

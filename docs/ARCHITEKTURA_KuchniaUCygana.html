@@ -1,0 +1,2112 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kuchnia u Cygana — Dokument Architektoniczny</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:          #0d1117;
+    --bg-2:        #161b22;
+    --bg-3:        #1c2330;
+    --border:      #2a3441;
+    --accent:      #e8a020;
+    --accent-dim:  #c07a10;
+    --accent-glow: rgba(232,160,32,.15);
+    --green:       #3fb950;
+    --red:         #f85149;
+    --blue:        #58a6ff;
+    --purple:      #bc8cff;
+    --teal:        #39d5d5;
+    --text:        #e6edf3;
+    --text-muted:  #8b949e;
+    --text-dim:    #484f58;
+    --code-bg:     #161b22;
+    --sidebar-w:   270px;
+    --radius:      8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    display: flex;
+  }
+
+  /* ── SIDEBAR ─────────────────────────────────────────────── */
+  #sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--sidebar-w);
+    height: 100vh;
+    background: var(--bg-2);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 0 32px;
+    z-index: 100;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  #sidebar::-webkit-scrollbar { width: 4px; }
+  #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .sidebar-header {
+    padding: 24px 20px 16px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+    background: var(--bg-2);
+    z-index: 1;
+  }
+
+  .sidebar-logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .sidebar-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .nav-group {
+    padding: 16px 0 0;
+  }
+
+  .nav-group-label {
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    padding: 0 20px 6px;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 20px;
+    text-decoration: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    transition: all .15s;
+    border-left: 2px solid transparent;
+  }
+
+  .nav-link:hover {
+    color: var(--text);
+    background: rgba(255,255,255,.03);
+    border-left-color: var(--border);
+  }
+
+  .nav-link.active {
+    color: var(--accent);
+    background: var(--accent-glow);
+    border-left-color: var(--accent);
+  }
+
+  .nav-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 18px;
+  }
+
+  /* ── MAIN CONTENT ────────────────────────────────────────── */
+  #main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 40%, #1a1f2e 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 56px 64px 48px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -80px; right: -80px;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(232,160,32,.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero::after {
+    content: 'ARCHITECTURE DOC';
+    position: absolute;
+    bottom: 16px; right: 64px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .15em;
+    color: var(--text-dim);
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-glow);
+    border: 1px solid rgba(232,160,32,.3);
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+    letter-spacing: .05em;
+  }
+
+  .hero h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(28px, 4vw, 42px);
+    line-height: 1.15;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+
+  .hero h1 span { color: var(--accent); }
+
+  .hero-desc {
+    color: var(--text-muted);
+    font-size: 14px;
+    max-width: 600px;
+  }
+
+  .hero-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 28px;
+    flex-wrap: wrap;
+  }
+
+  .meta-chip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: var(--radius);
+  }
+
+  .meta-chip .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  /* Content wrapper */
+  .content {
+    padding: 0 64px 80px;
+    max-width: 980px;
+  }
+
+  /* Sections */
+  .section {
+    padding-top: 56px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 28px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    background: var(--accent-glow);
+    border: 1px solid rgba(232,160,32,.25);
+    padding: 2px 9px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .section-header h2 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--text);
+  }
+
+  h3 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text);
+    margin: 28px 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  h3::before {
+    content: '//';
+    color: var(--accent-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+
+  p { margin-bottom: 12px; color: var(--text-muted); }
+
+  strong { color: var(--text); font-weight: 500; }
+
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+
+  thead tr {
+    background: var(--bg-3);
+    border-bottom: 2px solid var(--accent);
+  }
+
+  th {
+    padding: 11px 16px;
+    text-align: left;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    vertical-align: top;
+  }
+
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  td:first-child { color: var(--text); font-weight: 500; }
+
+  td code, th code {
+    background: rgba(88,166,255,.1);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  /* Code blocks */
+  .code-block {
+    margin: 16px 0;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--bg-3);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .code-lang {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .code-copy {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    background: none;
+    border: 1px solid var(--border);
+    padding: 2px 9px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+
+  .code-copy:hover { color: var(--text); border-color: var(--text-muted); }
+  .code-copy.copied { color: var(--green); border-color: var(--green); }
+
+  pre {
+    background: var(--code-bg);
+    padding: 20px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  pre::-webkit-scrollbar { height: 4px; }
+  pre::-webkit-scrollbar-thumb { background: var(--border); }
+
+  pre code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text);
+    white-space: pre;
+  }
+
+  /* Inline code */
+  p code, li code, td code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    background: rgba(88,166,255,.1);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  /* Callouts */
+  .callout {
+    display: flex;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: var(--radius);
+    margin: 16px 0;
+    font-size: 13.5px;
+  }
+
+  .callout-warn {
+    background: rgba(248, 81, 73, .08);
+    border: 1px solid rgba(248,81,73,.25);
+    color: #f0a0a0;
+  }
+
+  .callout-info {
+    background: rgba(88,166,255,.08);
+    border: 1px solid rgba(88,166,255,.25);
+    color: #a0c8f0;
+  }
+
+  .callout-tip {
+    background: rgba(63,185,80,.08);
+    border: 1px solid rgba(63,185,80,.25);
+    color: #a0e0b0;
+  }
+
+  .callout-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .callout-body { flex: 1; }
+  .callout-body strong { color: inherit; font-weight: 600; }
+
+  /* Lists */
+  ul, ol {
+    padding-left: 20px;
+    margin: 10px 0 14px;
+  }
+
+  li {
+    margin-bottom: 6px;
+    color: var(--text-muted);
+    padding-left: 4px;
+  }
+
+  li strong { color: var(--text); }
+
+  ul li::marker { color: var(--accent); }
+  ol li::marker { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+  /* Team cards */
+  .team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+
+  .team-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    transition: border-color .2s;
+  }
+
+  .team-card:hover { border-color: var(--accent); }
+
+  .team-card-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+
+  .team-card-name {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .team-card-module {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  /* Architecture diagram */
+  .arch-diagram {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin: 16px 0;
+  }
+
+  .arch-layer {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 4px;
+    position: relative;
+    transition: border-color .2s;
+  }
+
+  .arch-layer:hover { border-color: var(--accent-dim); }
+
+  .arch-layer-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .arch-layer-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .layer-web    { border-left: 3px solid var(--blue);   background: rgba(88,166,255,.04); }
+  .layer-app    { border-left: 3px solid var(--green);  background: rgba(63,185,80,.04); }
+  .layer-domain { border-left: 3px solid var(--accent); background: rgba(232,160,32,.04); }
+  .layer-infra  { border-left: 3px solid var(--purple); background: rgba(188,140,255,.04); }
+
+  .layer-web    .arch-layer-title { color: var(--blue); }
+  .layer-app    .arch-layer-title { color: var(--green); }
+  .layer-domain .arch-layer-title { color: var(--accent); }
+  .layer-infra  .arch-layer-title { color: var(--purple); }
+
+  .arch-arrow {
+    text-align: center;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 3px 0;
+  }
+
+  /* Nuget badges */
+  .pkg-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 8px;
+    margin: 12px 0;
+  }
+
+  .pkg-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    transition: border-color .15s;
+  }
+
+  .pkg-item:hover { border-color: var(--blue); }
+
+  .pkg-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--blue);
+    margin-bottom: 3px;
+  }
+
+  .pkg-version {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: rgba(63,185,80,.1);
+    color: var(--green);
+    border: 1px solid rgba(63,185,80,.25);
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-right: 6px;
+  }
+
+  .pkg-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* Checklist */
+  .checklist { list-style: none; padding: 0; margin: 12px 0; }
+
+  .checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13.5px;
+  }
+
+  .checklist li:last-child { border-bottom: none; }
+
+  .check-icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+
+  /* Priority tags */
+  .tag {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-right: 6px;
+    letter-spacing: .04em;
+  }
+
+  .tag-high   { background: rgba(248,81,73,.1);  color: var(--red);    border: 1px solid rgba(248,81,73,.3); }
+  .tag-medium { background: rgba(232,160,32,.1); color: var(--accent); border: 1px solid rgba(232,160,32,.3); }
+  .tag-low    { background: rgba(139,148,158,.1);color: var(--text-muted); border: 1px solid var(--border); }
+
+  /* Glossary */
+  .glossary-item {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: start;
+  }
+
+  .glossary-item:last-child { border-bottom: none; }
+
+  .glossary-term {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--blue);
+    background: rgba(88,166,255,.06);
+    padding: 4px 10px;
+    border-radius: 4px;
+    word-break: break-all;
+  }
+
+  .glossary-def {
+    font-size: 13.5px;
+    color: var(--text-muted);
+  }
+
+  /* Deploy options */
+  .deploy-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+
+  .deploy-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+
+  .deploy-card h4 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--accent);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .deploy-card ul {
+    padding-left: 16px;
+    margin: 0;
+  }
+
+  .deploy-card li { font-size: 13px; margin-bottom: 5px; }
+
+  /* Footer */
+  .doc-footer {
+    margin-top: 64px;
+    padding: 24px 64px;
+    border-top: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Progress bar scroll indicator */
+  #scroll-progress {
+    position: fixed;
+    top: 0; left: var(--sidebar-w);
+    height: 2px;
+    background: var(--accent);
+    z-index: 200;
+    transition: width .1s;
+    width: 0%;
+  }
+
+  /* Syntax highlight helpers */
+  .kw  { color: #ff7b72; }
+  .str { color: #a5d6ff; }
+  .cm  { color: var(--text-dim); font-style: italic; }
+  .cls { color: #ffa657; }
+  .num { color: #79c0ff; }
+  .prop{ color: var(--teal); }
+  .op  { color: #e6edf3; }
+
+  @media (max-width: 900px) {
+    #sidebar { transform: translateX(-100%); }
+    #main { margin-left: 0; }
+    .content { padding: 0 24px 60px; }
+    .hero { padding: 40px 24px 36px; }
+    .deploy-grid { grid-template-columns: 1fr; }
+    .glossary-item { grid-template-columns: 1fr; }
+    #scroll-progress { left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">Kuchnia u Cygana</div>
+    <div class="sidebar-sub">v1.0 · ASP.NET MVC 8</div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Przegląd</div>
+    <a class="nav-link" href="#s1"><span class="nav-num">01</span> Kontekst projektu</a>
+    <a class="nav-link" href="#s2"><span class="nav-num">02</span> Architektura</a>
+    <a class="nav-link" href="#s3"><span class="nav-num">03</span> Struktura repo</a>
+    <a class="nav-link" href="#s4"><span class="nav-num">04</span> Model domeny</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Warstwa danych</div>
+    <a class="nav-link" href="#s5"><span class="nav-num">05</span> Baza danych / ORM</a>
+    <a class="nav-link" href="#s6"><span class="nav-num">06</span> Uwierzytelnianie</a>
+    <a class="nav-link" href="#s7"><span class="nav-num">07</span> AutoMapper</a>
+    <a class="nav-link" href="#s8"><span class="nav-num">08</span> Caching</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Narzędzia</div>
+    <a class="nav-link" href="#s9"><span class="nav-num">09</span> Generator danych</a>
+    <a class="nav-link" href="#s10"><span class="nav-num">10</span> StyleCop / Analyzers</a>
+    <a class="nav-link" href="#s11"><span class="nav-num">11</span> Docker</a>
+    <a class="nav-link" href="#s12"><span class="nav-num">12</span> Rejestracja DI</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Referencje</div>
+    <a class="nav-link" href="#s13"><span class="nav-num">13</span> Pakiety NuGet</a>
+    <a class="nav-link" href="#s14"><span class="nav-num">14</span> Zewnętrzne API</a>
+    <a class="nav-link" href="#s15"><span class="nav-num">15</span> Generowanie PDF</a>
+    <a class="nav-link" href="#s16"><span class="nav-num">16</span> Obsługa plików</a>
+    <a class="nav-link" href="#s17"><span class="nav-num">17</span> Testy</a>
+    <a class="nav-link" href="#s18"><span class="nav-num">18</span> Wdrożenie</a>
+    <a class="nav-link" href="#s19"><span class="nav-num">19</span> Rekomendacje</a>
+    <a class="nav-link" href="#s20"><span class="nav-num">20</span> Słownik pojęć</a>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<main id="main">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-badge">
+      <span>●</span> Dokument architektoniczny projektu
+    </div>
+    <h1>Kuchnia u <span>Cygana</span></h1>
+    <p class="hero-desc">
+      System e-commerce i ERP dla cateringu dietetycznego — instrukcja dla AI (Cursor/Claude) oraz zespołu deweloperskiego.
+    </p>
+    <div class="hero-meta">
+      <div class="meta-chip"><span class="dot"></span>ASP.NET MVC 8</div>
+      <div class="meta-chip"><span class="dot"></span>SQLite + OrmLite</div>
+      <div class="meta-chip"><span class="dot"></span>FluentMigrator</div>
+      <div class="meta-chip"><span class="dot"></span>Clean Architecture</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── S1 ── -->
+    <section class="section" id="s1">
+      <div class="section-header">
+        <span class="section-num">01</span>
+        <h2>Kontekst Projektu</h2>
+      </div>
+
+      <p><strong>Kuchnia u Cygana</strong> to platforma webowa dla firmy cateringowej łącząca:</p>
+      <ul>
+        <li><strong>Portal B2C</strong> — klient zamawia diety, zarządza kalendarzem dostaw, płaci online.</li>
+        <li><strong>ERP back-office</strong> — produkcja, magazyn, logistyka, HR, helpdesk.</li>
+      </ul>
+
+      <h3>Skład zespołu</h3>
+      <div class="team-grid">
+        <div class="team-card">
+          <div class="team-card-num">DEV 01</div>
+          <div class="team-card-name">Developer 1</div>
+          <div class="team-card-module">Moduł E-commerce i Zamówień</div>
+        </div>
+        <div class="team-card">
+          <div class="team-card-num">DEV 02</div>
+          <div class="team-card-name">Developer 2</div>
+          <div class="team-card-module">Moduł Katalogu Diet i Receptur</div>
+        </div>
+        <div class="team-card">
+          <div class="team-card-num">DEV 03</div>
+          <div class="team-card-name">Developer 3</div>
+          <div class="team-card-module">Moduł Produkcji i Magazynu</div>
+        </div>
+        <div class="team-card">
+          <div class="team-card-num">DEV 04</div>
+          <div class="team-card-name">Developer 4</div>
+          <div class="team-card-module">Moduł Logistyki i Dostaw</div>
+        </div>
+        <div class="team-card">
+          <div class="team-card-num">DEV 05</div>
+          <div class="team-card-name">Developer 5</div>
+          <div class="team-card-module">Moduł Administracji, HR i Komunikacji</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── S2 ── -->
+    <section class="section" id="s2">
+      <div class="section-header">
+        <span class="section-num">02</span>
+        <h2>Architektura — N-Tier / Clean Architecture</h2>
+      </div>
+
+      <p>Projekt stosuje <strong>architekturę warstwową</strong> z czytelnym podziałem odpowiedzialności. Żadna warstwa nie może znać szczegółów warstwy powyżej niej.</p>
+
+      <div class="arch-diagram">
+        <div class="arch-layer layer-web">
+          <div class="arch-layer-title">KuchniaUCygana.Web &nbsp;·&nbsp; ASP.NET MVC</div>
+          <div class="arch-layer-desc">Controllers · Views · ViewModels · wwwroot</div>
+        </div>
+        <div class="arch-arrow">↓ &nbsp; używa DTOs z Application</div>
+        <div class="arch-layer layer-app">
+          <div class="arch-layer-title">KuchniaUCygana.Application &nbsp;·&nbsp; BLL</div>
+          <div class="arch-layer-desc">Services · DTOs · Interfaces · AutoMapper Profiles · Validators (FluentValidation)</div>
+        </div>
+        <div class="arch-arrow">↓ &nbsp; używa Interfejsów z Domain</div>
+        <div class="arch-layer layer-domain">
+          <div class="arch-layer-title">KuchniaUCygana.Domain &nbsp;·&nbsp; Core</div>
+          <div class="arch-layer-desc">Entities · Repository Interfaces · Domain Events</div>
+        </div>
+        <div class="arch-arrow">↓ &nbsp; implementuje Interfejsy</div>
+        <div class="arch-layer layer-infra">
+          <div class="arch-layer-title">KuchniaUCygana.Infrastructure &nbsp;·&nbsp; DAL + Zewnętrzne</div>
+          <div class="arch-layer-desc">Repositories · DB (OrmLite) · Migrations · External APIs: Stripe, Maps, OpenAI · File Storage · PDF Generator · Cache</div>
+        </div>
+      </div>
+
+      <div class="callout callout-info">
+        <span class="callout-icon">ℹ️</span>
+        <div class="callout-body"><strong>Zasada:</strong> Warstwa Web zna tylko Application. Application zna tylko Domain. Infrastructure implementuje interfejsy Domain — nigdy na odwrót.</div>
+      </div>
+    </section>
+
+    <!-- ── S3 ── -->
+    <section class="section" id="s3">
+      <div class="section-header">
+        <span class="section-num">03</span>
+        <h2>Struktura Repozytorium GitHub</h2>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">tree</span>
+          <button class="code-copy" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><code>KuchniaUCygana/
+│
+├── .github/
+│   ├── workflows/
+│   │   └── ci.yml                   <span class="cm"># GitHub Actions — build + testy</span>
+│   └── pull_request_template.md
+│
+├── src/
+│   ├── KuchniaUCygana.Web/          <span class="cm"># Projekt startowy ASP.NET MVC</span>
+│   │   ├── Controllers/
+│   │   │   ├── AccountController.cs
+│   │   │   ├── CartController.cs
+│   │   │   ├── DietController.cs
+│   │   │   ├── OrderController.cs
+│   │   │   ├── ProductionController.cs
+│   │   │   ├── LogisticsController.cs
+│   │   │   ├── AdminController.cs
+│   │   │   └── TicketController.cs
+│   │   ├── Views/
+│   │   │   ├── Shared/  (_Layout.cshtml, _ValidationScriptsPartial.cshtml)
+│   │   │   ├── Account/ · Diet/ · Order/ · Production/ · Logistics/ · Admin/ · Ticket/
+│   │   ├── ViewModels/              <span class="cm"># Modele wyłącznie dla widoków (NIE DTO)</span>
+│   │   ├── Filters/                 <span class="cm"># ActionFilters, ExceptionFilters</span>
+│   │   ├── Middleware/              <span class="cm"># Custom middleware</span>
+│   │   ├── Extensions/              <span class="cm"># WebApplicationBuilder extensions</span>
+│   │   ├── wwwroot/ (css/ · js/ · uploads/)
+│   │   ├── appsettings.json
+│   │   ├── appsettings.Development.json
+│   │   └── Program.cs
+│   │
+│   ├── KuchniaUCygana.Application/  <span class="cm"># BLL</span>
+│   │   ├── Common/ (Interfaces/ · Exceptions/ · Models/)
+│   │   ├── DTOs/ (Auth/ · Diet/ · Order/ · Production/ · Logistics/ · Ticket/)
+│   │   ├── Interfaces/              <span class="cm"># IOrderService, IDietService...</span>
+│   │   ├── Mappings/                <span class="cm"># AutoMapper Profiles (1 plik / moduł)</span>
+│   │   ├── Services/                <span class="cm"># Implementacje IXxxService</span>
+│   │   ├── Validators/              <span class="cm"># FluentValidation validators</span>
+│   │   └── DependencyInjection.cs
+│   │
+│   ├── KuchniaUCygana.Domain/       <span class="cm"># Core — zero zależności zewnętrznych</span>
+│   │   ├── Entities/
+│   │   │   ├── Auth/       (User.cs · Role.cs)
+│   │   │   ├── Catalog/    (Diet.cs · Meal.cs · Ingredient.cs · Recipe.cs · Allergen.cs · MealAllergen.cs)
+│   │   │   ├── Orders/     (Order.cs · OrderItem.cs · DeliveryCalendar.cs · Address.cs)
+│   │   │   ├── Production/ (ProductionPlan.cs · ProductionPlanItem.cs · WarehouseEntry.cs)
+│   │   │   ├── Logistics/  (Vehicle.cs · Driver.cs · DeliveryRoute.cs · DeliveryRouteStop.cs)
+│   │   │   └── Admin/      (Ticket.cs · TicketAttachment.cs · WorkSchedule.cs)
+│   │   ├── Interfaces/     (IRepository&lt;T&gt;, IUnitOfWork)
+│   │   ├── Enums/          (OrderStatus · DeliveryStatus · UserRole · TicketStatus)
+│   │   └── Common/BaseEntity.cs
+│   │
+│   └── KuchniaUCygana.Infrastructure/
+│       ├── Persistence/
+│       │   ├── ConnectionFactory/ (IDbConnectionFactory · SqliteConnectionFactory)
+│       │   ├── Repositories/      (BaseRepository · UserRepository · DietRepository · ...)
+│       │   └── Migrations/        (MigrationRunner · 001_CreateUsersTable · 002... · 003...)
+│       ├── ExternalServices/ (Stripe/ · Maps/ · AI/)
+│       ├── FileStorage/      (IFileStorageService · LocalFileStorageService)
+│       ├── Pdf/              (IPdfGenerator · QuestPdfGenerator)
+│       ├── Cache/            (ICacheService · MemoryCacheService)
+│       ├── Auth/             (IJwtService · JwtService · ClaimsHelper)
+│       └── DependencyInjection.cs
+│
+├── tests/
+│   └── KuchniaUCygana.Tests/
+│       ├── Unit/       (Services/ · Validators/ · Mappings/)
+│       ├── Integration/ (Repositories/ · Controllers/)
+│       └── Fixtures/
+│           ├── DatabaseFixture.cs
+│           └── SeedData/ (UserSeeder · DietSeeder · OrderSeeder)
+│
+├── docker/
+│   ├── Dockerfile
+│   └── docker-compose.yml
+│
+├── docs/
+│   ├── ARCHITEKTURA_KuchniaUCygana.html
+│   ├── ER_Diagram.png
+│   └── API_Endpoints.md
+│
+├── .editorconfig
+├── .gitignore
+├── stylecop.json
+├── Directory.Build.props             <span class="cm"># Globalne ustawienia MSBuild / Analyzers</span>
+├── KuchniaUCygana.sln
+└── README.md</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S4 ── -->
+    <section class="section" id="s4">
+      <div class="section-header">
+        <span class="section-num">04</span>
+        <h2>Model Domeny — Encje i Relacje</h2>
+      </div>
+
+      <div class="callout callout-tip">
+        <span class="callout-icon">✅</span>
+        <div class="callout-body">Wymaganie: ~25 encji (5 osób × min. 5 encji niesłownikowych/os.), relacje ManyToMany i OneToMany.</div>
+      </div>
+
+      <h3>Encje z relacjami</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">er-diagram</span></div>
+        <pre><code>User (1) ──────────────────── (N) Order
+User (1) ──────────────────── (N) Address
+User (1) ──────────────────── (N) Ticket
+User (1) ──────────────────── (N) WorkSchedule
+
+Diet (1) ──────────────────── (N) DietVariant          (1500kcal, 2000kcal...)
+DietVariant (1) ────────────── (N) DietVariantMeal      ← tabela łącząca
+Meal (N) ──────────────────── (N) DietVariant           [ManyToMany via DietVariantMeal]
+
+Meal (N) ──────────────────── (N) Ingredient            [ManyToMany via Recipe]
+Recipe                                                   ← tabela łącząca z gramaturą
+
+Meal (N) ──────────────────── (N) Allergen              [ManyToMany via MealAllergen]
+
+Order (1) ──────────────────── (N) OrderItem
+Order (1) ──────────────────── (N) DeliveryCalendar
+DeliveryCalendar (N) ────────── (1) Address
+
+ProductionPlan (1) ─────────── (N) ProductionPlanItem
+ProductionPlanItem (N) ─────── (1) Meal
+
+WarehouseEntry (N) ─────────── (1) Ingredient
+
+DeliveryRoute (1) ───────────── (N) DeliveryRouteStop
+DeliveryRoute (N) ───────────── (1) Driver
+DeliveryRoute (N) ───────────── (1) Vehicle
+DeliveryRouteStop (N) ───────── (1) DeliveryCalendar
+
+Driver (N) ──────────────────── (1) User
+Vehicle (1) ─────────────────── (N) DeliveryRoute
+
+Ticket (1) ──────────────────── (N) TicketAttachment
+Ticket (N) ──────────────────── (1) User (klient)
+Ticket (1) ──────────────────── (1) User (pracownik, nullable)</code></pre>
+      </div>
+
+      <h3>Klasa bazowa BaseEntity</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">csharp</span>
+          <button class="code-copy" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><code><span class="cm">// Domain/Common/BaseEntity.cs</span>
+<span class="kw">public abstract class</span> <span class="cls">BaseEntity</span>
+{
+    [AutoIncrement]
+    <span class="kw">public</span> <span class="prop">int</span> Id { <span class="kw">get</span>; <span class="kw">set</span>; }
+
+    <span class="kw">public</span> <span class="cls">DateTime</span> CreatedAt { <span class="kw">get</span>; <span class="kw">set</span>; } = <span class="cls">DateTime</span>.UtcNow;
+    <span class="kw">public</span> <span class="cls">DateTime</span>? UpdatedAt { <span class="kw">get</span>; <span class="kw">set</span>; }
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S5 ── -->
+    <section class="section" id="s5">
+      <div class="section-header">
+        <span class="section-num">05</span>
+        <h2>Baza Danych — SQLite + OrmLite + FluentMigrator</h2>
+      </div>
+
+      <h3>Podział odpowiedzialności</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Zadanie</th><th>Narzędzie</th><th>Powód</th></tr></thead>
+          <tbody>
+            <tr><td>Schemat bazy (DDL)</td><td><strong>FluentMigrator</strong></td><td>Wersjonowane migracje, niezależne od ORM</td></tr>
+            <tr><td>Odczyt/zapis danych (DML)</td><td><strong>ServiceStack OrmLite</strong></td><td>Lekki, szybki, bliżej SQL niż EF Core</td></tr>
+            <tr><td>Seedowanie testowe</td><td><strong>Bogus</strong></td><td>Deterministyczne, realistyczne dane</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout callout-warn">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-body"><strong>Uwaga:</strong> OrmLite ma wbudowane <code>db.CreateTableIfNotExists&lt;T&gt;()</code> — <strong>nie używaj tej metody</strong>. Całość DDL zarządza FluentMigrator — jest to świadoma decyzja architektoniczna, zapewniająca audyt zmian schematu przez Git.</div>
+      </div>
+
+      <h3>5.1 Connection Factory</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">csharp</span>
+          <button class="code-copy" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><code><span class="cm">// Infrastructure/Persistence/ConnectionFactory/IDbConnectionFactory.cs</span>
+<span class="kw">public interface</span> <span class="cls">IDbConnectionFactory</span>
+{
+    <span class="cls">IDbConnection</span> <span class="prop">CreateConnection</span>();
+}
+
+<span class="cm">// Infrastructure/Persistence/ConnectionFactory/SqliteConnectionFactory.cs</span>
+<span class="kw">public sealed class</span> <span class="cls">SqliteConnectionFactory</span> : <span class="cls">IDbConnectionFactory</span>
+{
+    <span class="kw">private readonly</span> <span class="prop">string</span> _connectionString;
+
+    <span class="kw">public</span> <span class="cls">SqliteConnectionFactory</span>(<span class="cls">IConfiguration</span> config)
+    {
+        _connectionString = config.GetConnectionString(<span class="str">"DefaultConnection"</span>)
+            ?? <span class="kw">throw new</span> <span class="cls">InvalidOperationException</span>(<span class="str">"Connection string 'DefaultConnection' not found."</span>);
+    }
+
+    <span class="kw">public</span> <span class="cls">IDbConnection</span> <span class="prop">CreateConnection</span>()
+    {
+        <span class="kw">var</span> ormFactory = <span class="kw">new</span> <span class="cls">OrmLiteConnectionFactory</span>(_connectionString, SqliteDialect.Provider);
+        <span class="kw">return</span> ormFactory.OpenDbConnection();
+    }
+}</code></pre>
+      </div>
+
+      <h3>5.2 Generic Repository</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">csharp</span>
+          <button class="code-copy" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><code><span class="cm">// Domain/Interfaces/IRepository.cs</span>
+<span class="kw">public interface</span> <span class="cls">IRepository</span>&lt;T&gt; <span class="kw">where</span> T : <span class="cls">BaseEntity</span>
+{
+    <span class="cls">Task</span>&lt;T?&gt; <span class="prop">GetByIdAsync</span>(<span class="prop">int</span> id);
+    <span class="cls">Task</span>&lt;<span class="cls">IEnumerable</span>&lt;T&gt;&gt; <span class="prop">GetAllAsync</span>();
+    <span class="cls">Task</span>&lt;<span class="prop">int</span>&gt; <span class="prop">InsertAsync</span>(T entity);
+    <span class="cls">Task</span>&lt;<span class="prop">bool</span>&gt; <span class="prop">UpdateAsync</span>(T entity);
+    <span class="cls">Task</span>&lt;<span class="prop">bool</span>&gt; <span class="prop">DeleteAsync</span>(<span class="prop">int</span> id);
+}
+
+<span class="cm">// Infrastructure/Persistence/Repositories/BaseRepository.cs</span>
+<span class="kw">public abstract class</span> <span class="cls">BaseRepository</span>&lt;T&gt; : <span class="cls">IRepository</span>&lt;T&gt; <span class="kw">where</span> T : <span class="cls">BaseEntity</span>
+{
+    <span class="kw">protected readonly</span> <span class="cls">IDbConnectionFactory</span> _factory;
+
+    <span class="kw">protected</span> <span class="cls">BaseRepository</span>(<span class="cls">IDbConnectionFactory</span> factory) =&gt; _factory = factory;
+
+    <span class="kw">public async</span> <span class="cls">Task</span>&lt;T?&gt; <span class="prop">GetByIdAsync</span>(<span class="prop">int</span> id)
+    {
+        <span class="kw">using var</span> db = _factory.CreateConnection();
+        <span class="kw">return await</span> db.SingleByIdAsync&lt;T&gt;(id);
+    }
+
+    <span class="kw">public async</span> <span class="cls">Task</span>&lt;<span class="prop">int</span>&gt; <span class="prop">InsertAsync</span>(T entity)
+    {
+        entity.CreatedAt = <span class="cls">DateTime</span>.UtcNow;
+        <span class="kw">using var</span> db = _factory.CreateConnection();
+        <span class="kw">return</span> (<span class="prop">int</span>)<span class="kw">await</span> db.InsertAsync(entity, selectIdentity: <span class="kw">true</span>);
+    }
+
+    <span class="kw">public async</span> <span class="cls">Task</span>&lt;<span class="prop">bool</span>&gt; <span class="prop">UpdateAsync</span>(T entity)
+    {
+        entity.UpdatedAt = <span class="cls">DateTime</span>.UtcNow;
+        <span class="kw">using var</span> db = _factory.CreateConnection();
+        <span class="kw">return await</span> db.UpdateAsync(entity) &gt; <span class="num">0</span>;
+    }
+    <span class="cm">// ...pozostałe metody</span>
+}</code></pre>
+      </div>
+
+      <h3>5.3 Przykładowa Migracja FluentMigrator</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">csharp</span>
+          <button class="code-copy" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><code><span class="cm">// Infrastructure/Persistence/Migrations/001_CreateUsersTable.cs</span>
+[Migration(<span class="num">1</span>)]
+<span class="kw">public class</span> <span class="cls">CreateUsersTable</span> : <span class="cls">Migration</span>
+{
+    <span class="kw">public override void</span> <span class="prop">Up</span>()
+    {
+        Create.Table(<span class="str">"Users"</span>)
+            .WithColumn(<span class="str">"Id"</span>).AsInt32().PrimaryKey().Identity()
+            .WithColumn(<span class="str">"Email"</span>).AsString(<span class="num">256</span>).NotNullable().Unique()
+            .WithColumn(<span class="str">"PasswordHash"</span>).AsString(<span class="num">512</span>).NotNullable()
+            .WithColumn(<span class="str">"FirstName"</span>).AsString(<span class="num">100</span>).NotNullable()
+            .WithColumn(<span class="str">"LastName"</span>).AsString(<span class="num">100</span>).NotNullable()
+            .WithColumn(<span class="str">"Role"</span>).AsString(<span class="num">50</span>).NotNullable().WithDefaultValue(<span class="str">"Client"</span>)
+            .WithColumn(<span class="str">"IsActive"</span>).AsBoolean().NotNullable().WithDefaultValue(<span class="kw">true</span>)
+            .WithColumn(<span class="str">"CreatedAt"</span>).AsDateTime().NotNullable()
+            .WithColumn(<span class="str">"UpdatedAt"</span>).AsDateTime().Nullable();
+    }
+    <span class="kw">public override void</span> <span class="prop">Down</span>() =&gt; Delete.Table(<span class="str">"Users"</span>);
+}
+
+<span class="cm">// 004_CreateRecipeTable.cs — przykład ManyToMany</span>
+[Migration(<span class="num">4</span>)]
+<span class="kw">public class</span> <span class="cls">CreateRecipeTable</span> : <span class="cls">Migration</span>
+{
+    <span class="kw">public override void</span> <span class="prop">Up</span>()
+    {
+        Create.Table(<span class="str">"Recipes"</span>)
+            .WithColumn(<span class="str">"Id"</span>).AsInt32().PrimaryKey().Identity()
+            .WithColumn(<span class="str">"MealId"</span>).AsInt32().NotNullable()
+                .ForeignKey(<span class="str">"FK_Recipe_Meal"</span>, <span class="str">"Meals"</span>, <span class="str">"Id"</span>).OnDelete(Rule.Cascade)
+            .WithColumn(<span class="str">"IngredientId"</span>).AsInt32().NotNullable()
+                .ForeignKey(<span class="str">"FK_Recipe_Ingredient"</span>, <span class="str">"Ingredients"</span>, <span class="str">"Id"</span>)
+            .WithColumn(<span class="str">"WeightGrams"</span>).AsDecimal(<span class="num">10</span>, <span class="num">2</span>).NotNullable()
+            .WithColumn(<span class="str">"CreatedAt"</span>).AsDateTime().NotNullable()
+            .WithColumn(<span class="str">"UpdatedAt"</span>).AsDateTime().Nullable();
+
+        Create.UniqueConstraint(<span class="str">"UQ_Recipe_Meal_Ingredient"</span>)
+            .OnTable(<span class="str">"Recipes"</span>)
+            .Columns(<span class="str">"MealId"</span>, <span class="str">"IngredientId"</span>);
+    }
+    <span class="kw">public override void</span> <span class="prop">Down</span>() =&gt; Delete.Table(<span class="str">"Recipes"</span>);
+}</code></pre>
+      </div>
+
+      <h3>5.4 Uruchamianie Migracji przy starcie</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">csharp</span>
+          <button class="code-copy" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><code><span class="cm">// Program.cs — wywołanie po app.Build()</span>
+MigrationRunner.RunMigrations(app.Services);
+
+<span class="cm">// Infrastructure/Persistence/Migrations/MigrationRunner.cs</span>
+<span class="kw">public static class</span> <span class="cls">MigrationRunner</span>
+{
+    <span class="kw">public static void</span> <span class="prop">RunMigrations</span>(<span class="cls">IServiceProvider</span> services)
+    {
+        <span class="kw">using var</span> scope = services.CreateScope();
+        <span class="kw">var</span> runner = scope.ServiceProvider.GetRequiredService&lt;<span class="cls">IMigrationRunner</span>&gt;();
+        runner.MigrateUp();
+    }
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S6 ── -->
+    <section class="section" id="s6">
+      <div class="section-header">
+        <span class="section-num">06</span>
+        <h2>Uwierzytelnianie — JWT + ClaimsIdentity</h2>
+      </div>
+
+      <h3>Role w systemie</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">csharp</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="cm">// Domain/Enums/UserRole.cs</span>
+<span class="kw">public static class</span> <span class="cls">UserRoles</span>
+{
+    <span class="kw">public const</span> <span class="prop">string</span> Client  = <span class="str">"Client"</span>;
+    <span class="kw">public const</span> <span class="prop">string</span> Kitchen = <span class="str">"Kitchen"</span>;
+    <span class="kw">public const</span> <span class="prop">string</span> Driver  = <span class="str">"Driver"</span>;
+    <span class="kw">public const</span> <span class="prop">string</span> Admin   = <span class="str">"Admin"</span>;
+}</code></pre>
+      </div>
+
+      <h3>JwtService — generowanie tokenów</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">csharp</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="cm">// Infrastructure/Auth/JwtService.cs</span>
+<span class="kw">public class</span> <span class="cls">JwtService</span> : <span class="cls">IJwtService</span>
+{
+    <span class="kw">private readonly</span> <span class="cls">JwtSettings</span> _settings;
+
+    <span class="kw">public</span> <span class="cls">JwtService</span>(<span class="cls">IOptions</span>&lt;<span class="cls">JwtSettings</span>&gt; settings) =&gt; _settings = settings.Value;
+
+    <span class="kw">public</span> <span class="prop">string</span> <span class="prop">GenerateToken</span>(<span class="cls">User</span> user)
+    {
+        <span class="kw">var</span> claims = <span class="kw">new</span> <span class="cls">List</span>&lt;<span class="cls">Claim</span>&gt;
+        {
+            <span class="kw">new</span>(<span class="cls">ClaimTypes</span>.NameIdentifier, user.Id.ToString()),
+            <span class="kw">new</span>(<span class="cls">ClaimTypes</span>.Email, user.Email),
+            <span class="kw">new</span>(<span class="cls">ClaimTypes</span>.Role, user.Role),
+            <span class="kw">new</span>(<span class="cls">ClaimTypes</span>.GivenName, user.FirstName),
+            <span class="kw">new</span>(<span class="str">"fullName"</span>, <span class="str">$"{user.FirstName} {user.LastName}"</span>)
+        };
+
+        <span class="kw">var</span> identity = <span class="kw">new</span> <span class="cls">ClaimsIdentity</span>(claims, <span class="cls">JwtBearerDefaults</span>.AuthenticationScheme);
+        <span class="kw">var</span> key   = <span class="kw">new</span> <span class="cls">SymmetricSecurityKey</span>(<span class="cls">Encoding</span>.UTF8.GetBytes(_settings.SecretKey));
+        <span class="kw">var</span> creds = <span class="kw">new</span> <span class="cls">SigningCredentials</span>(key, <span class="cls">SecurityAlgorithms</span>.HmacSha256);
+
+        <span class="kw">var</span> token = <span class="kw">new</span> <span class="cls">JwtSecurityToken</span>(
+            issuer:            _settings.Issuer,
+            audience:          _settings.Audience,
+            claims:            identity.Claims,
+            expires:           <span class="cls">DateTime</span>.UtcNow.AddHours(_settings.ExpiryHours),
+            signingCredentials: creds
+        );
+
+        <span class="kw">return new</span> <span class="cls">JwtSecurityTokenHandler</span>().WriteToken(token);
+    }
+}</code></pre>
+      </div>
+
+      <h3>ClaimsHelper — odczyt danych z tokena</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">csharp</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="cm">// Infrastructure/Auth/ClaimsHelper.cs</span>
+<span class="kw">public static class</span> <span class="cls">ClaimsHelper</span>
+{
+    <span class="kw">public static</span> <span class="prop">int</span> <span class="prop">GetUserId</span>(<span class="cls">ClaimsPrincipal</span> principal)
+        =&gt; <span class="prop">int</span>.Parse(principal.FindFirstValue(<span class="cls">ClaimTypes</span>.NameIdentifier)
+            ?? <span class="kw">throw new</span> <span class="cls">UnauthorizedAccessException</span>());
+
+    <span class="kw">public static</span> <span class="prop">string</span> <span class="prop">GetUserRole</span>(<span class="cls">ClaimsPrincipal</span> principal)
+        =&gt; principal.FindFirstValue(<span class="cls">ClaimTypes</span>.Role)
+            ?? <span class="kw">throw new</span> <span class="cls">UnauthorizedAccessException</span>();
+
+    <span class="kw">public static</span> <span class="prop">bool</span> <span class="prop">IsAdmin</span>(<span class="cls">ClaimsPrincipal</span> principal)
+        =&gt; principal.IsInRole(<span class="cls">UserRoles</span>.Admin);
+}</code></pre>
+      </div>
+
+      <h3>Konfiguracja appsettings.json</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">json</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code>{
+  <span class="prop">"ConnectionStrings"</span>: {
+    <span class="prop">"DefaultConnection"</span>: <span class="str">"Data Source=kuchniaucygana.db"</span>
+  },
+  <span class="prop">"JwtSettings"</span>: {
+    <span class="prop">"SecretKey"</span>: <span class="str">"ZMIEN_NA_MIN_32_ZNAKOWY_KLUCZ_PRODUKCYJNY"</span>,
+    <span class="prop">"Issuer"</span>:    <span class="str">"KuchniaUCygana"</span>,
+    <span class="prop">"Audience"</span>:  <span class="str">"KuchniaUCyganaUsers"</span>,
+    <span class="prop">"ExpiryHours"</span>: <span class="num">8</span>
+  },
+  <span class="prop">"Stripe"</span>: {
+    <span class="prop">"SecretKey"</span>:      <span class="str">"sk_test_..."</span>,
+    <span class="prop">"PublishableKey"</span>: <span class="str">"pk_test_..."</span>
+  },
+  <span class="prop">"OpenAI"</span>: { <span class="prop">"ApiKey"</span>: <span class="str">"sk-..."</span> },
+  <span class="prop">"Serilog"</span>: { <span class="prop">"MinimumLevel"</span>: <span class="str">"Information"</span> }
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S7 ── -->
+    <section class="section" id="s7">
+      <div class="section-header">
+        <span class="section-num">07</span>
+        <h2>AutoMapper — Profile mapowań</h2>
+      </div>
+      <div class="callout callout-info">
+        <span class="callout-icon">ℹ️</span>
+        <div class="callout-body"><strong>Zasada:</strong> 1 plik Profile per moduł. Zarejestruj przez <code>services.AddAutoMapper(typeof(DietProfile).Assembly)</code>.</div>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">csharp</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="cm">// Application/Mappings/DietProfile.cs</span>
+<span class="kw">public class</span> <span class="cls">DietProfile</span> : <span class="cls">Profile</span>
+{
+    <span class="kw">public</span> <span class="cls">DietProfile</span>()
+    {
+        CreateMap&lt;<span class="cls">Diet</span>, <span class="cls">DietDto</span>&gt;()
+            .ForMember(d =&gt; d.VariantCount, o =&gt; o.MapFrom(s =&gt; s.Variants.Count));
+
+        CreateMap&lt;<span class="cls">CreateDietRequest</span>, <span class="cls">Diet</span>&gt;()
+            .ForMember(d =&gt; d.CreatedAt, o =&gt; o.MapFrom(_ =&gt; <span class="cls">DateTime</span>.UtcNow));
+
+        CreateMap&lt;<span class="cls">Meal</span>, <span class="cls">MealDto</span>&gt;()
+            .ForMember(d =&gt; d.AllergenNames, o =&gt;
+                o.MapFrom(s =&gt; s.MealAllergens.Select(ma =&gt; ma.Allergen.Name)));
+    }
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S8 ── -->
+    <section class="section" id="s8">
+      <div class="section-header">
+        <span class="section-num">08</span>
+        <h2>Caching</h2>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">csharp</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="cm">// Infrastructure/Cache/ICacheService.cs</span>
+<span class="kw">public interface</span> <span class="cls">ICacheService</span>
+{
+    <span class="cls">Task</span>&lt;T?&gt; <span class="prop">GetAsync</span>&lt;T&gt;(<span class="prop">string</span> key);
+    <span class="cls">Task</span>     <span class="prop">SetAsync</span>&lt;T&gt;(<span class="prop">string</span> key, T value, <span class="cls">TimeSpan</span>? expiry = <span class="kw">null</span>);
+    <span class="cls">Task</span>     <span class="prop">RemoveAsync</span>(<span class="prop">string</span> key);
+    <span class="cls">Task</span>     <span class="prop">RemoveByPrefixAsync</span>(<span class="prop">string</span> prefix);
+}
+
+<span class="cm">// Infrastructure/Cache/MemoryCacheService.cs</span>
+<span class="kw">public class</span> <span class="cls">MemoryCacheService</span> : <span class="cls">ICacheService</span>
+{
+    <span class="kw">private readonly</span> <span class="cls">IMemoryCache</span> _cache;
+    <span class="kw">private readonly</span> <span class="cls">HashSet</span>&lt;<span class="prop">string</span>&gt; _keys = <span class="kw">new</span>();
+
+    <span class="kw">public</span> <span class="cls">MemoryCacheService</span>(<span class="cls">IMemoryCache</span> cache) =&gt; _cache = cache;
+
+    <span class="kw">public</span> <span class="cls">Task</span>&lt;T?&gt; <span class="prop">GetAsync</span>&lt;T&gt;(<span class="prop">string</span> key)
+        =&gt; <span class="cls">Task</span>.FromResult(_cache.TryGetValue(key, <span class="kw">out</span> T? value) ? value : <span class="kw">default</span>);
+
+    <span class="kw">public</span> <span class="cls">Task</span> <span class="prop">SetAsync</span>&lt;T&gt;(<span class="prop">string</span> key, T value, <span class="cls">TimeSpan</span>? expiry = <span class="kw">null</span>)
+    {
+        _keys.Add(key);
+        <span class="kw">var</span> options = <span class="kw">new</span> <span class="cls">MemoryCacheEntryOptions</span>
+            { AbsoluteExpirationRelativeToNow = expiry ?? <span class="cls">TimeSpan</span>.FromMinutes(<span class="num">10</span>) };
+        _cache.Set(key, value, options);
+        <span class="kw">return</span> <span class="cls">Task</span>.CompletedTask;
+    }
+
+    <span class="kw">public</span> <span class="cls">Task</span> <span class="prop">RemoveByPrefixAsync</span>(<span class="prop">string</span> prefix)
+    {
+        <span class="kw">foreach</span> (<span class="kw">var</span> key <span class="kw">in</span> _keys.Where(k =&gt; k.StartsWith(prefix)))
+            _cache.Remove(key);
+        <span class="kw">return</span> <span class="cls">Task</span>.CompletedTask;
+    }
+}</code></pre>
+      </div>
+      <h3>Konwencja kluczy cache</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">text</span></div>
+        <pre><code>diets:all
+diets:{id}
+ingredients:all
+production:plan:{date}</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S9 ── -->
+    <section class="section" id="s9">
+      <div class="section-header">
+        <span class="section-num">09</span>
+        <h2>Generowanie Danych Testowych — Bogus</h2>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">csharp</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="cm">// Tests/Fixtures/SeedData/UserSeeder.cs</span>
+<span class="kw">public static class</span> <span class="cls">UserSeeder</span>
+{
+    <span class="kw">public static</span> <span class="cls">List</span>&lt;<span class="cls">User</span>&gt; <span class="prop">Generate</span>(<span class="prop">int</span> count = <span class="num">50</span>)
+    {
+        <span class="kw">var</span> faker = <span class="kw">new</span> <span class="cls">Faker</span>&lt;<span class="cls">User</span>&gt;(<span class="str">"pl"</span>)
+            .RuleFor(u =&gt; u.Email,        f =&gt; f.Internet.Email())
+            .RuleFor(u =&gt; u.FirstName,    f =&gt; f.Name.FirstName())
+            .RuleFor(u =&gt; u.LastName,     f =&gt; f.Name.LastName())
+            .RuleFor(u =&gt; u.Role,         f =&gt; <span class="cls">UserRoles</span>.Client)
+            .RuleFor(u =&gt; u.PasswordHash, f =&gt; BCrypt.Net.BCrypt.HashPassword(<span class="str">"Test1234!"</span>))
+            .RuleFor(u =&gt; u.IsActive,     f =&gt; <span class="kw">true</span>)
+            .RuleFor(u =&gt; u.CreatedAt,    f =&gt; f.Date.Past(<span class="num">1</span>));
+
+        <span class="kw">return</span> faker.Generate(count);
+    }
+}
+
+<span class="cm">// Tests/Fixtures/SeedData/DietSeeder.cs</span>
+<span class="kw">public static class</span> <span class="cls">DietSeeder</span>
+{
+    <span class="kw">private static readonly</span> <span class="prop">string</span>[] DietNames =
+        { <span class="str">"Keto"</span>, <span class="str">"Vege"</span>, <span class="str">"Sport"</span>, <span class="str">"Klasyczna"</span>, <span class="str">"Low Carb"</span>, <span class="str">"Glutenfree"</span> };
+
+    <span class="kw">public static</span> <span class="cls">List</span>&lt;<span class="cls">Diet</span>&gt; <span class="prop">Generate</span>()
+        =&gt; DietNames.Select((name, i) =&gt; <span class="kw">new</span> <span class="cls">Diet</span>
+        {
+            Name        = name,
+            Description = <span class="kw">new</span> <span class="cls">Faker</span>(<span class="str">"pl"</span>).Lorem.Paragraph(),
+            IsActive    = <span class="kw">true</span>,
+            CreatedAt   = <span class="cls">DateTime</span>.UtcNow
+        }).ToList();
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S10 ── -->
+    <section class="section" id="s10">
+      <div class="section-header">
+        <span class="section-num">10</span>
+        <h2>StyleCop + Analyzers — Jakość Kodu</h2>
+      </div>
+
+      <h3>Directory.Build.props</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">xml</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="op">&lt;</span>Project<span class="op">&gt;</span>
+  <span class="op">&lt;</span>PropertyGroup<span class="op">&gt;</span>
+    <span class="op">&lt;</span>Nullable<span class="op">&gt;</span>enable<span class="op">&lt;/</span>Nullable<span class="op">&gt;</span>
+    <span class="op">&lt;</span>ImplicitUsings<span class="op">&gt;</span>enable<span class="op">&lt;/</span>ImplicitUsings<span class="op">&gt;</span>
+    <span class="op">&lt;</span>TreatWarningsAsErrors<span class="op">&gt;</span>false<span class="op">&lt;/</span>TreatWarningsAsErrors<span class="op">&gt;</span>
+    <span class="op">&lt;</span>EnforceCodeStyleInBuild<span class="op">&gt;</span>true<span class="op">&lt;/</span>EnforceCodeStyleInBuild<span class="op">&gt;</span>
+    <span class="op">&lt;</span>AnalysisMode<span class="op">&gt;</span>Recommended<span class="op">&lt;/</span>AnalysisMode<span class="op">&gt;</span>
+  <span class="op">&lt;/</span>PropertyGroup<span class="op">&gt;</span>
+
+  <span class="op">&lt;</span>ItemGroup<span class="op">&gt;</span>
+    <span class="op">&lt;</span>PackageReference Include=<span class="str">"StyleCop.Analyzers"</span> Version=<span class="str">"1.2.0-beta.556"</span><span class="op">&gt;</span>
+      <span class="op">&lt;</span>PrivateAssets<span class="op">&gt;</span>all<span class="op">&lt;/</span>PrivateAssets<span class="op">&gt;</span>
+      <span class="op">&lt;</span>IncludeAssets<span class="op">&gt;</span>runtime; build; native; contentfiles; analyzers<span class="op">&lt;/</span>IncludeAssets<span class="op">&gt;</span>
+    <span class="op">&lt;/</span>PackageReference<span class="op">&gt;</span>
+    <span class="op">&lt;</span>PackageReference Include=<span class="str">"Roslynator.Analyzers"</span> Version=<span class="str">"4.12.4"</span><span class="op">&gt;</span>
+      <span class="op">&lt;</span>PrivateAssets<span class="op">&gt;</span>all<span class="op">&lt;/</span>PrivateAssets<span class="op">&gt;</span>
+      <span class="op">&lt;</span>IncludeAssets<span class="op">&gt;</span>analyzers<span class="op">&lt;/</span>IncludeAssets<span class="op">&gt;</span>
+    <span class="op">&lt;/</span>PackageReference<span class="op">&gt;</span>
+    <span class="op">&lt;</span>AdditionalFiles Include=<span class="str">"$(MSBuildThisFileDirectory)stylecop.json"</span> /<span class="op">&gt;</span>
+  <span class="op">&lt;/</span>ItemGroup<span class="op">&gt;</span>
+<span class="op">&lt;/</span>Project<span class="op">&gt;</span></code></pre>
+      </div>
+
+      <h3>stylecop.json</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">json</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code>{
+  <span class="prop">"settings"</span>: {
+    <span class="prop">"documentationRules"</span>: {
+      <span class="prop">"companyName"</span>: <span class="str">"KuchniaUCygana"</span>,
+      <span class="prop">"xmlHeader"</span>: <span class="kw">false</span>,
+      <span class="prop">"documentExposedElements"</span>: <span class="kw">false</span>
+    },
+    <span class="prop">"orderingRules"</span>: {
+      <span class="prop">"usingDirectivesPlacement"</span>: <span class="str">"outsideNamespace"</span>,
+      <span class="prop">"systemUsingDirectivesFirst"</span>: <span class="kw">true</span>
+    }
+  }
+}</code></pre>
+      </div>
+
+      <h3>.editorconfig (kluczowe reguły)</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">ini</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code>root = true
+
+[*]
+indent_style             = space
+indent_size              = 4
+end_of_line              = crlf
+charset                  = utf-8
+trim_trailing_whitespace = true
+insert_final_newline     = true
+
+[*.cs]
+csharp_style_namespace_declarations          = file_scoped:warning
+csharp_style_var_for_built_in_types          = false:warning
+csharp_style_var_when_type_is_apparent       = true:suggestion
+csharp_style_expression_bodied_methods       = when_on_single_line:suggestion
+
+<span class="cm"># StyleCop — wyłącz nagłówki plików (akademicki projekt)</span>
+dotnet_diagnostic.SA1633.severity = none
+dotnet_diagnostic.SA1600.severity = none
+dotnet_diagnostic.SA1101.severity = none</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S11 ── -->
+    <section class="section" id="s11">
+      <div class="section-header">
+        <span class="section-num">11</span>
+        <h2>Docker</h2>
+      </div>
+
+      <div class="callout callout-info">
+        <span class="callout-icon">ℹ️</span>
+        <div class="callout-body"><strong>SQLite nie potrzebuje osobnego kontenera</strong> — to plik. Dane persystują przez named volume <code>sqlite_data</code>. Podmiana na PostgreSQL wymaga tylko zmiany providera w DI.</div>
+      </div>
+
+      <h3>docker-compose.yml</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">yaml</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code>version: <span class="str">"3.9"</span>
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - <span class="str">"8080:8080"</span>
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Data Source=/app/data/kuchniaucygana.db
+    volumes:
+      - sqlite_data:/app/data
+      - uploads:/app/wwwroot/uploads
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:
+  uploads:</code></pre>
+      </div>
+
+      <h3>Dockerfile</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">dockerfile</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="kw">FROM</span> mcr.microsoft.com/dotnet/sdk:8.0 <span class="kw">AS</span> build
+<span class="kw">WORKDIR</span> /src
+<span class="kw">COPY</span> [<span class="str">"src/KuchniaUCygana.Web/KuchniaUCygana.Web.csproj"</span>, <span class="str">"Web/"</span>]
+<span class="kw">COPY</span> [<span class="str">"src/KuchniaUCygana.Application/KuchniaUCygana.Application.csproj"</span>, <span class="str">"Application/"</span>]
+<span class="kw">COPY</span> [<span class="str">"src/KuchniaUCygana.Domain/KuchniaUCygana.Domain.csproj"</span>, <span class="str">"Domain/"</span>]
+<span class="kw">COPY</span> [<span class="str">"src/KuchniaUCygana.Infrastructure/KuchniaUCygana.Infrastructure.csproj"</span>, <span class="str">"Infrastructure/"</span>]
+<span class="kw">RUN</span> dotnet restore <span class="str">"Web/KuchniaUCygana.Web.csproj"</span>
+<span class="kw">COPY</span> src/ .
+<span class="kw">RUN</span> dotnet publish <span class="str">"Web/KuchniaUCygana.Web.csproj"</span> -c Release -o /app/publish
+
+<span class="kw">FROM</span> mcr.microsoft.com/dotnet/aspnet:8.0 <span class="kw">AS</span> runtime
+<span class="kw">WORKDIR</span> /app
+<span class="kw">RUN</span> mkdir -p /app/data /app/wwwroot/uploads
+<span class="kw">COPY</span> --from=build /app/publish .
+<span class="kw">ENTRYPOINT</span> [<span class="str">"dotnet"</span>, <span class="str">"KuchniaUCygana.Web.dll"</span>]</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S12 ── -->
+    <section class="section" id="s12">
+      <div class="section-header">
+        <span class="section-num">12</span>
+        <h2>Rejestracja Zależności (DI)</h2>
+      </div>
+
+      <h3>Infrastructure/DependencyInjection.cs</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">csharp</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="kw">public static class</span> <span class="cls">DependencyInjection</span>
+{
+    <span class="kw">public static</span> <span class="cls">IServiceCollection</span> <span class="prop">AddInfrastructure</span>(
+        <span class="kw">this</span> <span class="cls">IServiceCollection</span> services, <span class="cls">IConfiguration</span> config)
+    {
+        <span class="cm">// Connection Factory</span>
+        services.AddSingleton&lt;<span class="cls">IDbConnectionFactory</span>, <span class="cls">SqliteConnectionFactory</span>&gt;();
+
+        <span class="cm">// Repositories</span>
+        services.AddScoped&lt;<span class="cls">IUserRepository</span>,  <span class="cls">UserRepository</span>&gt;();
+        services.AddScoped&lt;<span class="cls">IDietRepository</span>,  <span class="cls">DietRepository</span>&gt;();
+        services.AddScoped&lt;<span class="cls">IOrderRepository</span>, <span class="cls">OrderRepository</span>&gt;();
+
+        <span class="cm">// FluentMigrator</span>
+        services
+            .AddFluentMigratorCore()
+            .ConfigureRunner(rb =&gt; rb
+                .AddSQLite()
+                .WithGlobalConnectionString(config.GetConnectionString(<span class="str">"DefaultConnection"</span>))
+                .ScanIn(<span class="kw">typeof</span>(<span class="cls">DependencyInjection</span>).Assembly).For.Migrations())
+            .AddLogging(lb =&gt; lb.AddFluentMigratorConsole());
+
+        <span class="cm">// Auth / Cache / External services</span>
+        services.Configure&lt;<span class="cls">JwtSettings</span>&gt;(config.GetSection(<span class="str">"JwtSettings"</span>));
+        services.AddScoped&lt;<span class="cls">IJwtService</span>, <span class="cls">JwtService</span>&gt;();
+        services.AddMemoryCache();
+        services.AddSingleton&lt;<span class="cls">ICacheService</span>, <span class="cls">MemoryCacheService</span>&gt;();
+        services.AddScoped&lt;<span class="cls">IPaymentService</span>,         <span class="cls">StripePaymentService</span>&gt;();
+        services.AddScoped&lt;<span class="cls">IGeocodeService</span>,         <span class="cls">OpenStreetMapService</span>&gt;();
+        services.AddScoped&lt;<span class="cls">IAiDescriptionService</span>,   <span class="cls">OpenAiDescriptionService</span>&gt;();
+        services.AddScoped&lt;<span class="cls">IFileStorageService</span>,     <span class="cls">LocalFileStorageService</span>&gt;();
+        services.AddScoped&lt;<span class="cls">IPdfGenerator</span>,           <span class="cls">QuestPdfGenerator</span>&gt;();
+
+        services.AddHttpClient&lt;<span class="cls">IGeocodeService</span>, <span class="cls">OpenStreetMapService</span>&gt;(client =&gt;
+        {
+            client.BaseAddress = <span class="kw">new</span> <span class="cls">Uri</span>(<span class="str">"https://nominatim.openstreetmap.org/"</span>);
+            client.DefaultRequestHeaders.Add(<span class="str">"User-Agent"</span>, <span class="str">"KuchniaUCygana/1.0"</span>);
+        });
+
+        <span class="kw">return</span> services;
+    }
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S13 ── -->
+    <section class="section" id="s13">
+      <div class="section-header">
+        <span class="section-num">13</span>
+        <h2>Kompletna Lista Pakietów NuGet</h2>
+      </div>
+
+      <h3>KuchniaUCygana.Web</h3>
+      <div class="pkg-grid">
+        <div class="pkg-item">
+          <div><div class="pkg-name">Microsoft.AspNetCore.Authentication.JwtBearer</div><span class="pkg-version">8.x</span><span class="pkg-desc">Walidacja JWT w middleware</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Serilog.AspNetCore</div><span class="pkg-version">8.x</span><span class="pkg-desc">Logowanie HTTP + aplikacyjne</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Serilog.Sinks.Console</div><span class="pkg-version">5.x</span><span class="pkg-desc">Sink do konsoli</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Serilog.Sinks.File</div><span class="pkg-version">5.x</span><span class="pkg-desc">Sink do pliku</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">FluentValidation.AspNetCore</div><span class="pkg-version">11.x</span><span class="pkg-desc">Integracja walidacji z MVC</span></div>
+        </div>
+      </div>
+
+      <h3>KuchniaUCygana.Application</h3>
+      <div class="pkg-grid">
+        <div class="pkg-item">
+          <div><div class="pkg-name">AutoMapper</div><span class="pkg-version">13.x</span><span class="pkg-desc">Mapowanie obiektów</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">AutoMapper.Extensions.Microsoft.DependencyInjection</div><span class="pkg-version">13.x</span><span class="pkg-desc">Rejestracja DI</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">FluentValidation</div><span class="pkg-version">11.x</span><span class="pkg-desc">Walidacja DTO / Request</span></div>
+        </div>
+      </div>
+
+      <h3>KuchniaUCygana.Infrastructure</h3>
+      <div class="pkg-grid">
+        <div class="pkg-item">
+          <div><div class="pkg-name">ServiceStack.OrmLite.Sqlite</div><span class="pkg-version">8.x</span><span class="pkg-desc">ORM + SQLite provider</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Microsoft.Data.Sqlite</div><span class="pkg-version">8.x</span><span class="pkg-desc">ADO.NET SQLite driver</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">FluentMigrator</div><span class="pkg-version">5.x</span><span class="pkg-desc">Migracje schematu</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">FluentMigrator.Runner</div><span class="pkg-version">5.x</span><span class="pkg-desc">Runner migracji</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">FluentMigrator.Runner.SQLite</div><span class="pkg-version">5.x</span><span class="pkg-desc">SQLite dialekt</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">BCrypt.Net-Next</div><span class="pkg-version">4.x</span><span class="pkg-desc">Hashowanie haseł</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">System.IdentityModel.Tokens.Jwt</div><span class="pkg-version">7.x</span><span class="pkg-desc">Generowanie JWT</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Microsoft.IdentityModel.Protocols.OpenIdConnect</div><span class="pkg-version">7.x</span><span class="pkg-desc">Obsługa claims</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Stripe.net</div><span class="pkg-version">45.x</span><span class="pkg-desc">Płatności Stripe</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">OpenAI</div><span class="pkg-version">2.x</span><span class="pkg-desc">Oficjalne SDK OpenAI (.NET)</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">QuestPDF</div><span class="pkg-version">2024.x</span><span class="pkg-desc">Generowanie PDF</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Microsoft.Extensions.Caching.Memory</div><span class="pkg-version">8.x</span><span class="pkg-desc">IMemoryCache</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Microsoft.Extensions.Http</div><span class="pkg-version">8.x</span><span class="pkg-desc">IHttpClientFactory</span></div>
+        </div>
+      </div>
+
+      <h3>KuchniaUCygana.Tests</h3>
+      <div class="pkg-grid">
+        <div class="pkg-item">
+          <div><div class="pkg-name">xunit</div><span class="pkg-version">2.x</span><span class="pkg-desc">Framework testowy</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">xunit.runner.visualstudio</div><span class="pkg-version">2.x</span><span class="pkg-desc">Integracja z VS Test Explorer</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Moq</div><span class="pkg-version">4.x</span><span class="pkg-desc">Mockowanie interfejsów</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">FluentAssertions</div><span class="pkg-version">6.x</span><span class="pkg-desc">Czytelne asercje</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Bogus</div><span class="pkg-version">35.x</span><span class="pkg-desc">Generator danych testowych (Faker)</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Microsoft.AspNetCore.Mvc.Testing</div><span class="pkg-version">8.x</span><span class="pkg-desc">Testy integracyjne kontrolerów</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">coverlet.collector</div><span class="pkg-version">6.x</span><span class="pkg-desc">Pokrycie kodu (70-80% wymagane)</span></div>
+        </div>
+      </div>
+
+      <h3>Globalne — Directory.Build.props</h3>
+      <div class="pkg-grid">
+        <div class="pkg-item">
+          <div><div class="pkg-name">StyleCop.Analyzers</div><span class="pkg-version">1.2.0-beta</span><span class="pkg-desc">Styl kodu (konwencje)</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">Roslynator.Analyzers</div><span class="pkg-version">4.x</span><span class="pkg-desc">Dodatkowe reguły analizy</span></div>
+        </div>
+        <div class="pkg-item">
+          <div><div class="pkg-name">SonarAnalyzer.CSharp</div><span class="pkg-version">9.x</span><span class="pkg-desc">Wykrywanie bugów / code smells</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── S14 ── -->
+    <section class="section" id="s14">
+      <div class="section-header">
+        <span class="section-num">14</span>
+        <h2>Zewnętrzne API — Zestawienie</h2>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>API</th><th>Pakiet / Podejście</th><th>Moduł</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Stripe</strong></td><td><code>Stripe.net</code></td><td>E-commerce — płatności</td></tr>
+            <tr><td><strong>OpenAI</strong></td><td><code>OpenAI</code> (SDK)</td><td>Katalog — generowanie opisów posiłków</td></tr>
+            <tr><td><strong>OpenStreetMap Nominatim</strong></td><td><code>HttpClient</code></td><td>Logistyka — geokodowanie adresów</td></tr>
+            <tr><td><strong>OpenStreetMap OSRM</strong></td><td><code>HttpClient</code></td><td>Logistyka — optymalizacja trasy (opcjonalne)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── S15 ── -->
+    <section class="section" id="s15">
+      <div class="section-header">
+        <span class="section-num">15</span>
+        <h2>Generowanie PDF — QuestPDF</h2>
+      </div>
+      <p>QuestPDF jest darmowy dla projektów open-source i akademickich. Generowane dokumenty:</p>
+      <ul>
+        <li><strong>Karta Produkcyjna</strong> — tabela posiłków na dany dzień (moduł 3)</li>
+        <li><strong>Etykieta Przewozowa</strong> — adres + dieta + kod QR (moduł 4)</li>
+      </ul>
+      <div class="callout callout-warn">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-body">Dodaj <code>QuestPDF.Settings.License = LicenseType.Community;</code> w <code>Program.cs</code> przed pierwszym użyciem.</div>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">csharp</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="cm">// Infrastructure/Pdf/QuestPdfGenerator.cs</span>
+<span class="kw">public class</span> <span class="cls">ProductionPlanDocument</span> : <span class="cls">IDocument</span>
+{
+    <span class="kw">private readonly</span> <span class="cls">ProductionPlanDto</span> _plan;
+    <span class="kw">public</span> <span class="cls">ProductionPlanDocument</span>(<span class="cls">ProductionPlanDto</span> plan) =&gt; _plan = plan;
+
+    <span class="kw">public void</span> <span class="prop">Compose</span>(<span class="cls">IDocumentContainer</span> container)
+    {
+        container.Page(page =&gt;
+        {
+            page.Size(<span class="cls">PageSizes</span>.A4);
+            page.Margin(<span class="num">2</span>, <span class="cls">Unit</span>.Centimetre);
+            page.Header().Text(<span class="str">$"Plan produkcji — {_plan.Date:dd.MM.yyyy}"</span>).Bold().FontSize(<span class="num">18</span>);
+            page.Content().Table(table =&gt;
+            {
+                table.ColumnsDefinition(c =&gt;
+                {
+                    c.RelativeColumn(<span class="num">3</span>);
+                    c.RelativeColumn(<span class="num">1</span>);
+                    c.RelativeColumn(<span class="num">1</span>);
+                });
+                <span class="cm">// nagłówki + dane</span>
+            });
+        });
+    }
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S16 ── -->
+    <section class="section" id="s16">
+      <div class="section-header">
+        <span class="section-num">16</span>
+        <h2>Obsługa Plików</h2>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">csharp</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="cm">// Infrastructure/FileStorage/LocalFileStorageService.cs</span>
+<span class="kw">public class</span> <span class="cls">LocalFileStorageService</span> : <span class="cls">IFileStorageService</span>
+{
+    <span class="kw">private readonly</span> <span class="prop">string</span> _uploadPath;
+
+    <span class="kw">public</span> <span class="cls">LocalFileStorageService</span>(<span class="cls">IWebHostEnvironment</span> env)
+        =&gt; _uploadPath = <span class="cls">Path</span>.Combine(env.WebRootPath, <span class="str">"uploads"</span>);
+
+    <span class="kw">public async</span> <span class="cls">Task</span>&lt;<span class="prop">string</span>&gt; <span class="prop">SaveAsync</span>(<span class="cls">IFormFile</span> file, <span class="prop">string</span> subfolder)
+    {
+        <span class="kw">var</span> allowed = <span class="kw">new</span>[] { <span class="str">".jpg"</span>, <span class="str">".jpeg"</span>, <span class="str">".png"</span>, <span class="str">".webp"</span> };
+        <span class="kw">var</span> ext = <span class="cls">Path</span>.GetExtension(file.FileName).ToLowerInvariant();
+        <span class="kw">if</span> (!allowed.Contains(ext))
+            <span class="kw">throw new</span> <span class="cls">InvalidOperationException</span>(<span class="str">"Nieobsługiwany format pliku."</span>);
+
+        <span class="kw">var</span> fileName = <span class="str">$"{Guid.NewGuid()}{ext}"</span>;
+        <span class="kw">var</span> dir = <span class="cls">Path</span>.Combine(_uploadPath, subfolder);
+        <span class="cls">Directory</span>.CreateDirectory(dir);
+
+        <span class="kw">var</span> fullPath = <span class="cls">Path</span>.Combine(dir, fileName);
+        <span class="kw">await using var</span> stream = <span class="cls">File</span>.Create(fullPath);
+        <span class="kw">await</span> file.CopyToAsync(stream);
+
+        <span class="kw">return</span> <span class="str">$"/uploads/{subfolder}/{fileName}"</span>;
+    }
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S17 ── -->
+    <section class="section" id="s17">
+      <div class="section-header">
+        <span class="section-num">17</span>
+        <h2>Testy Automatyczne — Strategia</h2>
+      </div>
+
+      <div class="callout callout-tip">
+        <span class="callout-icon">🎯</span>
+        <div class="callout-body">Wymagane pokrycie: <strong>70–80% głównej logiki aplikacji</strong> (bez zapisów do ORM).</div>
+      </div>
+
+      <h3>Priorytety</h3>
+      <ul class="checklist">
+        <li><span class="check-icon">✅</span><div><span class="tag tag-high">wysoki</span><strong>Services (BLL)</strong> — OrderService, ProductionService, DietService</div></li>
+        <li><span class="check-icon">✅</span><div><span class="tag tag-high">wysoki</span><strong>AutoMapper profiles</strong> — poprawność mapowań</div></li>
+        <li><span class="check-icon">✅</span><div><span class="tag tag-high">wysoki</span><strong>FluentValidation validators</strong></div></li>
+        <li><span class="check-icon">✅</span><div><span class="tag tag-high">wysoki</span><strong>JwtService</strong> — generowanie i walidacja tokenów + ClaimsHelper</div></li>
+        <li><span class="check-icon">✅</span><div><span class="tag tag-medium">średni</span><strong>Repositories</strong> — rzeczywiste zapytania do SQLite in-memory</div></li>
+        <li><span class="check-icon">✅</span><div><span class="tag tag-medium">średni</span><strong>Controllers</strong> — WebApplicationFactory, testowanie HTTP 200/400/403</div></li>
+        <li><span class="check-icon">❌</span><div><span class="tag tag-low">pominięte</span>Bezpośrednie zapisy do ORM (zgodnie z wymaganiem prowadzącego)</div></li>
+      </ul>
+
+      <h3>Przykładowy test serwisu</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">csharp</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code><span class="kw">public class</span> <span class="cls">OrderServiceTests</span>
+{
+    <span class="kw">private readonly</span> <span class="cls">Mock</span>&lt;<span class="cls">IOrderRepository</span>&gt; _repoMock = <span class="kw">new</span>();
+    <span class="kw">private readonly</span> <span class="cls">Mock</span>&lt;<span class="cls">IMapper</span>&gt;          _mapperMock = <span class="kw">new</span>();
+    <span class="kw">private readonly</span> <span class="cls">OrderService</span>           _sut;
+
+    <span class="kw">public</span> <span class="cls">OrderServiceTests</span>()
+        =&gt; _sut = <span class="kw">new</span> <span class="cls">OrderService</span>(_repoMock.Object, _mapperMock.Object);
+
+    [Fact]
+    <span class="kw">public async</span> <span class="cls">Task</span> <span class="prop">CreateOrderAsync_WhenValidRequest_ReturnsOrderDto</span>()
+    {
+        <span class="cm">// Arrange</span>
+        <span class="kw">var</span> request = <span class="kw">new</span> <span class="cls">Faker</span>&lt;<span class="cls">CreateOrderRequest</span>&gt;()
+            .RuleFor(r =&gt; r.DietVariantId, f =&gt; f.Random.Int(<span class="num">1</span>, <span class="num">100</span>))
+            .Generate();
+
+        _repoMock.Setup(r =&gt; r.InsertAsync(<span class="cls">It</span>.IsAny&lt;<span class="cls">Order</span>&gt;())).ReturnsAsync(<span class="num">1</span>);
+        _mapperMock.Setup(m =&gt; m.Map&lt;<span class="cls">OrderDto</span>&gt;(<span class="cls">It</span>.IsAny&lt;<span class="cls">Order</span>&gt;()))
+            .Returns(<span class="kw">new</span> <span class="cls">OrderDto</span> { Id = <span class="num">1</span> });
+
+        <span class="cm">// Act</span>
+        <span class="kw">var</span> result = <span class="kw">await</span> _sut.CreateOrderAsync(request, userId: <span class="num">42</span>);
+
+        <span class="cm">// Assert</span>
+        result.Should().NotBeNull();
+        result.Id.Should().Be(<span class="num">1</span>);
+    }
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- ── S18 ── -->
+    <section class="section" id="s18">
+      <div class="section-header">
+        <span class="section-num">18</span>
+        <h2>Wdrożenie (produkcja)</h2>
+      </div>
+
+      <div class="deploy-grid">
+        <div class="deploy-card">
+          <h4>☁️ Opcja A — Azure App Service</h4>
+          <ul>
+            <li>Free/B1 tier wystarczy do egzaminu</li>
+            <li>SQLite volume via App Service Persistent Storage</li>
+            <li>Zmienne środowiskowe dla sekretów (nie appsettings.json!)</li>
+          </ul>
+        </div>
+        <div class="deploy-card">
+          <h4>🖥️ Opcja B — SmarterASP.NET</h4>
+          <ul>
+            <li>Hosting .NET z FTP deploy</li>
+            <li>Ręczne uruchomienie migracji przy pierwszym deploy</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>GitHub Actions CI/CD</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">yaml</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre><code>name: Build &amp; Test
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: <span class="str">"8.x"</span> }
+      - run: dotnet restore
+      - run: dotnet build --no-restore
+      - run: dotnet test --no-build --collect:<span class="str">"XPlat Code Coverage"</span></code></pre>
+      </div>
+    </section>
+
+    <!-- ── S19 ── -->
+    <section class="section" id="s19">
+      <div class="section-header">
+        <span class="section-num">19</span>
+        <h2>Uwagi Architektoniczne i Rekomendacje</h2>
+      </div>
+
+      <h3>Co projekt spełnia z wymagań prowadzącego</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Wymaganie</th><th>Realizacja</th></tr></thead>
+          <tbody>
+            <tr><td>Wzorzec Repository</td><td><code>IRepository&lt;T&gt;</code> + implementacje per moduł</td></tr>
+            <tr><td>DTO</td><td>Osobne klasy Request/Response w <code>Application/DTOs</code></td></tr>
+            <tr><td>ClaimsIdentity (2 role min.)</td><td>4 role: Client, Kitchen, Driver, Admin</td></tr>
+            <tr><td>Plik upload HTML</td><td><code>IFormFile</code> w kontrolerach — posiłki + reklamacje</td></tr>
+            <tr><td>ManyToMany</td><td><code>Recipe</code> (Meal↔Ingredient), <code>MealAllergen</code>, <code>DietVariantMeal</code></td></tr>
+            <tr><td>OneToMany</td><td>User→Order, Order→OrderItem, Diet→DietVariant itp.</td></tr>
+            <tr><td>~25 encji</td><td>Zgodne z wymaganiem 5 os. × 5 encji</td></tr>
+            <tr><td>Zewnętrzne API</td><td>Stripe, OpenAI, OpenStreetMap</td></tr>
+            <tr><td>Generowanie PDF</td><td>QuestPDF — karta produkcyjna + etykiety</td></tr>
+            <tr><td>Testy 70-80%</td><td>xUnit + Moq + coverlet</td></tr>
+            <tr><td>Wdrożenie</td><td>Docker / Azure / SmarterASP</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Ważne kwestie do omówienia z zespołem</h3>
+      <div class="callout callout-warn" style="margin-bottom:12px">
+        <span class="callout-icon">1️⃣</span>
+        <div class="callout-body"><strong>ServiceStack OrmLite vs EF Core</strong> — OrmLite nie ma lazy loadingu. Przy ManyToMany trzeba jawnie ładować dane przez JOIN lub dodatkowe zapytania. Napiszcie te zapytania "na papierze" przed implementacją modułu produkcyjnego.</div>
+      </div>
+      <div class="callout callout-warn" style="margin-bottom:12px">
+        <span class="callout-icon">2️⃣</span>
+        <div class="callout-body"><strong>SQLite write-lock</strong> — SQLite blokuje całą bazę przy każdym zapisie. Dla projektu akademickiego wystarczy; upgrade do PostgreSQL wymaga tylko podmiany providera w DI.</div>
+      </div>
+      <div class="callout callout-warn" style="margin-bottom:12px">
+        <span class="callout-icon">3️⃣</span>
+        <div class="callout-body"><strong>FluentMigrator jako jedyne źródło DDL</strong> — atrybuty OrmLite (<code>[AutoIncrement]</code>, <code>[References]</code>) wpływają tylko na DML, nie tworzą tabel. Migracje to JEDYNE miejsce DDL.</div>
+      </div>
+      <div class="callout callout-info" style="margin-bottom:12px">
+        <span class="callout-icon">4️⃣</span>
+        <div class="callout-body"><strong>JWT w cookie vs localStorage</strong> — W MVC (Razor Views) tokeny wygodniej trzymać w HttpOnly cookie. <code>[Authorize]</code> działa automatycznie bez ręcznego dołączania headera.</div>
+      </div>
+      <div class="callout callout-info" style="margin-bottom:12px">
+        <span class="callout-icon">5️⃣</span>
+        <div class="callout-body"><strong>QuestPDF licencja</strong> — Od wersji 2023.x darmowy dla projektów community. Wymagane: <code>QuestPDF.Settings.License = LicenseType.Community;</code></div>
+      </div>
+      <div class="callout callout-warn">
+        <span class="callout-icon">6️⃣</span>
+        <div class="callout-body"><strong>Sekrety</strong> — NIE commitujcie kluczy API do Git. Używajcie <code>dotnet user-secrets</code> lokalnie i zmiennych środowiskowych na produkcji.</div>
+      </div>
+    </section>
+
+    <!-- ── S20 ── -->
+    <section class="section" id="s20">
+      <div class="section-header">
+        <span class="section-num">20</span>
+        <h2>Słownik Pojęć dla Cursora</h2>
+      </div>
+
+      <div class="glossary-item">
+        <div class="glossary-term">BaseEntity</div>
+        <div class="glossary-def">Abstrakcyjna klasa bazowa ze wspólnymi polami (Id, CreatedAt, UpdatedAt) — dziedziczą po niej wszystkie encje.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">IRepository&lt;T&gt;</div>
+        <div class="glossary-def">Generyczny interfejs CRUD — jeden per agregat w warstwie Domain.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">BaseRepository&lt;T&gt;</div>
+        <div class="glossary-def">Implementacja generyczna oparta na OrmLite — dziedziczy po niej każde konkretne repozytorium.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">IDbConnectionFactory</div>
+        <div class="glossary-def">Fabryka połączeń do SQLite — wstrzykiwana do repozytoriów przez DI.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">DTO</div>
+        <div class="glossary-def">Data Transfer Object — klasy w <code>Application/DTOs</code> — NIGDY encje bezpośrednio do View.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">ViewModel</div>
+        <div class="glossary-def">Model widoku — klasy w <code>Web/ViewModels</code> — może agregować kilka DTO.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">Profile (AutoMapper)</div>
+        <div class="glossary-def">Klasa konfiguracji mapowania — 1 plik per moduł.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">ICacheService</div>
+        <div class="glossary-def">Abstrakcja nad IMemoryCache — umożliwia podmianę na Redis bez zmiany kodu serwisów.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">ClaimsHelper</div>
+        <div class="glossary-def">Statyczna klasa pomocnicza do odczytu danych z <code>ClaimsPrincipal</code>.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">[Migration(N)]</div>
+        <div class="glossary-def">Atrybut FluentMigratora określający kolejność migracji — klasy te są JEDYNYM miejscem DDL w projekcie.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">UserSeeder / DietSeeder</div>
+        <div class="glossary-def">Klasy z biblioteką Bogus — generują deterministyczne, realistyczne dane testowe.</div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="doc-footer">
+    <span>Kuchnia u Cygana · Dokument Architektoniczny v1.0</span>
+    <span>Wygenerowano: 2026-04-03 · ASP.NET MVC 8</span>
+  </footer>
+</main>
+
+<script>
+  // Scroll progress
+  const bar = document.getElementById('scroll-progress');
+  window.addEventListener('scroll', () => {
+    const pct = window.scrollY / (document.body.scrollHeight - window.innerHeight) * 100;
+    bar.style.width = pct + '%';
+  });
+
+  // Active nav link
+  const sections = document.querySelectorAll('.section');
+  const links    = document.querySelectorAll('.nav-link');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.nav-link[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+
+  // Copy code
+  function copyCode(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    const text = pre.innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+</script>
+</body>
+</html>

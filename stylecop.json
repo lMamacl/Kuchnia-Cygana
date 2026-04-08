@@ -1,0 +1,13 @@
+{
+  "settings": {
+    "documentationRules": {
+      "companyName": "KuchniaUCygana",
+      "xmlHeader": false,
+      "documentExposedElements": false
+    },
+    "orderingRules": {
+      "usingDirectivesPlacement": "outsideNamespace",
+      "systemUsingDirectivesFirst": true
+    }
+  }
+}
