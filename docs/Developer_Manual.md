@@ -61,3 +61,5 @@ PrzykÅ‚ad Commita na obecny stan dla gita po zrealizowaniu zadaÅ„:
 ## ??? Baza Danych: Migracje (FluentMigrator)
 
 W utworzonej warstwie \Infrastructure/Persistence/Migrations/\ powo³ano migracje schematów, wykorzystuj¹c klasê \CreateWarehouseTables\. Podczas tworzenia tabel opartych o \AuditableEntity\ zawsze pamiêtaj o rêcznym rzutowaniu kolumn: \CreatedBy, UpdatedBy, IsDeleted, DeletedAt, DeletedBy\, poniewa¿ FluentMigrator nie realizuje automatycznego sczytywania dziedziczenia w³asnoœci modeli jak EF Core!
+
+### Komponent 3: Repozytoria Magazynu i Logika FEFO`n- BaseRepository<TEntity, TId> uogolniony, Soft Delete automatyczny`n- BatchRepository: FEFO sort, alerty waznosci`n- InventoryTransactionRepository: historia Sanepid, zakres dat`n- Testy: 4/4 zielone (Bogus + Moq + FluentAssertions)
