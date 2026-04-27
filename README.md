@@ -99,6 +99,7 @@ dotnet run --project src/KuchniaUCygana.Web
 Migracje SQLite uruchamiają się **automatycznie** przy starcie aplikacji. Baza `kuchniaucygana_dev.db` zostanie utworzona w katalogu projektu Web.
 
 Aplikacja będzie dostępna pod: `https://localhost:5001` lub `http://localhost:5000`
+(lub innym porcie, sprawdź w terminalu po uruchomieniu)
 
 ---
 
@@ -190,7 +191,7 @@ main ← develop ← feature/devX-opis-zadania
 | [`docs/PLAN_PROJEKTU.md`](docs/PLAN_PROJEKTU.md) | Ogólny roadmap projektu (7 faz) |
 | [`docs/module-3/PLAN_MODUL_3.md`](docs/module-3/PLAN_MODUL_3.md) | Szczegółowy plan Modułu 3 |
 | [`docs/Decisions_Log.md`](docs/Decisions_Log.md) | Dziennik decyzji architektonicznych |
-| [`docs/guides/Developer_Manual.md`](docs/guides/Developer_Manual.md) | Podręcznik dewelopera |
+| [`docs/guides/Developer_Manual.md`](docs/guides/Developer_Manual.md) | Podręcznik dewelopera (OPRÓCZ PLANU NAJWAŻNIEJSZE) |
 
 ---
 

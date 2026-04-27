@@ -54,10 +54,38 @@ Sygnalizator zdarzeń, który rozdziela odpowiedzialności. Jeśli proces produk
 Aplikacja wykorzystuje `FluentMigrator` do wersjonowania schematu bazy danych. Wszelkie migracje muszą znajdować się w projekcie infrastruktury w odpowiednim katalogu: `Infrastructure/Persistence/Migrations/`.
 
 **🔴 Bardzo Ważne zasady tworzenia tabel dla `AuditableEntity`:**
-Gdy przygotowujesz migracje tworzące w bazie nowe tabele obsługujące Soft Delete i Audyt, pamiętaj by dodać ręcznie definicję tych kolumn do definicji tabeli. `FluentMigrator` nie zagląda automatycznie do kodu w klasie `AuditableEntity` (jak robiłoby to EF Core).
+Gdy przygotowujesz migracje tworzące w bazie nowe tabele obsługujące Soft Delete i Audyt, pamiętaj by dodać ręcznie definicję tych kolumn do definicji tabeli. `FluentMigrator` nie zagląda automatycznie do kodu w klasie `AuditableEntity` (jak robiłbyś to w EF Core).
 Zawsze dodawaj odpowiedniki kolumn dziedziczonych: `CreatedBy`, `UpdatedBy`, `IsDeleted`, `DeletedAt`, `DeletedBy`. 
 
 **Pamiętaj o przedziałach numeracji migracji:** Aby zapobiec konfliktom z innymi deweloperami, korzystaj wyłącznie z przedziału przydzielonego dla przypisanego do ciebie Modułu (Sprawdź zakresy przydziału w głównym `README.md`).
+
+---
+
+## 🧭 Jak tworzyć kod dla swojego Modułu (Poradnik Krok po Kroku)
+
+W odróżnieniu od standardowych projektów opartych na Entity Framework Core, nasz projekt używa **ServiceStack.OrmLite** oraz **FluentMigrator**. Różnice te wymagają innego podejścia do tworzenia bazy danych i zapytań. Oto na co musisz zwrócić uwagę przy kodowaniu:
+
+### 1. Tworzenie Encji (Klas Bazowych)
+* **Zawsze dziedzicz:** Twoja encja musi dziedziczyć z `AuditableEntity<T>` (dla danych biznesowych) lub `BaseEntity<T>` (dla słowników).
+* **Brak relacji nawigacyjnych:** W przeciwieństwie do EF Core, OrmLite to "Micro-ORM". **Nie twórz** właściwości nawigacyjnych typowych dla EF (np. `public virtual List<Item> Items { get; set; }`). Jeśli musisz połączyć tabele, przechowuj tylko klucze obce (np. `public int CategoryId { get; set; }`) i wykonuj jawne `JOIN` w repozytorium lub używaj dedykowanych atrybutów `[Reference]`, mając na uwadze różnice w działaniu.
+* **Atrybuty OrmLite:** Oznaczaj nazwy tabel i zignorowane pola odpowiednimi atrybutami (np. `[Alias("MojaTabela")]`, `[Ignore]`).
+
+### 2. Pisanie Migracji (FluentMigrator)
+* **Explicit vs Implicit:** W EF Core robiłeś `Add-Migration`. Tutaj każdą zmianę struktury bazy piszesz **całkowicie ręcznie** w klasie dziedziczącej po `Migration`.
+* **Kolumny audytowe:** Przypomnienie — dla tabel powiązanych z `AuditableEntity` musisz zawsze "z palca" dodać kolumny: `CreatedBy`, `UpdatedBy`, `IsDeleted`, `DeletedAt`, `DeletedBy`.
+* **Klucze obce i indeksy:** Definiuj je jawnie w kodzie migracji za pomocą łańcucha np. `.ForeignKey()` oraz `.Indexed()`.
+* **Przedziały numeracji:** Trzymaj się puli przypisanej do Twojego modułu (np. 300-399). Migracje uruchamiają się w kolejności swoich numerów (nazw klas)!
+
+### 3. Implementacja Repozytoriów
+* **Dziedzicz z BaseRepository:** Tworząc własne repozytorium (np. `MyEntityRepository`), dziedzicz po gotowym `BaseRepository<MyEntity, int>`. Otrzymasz za darmo podstawowe operacje CRUD (w tym wbudowaną w generyki obsługę flag Soft Delete).
+* **Zaawansowane zapytania (JOIN-y):** Własne, skomplikowane metody w repozytorium (np. pobierające specyficzne raporty) muszą korzystać z API `SqlExpression` dostarczanego przez OrmLite. Musisz sam zadbać o `db.LoadSelect()` lub zdefiniować odpowiednie złączenia JOIN. Zawsze testuj wygenerowany SQL.
+* **Separacja Interfejsów:** Zawsze definiuj interfejs repozytorium (np. `IMyEntityRepository`) w warstwie `Domain/Interfaces` i implementuj go dopiero w warstwie `Infrastructure/Persistence/Repositories`.
+
+### 4. Pisanie Testów
+* **Testowanie w izolacji:** Swoje serwisy aplikacyjne (logikę biznesową) testuj jednostkowo za pomocą frameworka **xUnit** oraz biblioteki **Moq** (mockując wstrzykiwane przez konstruktor repozytoria).
+* **Bogus do generowania danych:** Do masowego generowania fikcyjnych, ale realistycznych danych (imiona, opisy, losowe daty ważności) używaj biblioteki **Bogus**. Bardzo ułatwia to testowanie logiki (np. zachowania dla metody sprawdzającej partie FEFO).
+* **FluentAssertions:** Asercje sprawdzające wyniki testów zapisuj za pomocą FluentAssertions (np. `result.Should().NotBeNull()`), co czyni testy czytelnymi niemal jak język naturalny.
+* **Baza in-memory:** Do testów integracyjnych repozytoriów używamy specjalnego dialektu pamięciowego SQLite (`SqliteDialect.Provider`), który umożliwia pełne testowanie zapytań SQL bez ryzyka uszkodzenia rzeczywistego pliku bazy deweloperskiej.
 
 ---
 
