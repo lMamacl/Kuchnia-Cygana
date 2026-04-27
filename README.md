@@ -99,6 +99,7 @@ dotnet run --project src/KuchniaUCygana.Web
 Migracje SQLite uruchamiają się **automatycznie** przy starcie aplikacji. Baza `kuchniaucygana_dev.db` zostanie utworzona w katalogu projektu Web.
 
 Aplikacja będzie dostępna pod: `https://localhost:5001` lub `http://localhost:5000`
+(lub innym porcie, sprawdź w terminalu po uruchomieniu)
 
 ---
 
