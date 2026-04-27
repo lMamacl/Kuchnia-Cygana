@@ -1,63 +1,77 @@
-# Developer Manual - Kuchnia U Cygana
+# Podręcznik Dewelopera - Kuchnia U Cygana
 
-Witaj w podręczniku technicznym dla Deweloperów systemu ERP Platformy Cateringowej.
+Witaj w podręczniku technicznym dla Deweloperów systemu ERP Platformy Cateringowej. Ten dokument opisuje bazową architekturę znajdującą się na gałęzi `develop` i zasady, którymi należy się kierować przy budowie nowych modułów.
 
 ## Nawigacja po Dokumentacji
-Poniżej znajdziesz szybkie linki do innych kluczowych dokumentów określających pracę w środowisku projektu:
-* [ARCHITEKTURA PROJEKTU](./ARCHITEKTURA_KuchniaUCygana.html) - Definicje bazy, Clean Architecture (Plik HTML).
-* [DZIENNIK DECYZJI (Decisions Log)](./Decisions_Log.md) - Poradnik z wytłumaczeniem "Dlaczego używamy takiej technologii, a nie innej i jak ona pod spodem działa" (Szczególnie DDD, Soft Delete).
-* [MODUŁ 3: Produkcja i Magazyn](./module%203/Modu%C5%823.pdf) - Założenia domenowe modułu nr 3.
+Poniżej znajdziesz szybkie linki do innych kluczowych dokumentów:
+* [ARCHITEKTURA PROJEKTU](../architecture/ARCHITEKTURA_KuchniaUCygana.html) - Definicje bazy, Clean Architecture.
+* [DZIENNIK DECYZJI (Decisions Log)](../Decisions_Log.md) - Poradnik z wytłumaczeniem "dlaczego" używamy takich a nie innych technologii i rozwiązań architektonicznych (szczególnie przydatne dla zrozumienia koncepcji DDD oraz Soft Delete).
+* [PLAN PROJEKTU](../PLAN_PROJEKTU.md) - Etapy i status realizacji całego przedsięwzięcia.
 
 ---
 
-## 🏗️ Status Prac i Najważniejsze Komponenty
+## 🛠️ Stan Gałęzi `develop` (Czysta Baza)
 
-Obecnie skupiamy się na **Module 3 (Magazyn, Produkcja)** i izolacji go, wplatając zasady bezpiecznych operacji sanitarno-epidemiologicznych i audytu danych (środowisko budowane na SQLite + ServiceStack.OrmLite, bezinwazyjne dla niezbudowanych jeszcze zewnętrznych modułów e-commerce za pomocą Mocków).
+Obecnie na gałęzi `develop` znajduje się **Czysty Szablon Architektoniczny**. Został on zoptymalizowany i oczyszczony z próbnych komponentów i logiki testowej, aby każdy deweloper, niezależnie od przypisanego modułu, mógł od niego bezpiecznie wystartować.
 
-Poniżej przegląd stworzonych lub modyfikowanych do tej pory rozwiązań:
+Czego możesz oczekiwać pobierając najnowszego `develop'a`:
+1. Skonfigurowane i gotowe środowisko deweloperskie: pliki Docker, konfiguracja `user-secrets`, Pipeline CI w GitHub Actions (z wbudowanymi testami i weryfikacją pokrycia kodu).
+2. Przygotowany i przetestowany układ katalogów (Clean Architecture): `Web`, `Application`, `Domain`, `Infrastructure`.
+3. Gotowe fundamenty DDD i wzorce bazodanowe (Bazowe Encje i Generyczne Repozytoria).
 
-### Komponent 1: Obiekty Bazowe i DDD (`Domain/Common/`)
-Skonfigurowano tzw. szkielet relacyjny bazy dla ServiceStack.OrmLite pod założenia Domain-Driven Design we wnętrzu *Clean Architecture*.
+Na gałęzi `develop` nie uświadczysz na ten moment **żadnej ścisłej logiki biznesowej** dla któregokolwiek z planowanych 5 modułów — jest to celowy zabieg. Startujesz na czysto i budujesz swój kod na udostępnionym niżej fundamencie.
 
-#### 🔸 `BaseEntity<T>` (Domain/Common/BaseEntity.cs)
-**Dla kogo i Kiedy?** Stosuj, gdy tworzysz proste obiekty słownikowe w których człowiek ich nie aktualizuje (np. Tabela z nazwami Państw, Tabela Jednostek Miar - gramy/litry, Tagowanie).
-**Co zawiera?** Primary Key (`Id`), nadpisane operatory do porównania by identyfikować w całości obiekt przy listach oraz pola tworzenia `CreatedAt` w bezpiecznym standardzie strefowym świata z `DateTimeOffset`.
+---
 
-#### 🔸 `AuditableEntity<T>` (Domain/Common/AuditableEntity.cs)
-**Dla kogo i Kiedy?** Stosuj ZAWSZE dla ruchomych danych biznesowych tworzonych/edycje przez pracownika i klienta. Jeśli encją jest Transakcja, Zlecenie Produkcyjne, Karta Magazyniera lub Dodana Partia Kurczaka do chłodni... Używamy *AuditableEntity*!
-**Co wpierają dodatkowo?**
-- Znaczniki `CreatedBy` i `UpdatedBy` określające kto kliknął przycisk (śledzenie akcji w celach audytu/błędu ludzkiego).
-- Implementacja **Soft Delete**! (dziedziczy interfejs z `Domain/Common/Interfaces/ISoftDeletable.cs`). To znaczy, że nie używasz hardkore'owego `DELETE FROM Tabelka` w OrmLite, lecz ustawiasz flagę `IsDeleted = true; DeletedBy = {pracownik_id}` zachowując ciągłość rekordów dla bazy historycznej Sanepidu.
+## 🏗️ Komponenty Bazowe (Szkielet DDD w `Domain/Common/`)
 
-#### 🔸 `IDomainEvent`
-Sygnalizator (Marker w `Domain/Common/Events/`). Jeśli wystąpi skompresowana akcja, będziemy nim w łatwy sposób nasłuchiwali i odpalali handler, by np. notyfikować wszystkie systemy ("Uwaga, partia nr 00923 skończyła ważność!"). 
+Kluczem do pracy z bazą w naszym systemie (pod spodem korzystamy z ORM `ServiceStack.OrmLite`) są dostarczone encje bazowe, po których **musisz** dziedziczyć, budując modele danych dla swoich modułów.
 
-### Komponent 2: Modele Bazy Magazynu (Smart Inventory / FEFO) z uwzgl. Prawa Sanitarnego (`Domain/Entities/Warehouse/`)
-Powołane nowe Encje definiują fizyczny i ewidencyjny obraz funkcjonowania Magazynu, odporny na braki zewnętrznych modułów:
-- `UnitOfMeasure`: Prosty słownik (BaseEntity). Zawiera koncepcję logistyczną (symbol i nazwa jednostki np. *L*, *Litr*).
-- `StockItem`: Składnik fizyczny z alertami do zamawiania (AuditableEntity). Określa limit (`MinimumLevel`) rzucający alert przy przekroczeniu, oraz `LeadTimeDays` (ile dni czekamy na hurtownika).
-- `Batch`: Zastosowane tu prawo FEFO. Dostawy nie wchodzą fizycznie w surowiec sam w sobie, tylko tworzą obiekty "Partii" (Batches). Posiadają kluczową dla algorytmu `ExpiryDate` (Ważność) oraz `IsDepleted` (Zatwierdzono do wyczerpania).
-- `InventoryTransaction`: Zabezpiecza proces audytorny przed modyfikacjami - to Immutable Transaction Log tworzony z BaseEntity w oparciu o typ (`InventoryTransactionType` w Enumach np. Receipt, Waste, ProductionIssue).
-- `TemperatureLog`: Zabezpieczenie na wypadek audytu Sanepidu ze stałej kontroli temperatury w punktach logistycznych (AuditableEntity).
+### 🔸 `BaseEntity<T>` (`Domain/Common/BaseEntity.cs`)
+**Dla kogo i kiedy?** Stosuj, gdy tworzysz proste słowniki, tagi czy tabele konfiguracyjne, które praktycznie nigdy nie będą edytowane ręcznie przez pracownika w trakcie działania systemu (np. Tabele jednostek miar `[L, kg, g]`, predefiniowane statusy, typy operacji, kody błędów).
+**Co ułatwia?** 
+- Dodaje klucz główny `Id` (typu generycznego, zazwyczaj `int`). Zauważysz tam **publiczny setter** — to zabieg celowy; ułatwia hydrację danych obiektowych przez `ServiceStack.OrmLite` z bazy, a także pozwala zdefiniować testowe ID w xUnit i klasach generujących mockowane dane.
+- Automatycznie dokłada `CreatedAt` ustawiane jako `DateTimeOffset` według czasu UTC.
+- Posiada nadpisane metody `Equals` dla standardowej identyfikacji tożsamości poprzez pole Id.
+- Wprowadza obsługę `IDomainEvent`.
+
+### 🔸 `AuditableEntity<T>` (`Domain/Common/AuditableEntity.cs`)
+**Dla kogo i kiedy?** Stosuj ZAWSZE dla ruchomych danych biznesowych, których cykl życia polega na edycjach ze strony pracowników czy klientów! Jeśli encją jest Zamówienie, Receptura, Partia kurczaka włożona do chłodni czy Zgłoszenie Pracownika — zawsze dziedziczymy po `AuditableEntity`.
+**Co wspiera dodatkowo?**
+- Posiada sygnatury audytowe: `CreatedBy` i `UpdatedBy`. Śledzi kto wykonał akcję — zapisując ID użytkownika uwierzytelnionego z JWT.
+- Posiada wbudowany i przygotowany pod repozytoria **Soft Delete**! (poprzez implementację interfejsu z `Domain/Common/Interfaces/ISoftDeletable.cs`). To znaczy, że nie używasz w swoim kodzie niebezpiecznego `DELETE FROM Tabelka`. Usuwanie odbywa się poprzez nałożenie wierszowej flagi `IsDeleted = true` oraz `DeletedBy = {pracownik_id}`. Utrzymujemy historię każdego usunięcia w bazie w celach dowodowych dla Sanepidu czy księgowości.
+
+### 🔸 Generyczne Repozytorium (`BaseRepository<T, TId>`)
+Gotowe do użycia generyczne operacje asynchroniczne typu Create/Update/Delete/GetAll. Zostało odpowiednio oskryptowane — jeśli wskażesz mu by zwrócił dane encji typu `AuditableEntity`, repozytorium **automatycznie** zignoruje "usunięte" rekordy (Soft Delete) wywołując zwykłe zapytanie. Wywołanie usunięcia nadpisze status, zamiast usuwać wiersz z bazy.
+
+### 🔸 `IDomainEvent` (`Domain/Common/Events/`)
+Sygnalizator zdarzeń, który rozdziela odpowiedzialności. Jeśli proces produkcyjny (Moduł 3) zmieni datę ważności jogurtu na przedawniony, wypuści `BatchExpiredEvent`. Wtedy dowolny inny moduł (np. Komunikacja - Moduł 5) może w odpowiedzi bezproblemowo stworzyć subskrybenta i wysłać automatycznego e-maila menedżerowi do spraw bezpieczeństwa. Moduły nie "gadają" ze sobą bezpośrednio w kodzie.
+
+---
+
+## 💾 Baza Danych: Migracje (FluentMigrator)
+
+Aplikacja wykorzystuje `FluentMigrator` do wersjonowania schematu bazy danych. Wszelkie migracje muszą znajdować się w projekcie infrastruktury w odpowiednim katalogu: `Infrastructure/Persistence/Migrations/`.
+
+**🔴 Bardzo Ważne zasady tworzenia tabel dla `AuditableEntity`:**
+Gdy przygotowujesz migracje tworzące w bazie nowe tabele obsługujące Soft Delete i Audyt, pamiętaj by dodać ręcznie definicję tych kolumn do definicji tabeli. `FluentMigrator` nie zagląda automatycznie do kodu w klasie `AuditableEntity` (jak robiłoby to EF Core).
+Zawsze dodawaj odpowiedniki kolumn dziedziczonych: `CreatedBy`, `UpdatedBy`, `IsDeleted`, `DeletedAt`, `DeletedBy`. 
+
+**Pamiętaj o przedziałach numeracji migracji:** Aby zapobiec konfliktom z innymi deweloperami, korzystaj wyłącznie z przedziału przydzielonego dla przypisanego do ciebie Modułu (Sprawdź zakresy przydziału w głównym `README.md`).
 
 ---
 
 ## 📝 Zasady Zgłaszania Commitów i Czystego Kodu
-Poniżej znajdują się standardy dodawania zmian związanych z powyższymi elementami:
 
-**Proponowana struktura flag commitów (np. zgodnie z Conventional Commits):**
-* `feat:` (Nowa funkcja, np. Utworzono encję dla dostawców magazynowych która dziedziczy po AuditableEntity).
-* `fix:` (Rozwiązanie błędu produkcyjnego).
-* `refactor:` (Przepisanie części kodu zgodnie ze standardami architektonicznymi np. zmiana `DateTime` na `DateTimeOffset`).
-* `docs:` (Wszelakie zmiany w dokumentacji np. Dzienniku decyzji, diagramach UML, wewnątrz /docs).
-* `test:` (Pokrywanie unit testami koncepcji baz danych w xUnit).
-* `chore:` (Aktualizacje np. pliki typu `.gitignore` i paczki NuGet - m.in. dostarczenie `ServiceStack.Interfaces`).
+Utrzymujemy czysty i uporządkowany rejestr zmian korzystając z konwencji **Conventional Commits**. Każdą wykonaną u siebie w branchu `feature/*` zmianę flaguj w gicie następująco:
 
-Przykład Commita na obecny stan dla gita po zrealizowaniu zadań:
-`feat: Wdrożono zasady DDD oraz klasy BaseEntity i AuditableEntity`
-`chore: Zaktualizowano reguły pliku .gitignore pod konwersje rozszerzeń (txt)`
+* `feat:` (Nowa funkcjonalność, kod dla encji, nowe polecenie w systemie, wdrożenie)
+* `fix:` (Załatanie błędu zgłoszonego na `develop` lub produkcyjnego, poprawki łamiących się testów)
+* `refactor:` (Optymalizacje kodu bez zmian w funkcjonalności aplikacji)
+* `docs:` (Wszelkie aktualizacje w plikach `.md`, dziennikach ustaleń, logach)
+* `test:` (Samo testowanie — np. wprowadzanie Mocków czy konfiguracja Bogusa)
+* `chore:` (Obsługa techniczna np. aktualizacje NuGet, GitHub Actions, edycja .gitignore)
 
-
-## ??? Baza Danych: Migracje (FluentMigrator)
-
-W utworzonej warstwie \Infrastructure/Persistence/Migrations/\ powo�ano migracje schemat�w, wykorzystuj�c klas� \CreateWarehouseTables\. Podczas tworzenia tabel opartych o \AuditableEntity\ zawsze pami�taj o r�cznym rzutowaniu kolumn: \CreatedBy, UpdatedBy, IsDeleted, DeletedAt, DeletedBy\, poniewa� FluentMigrator nie realizuje automatycznego sczytywania dziedziczenia w�asno�ci modeli jak EF Core!
+**Przed dodaniem Commita koniecznie sprawdź, czy:**
+1. Masz schowane swoje dane produkcyjne API lub wygenerowane hasła w usłudze narzędziowej: `dotnet user-secrets` a w `.env` i `appsettings.json` nie ma twardo zapisanych kluczy!
+2. Twoje zmiany na branchu skompilują się na serwerze i nie zerwą głównego strumienia. Zrób na konsoli kontrolny test: `dotnet test`.
