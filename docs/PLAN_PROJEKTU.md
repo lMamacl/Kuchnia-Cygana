@@ -77,9 +77,9 @@ Ten dokument definiuje **kolejność realizacji komponentów** — od infrastruk
 |---|---------|--------|
 | 0.1 | Docker: Dockerfile + docker-compose z named volumes (SQLite + uploads) | ✅ |
 | 0.2 | `.editorconfig`, `stylecop.json`, `Directory.Build.props` — jakość kodu | ✅ |
-| 0.3 | GitHub Actions CI (`ci.yml`): build + test + coverage | 🔨 (XPlat Code Coverage + artifact upload) |
-| 0.4 | `.env` / `user-secrets` — zarządzanie sekretami | 🔨 (UserSecretsId + .env.example + appsettings.Development.json.example) |
-| 0.5 | `README.md` — instrukcja uruchomienia projektu | 🔨 (pełna instrukcja: dotnet, Docker, user-secrets, testy, workflow) |
+| 0.3 | GitHub Actions CI (`ci.yml`): build + test + coverage | ✅ (XPlat Code Coverage + artifact upload) |
+| 0.4 | `.env` / `user-secrets` — zarządzanie sekretami | ✅ (UserSecretsId + .env.example + appsettings.Development.json.example) |
+| 0.5 | `README.md` — instrukcja uruchomienia projektu | ✅ (pełna instrukcja: dotnet, Docker, user-secrets, testy, workflow) |
 
 ### FAZA 1 — Domain Core + Baza Danych
 **Priorytet:** 🔴 KRYTYCZNY — fundament wszystkich modułów  
