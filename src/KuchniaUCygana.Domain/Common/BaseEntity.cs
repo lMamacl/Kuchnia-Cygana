@@ -9,7 +9,7 @@ public abstract class BaseEntity<TId> : IEquatable<BaseEntity<TId>>
 {
     [AutoIncrement]
     [PrimaryKey]
-    public TId Id { get; protected internal set; } = default!;
+    public TId Id { get; set; } = default!;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? UpdatedAt { get; set; }
