@@ -1,0 +1,96 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor LightBlue
+  BorderColor DarkBlue
+}
+
+actor "Szef Kuchni" as Chef
+actor " Magazynier" as Mag
+actor "⚙️ System (Zadanie w tle)" as Sys
+
+' --- ZEWNĘTRZNE MODUŁY (Punkty styku) ---
+usecase "Pobierz Aktywne Zamówienia\n(Moduł 1)" as M1
+usecase "Pobierz 7-dniowy Plan Diet\ni Posiłków (Moduł 2)" as M2
+usecase "Pobierz Manifest Transportowy\n(Trasy i Przypisania\nAut do Kierowców) (Moduł 4)" as M4
+usecase "Udostępnij Zestawienie (Dla Modułu 4)" as M3
+
+
+package "Moduł 3: Produkcja, Kompletacja i Magazyn (WMS/ERP)" {
+  
+  ' --- SEKCJA 1: PRODUKCJA (KUCHNIA) ---
+  usecase "Wygeneruj Dzienny Plan Produkcji" as UC1
+  usecase "Oblicz Zapotrzebowanie (Food Cost)" as UC2
+  usecase "Wygeneruj Raport o Brakach" as UC_Braki
+  usecase "Pobierz Zbiorczą Kartę Gotowania" as UC3
+  usecase "Zatwierdź Ugotowanie Posiłków" as UC4
+  usecase "Wyprodukuj Półprodukty\n(np. Buliony, Sosy)" as UC_Polprodukty
+  
+  ' --- SEKCJA 2: KOMPLETACJA I ZAŁADUNEK (MAGAZYN) ---
+  usecase "Kompletuj i Pakuj Diety Klientów" as UC_Pakowanie
+  usecase "Przypisz paczki do klientów" as UC_Przypisanie
+  usecase "Utwórz Zestawienie Paczek/klient" as UC_Lista
+  usecase "Generuj Etykiety na Paczki\n(QR, Alergeny, Klient, Dieta)" as UC_Etykiety
+  usecase "Załaduj Paczki do Przypisanego Auta" as UC_Zaladunek
+  usecase "Zatwierdź Wydanie Towaru Kurierowi" as UC_Wydanie
+  usecase "Rozlicz Opakowania\n(Pudełka, Torby, Wieczka)" as UC_Opakowania
+
+  ' --- SEKCJA 3: SMART INVENTORY (MAGAZYN ZAAWANSOWANY) ---
+  usecase "Automatycznie Zdejmij Składniki (FEFO)" as UC5
+  usecase "Analizuj Daty Ważności i Lead-Time\n(Czas oczekiwania na dostawę)" as UC_SmartAnaliza
+  usecase "Generuj Prewencyjny Alert o Uzupełnieniu" as UC_SmartAlert
+  usecase "Wprowadź Dostawę\n(z Datą Ważności i Partią)" as UC8
+  usecase "Utwórz Zamówienie u Dostawcy" as UC9
+
+  ' --- SEKCJA 4: NADZÓR I UTRZYMANIE (HACCP / STRATY) ---
+  usecase "Przeprowadź Inwentaryzację (Korekta)" as UC_Inwentaryzacja
+  usecase "Zarejestruj Straty / Przeceny" as UC_Straty
+  usecase "Kontrola Temperatur i HACCP\n(Sanepid)" as UC_HACCP
+  usecase "Śledzenie Partii (Traceability)" as UC_Sanepid
+}
+
+' ==========================================
+' RELACJE I PRZEPŁYWY (FLOW)
+' ==========================================
+
+' --- Kucharz i Produkcja ---
+Sys --> UC1 : O 22:00
+Chef --> UC1 : Ręczne wymuszenie
+Chef --> UC3
+Chef --> UC4
+Chef --> UC_Polprodukty
+
+UC1 ..> M1 : <<include>>
+UC1 ..> M2 : <<include>>
+UC1 ..> UC2 : <<include>>
+UC4 ..> UC5 : <<include>>
+UC2 ..> UC_Braki : <<include>>
+
+' --- Magazynier: Kompletacja, Etykiety, Załadunek ---
+Mag --> UC_Pakowanie
+UC_Pakowanie ..> UC_Przypisanie : <<include>>
+UC_Pakowanie ..> UC_Opakowania : <<include>>
+UC_Przypisanie ..> UC_Lista : <<include>>
+UC_Przypisanie ..> UC_Etykiety : <<include>>
+UC_Lista ..> M3 : Udostępnia dane\nna Endpoint API
+
+Mag --> UC_Zaladunek
+UC_Zaladunek ..> M4 : <<include>> (Weryfikacja auta)
+UC_Zaladunek ..> UC_Wydanie : <<include>>
+
+' --- Magazynier: Inteligentny Magazyn ---
+Mag --> UC8
+Mag --> UC9
+Mag --> UC_Inwentaryzacja
+Mag --> UC_Straty
+
+UC8 ..> UC_HACCP : <<include>> (Przyjęcie towaru)
+UC5 ..> UC_Sanepid : <<extend>> [Loguj nr Partii i Odbiorcę]
+
+' --- System: Smart Inventory ---
+Sys --> UC_SmartAnaliza : Codzienny audyt
+UC_SmartAnaliza <.. UC_SmartAlert : <<extend>> \n[Gdy krótka data lub \nczas dostawy > zapasy]
+UC5 <.. UC_SmartAlert : <<extend>> \n[Gdy zapasy < minimum]
+
+@enduml

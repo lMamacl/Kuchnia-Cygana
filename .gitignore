@@ -27,3 +27,10 @@ docker-compose.override.yml
 
 .DS_Store
 Thumbs.db
+
+# Pliki z konwersji PDF do TXT oraz skrypty pomocnicze
+docs/**/*.txt
+extract.py
+
+# Katalog z pomocniczymi notatkami AI (wyodrębniony tekst z pdf modułów)
+.ai_docs/
