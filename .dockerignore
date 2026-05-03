@@ -1,0 +1,16 @@
+**/.git
+**/.github
+**/.vs
+**/.idea
+**/bin
+**/obj
+**/TestResults
+**/*.db
+**/*.sqlite
+**/.env
+**/*.user
+**/*.suo
+**/TestResults
+**/docker-compose*.yml
+docs/
+tests/

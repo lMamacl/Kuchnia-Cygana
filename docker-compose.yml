@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   web:
     build:
@@ -14,6 +12,7 @@ services:
       - ConnectionStrings__DefaultConnection=Data Source=/app/data/kuchniaucygana.db
       - JwtSettings__SecretKey=${JWT_SECRET}
       - Stripe__SecretKey=${STRIPE_SECRET}
+      - Stripe__PublishableKey=${STRIPE_PUBLISHABLE}
       - OpenAI__ApiKey=${OPENAI_KEY}
     volumes:
       - sqlite_data:/app/data
