@@ -66,6 +66,8 @@ git clone https://github.com/lMamacl/Kuchnia-Cygana.git
 cd Kuchnia-Cygana
 ```
 
+> **⚠️ UWAGA — WAŻNE:** Wszystkie poniższe komendy (`dotnet`, `docker-compose`) **muszą** być uruchamiane z poziomu **głównego katalogu repozytorium** (tam, gdzie znajduje się plik `KuchniaUCygana.sln`), a **NIE** wewnątrz folderu `src/KuchniaUCygana.Web`!
+
 ### 2. Przywrócenie zależności
 
 ```bash
