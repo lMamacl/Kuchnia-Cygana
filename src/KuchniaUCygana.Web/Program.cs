@@ -1,3 +1,5 @@
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using KuchniaUCygana.Application;
 using KuchniaUCygana.Infrastructure;
 using KuchniaUCygana.Infrastructure.Auth;
@@ -7,11 +9,17 @@ using Microsoft.IdentityModel.Tokens;
 using QuestPDF.Infrastructure;
 using System.Text;
 
+using Serilog;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, configuration) =>
+    configuration.ReadFrom.Configuration(context.Configuration));
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews()
+    .AddFluentValidation(fv => fv.RegisterValidatorsFromAssemblyContaining<Program>());
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>() ?? new JwtSettings();
 if (!string.IsNullOrWhiteSpace(jwtSettings.SecretKey))
@@ -35,6 +43,8 @@ if (!string.IsNullOrWhiteSpace(jwtSettings.SecretKey))
 }
 
 var app = builder.Build();
+
+app.UseSerilogRequestLogging();
 
 QuestPDF.Settings.License = LicenseType.Community;
 MigrationRunner.RunMigrations(app.Services);

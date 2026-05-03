@@ -12,7 +12,8 @@ RUN dotnet publish "src/KuchniaUCygana.Web/KuchniaUCygana.Web.csproj" -c Release
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
-RUN mkdir -p /app/data /app/wwwroot/uploads
-COPY --from=build /app/publish .
+RUN mkdir -p /app/data /app/wwwroot/uploads && chown -R app:app /app
+USER app
+COPY --from=build --chown=app:app /app/publish .
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "KuchniaUCygana.Web.dll"]
