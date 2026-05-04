@@ -20,3 +20,29 @@ html {
 body {
   margin-bottom: 60px;
 }
+
+/* ── HTMX: Loading indicators ─────────────────────────── */
+/* HTMX automatycznie dodaje klasę .htmx-request na element
+   wysyłający żądanie. Użyj tych klas do pokazania spinnera
+   i wyszarzenia ładowanego elementu. */
+
+.htmx-indicator {
+  display: none;
+}
+
+.htmx-request .htmx-indicator {
+  display: inline-block;
+}
+
+.htmx-request.htmx-target,
+.htmx-request .htmx-target {
+  opacity: 0.5;
+  transition: opacity 200ms ease-in-out;
+}
+
+/* ── Alpine.js: x-cloak ──────────────────────────────── */
+/* Ukrywa elementy z x-cloak dopóki Alpine się nie zainicjalizuje.
+   Zapobiega "migotaniu" ukrytych elementów przy ładowaniu strony. */
+[x-cloak] {
+  display: none !important;
+}

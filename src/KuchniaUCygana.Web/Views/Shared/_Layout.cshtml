@@ -1,9 +1,11 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html>
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+<html lang="pl">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - KuchniaUCygana.Web</title>
+    <meta name="csrf-token" content="@Antiforgery.GetAndStoreTokens(Context).RequestToken" />
+    <title>@ViewData["Title"] - Kuchnia u Cygana</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/KuchniaUCygana.Web.styles.css" asp-append-version="true" />
@@ -12,7 +14,7 @@
     <header>
         <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
             <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">KuchniaUCygana.Web</a>
+                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">Kuchnia u Cygana</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
                         aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
@@ -30,6 +32,10 @@
             </div>
         </nav>
     </header>
+
+    @* Globalny kontener na alerty HTMX (błędy serwera) *@
+    <div id="htmx-alerts" class="container"></div>
+
     <div class="container">
         <main role="main" class="pb-3">
             @RenderBody()
@@ -38,12 +44,22 @@
 
     <footer class="border-top footer text-muted">
         <div class="container">
-            &copy; 2026 - KuchniaUCygana.Web - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+            &copy; 2026 - Kuchnia u Cygana - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
         </div>
     </footer>
+
+    @* ── Vendor JS ────────────────────────────────────── *@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+
+    @* ── HTMX + Alpine.js ─────────────────────────────── *@
+    <script src="~/lib/htmx/htmx.min.js"></script>
+    <script src="~/js/htmx-config.js" asp-append-version="true"></script>
+    <script defer src="~/lib/alpinejs/alpine.min.js"></script>
+
+    @* ── App JS + sekcja per-page scripts ─────────────── *@
     <script src="~/js/site.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
+
