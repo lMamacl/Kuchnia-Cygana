@@ -23,6 +23,8 @@
 
 Projekt „Kuchnia u Cygana" to platforma webowa (B2C e-commerce + ERP back-office) dla firmy cateringowej. System składa się z **5 modułów domenowych** rozwijanych przez 5 deweloperów, osadzonych w architekturze N-Tier / Clean Architecture (ASP.NET MVC 8, SQLite + OrmLite, FluentMigrator).
 
+**Decyzja frontendowa (2026-05-04):** Wybrany stack to **Razor Views + HTMX + Alpine.js** (Opcja B). Szczegółowe porównanie z klasycznym jQuery w [`docs/frontend-comparison.html`](./frontend-comparison.html).
+
 Ten dokument definiuje **kolejność realizacji komponentów** — od infrastruktury po wdrożenie — z uzasadnieniem opartym na współzależnościach.
 
 ---
@@ -183,17 +185,24 @@ Moduły 1, 2 i 5 mogą być rozwijane **równolegle**, ponieważ mają minimalne
 
 ### FAZA 6 — Frontend, Finalizacja i Wdrożenie
 **Priorytet:** 🟢 STANDARD  
-**Czas:** Tydzień 8–9
+**Czas:** Tydzień 8–9  
+**Stack frontendowy:** Razor Views + **HTMX 2.x** + **Alpine.js 3.x** + Bootstrap 5
 
-| # | Zadanie |
-|---|---------|
-| 6.1 | `_Layout.cshtml` — spójna nawigacja, responsywność |
-| 6.2 | CSS/JS: `wwwroot/css`, `wwwroot/js` |
-| 6.3 | Walidacja front-end (jQuery Validation + FluentValidation) |
-| 6.4 | Upload plików: integracja IFormFile w widokach |
-| 6.5 | Wdrożenie: Azure App Service lub SmarterASP.NET |
-| 6.6 | Zmienne środowiskowe (sekrety na produkcji) |
-| 6.7 | Dokumentacja finalna |
+> Wybrana Opcja B — partial swap bez przeładowania strony, zero JS boilerplate dla CRUD.
+> Porównanie z jQuery: [`docs/frontend-comparison.html`](./frontend-comparison.html)
+
+| # | Zadanie | Status |
+|---|---------|--------|
+| 6.1 | `_Layout.cshtml` + `_LayoutAdmin.cshtml` — dwa layouty (B2C / ERP), responsywność | ⬜ |
+| 6.2 | `wwwroot/lib/`: dodanie `htmx.min.js` + `alpine.min.js` (CDN lub lokalne) | ⬜ |
+| 6.3 | `wwwroot/js/htmx-config.js` — globalna konfiguracja HTMX (CSRF token, error handling) | ⬜ |
+| 6.4 | `wwwroot/css/site.css` — design system (kolory, typografia, komponenty) | ⬜ |
+| 6.5 | Walidacja front-end: jQuery Validation Unobtrusive (kompatybilna z HTMX) | ⬜ |
+| 6.6 | Partial Views dla modułów ERP — fragmenty HTML zwracane przez akcje HTMX | ⬜ |
+| 6.7 | Upload plików: `IFormFile` + `hx-encoding="multipart/form-data"` | ⬜ |
+| 6.8 | Wdrożenie: Azure App Service (Free F1 / Basic B1) via GitHub Actions | ⬜ |
+| 6.9 | Zmienne środowiskowe na produkcji (Azure App Settings) | ⬜ |
+| 6.10 | Dokumentacja finalna |  ⬜ |
 
 ---
 
