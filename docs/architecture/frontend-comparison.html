@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend: Razor+jQuery vs Razor+HTMX — Kuchnia u Cygana</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface2: #232733;
+            --border: #2e3345;
+            --text: #e2e4eb;
+            --text-dim: #8b90a0;
+            --accent-a: #f59e0b;
+            --accent-a-bg: rgba(245,158,11,0.1);
+            --accent-b: #6366f1;
+            --accent-b-bg: rgba(99,102,241,0.1);
+            --green: #22c55e;
+            --red: #ef4444;
+            --code-bg: #151820;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg); color: var(--text);
+            line-height: 1.7; padding: 2rem;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        /* NAV */
+        nav.toc {
+            position: fixed; top: 2rem; right: 2rem; width: 220px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 1rem; font-size: 0.8rem; z-index: 100;
+        }
+        nav.toc h4 { color: var(--text-dim); text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
+        nav.toc a {
+            display: block; color: var(--text-dim); text-decoration: none;
+            padding: 0.25rem 0; transition: color 0.2s;
+        }
+        nav.toc a:hover { color: var(--accent-b); }
+        nav.toc a.indent { padding-left: 0.75rem; font-size: 0.75rem; }
+
+        @media (max-width: 1400px) { nav.toc { display: none; } }
+
+        /* HEADER */
+        header {
+            text-align: center; padding: 3rem 0 2rem;
+            border-bottom: 1px solid var(--border); margin-bottom: 3rem;
+        }
+        header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+        header p { color: var(--text-dim); font-size: 0.95rem; }
+        .badge {
+            display: inline-block; padding: 0.2rem 0.7rem; border-radius: 20px;
+            font-size: 0.75rem; font-weight: 600; margin: 0 0.25rem;
+        }
+        .badge-a { background: var(--accent-a-bg); color: var(--accent-a); border: 1px solid rgba(245,158,11,0.3); }
+        .badge-b { background: var(--accent-b-bg); color: var(--accent-b); border: 1px solid rgba(99,102,241,0.3); }
+
+        /* SECTIONS */
+        section { margin-bottom: 3rem; }
+        h2 {
+            font-size: 1.5rem; font-weight: 700; margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem; border-bottom: 2px solid var(--border);
+        }
+        h3 { font-size: 1.15rem; font-weight: 600; margin: 1.5rem 0 0.75rem; }
+        h4 { font-size: 0.95rem; font-weight: 600; margin: 1rem 0 0.5rem; color: var(--text-dim); }
+        p { margin-bottom: 0.75rem; }
+
+        /* CARDS */
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem;
+        }
+        .card-a { border-left: 3px solid var(--accent-a); }
+        .card-b { border-left: 3px solid var(--accent-b); }
+
+        /* SPLIT */
+        .split { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        @media (max-width: 768px) { .split { grid-template-columns: 1fr; } }
+
+        /* TABLE */
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+        th, td { padding: 0.65rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-dim); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        td:first-child { font-weight: 500; }
+        tr:hover td { background: var(--surface2); }
+
+        /* CODE */
+        pre {
+            background: var(--code-bg); border: 1px solid var(--border);
+            border-radius: 8px; padding: 1rem; overflow-x: auto;
+            font-size: 0.82rem; line-height: 1.6; margin: 0.75rem 0;
+        }
+        code { font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; }
+        .code-label {
+            display: inline-block; font-size: 0.7rem; font-weight: 600;
+            padding: 0.15rem 0.5rem; border-radius: 4px 4px 0 0;
+            margin-bottom: -1px; position: relative; top: 1px;
+        }
+        .code-label-a { background: var(--accent-a); color: #000; }
+        .code-label-b { background: var(--accent-b); color: #fff; }
+        .code-label-cs { background: #68217a; color: #fff; }
+
+        /* INLINE */
+        .pro { color: var(--green); }
+        .con { color: var(--red); }
+        .tag {
+            display: inline-block; font-size: 0.7rem; padding: 0.1rem 0.4rem;
+            border-radius: 4px; font-weight: 600;
+        }
+        .tag-a { background: var(--accent-a-bg); color: var(--accent-a); }
+        .tag-b { background: var(--accent-b-bg); color: var(--accent-b); }
+
+        /* DIAGRAM */
+        .diagram {
+            background: var(--code-bg); border: 1px solid var(--border);
+            border-radius: 8px; padding: 1.5rem; font-family: 'Cascadia Code', monospace;
+            font-size: 0.8rem; line-height: 1.5; overflow-x: auto; white-space: pre;
+        }
+
+        /* CALLOUT */
+        .callout {
+            background: var(--surface2); border-left: 3px solid var(--accent-b);
+            border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+        .callout-warn { border-left-color: var(--accent-a); }
+        .callout strong { display: block; margin-bottom: 0.25rem; }
+
+        /* SCORE */
+        .score-bar { display: flex; align-items: center; gap: 0.5rem; margin: 0.15rem 0; }
+        .score-bar .label { width: 160px; font-size: 0.82rem; }
+        .score-track { flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+        .score-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+        .score-fill-a { background: var(--accent-a); }
+        .score-fill-b { background: var(--accent-b); }
+        .score-val { width: 30px; text-align: right; font-size: 0.8rem; font-weight: 600; }
+
+        ul, ol { margin: 0.5rem 0 0.75rem 1.5rem; }
+        li { margin-bottom: 0.3rem; }
+
+        footer { text-align: center; color: var(--text-dim); font-size: 0.8rem; padding: 2rem 0; border-top: 1px solid var(--border); }
+    </style>
+</head>
+<body>
+
+<!-- NAV (zostanie uzupełniona w msg 5) -->
+<nav class="toc" id="toc">
+    <h4>Spis treści</h4>
+    <a href="#intro">1. Wprowadzenie</a>
+    <a href="#arch">2. Architektura</a>
+    <a href="#compare">3. Porównanie</a>
+    <a href="#partials">4. Partial Views</a>
+    <a href="#forms">5. Formularze</a>
+    <a href="#ajax">6. Interaktywność</a>
+    <a href="#controllers">7. Kontrolery</a>
+    <a href="#structure">8. Struktura projektu</a>
+    <a href="#problems">9. Problemy i obejścia</a>
+    <a href="#verdict">10. Ocena końcowa</a>
+</nav>
+
+<div class="container">
+
+<header>
+    <h1>Architektura Frontendowa — Porównanie</h1>
+    <p>
+        <span class="badge badge-a">A: Razor + jQuery</span>
+        vs
+        <span class="badge badge-b">B: Razor + HTMX + Alpine.js</span>
+    </p>
+    <p style="margin-top:0.5rem">Kuchnia u Cygana · ASP.NET MVC 8 · Maj 2026</p>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJA 1: WPROWADZENIE                                  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="intro">
+<h2>1. Wprowadzenie — o co chodzi?</h2>
+
+<p>Obydwa podejścia używają <strong>tych samych kontrolerów MVC</strong> i <strong>Razor Views</strong> po stronie serwera. Różnica leży w tym, <em>jak obsługujemy interaktywność</em> po stronie przeglądarki.</p>
+
+<div class="split">
+    <div class="card card-a">
+        <h3><span class="tag tag-a">Opcja A</span> Razor + jQuery</h3>
+        <p>Klasyczne podejście: serwer generuje pełną stronę HTML, przeglądarka wyświetla. Gdy użytkownik kliknie — <strong>pełne przeładowanie strony</strong> lub ręczny AJAX z jQuery.</p>
+        <p><strong>Prostymi słowy:</strong> każda akcja = nowa strona. Chcesz dynamiczności? Pisz $.ajax() ręcznie.</p>
+    </div>
+    <div class="card card-b">
+        <h3><span class="tag tag-b">Opcja B</span> Razor + HTMX + Alpine.js</h3>
+        <p>Ten sam Razor, ale z <strong>HTMX</strong> — biblioteką (14 KB), która pozwala aktualizować <em>fragment strony</em> bez przeładowania, używając atrybutów HTML. <strong>Alpine.js</strong> (15 KB) dodaje lokalną reaktywność (show/hide, toggle, modals).</p>
+        <p><strong>Prostymi słowy:</strong> HTML sam mówi "pobierz ten kawałek i wstaw tu" — bez pisania JS.</p>
+    </div>
+</div>
+
+<div class="callout">
+    <strong>💡 Ważne: obydwie opcje NIE wymagają zmian w backendzie.</strong>
+    Kontrolery, serwisy, repozytoria, DTOs, walidatory — wszystko zostaje tak samo. Różnica dotyczy wyłącznie tego, co dzieje się w przeglądarce i jak widoki (.cshtml) są napisane.
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJA 2: ARCHITEKTURA                                  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="arch">
+<h2>2. Architektura — jak płyną dane?</h2>
+
+<h3>Opcja A: Razor + jQuery — cykl żądania</h3>
+<div class="diagram">
+Użytkownik klika "Pokaż plan produkcji na 05.05"
+        │
+        ▼
+┌─────────────────────────────────────────────────────┐
+│  Przeglądarka wysyła GET /Production/Index?date=... │
+│  (pełne żądanie HTTP — cała strona)                 │
+└──────────────────────┬──────────────────────────────┘
+                       ▼
+         ┌─────────────────────────┐
+         │   ProductionController  │
+         │   .Index(date)          │
+         │   → View("Index", model)│
+         └─────────┬───────────────┘
+                   ▼
+    ┌──────────────────────────────┐
+    │  Razor renderuje PEŁNĄ stronę│
+    │  (_Layout + Index.cshtml)    │
+    │  ~50 KB HTML                 │
+    └──────────┬───────────────────┘
+               ▼
+     Przeglądarka wyrzuca stary DOM,
+     parsuje nowy HTML, ładuje CSS/JS,
+     renderuje od zera.
+
+     ⏱️ Czas: ~300-500ms (pełny reload)
+</div>
+
+<p style="margin-top:1rem">Przy AJAX (jQuery) flow jest inny, ale wymaga <strong>ręcznego kodu JS</strong>:</p>
+
+<div class="diagram">
+$.ajax({
+    url: '/Production/PlanItems?date=2026-05-05',
+    success: function(html) {
+        $('#plan-table').html(html);   // ← ręczne wstawienie
+    }
+});
+// Trzeba też obsłużyć: loading, błędy, CSRF token, animacje...
+</div>
+
+<h3 style="margin-top:2rem">Opcja B: Razor + HTMX — cykl żądania</h3>
+<div class="diagram">
+Użytkownik klika "Pokaż plan produkcji na 05.05"
+        │
+        ▼
+┌─────────────────────────────────────────────────────┐
+│  HTMX wysyła GET /Production/PlanItems?date=...     │
+│  (żądanie AJAX — automatycznie, z nagłówkiem         │
+│   HX-Request: true)                                  │
+└──────────────────────┬──────────────────────────────┘
+                       ▼
+         ┌──────────────────────────┐
+         │   ProductionController   │
+         │   .PlanItems(date)       │
+         │   → PartialView(model)   │  ← zwraca FRAGMENT
+         └─────────┬────────────────┘
+                   ▼
+    ┌──────────────────────────────┐
+    │  Razor renderuje TYLKO       │
+    │  _PlanItemsTable.cshtml      │
+    │  ~3 KB HTML (sam &lt;tbody&gt;)    │
+    └──────────┬───────────────────┘
+               ▼
+     HTMX podmienia TYLKO element
+     z id="plan-table" w istniejącym DOM.
+     Reszta strony nie zmienia się.
+
+     ⏱️ Czas: ~50-100ms (partial swap)
+</div>
+
+<div class="callout">
+    <strong>🔑 Kluczowa różnica architektoniczna</strong>
+    W opcji A kontroler <em>zawsze</em> zwraca pełną stronę (View). W opcji B kontroler rozróżnia: jeśli to żądanie HTMX → zwraca fragment (PartialView), jeśli normalne → pełna strona. <strong>Jeden kontroler obsługuje oba scenariusze.</strong>
+</div>
+
+<h3>Porównanie rozmiaru odpowiedzi</h3>
+<table>
+    <tr><th>Scenariusz</th><th>Opcja A (pełna strona)</th><th>Opcja B (fragment)</th></tr>
+    <tr><td>Zmiana daty w planie produkcji</td><td>~50 KB (layout+nav+body+scripts)</td><td>~3 KB (sama tabela)</td></tr>
+    <tr><td>Zatwierdzenie 1 pozycji gotowania</td><td>~50 KB (reload)</td><td>~0.2 KB (1 wiersz <code>&lt;tr&gt;</code>)</td></tr>
+    <tr><td>Filtrowanie stanów magazynowych</td><td>~45 KB</td><td>~5 KB</td></tr>
+    <tr><td>Dodanie wpisu temperatury</td><td>~50 KB (redirect)</td><td>~0.5 KB (nowy wiersz)</td></tr>
+</table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJA 3: TABELA PORÓWNAWCZA                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="compare">
+<h2>3. Porównanie — tabela zbiorcza</h2>
+
+<table>
+    <tr>
+        <th>Kryterium</th>
+        <th><span class="tag tag-a">Opcja A</span></th>
+        <th><span class="tag tag-b">Opcja B</span></th>
+    </tr>
+    <tr>
+        <td>Koszt wdrożenia</td>
+        <td class="pro">Zerowy — jest w projekcie</td>
+        <td>Minimalny — 2 pliki CDN</td>
+    </tr>
+    <tr>
+        <td>Krzywa uczenia (5 C#-devów)</td>
+        <td class="pro">Znana technologia</td>
+        <td>~2-4h nauki HTMX + Alpine</td>
+    </tr>
+    <tr>
+        <td>Interaktywność UI</td>
+        <td class="con">Reload lub ręczny $.ajax()</td>
+        <td class="pro">Partial swap — deklaratywnie</td>
+    </tr>
+    <tr>
+        <td>Ilość kodu JS do napisania</td>
+        <td class="con">Dużo — każdy AJAX ręcznie</td>
+        <td class="pro">Mało — atrybuty HTML</td>
+    </tr>
+    <tr>
+        <td>UX back-office (ERP)</td>
+        <td class="con">Przeciętny (reload)</td>
+        <td class="pro">Płynny (partial updates)</td>
+    </tr>
+    <tr>
+        <td>UX front-office (B2C)</td>
+        <td>Wystarczający</td>
+        <td class="pro">Lepszy (koszyk, filtry)</td>
+    </tr>
+    <tr>
+        <td>SEO</td>
+        <td class="pro">Natywne SSR</td>
+        <td class="pro">Natywne SSR</td>
+    </tr>
+    <tr>
+        <td>Walidacja formularzy</td>
+        <td class="pro">jQuery Validation — działa</td>
+        <td class="pro">jQuery Validation — działa</td>
+    </tr>
+    <tr>
+        <td>Upload plików (IFormFile)</td>
+        <td class="pro">Natywny</td>
+        <td class="pro">Natywny (HTMX hx-encoding)</td>
+    </tr>
+    <tr>
+        <td>Rozmiar bibliotek (klient)</td>
+        <td>jQuery: ~87 KB min</td>
+        <td>HTMX: 14 KB + Alpine: 15 KB</td>
+    </tr>
+    <tr>
+        <td>Ryzyko „spaghetti JS"</td>
+        <td class="con">Wysokie — przy wielu $.ajax()</td>
+        <td class="pro">Niskie — logika w HTML</td>
+    </tr>
+    <tr>
+        <td>Debugowanie</td>
+        <td>DevTools + breakpointy JS</td>
+        <td>DevTools + nagłówki HX-*</td>
+    </tr>
+    <tr>
+        <td>Społeczność / materiały (.NET)</td>
+        <td class="pro">Ogromna — 15+ lat</td>
+        <td>Rosnąca — HTMX popularne od 2023</td>
+    </tr>
+    <tr>
+        <td>Praca 5 devów równolegle</td>
+        <td>OK — osobne widoki per moduł</td>
+        <td>OK — osobne widoki per moduł</td>
+    </tr>
+    <tr>
+        <td>Testowalność frontendu</td>
+        <td class="con">Trudna (jQuery)</td>
+        <td class="con">Trudna (ale mniej JS = mniej do testowania)</td>
+    </tr>
+    <tr>
+        <td>Kompatybilność z Bootstrap 5</td>
+        <td class="pro">Pełna</td>
+        <td class="pro">Pełna</td>
+    </tr>
+</table>
+
+<h3>Podsumowanie graficzne</h3>
+
+<div class="split">
+    <div class="card card-a">
+        <h4 style="color:var(--accent-a)">Opcja A — Wyniki</h4>
+        <div class="score-bar"><span class="label">Koszt wdrożenia</span><div class="score-track"><div class="score-fill score-fill-a" style="width:100%"></div></div><span class="score-val">10</span></div>
+        <div class="score-bar"><span class="label">Interaktywność</span><div class="score-track"><div class="score-fill score-fill-a" style="width:40%"></div></div><span class="score-val">4</span></div>
+        <div class="score-bar"><span class="label">UX back-office</span><div class="score-track"><div class="score-fill score-fill-a" style="width:35%"></div></div><span class="score-val">3.5</span></div>
+        <div class="score-bar"><span class="label">Czytelność kodu</span><div class="score-track"><div class="score-fill score-fill-a" style="width:50%"></div></div><span class="score-val">5</span></div>
+        <div class="score-bar"><span class="label">Materiały/wsparcie</span><div class="score-track"><div class="score-fill score-fill-a" style="width:90%"></div></div><span class="score-val">9</span></div>
+        <div class="score-bar"><span class="label">Skalowalność UI</span><div class="score-track"><div class="score-fill score-fill-a" style="width:30%"></div></div><span class="score-val">3</span></div>
+        <p style="margin-top:0.5rem;color:var(--text-dim);font-size:0.85rem"><strong>Średnia: 5.75 / 10</strong></p>
+    </div>
+    <div class="card card-b">
+        <h4 style="color:var(--accent-b)">Opcja B — Wyniki</h4>
+        <div class="score-bar"><span class="label">Koszt wdrożenia</span><div class="score-track"><div class="score-fill score-fill-b" style="width:90%"></div></div><span class="score-val">9</span></div>
+        <div class="score-bar"><span class="label">Interaktywność</span><div class="score-track"><div class="score-fill score-fill-b" style="width:80%"></div></div><span class="score-val">8</span></div>
+        <div class="score-bar"><span class="label">UX back-office</span><div class="score-track"><div class="score-fill score-fill-b" style="width:80%"></div></div><span class="score-val">8</span></div>
+        <div class="score-bar"><span class="label">Czytelność kodu</span><div class="score-track"><div class="score-fill score-fill-b" style="width:75%"></div></div><span class="score-val">7.5</span></div>
+        <div class="score-bar"><span class="label">Materiały/wsparcie</span><div class="score-track"><div class="score-fill score-fill-b" style="width:60%"></div></div><span class="score-val">6</span></div>
+        <div class="score-bar"><span class="label">Skalowalność UI</span><div class="score-track"><div class="score-fill score-fill-b" style="width:65%"></div></div><span class="score-val">6.5</span></div>
+        <p style="margin-top:0.5rem;color:var(--text-dim);font-size:0.85rem"><strong>Średnia: 7.50 / 10</strong></p>
+    </div>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJE 4-10: PLACEHOLDER (dodam w kolejnych msg)        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJA 4: PARTIAL VIEWS                                 -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="partials">
+<h2>4. Partial Views i Renderowanie</h2>
+
+<p>Partial View to <strong>fragment HTML</strong> (bez &lt;html&gt;, &lt;head&gt;, layoutu) — np. sama tabela, sam wiersz, sam formularz. Obydwie opcje je używają, ale w <em>inny sposób</em>.</p>
+
+<h3>Czym jest Partial View — prosty przykład</h3>
+
+<p>Wyobraź sobie stronę planu produkcji. Ma nawigację, sidebar, nagłówek — i w środku <strong>tabelę z pozycjami</strong>. Ta tabela to Partial View.</p>
+
+<div class="card">
+<span class="code-label code-label-cs">_PlanItemsTable.cshtml (Partial View)</span>
+<pre><code>@* Plik: Views/Production/_PlanItemsTable.cshtml *@
+@model IEnumerable&lt;ProductionPlanItemDto&gt;
+
+&lt;table class="table table-hover"&gt;
+    &lt;thead&gt;
+        &lt;tr&gt;
+            &lt;th&gt;Posiłek&lt;/th&gt;
+            &lt;th&gt;Ilość&lt;/th&gt;
+            &lt;th&gt;Status&lt;/th&gt;
+            &lt;th&gt;Akcje&lt;/th&gt;
+        &lt;/tr&gt;
+    &lt;/thead&gt;
+    &lt;tbody&gt;
+        @foreach (var item in Model)
+        {
+            &lt;tr id="item-@item.Id"&gt;
+                &lt;td&gt;@item.MealName&lt;/td&gt;
+                &lt;td&gt;@item.Quantity&lt;/td&gt;
+                &lt;td&gt;
+                    &lt;span class="badge bg-@item.StatusColor"&gt;
+                        @item.StatusText
+                    &lt;/span&gt;
+                &lt;/td&gt;
+                &lt;td&gt;@* Przycisk — różni się w A vs B *@&lt;/td&gt;
+            &lt;/tr&gt;
+        }
+    &lt;/tbody&gt;
+&lt;/table&gt;</code></pre>
+</div>
+
+<h3>Jak oba podejścia używają tego Partial View?</h3>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">Opcja A</span> Renderowanie w pełnej stronie</h4>
+        <span class="code-label code-label-a">Views/Production/Index.cshtml</span>
+<pre><code>@model ProductionDayViewModel
+
+&lt;h1&gt;Plan produkcji — @Model.Date&lt;/h1&gt;
+
+&lt;!-- Filtr daty: zmiana = przeładowanie CAŁEJ strony --&gt;
+&lt;form method="get"&gt;
+    &lt;input type="date" name="date"
+           value="@Model.Date"
+           onchange="this.form.submit()" /&gt;
+&lt;/form&gt;
+
+&lt;!-- Partial renderowany na serwerze, 
+     wklejony w HTML strony --&gt;
+<strong>@await Html.PartialAsync(
+    "_PlanItemsTable", Model.Items)</strong></code></pre>
+        <p style="font-size:0.85rem;color:var(--text-dim);margin-top:0.5rem">
+            ⚡ Zmiana daty = <code>GET /Production/Index?date=...</code> → cała strona od nowa (~50 KB).
+        </p>
+    </div>
+
+    <div class="card card-b">
+        <h4><span class="tag tag-b">Opcja B</span> Renderowanie fragmentu przez HTMX</h4>
+        <span class="code-label code-label-b">Views/Production/Index.cshtml</span>
+<pre><code>@model ProductionDayViewModel
+
+&lt;h1&gt;Plan produkcji — @Model.Date&lt;/h1&gt;
+
+&lt;!-- Filtr daty: zmiana = HTMX pobiera 
+     TYLKO tabelę, nie całą stronę --&gt;
+&lt;input type="date" name="date"
+       value="@Model.Date"
+       <strong>hx-get="/Production/PlanItems"</strong>
+       <strong>hx-target="#plan-table"</strong>
+       <strong>hx-trigger="change"</strong>
+       <strong>hx-swap="innerHTML"</strong> /&gt;
+
+&lt;div <strong>id="plan-table"</strong>&gt;
+    @await Html.PartialAsync(
+        "_PlanItemsTable", Model.Items)
+&lt;/div&gt;</code></pre>
+        <p style="font-size:0.85rem;color:var(--text-dim);margin-top:0.5rem">
+            ⚡ Zmiana daty = <code>GET /Production/PlanItems?date=...</code> → serwer zwraca <em>sam partial</em> (~3 KB) → HTMX wstawia go do <code>#plan-table</code>.
+        </p>
+    </div>
+</div>
+
+<div class="callout">
+    <strong>🔑 Co to znaczy w praktyce?</strong>
+    Partial View jest <strong>identyczny</strong> w obu opcjach — to ten sam plik <code>_PlanItemsTable.cshtml</code>. Różnica: w opcji A partial jest renderowany <em>wewnątrz</em> pełnej strony. W opcji B serwer potrafi zwrócić <em>sam partial</em> jako odpowiedź HTTP, a HTMX wkleja go w odpowiednie miejsce.
+</div>
+
+<h3>Aktualizacja pojedynczego wiersza</h3>
+
+<p>Scenariusz: Szef kuchni zatwierdza ugotowanie jednego posiłku. Wiersz tabeli powinien zmienić status z „Gotowanie" na „Ugotowane".</p>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">Opcja A</span> jQuery AJAX</h4>
+<pre><code>&lt;!-- W _PlanItemsTable.cshtml --&gt;
+&lt;button class="btn btn-success btn-approve"
+        data-id="@item.Id"&gt;
+    Zatwierdź
+&lt;/button&gt;
+
+&lt;!-- W site.js --&gt;
+$('.btn-approve').on('click', function() {
+    var id = $(this).data('id');
+    var $row = $('#item-' + id);
+    
+    $.ajax({
+        url: '/Production/Approve/' + id,
+        method: 'POST',
+        headers: {
+            'RequestVerificationToken': 
+                $('input[name=__Token]').val()
+        },
+        beforeSend: function() {
+            $row.css('opacity', '0.5');
+        },
+        success: function(html) {
+            $row.replaceWith(html);
+        },
+        error: function(xhr) {
+            alert('Błąd: ' + xhr.responseText);
+            $row.css('opacity', '1');
+        }
+    });
+});</code></pre>
+        <p style="font-size:0.85rem;color:var(--text-dim)">📝 <strong>18 linii JS</strong> na jedną akcję. Trzeba zadbać o: CSRF token, loading state, error handling, event delegation (jeśli tabela się przeładuje, eventy znikają).</p>
+    </div>
+
+    <div class="card card-b">
+        <h4><span class="tag tag-b">Opcja B</span> HTMX atrybut</h4>
+<pre><code>&lt;!-- W _PlanItemsTable.cshtml --&gt;
+&lt;button class="btn btn-success"
+        <strong>hx-post="/Production/Approve/@item.Id"</strong>
+        <strong>hx-target="#item-@item.Id"</strong>
+        <strong>hx-swap="outerHTML"</strong>
+        <strong>hx-indicator="#item-@item.Id"</strong>&gt;
+    Zatwierdź
+&lt;/button&gt;</code></pre>
+        <p style="font-size:0.85rem;color:var(--text-dim)">📝 <strong>0 linii JS</strong>. HTMX automatycznie: wysyła POST, pokazuje loading (CSS klasa <code>htmx-request</code>), podmienia wiersz odpowiedzią serwera. CSRF token dodawany globalnie (raz).</p>
+    </div>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJA 5: FORMULARZE                                    -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="forms">
+<h2>5. Formularze i Walidacja</h2>
+
+<p>Formularze to rdzeń aplikacji ERP: przyjęcie dostawy, rejestracja straty, log temperatury. Obydwie opcje korzystają z <strong>FluentValidation</strong> (serwer) + <strong>jQuery Validation Unobtrusive</strong> (klient) — to się nie zmienia.</p>
+
+<h3>Przykład: Formularz „Przyjmij dostawę" (WarehouseController)</h3>
+
+<div class="card">
+<span class="code-label code-label-cs">ReceiveDeliveryRequest.cs (DTO — wspólne dla obu)</span>
+<pre><code>public class ReceiveDeliveryRequest
+{
+    public long StockItemId { get; set; }
+    public decimal Quantity { get; set; }
+    public DateOnly ExpiryDate { get; set; }
+    public string? SupplierBatchNumber { get; set; }
+}
+
+// FluentValidation — walidacja serwerowa
+public class ReceiveDeliveryValidator 
+    : AbstractValidator&lt;ReceiveDeliveryRequest&gt;
+{
+    public ReceiveDeliveryValidator()
+    {
+        RuleFor(x =&gt; x.Quantity)
+            .GreaterThan(0)
+            .WithMessage("Ilość musi być &gt; 0");
+        RuleFor(x =&gt; x.ExpiryDate)
+            .GreaterThan(DateOnly.FromDateTime(DateTime.Today))
+            .WithMessage("Data ważności musi być w przyszłości");
+    }
+}</code></pre>
+</div>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">Opcja A</span> Klasyczny formularz POST</h4>
+<pre><code>&lt;!-- Views/Warehouse/ReceiveDelivery.cshtml --&gt;
+@model ReceiveDeliveryRequest
+
+&lt;form <strong>asp-action="ReceiveDelivery"</strong>
+      <strong>method="post"</strong>&gt;
+    
+    &lt;div class="mb-3"&gt;
+        &lt;label asp-for="StockItemId"&gt;&lt;/label&gt;
+        &lt;select asp-for="StockItemId"
+                asp-items="ViewBag.StockItems"
+                class="form-select"&gt;&lt;/select&gt;
+        &lt;span asp-validation-for="StockItemId"&gt;&lt;/span&gt;
+    &lt;/div&gt;
+
+    &lt;div class="mb-3"&gt;
+        &lt;label asp-for="Quantity"&gt;&lt;/label&gt;
+        &lt;input asp-for="Quantity" 
+               class="form-control" /&gt;
+        &lt;span asp-validation-for="Quantity"&gt;&lt;/span&gt;
+    &lt;/div&gt;
+
+    &lt;div class="mb-3"&gt;
+        &lt;label asp-for="ExpiryDate"&gt;&lt;/label&gt;
+        &lt;input asp-for="ExpiryDate" type="date"
+               class="form-control" /&gt;
+        &lt;span asp-validation-for="ExpiryDate"&gt;&lt;/span&gt;
+    &lt;/div&gt;
+
+    &lt;button type="submit" class="btn btn-primary"&gt;
+        Przyjmij
+    &lt;/button&gt;
+&lt;/form&gt;
+
+@section Scripts {
+    @{ await Html.RenderPartialAsync(
+        "_ValidationScriptsPartial"); }
+}</code></pre>
+        <p style="font-size:0.85rem;color:var(--text-dim)">Po submit: <strong>POST → redirect → GET</strong> (wzorzec PRG). Cała strona się przeładuje. Walidacja kliencka jQuery wyłapie błędy przed wysłaniem.</p>
+    </div>
+
+    <div class="card card-b">
+        <h4><span class="tag tag-b">Opcja B</span> Formularz z HTMX (bez reload)</h4>
+<pre><code>&lt;!-- Views/Warehouse/ReceiveDelivery.cshtml --&gt;
+@model ReceiveDeliveryRequest
+
+&lt;form <strong>hx-post="/Warehouse/ReceiveDelivery"</strong>
+      <strong>hx-target="#delivery-result"</strong>
+      <strong>hx-swap="innerHTML"</strong>&gt;
+    
+    &lt;!-- Pola identyczne jak w opcji A --&gt;
+    &lt;div class="mb-3"&gt;
+        &lt;label asp-for="StockItemId"&gt;&lt;/label&gt;
+        &lt;select asp-for="StockItemId"
+                asp-items="ViewBag.StockItems"
+                class="form-select"&gt;&lt;/select&gt;
+        &lt;span asp-validation-for="StockItemId"&gt;&lt;/span&gt;
+    &lt;/div&gt;
+
+    &lt;div class="mb-3"&gt;
+        &lt;label asp-for="Quantity"&gt;&lt;/label&gt;
+        &lt;input asp-for="Quantity" 
+               class="form-control" /&gt;
+        &lt;span asp-validation-for="Quantity"&gt;&lt;/span&gt;
+    &lt;/div&gt;
+
+    &lt;div class="mb-3"&gt;
+        &lt;label asp-for="ExpiryDate"&gt;&lt;/label&gt;
+        &lt;input asp-for="ExpiryDate" type="date"
+               class="form-control" /&gt;
+        &lt;span asp-validation-for="ExpiryDate"&gt;&lt;/span&gt;
+    &lt;/div&gt;
+
+    &lt;button type="submit" class="btn btn-primary"&gt;
+        Przyjmij
+    &lt;/button&gt;
+&lt;/form&gt;
+
+&lt;div <strong>id="delivery-result"</strong>&gt;&lt;/div&gt;
+
+@section Scripts {
+    @{ await Html.RenderPartialAsync(
+        "_ValidationScriptsPartial"); }
+}</code></pre>
+        <p style="font-size:0.85rem;color:var(--text-dim)">Po submit: <strong>POST (HTMX)</strong> → serwer zwraca partial z potwierdzeniem (np. alert „Przyjęto 5 kg mąki") → HTMX wkleja go do <code>#delivery-result</code>. <strong>Strona nie przeładowuje się.</strong> Formularz można wyczyścić eventem <code>htmx:afterRequest</code>.</p>
+    </div>
+</div>
+
+<div class="callout callout-warn">
+    <strong>⚠️ Ważne: jQuery Validation działa w obu opcjach identycznie.</strong>
+    HTMX nie wysyła formularza, dopóki jQuery Validation go nie „przepuści". Są w pełni kompatybilne — HTMX przechwytuje <code>submit</code> po walidacji.
+</div>
+
+<h3>Co się dzieje przy błędzie walidacji serwerowej?</h3>
+
+<table>
+    <tr><th>Scenariusz</th><th><span class="tag tag-a">A</span></th><th><span class="tag tag-b">B</span></th></tr>
+    <tr>
+        <td>Walidacja kliencka (data pusta)</td>
+        <td>jQuery blokuje submit</td>
+        <td>jQuery blokuje submit (tak samo)</td>
+    </tr>
+    <tr>
+        <td>Walidacja serwerowa (ilość &gt; stan)</td>
+        <td>Redirect do formularza z ModelState errors → pełny reload</td>
+        <td>Serwer zwraca partial z formularzem + błędy → HTMX podmienia formularz bez reload</td>
+    </tr>
+    <tr>
+        <td>Sukces</td>
+        <td>Redirect GET → pełna strona „Dostawy"</td>
+        <td>Serwer zwraca partial z potwierdzeniem → wklejony inline</td>
+    </tr>
+</table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJA 6: INTERAKTYWNOŚĆ AJAX                           -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="ajax">
+<h2>6. Interaktywność — typowe wzorce</h2>
+
+<p>Poniżej 4 realne scenariusze z systemu — od prostego do złożonego. Pokazuję <strong>ile kodu JS</strong> wymaga każda opcja.</p>
+
+<h3>6.1 Filtrowanie tabeli stanów magazynowych</h3>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">A</span> jQuery</h4>
+<pre><code>&lt;!-- HTML --&gt;
+&lt;select id="category-filter"&gt;...&lt;/select&gt;
+&lt;div id="stock-table"&gt;...&lt;/div&gt;
+
+&lt;!-- JS --&gt;
+$('#category-filter').on('change', function() {
+    var cat = $(this).val();
+    $.get('/Warehouse/StockTable', 
+          { category: cat }, 
+          function(html) {
+        $('#stock-table').html(html);
+    }).fail(function() {
+        alert('Błąd ładowania');
+    });
+});</code></pre>
+        <p style="font-size:0.82rem;color:var(--text-dim)">~10 linii JS</p>
+    </div>
+    <div class="card card-b">
+        <h4><span class="tag tag-b">B</span> HTMX</h4>
+<pre><code>&lt;!-- HTML (bez JS!) --&gt;
+&lt;select name="category"
+        <strong>hx-get="/Warehouse/StockTable"</strong>
+        <strong>hx-target="#stock-table"</strong>
+        <strong>hx-trigger="change"</strong>&gt;
+    ...
+&lt;/select&gt;
+&lt;div id="stock-table"&gt;...&lt;/div&gt;</code></pre>
+        <p style="font-size:0.82rem;color:var(--text-dim)">0 linii JS</p>
+    </div>
+</div>
+
+<h3>6.2 Usuwanie z potwierdzeniem (modal)</h3>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">A</span> jQuery + Bootstrap Modal</h4>
+<pre><code>&lt;!-- Modal HTML (w _Layout lub na stronie) --&gt;
+&lt;div class="modal" id="confirmModal"&gt;
+  &lt;div class="modal-dialog"&gt;
+    &lt;div class="modal-content"&gt;
+      &lt;div class="modal-body"&gt;
+        Na pewno usunąć?
+      &lt;/div&gt;
+      &lt;div class="modal-footer"&gt;
+        &lt;button id="confirmBtn" 
+                class="btn btn-danger"&gt;
+            Usuń
+        &lt;/button&gt;
+        &lt;button data-bs-dismiss="modal"&gt;
+            Anuluj
+        &lt;/button&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+
+&lt;!-- JS --&gt;
+var deleteId = null;
+$('.btn-delete').on('click', function() {
+    deleteId = $(this).data('id');
+    new bootstrap.Modal('#confirmModal')
+        .show();
+});
+$('#confirmBtn').on('click', function() {
+    $.post('/Warehouse/Delete/' + deleteId,
+           function() {
+        $('#item-' + deleteId)
+            .fadeOut(300, function() { 
+                $(this).remove(); 
+            });
+        bootstrap.Modal
+            .getInstance('#confirmModal')
+            .hide();
+    });
+});</code></pre>
+        <p style="font-size:0.82rem;color:var(--text-dim)">~20 linii JS + modal HTML</p>
+    </div>
+    <div class="card card-b">
+        <h4><span class="tag tag-b">B</span> Alpine.js + HTMX</h4>
+<pre><code>&lt;!-- Inline, bez osobnego modala --&gt;
+&lt;div <strong>x-data="{ confirm: false }"</strong>&gt;
+    &lt;button class="btn btn-danger btn-sm"
+            <strong>@@click="confirm = true"</strong>&gt;
+        Usuń
+    &lt;/button&gt;
+
+    &lt;div <strong>x-show="confirm"</strong> x-cloak
+         class="d-inline"&gt;
+        &lt;span class="text-danger"&gt;
+            Na pewno?
+        &lt;/span&gt;
+        &lt;button class="btn btn-danger btn-sm"
+                <strong>hx-delete="/Warehouse/@item.Id"</strong>
+                <strong>hx-target="#item-@item.Id"</strong>
+                <strong>hx-swap="outerHTML swap:300ms"</strong>
+                @@click="confirm = false"&gt;
+            Tak
+        &lt;/button&gt;
+        &lt;button class="btn btn-secondary btn-sm"
+                @@click="confirm = false"&gt;
+            Nie
+        &lt;/button&gt;
+    &lt;/div&gt;
+&lt;/div&gt;</code></pre>
+        <p style="font-size:0.82rem;color:var(--text-dim)">0 linii JS — Alpine obsługuje show/hide, HTMX wysyła DELETE. Serwer zwraca pusty &lt;tr&gt; lub nic.</p>
+    </div>
+</div>
+
+<h3>6.3 Loading indicators (wizualne potwierdzenie ładowania)</h3>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">A</span> Ręczny spinner</h4>
+<pre><code>$.ajax({
+    url: '/Production/PlanItems',
+    <strong>beforeSend: function() {</strong>
+        <strong>$('#spinner').show();</strong>
+        <strong>$('#plan-table').css('opacity','0.5');</strong>
+    <strong>},</strong>
+    success: function(html) {
+        $('#plan-table').html(html);
+    },
+    <strong>complete: function() {</strong>
+        <strong>$('#spinner').hide();</strong>
+        <strong>$('#plan-table').css('opacity','1');</strong>
+    <strong>}</strong>
+});</code></pre>
+    </div>
+    <div class="card card-b">
+        <h4><span class="tag tag-b">B</span> CSS automatyczny</h4>
+<pre><code>&lt;!-- Tylko CSS — HTMX dodaje klasę
+     .htmx-request automatycznie --&gt;
+&lt;style&gt;
+    .htmx-indicator {
+        display: none;
+    }
+    .htmx-request .htmx-indicator {
+        display: inline-block;
+    }
+    .htmx-request.htmx-target {
+        opacity: 0.5;
+        transition: opacity 200ms;
+    }
+&lt;/style&gt;
+
+&lt;!-- W HTML --&gt;
+&lt;span class="<strong>htmx-indicator</strong>"&gt;
+    &lt;div class="spinner-border 
+                spinner-border-sm"&gt;
+    &lt;/div&gt;
+&lt;/span&gt;</code></pre>
+        <p style="font-size:0.82rem;color:var(--text-dim)">HTMX automatycznie dodaje/usuwa klasę <code>htmx-request</code> na elemencie — wystarczy CSS.</p>
+    </div>
+</div>
+
+<h3>6.4 Podsumowanie: ilość kodu JS</h3>
+
+<table>
+    <tr><th>Scenariusz</th><th><span class="tag tag-a">A</span> linie JS</th><th><span class="tag tag-b">B</span> linie JS</th></tr>
+    <tr><td>Filtrowanie tabeli</td><td>~10</td><td>0</td></tr>
+    <tr><td>Zatwierdzenie pozycji</td><td>~18</td><td>0</td></tr>
+    <tr><td>Usuwanie z potwierdzeniem</td><td>~20</td><td>0</td></tr>
+    <tr><td>Loading indicator</td><td>~8 per żądanie</td><td>0 (CSS)</td></tr>
+    <tr><td>Paginacja AJAX</td><td>~12</td><td>0</td></tr>
+    <tr style="font-weight:700;border-top:2px solid var(--border)">
+        <td>Suma na moduł (~15 akcji)</td>
+        <td class="con">~200-300 linii</td>
+        <td class="pro">~10-20 linii</td>
+    </tr>
+</table>
+
+<div class="callout">
+    <strong>💡 Co to oznacza dla 5 deweloperów?</strong>
+    W opcji A każdy dev pisze ~200 linii JS per moduł, co daje ~1000 linii JS w całym projekcie. W opcji B ten JS praktycznie nie istnieje — logika jest w atrybutach HTML, które Razor generuje. Mniej JS = mniej bugów, mniej czasu na debugowanie.
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJA 7: KONTROLERY                                    -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="controllers">
+<h2>7. Wzorce Kontrolerów</h2>
+
+<p>To kluczowa sekcja — bo kontroler to jedyne miejsce, gdzie opcja A i B <strong>różnią się po stronie C#</strong>. Różnica jest niewielka, ale ważna.</p>
+
+<h3>7.1 Kontroler w Opcji A — klasyczny MVC</h3>
+
+<div class="card card-a">
+<span class="code-label code-label-a">ProductionController.cs — Opcja A</span>
+<pre><code>public class ProductionController : Controller
+{
+    private readonly IProductionService _productionService;
+
+    public ProductionController(IProductionService productionService)
+        =&gt; _productionService = productionService;
+
+    // GET /Production?date=2026-05-05
+    // Zawsze zwraca PEŁNĄ stronę z layoutem
+    public async Task&lt;IActionResult&gt; Index(DateOnly? date)
+    {
+        var planDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        var plan = await _productionService.GetPlanAsync(planDate);
+
+        return View(new ProductionDayViewModel
+        {
+            Date = planDate,
+            Items = plan.Items
+        });
+    }
+
+    // POST /Production/Approve/42
+    // Po zatwierdzeniu: redirect na pełną stronę
+    [HttpPost]
+    [Authorize(Roles = "Kitchen,Admin")]
+    public async Task&lt;IActionResult&gt; Approve(long id)
+    {
+        await _productionService.ApproveCookingAsync(id);
+        <strong>return RedirectToAction("Index");</strong>
+        // ↑ Przeładowuje całą stronę
+    }
+}</code></pre>
+<p style="font-size:0.85rem;color:var(--text-dim)">Prosty wzorzec: każda akcja → <code>View()</code> lub <code>RedirectToAction()</code>. Nie ma rozróżnienia między typami żądań.</p>
+</div>
+
+<h3>7.2 Kontroler w Opcji B — dual response (pełna strona LUB fragment)</h3>
+
+<div class="card card-b">
+<span class="code-label code-label-b">ProductionController.cs — Opcja B</span>
+<pre><code>public class ProductionController : Controller
+{
+    private readonly IProductionService _productionService;
+
+    public ProductionController(IProductionService productionService)
+        =&gt; _productionService = productionService;
+
+    // GET /Production?date=2026-05-05
+    // Pełna strona (pierwszy render lub bezpośredni URL)
+    public async Task&lt;IActionResult&gt; Index(DateOnly? date)
+    {
+        var planDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        var plan = await _productionService.GetPlanAsync(planDate);
+
+        return View(new ProductionDayViewModel
+        {
+            Date = planDate,
+            Items = plan.Items
+        });
+    }
+
+    // GET /Production/PlanItems?date=2026-05-05
+    // <strong>Nowa akcja — zwraca TYLKO fragment HTML</strong>
+    // HTMX wywoła tę akcję przy zmianie daty
+    public async Task&lt;IActionResult&gt; PlanItems(DateOnly date)
+    {
+        var plan = await _productionService.GetPlanAsync(date);
+        <strong>return PartialView("_PlanItemsTable", plan.Items);</strong>
+        // ↑ Zwraca sam &lt;table&gt; bez layoutu
+    }
+
+    // POST /Production/Approve/42
+    // Zwraca zaktualizowany WIERSZ (nie całą stronę)
+    [HttpPost]
+    [Authorize(Roles = "Kitchen,Admin")]
+    public async Task&lt;IActionResult&gt; Approve(long id)
+    {
+        var item = await _productionService.ApproveCookingAsync(id);
+        <strong>return PartialView("_PlanItemRow", item);</strong>
+        // ↑ Zwraca sam &lt;tr&gt; — HTMX podmieni ten wiersz
+    }
+}</code></pre>
+<p style="font-size:0.85rem;color:var(--text-dim)">Wzorzec: <code>Index()</code> zwraca pełną stronę. Dodatkowe akcje (<code>PlanItems</code>, <code>Approve</code>) zwracają <code>PartialView()</code> — fragmenty HTML, które HTMX wkleja w DOM.</p>
+</div>
+
+<div class="callout">
+    <strong>🔑 Kluczowa różnica w kodzie C#</strong>
+    Opcja B wymaga <strong>dodatkowych akcji</strong> w kontrolerze — takich, które zwracają <code>PartialView()</code>. To ~3-5 linii C# ekstra per akcja. Nie jest to duży koszt, ale trzeba o tym wiedzieć — każda interakcja HTMX potrzebuje swojego endpointu.
+</div>
+
+<h3>7.3 Uniwersalny kontroler (działa z A i B jednocześnie)</h3>
+
+<p>Jeśli chcesz, aby kontroler obsługiwał <strong>oba scenariusze</strong> (przeglądarka bez HTMX → pełna strona, HTMX → fragment), użyj sprawdzenia nagłówka:</p>
+
+<div class="card">
+<span class="code-label code-label-cs">Wzorzec uniwersalny</span>
+<pre><code>// Metoda pomocnicza (w BaseController lub extension method)
+private bool IsHtmxRequest 
+    =&gt; Request.Headers.ContainsKey("<strong>HX-Request</strong>");
+
+// Jedna akcja obsługuje oba scenariusze:
+public async Task&lt;IActionResult&gt; Index(DateOnly? date)
+{
+    var planDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+    var plan = await _productionService.GetPlanAsync(planDate);
+    var model = new ProductionDayViewModel
+    {
+        Date = planDate,
+        Items = plan.Items
+    };
+
+    <strong>if (IsHtmxRequest)</strong>
+        <strong>return PartialView("_PlanItemsTable", model.Items);</strong>
+
+    return View(model);
+}
+
+// POST — po zatwierdzeniu
+[HttpPost]
+public async Task&lt;IActionResult&gt; Approve(long id)
+{
+    var item = await _productionService.ApproveCookingAsync(id);
+
+    <strong>if (IsHtmxRequest)</strong>
+        <strong>return PartialView("_PlanItemRow", item);</strong>
+
+    return RedirectToAction("Index");
+}</code></pre>
+<p style="font-size:0.85rem;color:var(--text-dim)">Dzięki temu ten sam kontroler działa z opcją A (redirect) i B (partial swap). Nagłówek <code>HX-Request</code> jest automatycznie dodawany przez HTMX.</p>
+</div>
+
+<h3>7.4 CSRF (Anti-Forgery) — konfiguracja</h3>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">A</span> Per formularz</h4>
+<pre><code>&lt;!-- W każdym formularzu --&gt;
+&lt;form method="post"&gt;
+    @Html.AntiForgeryToken()
+    ...
+&lt;/form&gt;
+
+&lt;!-- W JS: ręczne dołączanie --&gt;
+headers: {
+    'RequestVerificationToken': 
+        $('input[name=__Token]').val()
+}</code></pre>
+    </div>
+    <div class="card card-b">
+        <h4><span class="tag tag-b">B</span> Globalnie (raz)</h4>
+<pre><code>&lt;!-- W _Layout.cshtml (raz) --&gt;
+&lt;meta name="csrf-token" 
+      content="@Antiforgery.GetTokens
+               (Context).RequestToken" /&gt;
+
+&lt;!-- W htmx-config.js (raz) --&gt;
+document.body.addEventListener(
+    'htmx:configRequest', function(e) {
+    e.detail.headers['RequestVerificationToken']
+        = document.querySelector(
+            'meta[name=csrf-token]'
+        ).content;
+});</code></pre>
+        <p style="font-size:0.82rem;color:var(--text-dim)">Konfiguracja jednorazowa — wszystkie żądania HTMX automatycznie dołączają token.</p>
+    </div>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJA 8: STRUKTURA PROJEKTU                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="structure">
+<h2>8. Struktura Projektu</h2>
+
+<p>Obydwie opcje mają <strong>identyczną strukturę backendu</strong> (Domain, Application, Infrastructure). Różnica dotyczy wyłącznie projektu <code>KuchniaUCygana.Web</code>.</p>
+
+<h3>8.1 Obecna struktura (wspólna baza)</h3>
+
+<div class="card">
+<pre><code>src/KuchniaUCygana.Web/
+├── Controllers/
+│   └── HomeController.cs          ← jedyny kontroler
+├── Views/
+│   ├── Home/Index.cshtml
+│   └── Shared/
+│       ├── _Layout.cshtml         ← główny layout
+│       ├── _Layout.cshtml.css
+│       ├── _ValidationScriptsPartial.cshtml
+│       └── Error.cshtml
+├── wwwroot/
+│   ├── css/
+│   ├── js/
+│   └── lib/
+│       ├── bootstrap/
+│       ├── jquery/
+│       ├── jquery-validation/
+│       └── jquery-validation-unobtrusive/
+└── Program.cs</code></pre>
+</div>
+
+<h3>8.2 Docelowa struktura</h3>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">Opcja A</span></h4>
+<pre><code>Controllers/
+├── HomeController.cs
+├── DietController.cs
+├── CartController.cs
+├── ProductionController.cs
+├── WarehouseController.cs
+├── PackingController.cs
+├── LogisticsController.cs
+└── AdminController.cs
+
+Views/
+├── Shared/
+│   ├── _Layout.cshtml
+│   ├── _LayoutAdmin.cshtml
+│   └── _ValidationScriptsPartial.cshtml
+├── Home/
+├── Diet/
+│   ├── Index.cshtml
+│   └── Details.cshtml
+├── Production/
+│   ├── Index.cshtml
+│   └── CookingCard.cshtml
+├── Warehouse/
+│   ├── Stock.cshtml
+│   ├── ReceiveDelivery.cshtml
+│   └── Waste.cshtml
+└── ...
+
+wwwroot/
+├── css/site.css
+├── js/
+│   └── site.js    ← <strong>DUŻY plik</strong>
+│                     lub wiele plików
+│                     z kodem jQuery AJAX
+└── lib/
+    ├── bootstrap/
+    └── jquery/</code></pre>
+        <p style="font-size:0.82rem;color:var(--text-dim)">Pliki JS rosną z każdym modułem. Trzeba je organizować (po jednym per moduł) lub skończą jako jeden wielki <code>site.js</code>.</p>
+    </div>
+
+    <div class="card card-b">
+        <h4><span class="tag tag-b">Opcja B</span></h4>
+<pre><code>Controllers/
+├── HomeController.cs
+├── DietController.cs
+├── CartController.cs
+├── ProductionController.cs
+├── WarehouseController.cs
+├── PackingController.cs
+├── LogisticsController.cs
+└── AdminController.cs
+
+Views/
+├── Shared/
+│   ├── _Layout.cshtml
+│   ├── _LayoutAdmin.cshtml
+│   ├── _Notifications.cshtml
+│   └── _ValidationScriptsPartial.cshtml
+├── Production/
+│   ├── Index.cshtml
+│   ├── CookingCard.cshtml
+│   ├── <strong>_PlanItemsTable.cshtml</strong>
+│   ├── <strong>_PlanItemRow.cshtml</strong>
+│   └── <strong>_CookingCardSection.cshtml</strong>
+├── Warehouse/
+│   ├── Stock.cshtml
+│   ├── ReceiveDelivery.cshtml
+│   ├── <strong>_StockTable.cshtml</strong>
+│   ├── <strong>_DeliveryConfirmation.cshtml</strong>
+│   └── <strong>_WasteRow.cshtml</strong>
+└── ...
+
+wwwroot/
+├── css/
+│   ├── site.css
+│   └── htmx-extras.css
+├── js/
+│   ├── htmx-config.js  ← <strong>~15 linii</strong>
+│   └── site.js          ← <strong>minimalny</strong>
+└── lib/
+    ├── bootstrap/
+    ├── jquery/
+    ├── <strong>htmx/htmx.min.js</strong>
+    └── <strong>alpinejs/alpine.min.js</strong></code></pre>
+        <p style="font-size:0.82rem;color:var(--text-dim)">Więcej Partial Views (<code>_PlanItemRow.cshtml</code> itp.), ale praktycznie brak plików JS. Logika jest w widokach Razor, nie w JavaScript.</p>
+    </div>
+</div>
+
+<h3>8.3 Gdzie leży złożoność?</h3>
+
+<table>
+    <tr><th>Metryka</th><th><span class="tag tag-a">A</span></th><th><span class="tag tag-b">B</span></th></tr>
+    <tr>
+        <td>Liczba plików .cshtml</td>
+        <td>~25-30</td>
+        <td>~40-50 (więcej partiali)</td>
+    </tr>
+    <tr>
+        <td>Liczba plików .js</td>
+        <td class="con">~5-8 (po jednym per moduł)</td>
+        <td class="pro">1-2 (globalny config)</td>
+    </tr>
+    <tr>
+        <td>Łączne linie JS</td>
+        <td class="con">~800-1200</td>
+        <td class="pro">~30-50</td>
+    </tr>
+    <tr>
+        <td>Łączne linie .cshtml</td>
+        <td>~2000</td>
+        <td>~2500 (partiale mają atrybuty hx-*)</td>
+    </tr>
+    <tr>
+        <td>Akcje w kontrolerach (łącznie)</td>
+        <td>~35-40</td>
+        <td>~50-60 (dodatkowe akcje na partiale)</td>
+    </tr>
+</table>
+
+<div class="callout">
+    <strong>💡 Trade-off</strong>
+    Opcja B zamienia ~1000 linii JavaScript na ~15 dodatkowych partiali Razor i ~15 dodatkowych akcji w kontrolerach (po ~5 linii C# każda). To przesunięcie złożoności z przeglądarki (JS) na serwer (C# + Razor) — gdzie masz <strong>silne typowanie, IntelliSense i kompilator</strong>.
+</div>
+
+<h3>8.4 Instalacja bibliotek w Opcji B</h3>
+
+<p>HTMX i Alpine.js nie wymagają npm — wystarczy pobrać pliki do <code>wwwroot/lib/</code> lub użyć CDN.</p>
+
+<div class="card card-b">
+<span class="code-label code-label-b">Instalacja (LibMan lub ręcznie)</span>
+<pre><code>&lt;!-- Opcja 1: CDN (najprostsze) --&gt;
+&lt;script src="https://unpkg.com/htmx.org@2.0.4"&gt;&lt;/script&gt;
+&lt;script defer src="https://unpkg.com/alpinejs@3.14.8"&gt;&lt;/script&gt;
+
+&lt;!-- Opcja 2: Lokalne pliki (lepsze dla produkcji) --&gt;
+&lt;!-- Ściągnij do wwwroot/lib/htmx/ i wwwroot/lib/alpinejs/ --&gt;
+&lt;script src="~/lib/htmx/htmx.min.js"&gt;&lt;/script&gt;
+&lt;script defer src="~/lib/alpinejs/alpine.min.js"&gt;&lt;/script&gt;</code></pre>
+<p style="font-size:0.82rem;color:var(--text-dim)">Dodaj te dwie linie w <code>_Layout.cshtml</code> przed <code>&lt;/body&gt;</code>. To cała „instalacja".</p>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJA 9: PROBLEMY I OBEJŚCIA                           -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="problems">
+<h2>9. Problemy i Obejścia</h2>
+
+<p>Żadne rozwiązanie nie jest idealne. Poniżej realne problemy, na które natrafisz w projekcie cateringowym — i jak je rozwiązać w każdej opcji.</p>
+
+<h3>9.1 Drag &amp; drop w kompletacji (PackingController)</h3>
+<p>Magazynier przeciąga pozycje między kolumnami „Do spakowania" → „Spakowane". To złożona interakcja UI.</p>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">A</span> Problem i obejście</h4>
+        <p>jQuery UI Sortable lub SortableJS. Trzeba napisać ~50 linii JS: inicjalizacja, obsługa drop, AJAX POST z nową kolejnością.</p>
+        <p class="pro">✅ jQuery UI jest naturalnym wyborem</p>
+    </div>
+    <div class="card card-b">
+        <h4><span class="tag tag-b">B</span> Problem i obejście</h4>
+        <p>HTMX nie obsługuje drag &amp; drop natywnie. Rozwiązanie: użyj <strong>SortableJS</strong> (8 KB, bez jQuery) + trigger HTMX po zakończeniu:</p>
+<pre><code>&lt;div id="packing-board"
+     x-data
+     x-init="Sortable.create($el, {
+         onEnd: function(e) {
+             htmx.ajax('POST', 
+                 '/Packing/Reorder', 
+                 { target: '#board',
+                   values: { 
+                       order: getOrder() 
+                   }
+                 });
+         }
+     })"&gt;</code></pre>
+        <p class="pro">✅ Działa, ale wymaga ~15 linii JS (jedyny wyjątek od „0 JS")</p>
+    </div>
+</div>
+
+<h3>9.2 Mapa tras (LogisticsController)</h3>
+<p>Moduł 4 wymaga mapy z pinami adresów dostaw i narysowaną trasą.</p>
+
+<div class="card">
+    <p><strong>Identyczne w obu opcjach:</strong> Leaflet.js (open-source, 40 KB) z OpenStreetMap tiles. To samodzielny widget JS — niezależny od jQuery ani HTMX. W obu opcjach trzeba napisać ~30 linii JS na inicjalizację mapy.</p>
+<pre><code>&lt;!-- Identyczne w A i B --&gt;
+&lt;div id="map" style="height: 500px"&gt;&lt;/div&gt;
+
+&lt;script&gt;
+var map = L.map('map').setView([52.23, 21.01], 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/...').addTo(map);
+// piny z @Model.Stops — generowane Razorem
+@foreach (var stop in Model.Stops)
+{
+    &lt;text&gt;
+    L.marker([@stop.Lat, @stop.Lng])
+     .addTo(map)
+     .bindPopup("@stop.ClientName");
+    &lt;/text&gt;
+}
+&lt;/script&gt;</code></pre>
+</div>
+
+<h3>9.3 Event delegation — utracone eventy po AJAX</h3>
+<p>W opcji A, gdy jQuery AJAX podmieni fragment DOM, eventy (<code>.on('click', ...)</code>) przypisane do starych elementów <strong>przestają działać</strong>.</p>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">A</span> Problem</h4>
+        <p class="con">❌ Trzeba użyć event delegation:</p>
+<pre><code>// ŹLE — nie zadziała po AJAX reload
+$('.btn-approve').on('click', fn);
+
+// DOBRZE — delegacja na rodzica
+$(document).on('click', 
+    '.btn-approve', fn);</code></pre>
+        <p>To częsty błąd juniorów — łatwo o niego zapomnieć.</p>
+    </div>
+    <div class="card card-b">
+        <h4><span class="tag tag-b">B</span> Brak problemu</h4>
+        <p class="pro">✅ HTMX nie ma tego problemu — atrybuty <code>hx-*</code> są na elementach HTML, więc po podmianie DOM nowe elementy mają swoje atrybuty. Alpine.js inicjalizuje się automatycznie na nowych elementach (<code>x-data</code>).</p>
+    </div>
+</div>
+
+<h3>9.4 Stripe Checkout (CartController)</h3>
+<p>Klient płaci za zamówienie — integracja Stripe Checkout.</p>
+
+<div class="card">
+    <p><strong>Identyczne w obu opcjach:</strong> Stripe.js Elements to niezależny widget — osadzony w <code>&lt;iframe&gt;</code>, nie zależy od jQuery/HTMX. Formularz płatności jest zawsze izolowany przez Stripe ze względów bezpieczeństwa PCI.</p>
+</div>
+
+<h3>9.5 Real-time alerty (temperatury, braki magazynowe)</h3>
+<p>System powinien wyświetlać powiadomienia w czasie rzeczywistym — np. „Temperatura w lodówce #2 przekroczyła 8°C".</p>
+
+<div class="split">
+    <div class="card card-a">
+        <h4><span class="tag tag-a">A</span> SignalR + jQuery</h4>
+<pre><code>// W site.js
+var conn = new signalR
+    .HubConnectionBuilder()
+    .withUrl("/hubs/alerts")
+    .build();
+
+conn.on("NewAlert", function(msg) {
+    // Ręczne tworzenie HTML
+    var html = '&lt;div class="alert"&gt;'
+        + msg.text + '&lt;/div&gt;';
+    $('#notifications').prepend(html);
+});
+conn.start();</code></pre>
+    </div>
+    <div class="card card-b">
+        <h4><span class="tag tag-b">B</span> SignalR + HTMX SSE</h4>
+<pre><code>&lt;!-- Użyj HTMX extension SSE
+     lub SignalR + OOB swap --&gt;
+&lt;div id="notifications"
+     hx-ext="sse"
+     sse-connect="/alerts/stream"
+     sse-swap="message"
+     hx-swap="afterbegin"&gt;
+&lt;/div&gt;
+
+&lt;!-- Serwer wysyła gotowy HTML:
+     &lt;div class="alert"&gt;...&lt;/div&gt;
+     HTMX wkleja go automatycznie --&gt;</code></pre>
+        <p style="font-size:0.82rem;color:var(--text-dim)">Alternatywnie: SignalR hub + 5 linii JS, które wywołują <code>htmx.ajax()</code> po otrzymaniu sygnału.</p>
+    </div>
+</div>
+
+<h3>9.6 Podsumowanie: co wymaga JS w obu opcjach?</h3>
+
+<table>
+    <tr><th>Funkcjonalność</th><th>Wymaga JS?</th><th>Biblioteka</th></tr>
+    <tr><td>CRUD, filtrowanie, paginacja</td><td><span class="tag tag-a">A: tak</span> <span class="tag tag-b">B: nie</span></td><td>jQuery / HTMX</td></tr>
+    <tr><td>Modale, toggle, show/hide</td><td><span class="tag tag-a">A: tak</span> <span class="tag tag-b">B: nie</span></td><td>jQuery / Alpine.js</td></tr>
+    <tr><td>Drag &amp; drop</td><td>Obie: tak</td><td>SortableJS (8 KB)</td></tr>
+    <tr><td>Mapa tras</td><td>Obie: tak</td><td>Leaflet.js (40 KB)</td></tr>
+    <tr><td>Wykresy dashboardu</td><td>Obie: tak</td><td>Chart.js (60 KB)</td></tr>
+    <tr><td>Stripe Checkout</td><td>Obie: tak</td><td>Stripe.js (zewnętrzny)</td></tr>
+    <tr><td>Real-time powiadomienia</td><td>Obie: tak (mniej w B)</td><td>SignalR</td></tr>
+</table>
+
+<div class="callout callout-warn">
+    <strong>⚠️ Uczciwa ocena</strong>
+    Drag &amp; drop, mapy i wykresy wymagają JS w <strong>obu</strong> opcjach — tu HTMX nie pomaga. Różnica dotyczy codziennych operacji CRUD, które stanowią ~80% interakcji w ERP. To tam HTMX eliminuje setki linii jQuery.
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SEKCJA 10: OCENA KOŃCOWA                                -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="verdict">
+<h2>10. Ocena Końcowa</h2>
+
+<h3>10.1 Kiedy wybrać Opcję A?</h3>
+<div class="card card-a">
+    <ul>
+        <li><strong>Zespół nie chce uczyć się niczego nowego</strong> — jQuery jest znany od lat</li>
+        <li><strong>Projekt jest bardzo prosty</strong> — kilka formularzy CRUD, brak dashboardów ERP</li>
+        <li><strong>Interaktywność nie jest priorytetem</strong> — pełne przeładowania strony są akceptowalne</li>
+        <li><strong>Istniejący kod jQuery</strong> — migracja byłaby zbyt kosztowna</li>
+        <li><strong>Prowadzący/firma wymaga jQuery</strong> — wymóg formalny projektu</li>
+    </ul>
+</div>
+
+<h3>10.2 Kiedy wybrać Opcję B?</h3>
+<div class="card card-b">
+    <ul>
+        <li><strong>Aplikacja ERP z wieloma interakcjami</strong> — dashboardy, zatwierdzanie, filtrowanie w czasie rzeczywistym</li>
+        <li><strong>Zespół zna C# lepiej niż JS</strong> — logika w Razor zamiast jQuery</li>
+        <li><strong>Chcesz mniej kodu JS</strong> — mniej bugów, łatwiejsze utrzymanie</li>
+        <li><strong>UX ma znaczenie</strong> — użytkownicy ERP pracują 8h dziennie, każdy reload irytuje</li>
+        <li><strong>Ograniczony czas</strong> — HTMX jest szybszy w implementacji niż ręczny AJAX</li>
+    </ul>
+</div>
+
+<h3>10.3 Macierz decyzyjna dla projektu Kuchnia u Cygana</h3>
+
+<table>
+    <tr><th>Czynnik specyficzny dla projektu</th><th>Wpływ na decyzję</th></tr>
+    <tr>
+        <td>5 deweloperów znających C#</td>
+        <td>→ Opcja B (mniej JS do nauki)</td>
+    </tr>
+    <tr>
+        <td>9-tygodniowy timeline</td>
+        <td>→ Opcja A (zero setup) lub B (szybsze CRUD)</td>
+    </tr>
+    <tr>
+        <td>Moduł 3 (Produkcja) — interaktywne dashboardy</td>
+        <td>→ Opcja B (partial updates krytyczne)</td>
+    </tr>
+    <tr>
+        <td>Moduł 1 (E-commerce) — koszyk, checkout</td>
+        <td>→ Obie OK (Stripe niezależny)</td>
+    </tr>
+    <tr>
+        <td>Moduł 4 (Logistyka) — mapa</td>
+        <td>→ Obie OK (Leaflet niezależny)</td>
+    </tr>
+    <tr>
+        <td>Moduł 5 (Admin) — CRUD ticketów</td>
+        <td>→ Obie OK (proste formularze)</td>
+    </tr>
+    <tr>
+        <td>Bootstrap 5 już w projekcie</td>
+        <td>→ Obie OK (pełna kompatybilność)</td>
+    </tr>
+    <tr>
+        <td>jQuery już w projekcie</td>
+        <td>→ Opcja A (gotowe) / B (jQuery zostaje do walidacji)</td>
+    </tr>
+    <tr>
+        <td>Projekt uczelniany vs produkcyjny</td>
+        <td>→ A: bezpieczniejsze / B: bardziej profesjonalne</td>
+    </tr>
+</table>
+
+<h3>10.4 Werdykt</h3>
+
+<div class="split">
+    <div class="card card-a" style="border-top: 3px solid var(--accent-a)">
+        <h4 style="color:var(--accent-a);font-size:1.1rem">Opcja A: Razor + jQuery</h4>
+        <p style="font-size:2rem;font-weight:700;color:var(--accent-a);margin:0.5rem 0">5.75 / 10</p>
+        <p><strong>Solidna, sprawdzona, ale przestarzała.</strong></p>
+        <p>Idealna, jeśli celem jest szybkie dostarczenie MVP bez uczenia się nowych narzędzi. Jednak przy 5 modułach ERP, ~1000 linii jQuery AJAX stanie się trudne do utrzymania.</p>
+        <p style="font-size:0.85rem;color:var(--text-dim)"><strong>Ryzyka:</strong> spaghetti JS, event delegation bugs, brak interaktywności w dashboardach produkcji i magazynu.</p>
+    </div>
+    <div class="card card-b" style="border-top: 3px solid var(--accent-b)">
+        <h4 style="color:var(--accent-b);font-size:1.1rem">Opcja B: Razor + HTMX + Alpine.js</h4>
+        <p style="font-size:2rem;font-weight:700;color:var(--accent-b);margin:0.5rem 0">7.50 / 10</p>
+        <p><strong>Nowoczesna ewolucja MVC — bez rewolucji.</strong></p>
+        <p>Daje 80% interaktywności SPA przy 20% kosztu. Wymaga ~2h nauki HTMX i dodania 2 plików. Trade-off: więcej partiali Razor, ale za to prawie zero JavaScript.</p>
+        <p style="font-size:0.85rem;color:var(--text-dim)"><strong>Ryzyka:</strong> mniej materiałów w ekosystemie .NET, zespół musi zrozumieć model „serwer zwraca HTML fragmenty".</p>
+    </div>
+</div>
+
+<div class="callout">
+    <strong>🏁 Rekomendacja ostateczna</strong>
+    Dla projektu „Kuchnia u Cygana" z 5 modułami ERP, oba podejścia są <strong>wykonalne</strong>. Opcja A jest bezpieczniejsza (znana technologia). Opcja B daje lepszy UX przy mniejszym nakładzie JS. Można też zastosować <strong>podejście hybrydowe</strong>: zacząć od A (proste moduły: Admin, Diet), a HTMX dodać w modułach, które tego wymagają (Production, Warehouse, Packing). HTMX i jQuery koegzystują bez konfliktów.
+</div>
+
+</section>
+
+<footer>
+    <p>Dokument wygenerowany dla projektu „Kuchnia u Cygana" · Maj 2026</p>
+    <p style="font-size:0.75rem;margin-top:0.25rem">Sekcje: 1–10 · ~1300 linii · Razor+jQuery vs Razor+HTMX+Alpine.js</p>
+</footer>
+
+</div><!-- /.container -->
+</body>
+</html>
