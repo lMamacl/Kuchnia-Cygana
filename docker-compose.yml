@@ -10,7 +10,6 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Data Source=/app/data/kuchniaucygana.db
-      - JwtSettings__SecretKey=${JWT_SECRET}
       - Stripe__SecretKey=${STRIPE_SECRET}
       - Stripe__PublishableKey=${STRIPE_PUBLISHABLE}
       - OpenAI__ApiKey=${OPENAI_KEY}
