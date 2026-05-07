@@ -15,7 +15,7 @@ Poniżej znajdziesz szybkie linki do innych kluczowych dokumentów:
 Obecnie na gałęzi `develop` znajduje się **Czysty Szablon Architektoniczny**. Został on zoptymalizowany i oczyszczony z próbnych komponentów i logiki testowej, aby każdy deweloper, niezależnie od przypisanego modułu, mógł od niego bezpiecznie wystartować.
 
 Czego możesz oczekiwać pobierając najnowszego `develop'a`:
-1. Skonfigurowane i gotowe środowisko deweloperskie: pliki Docker, konfiguracja `user-secrets`, Pipeline CI w GitHub Actions (z wbudowanymi testami i weryfikacją pokrycia kodu).
+1. Skonfigurowane i gotowe środowisko deweloperskie: pliki Docker, konfiguracja `user-secrets`, Pipeline CI w GitHub Actions (z wbudowanymi testami i weryfikacją pokrycia kodu), oraz przygotowana konfiguracja uwierzytelniania Cookie Authentication.
 2. Przygotowany i przetestowany układ katalogów (Clean Architecture): `Web`, `Application`, `Domain`, `Infrastructure`.
 3. Gotowe fundamenty DDD i wzorce bazodanowe (Bazowe Encje i Generyczne Repozytoria).
 
@@ -38,7 +38,7 @@ Kluczem do pracy z bazą w naszym systemie (pod spodem korzystamy z ORM `Service
 ### 🔸 `AuditableEntity<T>` (`Domain/Common/AuditableEntity.cs`)
 **Dla kogo i kiedy?** Stosuj ZAWSZE dla ruchomych danych biznesowych, których cykl życia polega na edycjach ze strony pracowników czy klientów! Jeśli encją jest Zamówienie, Receptura, Partia kurczaka włożona do chłodni czy Zgłoszenie Pracownika — zawsze dziedziczymy po `AuditableEntity`.
 **Co wspiera dodatkowo?**
-- Posiada sygnatury audytowe: `CreatedBy` i `UpdatedBy`. Śledzi kto wykonał akcję — zapisując ID użytkownika uwierzytelnionego z JWT.
+- Posiada sygnatury audytowe: `CreatedBy` i `UpdatedBy`. Śledzi kto wykonał akcję — zapisując ID użytkownika uwierzytelnionego (claims principal z sesji cookie).
 - Posiada wbudowany i przygotowany pod repozytoria **Soft Delete**! (poprzez implementację interfejsu z `Domain/Common/Interfaces/ISoftDeletable.cs`). To znaczy, że nie używasz w swoim kodzie niebezpiecznego `DELETE FROM Tabelka`. Usuwanie odbywa się poprzez nałożenie wierszowej flagi `IsDeleted = true` oraz `DeletedBy = {pracownik_id}`. Utrzymujemy historię każdego usunięcia w bazie w celach dowodowych dla Sanepidu czy księgowości.
 
 ### 🔸 Generyczne Repozytorium (`BaseRepository<T, TId>`)
@@ -101,5 +101,5 @@ Utrzymujemy czysty i uporządkowany rejestr zmian korzystając z konwencji **Con
 * `chore:` (Obsługa techniczna np. aktualizacje NuGet, GitHub Actions, edycja .gitignore)
 
 **Przed dodaniem Commita koniecznie sprawdź, czy:**
-1. Masz schowane swoje dane produkcyjne API lub wygenerowane hasła w usłudze narzędziowej: `dotnet user-secrets` a w `.env` i `appsettings.json` nie ma twardo zapisanych kluczy!
+1. Masz schowane swoje dane produkcyjne API lub wygenerowane hasła w usłudze narzędziowej: `dotnet user-secrets` a w `.env` i `appsettings.json` nie ma twardo zapisanych kluczy! (po migracji na cookie auth nie używamy już `JWT_SECRET`)
 2. Twoje zmiany na branchu skompilują się na serwerze i nie zerwą głównego strumienia. Zrób na konsoli kontrolny test: `dotnet test`.

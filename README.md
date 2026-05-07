@@ -82,9 +82,6 @@ Projekt korzysta z `dotnet user-secrets` do przechowywania kluczy API lokalnie (
 # Zainicjuj user-secrets dla projektu Web
 dotnet user-secrets init --project src/KuchniaUCygana.Web
 
-# Ustaw klucz JWT (min. 32 znaki)
-dotnet user-secrets set "JwtSettings:SecretKey" "TwojMinimum32ZnakowyBezpiecznyKlucz!!" --project src/KuchniaUCygana.Web
-
 # Opcjonalnie — klucze API (możesz pominąć jeśli nie testujesz integracji)
 dotnet user-secrets set "Stripe:SecretKey" "sk_test_..." --project src/KuchniaUCygana.Web
 dotnet user-secrets set "OpenAI:ApiKey" "sk-..." --project src/KuchniaUCygana.Web
@@ -111,7 +108,7 @@ Aplikacja będzie dostępna pod: `https://localhost:5001` lub `http://localhost:
 
 ```bash
 cp .env.example .env
-# Edytuj .env i uzupełnij wartości (JWT_SECRET, STRIPE_SECRET, OPENAI_KEY)
+# Edytuj .env i uzupełnij wartości (STRIPE_SECRET, STRIPE_PUBLISHABLE, OPENAI_KEY)
 ```
 
 ### 2. Uruchomienie
