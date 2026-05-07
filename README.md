@@ -4,7 +4,7 @@
 
 Platforma webowa dla firmy cateringowej łącząca **portal B2C** (zamawianie diet, płatności online) z **ERP back-office** (produkcja, magazyn, logistyka, HR, helpdesk).
 
-> **Technologie:** ASP.NET MVC 8 · SQLite + OrmLite · FluentMigrator · Clean Architecture
+> **Technologie:** ASP.NET MVC 8 · SQLite + OrmLite · FluentMigrator · Clean Architecture · HTMX 2.x · Alpine.js 3.x
 
 ---
 
@@ -65,6 +65,8 @@ KuchniaUCygana.Infrastructure   ← DAL (OrmLite, Migrations, External APIs, Cac
 git clone https://github.com/lMamacl/Kuchnia-Cygana.git
 cd Kuchnia-Cygana
 ```
+
+> **⚠️ UWAGA — WAŻNE:** Wszystkie poniższe komendy (`dotnet`, `docker-compose`) **muszą** być uruchamiane z poziomu **głównego katalogu repozytorium** (tam, gdzie znajduje się plik `KuchniaUCygana.sln`), a **NIE** wewnątrz folderu `src/KuchniaUCygana.Web`!
 
 ### 2. Przywrócenie zależności
 
@@ -200,8 +202,57 @@ main ← develop ← feature/devX-opis-zadania
 - **ORM:** ServiceStack OrmLite (bliżej SQL niż EF Core, brak lazy loading — jawne JOINy)
 - **Migracje:** FluentMigrator — jedyne źródło DDL (nie `db.CreateTableIfNotExists`!)
 - **Mapowania:** AutoMapper — 1 plik Profile per moduł
-- **Walidacja:** FluentValidation
+- **Walidacja:** FluentValidation (serwer) + jQuery Validation Unobtrusive (klient)
 - **Testy:** xUnit + Moq + FluentAssertions + Bogus
 - **PDF:** QuestPDF (licencja Community)
 - **Jakość kodu:** StyleCop + Roslynator + SonarAnalyzer (via `Directory.Build.props`)
 - **Logowanie:** Serilog (Console + File)
+- **Frontend:** HTMX 2.x (partial swap) + Alpine.js 3.x (lokalna reaktywność) + Bootstrap 5
+
+---
+
+## 🎨 Architektura Frontendowa
+
+**Wybrany stack: Razor Views + HTMX + Alpine.js** (decyzja 2026-05-04)
+
+```
+B2C (klient):           _LayoutPublic.cshtml
+                         Navbar | Body | Footer
+
+ERP back-office:        _LayoutAdmin.cshtml
+                         Sidebar | Breadcrumb | Body
+```
+
+### Zasady
+
+- **Interaktywność bez reload** — HTMX pobiera fragmenty HTML (Partial Views) i wkleja je w DOM bez przeładowania strony
+- **Lokalna reaktywność** — Alpine.js (`x-data`, `x-show`, `@click`) do modali, toggleów, potwierdzeń
+- **Zero JS boilerplate dla CRUD** — filtry, paginacja, zatwierdzanie pozycji przez atrybuty `hx-*`
+- **Walidacja** — FluentValidation (server) + jQuery Validation Unobtrusive (client); HTMX nie wysła formularza przed walidacją kliencką
+- **CSRF** — jednorazowa konfiguracja globalna w `htmx-config.js`; wszystkie żądania HTMX automatycznie dostączają token
+
+### Wzorzec kontrolera (dual response)
+
+```csharp
+// Akcja zwraca pełną stronę LUB fragment — zależnie od żądania
+public async Task<IActionResult> PlanItems(DateOnly date)
+{
+    var items = await _productionService.GetPlanItemsAsync(date);
+    if (Request.Headers.ContainsKey("HX-Request"))
+        return PartialView("_PlanItemsTable", items); // HTMX — fragment
+    return View(items);                                // przeglądarka — cała strona
+}
+```
+
+### Wzorzec widoku (HTMX)
+
+```html
+<!-- Filtr dat — aktualizuje tylko tabelę -->
+<input type="date" hx-get="/Production/PlanItems"
+       hx-target="#plan-table" hx-trigger="change" />
+<div id="plan-table">
+    @await Html.PartialAsync("_PlanItemsTable", Model.Items)
+</div>
+```
+
+> Pełne porównanie Razor+jQuery vs Razor+HTMX: [`docs/frontend-comparison.html`](docs/frontend-comparison.html)
