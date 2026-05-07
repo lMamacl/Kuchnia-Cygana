@@ -2,12 +2,12 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using KuchniaUCygana.Application;
 using KuchniaUCygana.Infrastructure;
-using KuchniaUCygana.Infrastructure.Auth;
 using KuchniaUCygana.Infrastructure.Persistence.Migrations;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.DataProtection;
 using QuestPDF.Infrastructure;
-using System.Text;
+using System.IO;
 
 using Serilog;
 
@@ -18,29 +18,55 @@ builder.Host.UseSerilog((context, configuration) =>
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddControllersWithViews()
-    .AddFluentValidation(fv => fv.RegisterValidatorsFromAssemblyContaining<Program>());
-
-var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>() ?? new JwtSettings();
-if (!string.IsNullOrWhiteSpace(jwtSettings.SecretKey))
-{
-    builder.Services
-        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-        .AddJwtBearer(
-            options =>
+builder.Services.AddDataProtection()
+    .SetApplicationName("KuchniaUCygana")
+    .PersistKeysToFileSystem(new DirectoryInfo("./Keys"));
+builder.Services
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(
+        options =>
+        {
+            options.Cookie.Name = "KuchniaUCygana.Auth";
+            options.Cookie.HttpOnly = true;
+            // Production should keep Always; local HTTP development can switch to SameAsRequest.
+            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.LoginPath = "/Account/Login";
+            options.AccessDeniedPath = "/Account/AccessDenied";
+            options.LogoutPath = "/Account/Logout";
+            options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
+            options.SlidingExpiration = true;
+            options.Events.OnRedirectToLogin = context =>
             {
-                options.TokenValidationParameters = new TokenValidationParameters
+                if (context.Request.Path.StartsWithSegments("/api") ||
+                    context.Request.Headers.XRequestedWith == "XMLHttpRequest")
                 {
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidateIssuerSigningKey = true,
-                    ValidateLifetime = true,
-                    ValidIssuer = jwtSettings.Issuer,
-                    ValidAudience = jwtSettings.Audience,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
-                };
-            });
-}
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                }
+
+                context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            };
+            options.Events.OnRedirectToAccessDenied = context =>
+            {
+                if (context.Request.Path.StartsWithSegments("/api") ||
+                    context.Request.Headers.XRequestedWith == "XMLHttpRequest")
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                }
+
+                context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            };
+        });
+builder.Services.AddAuthorization();
+builder.Services.AddControllersWithViews(options =>
+    {
+        options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+    })
+    .AddFluentValidation(fv => fv.RegisterValidatorsFromAssemblyContaining<Program>());
 
 var app = builder.Build();
 

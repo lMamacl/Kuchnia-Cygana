@@ -1,7 +1,6 @@
 using FluentMigrator.Runner;
 using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Interfaces;
-using KuchniaUCygana.Infrastructure.Auth;
 using KuchniaUCygana.Infrastructure.Cache;
 using KuchniaUCygana.Infrastructure.ExternalServices.AI;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
@@ -31,8 +30,6 @@ public static class DependencyInjection
                     .ScanIn(typeof(DependencyInjection).Assembly).For.Migrations())
             .AddLogging(loggingBuilder => loggingBuilder.AddFluentMigratorConsole());
 
-        services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
-        services.AddScoped<IJwtService, JwtService>();
         services.AddMemoryCache();
         services.AddSingleton<ICacheService, MemoryCacheService>();
         services.AddScoped<IPaymentService, StripePaymentService>();

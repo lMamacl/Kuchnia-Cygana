@@ -96,7 +96,7 @@ Ten dokument definiuje **kolejność realizacji komponentów** — od infrastruk
 | 1.5 | Migration `001_CreateUsersTable` | ✅ |
 | 1.6 | DI rejestracja (`AddInfrastructure`) | ✅ |
 | 1.7 | Domain Events: `IDomainEvent`, infrastruktura dispatching | ✅ |
-| 1.8 | `UserRoles` enum + `JwtService` + `ClaimsHelper` | ✅ |
+| 1.8 | `UserRoles` enum + `ClaimsHelper` + konfiguracja Cookie Authentication (bez JWT) | ✅ |
 
 ### FAZA 2 — Moduły Niezależne (równoległy rozwój)
 **Priorytet:** 🟡 WYSOKI  

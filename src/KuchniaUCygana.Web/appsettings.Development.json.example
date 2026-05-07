@@ -2,12 +2,6 @@
   "ConnectionStrings": {
     "DefaultConnection": "Data Source=kuchniaucygana_dev.db"
   },
-  "JwtSettings": {
-    "SecretKey": "--- USTAW PRZEZ: dotnet user-secrets set JwtSettings:SecretKey TWOJ_KLUCZ ---",
-    "Issuer": "KuchniaUCygana",
-    "Audience": "KuchniaUCyganaUsers",
-    "ExpiryHours": 8
-  },
   "Stripe": {
     "SecretKey": ""
   },
