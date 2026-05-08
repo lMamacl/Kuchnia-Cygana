@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -11,7 +11,8 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
 public class BatchRepository : BaseRepository<Batch>, IBatchRepository
 {
-    public BatchRepository(IDbConnectionFactory factory) : base(factory)
+    public BatchRepository(IDbConnectionFactory factory)
+        : base(factory)
     {
     }
 
@@ -25,8 +26,7 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
             !b.IsDepleted &&
             !b.IsDeleted);
 
-        // FEFO: partie z najwcześniejszą datą ważności idą pierwsze.
-        // Partie bez daty ważności (null) trafiają na koniec kolejki.
+        // FEFO: najpierw najwczesniejsze daty waznosci, partie bez daty na koncu.
         return batches
             .OrderBy(b => b.ExpiryDate.HasValue ? 0 : 1)
             .ThenBy(b => b.ExpiryDate);
@@ -37,13 +37,9 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
     {
         using var db = Factory.CreateConnection();
 
-        // SQLite przechowuje daty jako TEXT w formacie ISO8601;
-        // OrmLite tłumaczy porównania dat poprawnie.
-        var cutoff = date.UtcDateTime;
-
         return await db.SelectAsync<Batch>(b =>
             b.ExpiryDate != null &&
-            b.ExpiryDate <= cutoff &&
+            b.ExpiryDate <= date &&
             !b.IsDepleted &&
             !b.IsDeleted);
     }
