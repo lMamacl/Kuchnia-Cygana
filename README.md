@@ -1,64 +1,117 @@
-﻿# Kuchnia u Cygana
+# 🍽️ Kuchnia u Cygana
 
 [![CI - Build, Test i Coverage](https://github.com/lMamacl/Kuchnia-Cygana/actions/workflows/ci.yml/badge.svg)](https://github.com/lMamacl/Kuchnia-Cygana/actions/workflows/ci.yml)
 
-Platforma webowa dla firmy cateringowej laczaca portal klienta B2C z panelami ERP (produkcja, magazyn, logistyka, administracja).
+Platforma webowa dla firmy cateringowej łącząca **portal B2C** (zamawianie diet, płatności online) z **ERP back-office** (produkcja, magazyn, logistyka, HR, helpdesk).
 
-## Architektura
+> **Technologie:** ASP.NET MVC 8 · MS SQL Server · ServiceStack OrmLite · HTMX 2.x · Alpine.js · Clean Architecture
 
-Projekt jest podzielony warstwowo (Clean Architecture):
+---
 
+## 🏗️ Stan Projektu (Czysta Baza)
+Obecnie na gałęzi `develop` znajduje się **Czysty Szablon Architektoniczny**. Został on oczyszczony z logiki testowej, aby służyć jako solidny fundament pod budowę modułów. Posiada wbudowaną konfigurację **Cookie Authentication**, obsługę **HTMX** oraz gotowy pipeline CI/CD.
+
+> [!IMPORTANT]
+> Pełna implementacja **Modułu 3 (Magazyn i Produkcja)** znajduje się obecnie na dedykowanej gałęzi `Mamac`. Gałąź `develop` zawiera jedynie niezbędny baseline infrastrukturalny (SQL Server, Migracje).
+
+---
+
+## 📐 Architektura
 - `KuchniaUCygana.Web` - UI ASP.NET MVC
 - `KuchniaUCygana.Application` - logika aplikacyjna, DTO, mapowania
 - `KuchniaUCygana.Domain` - encje i kontrakty domenowe
 - `KuchniaUCygana.Infrastructure` - dostep do danych, migracje, integracje zewnetrzne
 
-Zaleznosci: `Web -> Application -> Domain <- Infrastructure`.
+Projekt stosuje **N-Tier / Clean Architecture** z czytelnym podziałem odpowiedzialności:
 
-## Stos technologiczny
+```
+KuchniaUCygana.Web              ← ASP.NET MVC (Controllers, Views, wwwroot)
+    ↓ używa DTOs
+KuchniaUCygana.Application      ← BLL (Services, DTOs, AutoMapper, Validators)
+    ↓ używa Interfejsów
+KuchniaUCygana.Domain           ← Core (Entities, Repository Interfaces, Events)
+    ↑ implementuje Interfejsy
+KuchniaUCygana.Infrastructure   ← DAL (OrmLite, Migrations, External APIs, Cache)
+```
 
-- .NET 8
-- MS SQL Server (Docker)
-- ServiceStack.OrmLite
-- FluentMigrator
-- xUnit + FluentAssertions + Moq + Bogus + Testcontainers
+**Zasada:** Web → Application → Domain ← Infrastructure. Żadna warstwa nie może znać szczegółów warstwy powyżej.
 
-## Instalacja i pierwsze uruchomienie
+---
 
-### 1. Wymagania
+## 🗂️ Moduły Funkcjonalne
 
-- .NET 8 SDK
-- Docker Desktop
-- Git
+| # | Moduł | Deweloper | Opis |
+|---|-------|-----------|------|
+| 1 | **E-commerce i Zamówienia** | DEV 01 | Klient zamawia diety, zarządza dostawami, płaci online (Stripe) |
+| 2 | **Katalog Diet i Receptur** | DEV 02 | Diety, warianty kaloryczne, posiłki, składniki, alergeny, AI opisy (OpenAI) |
+| 3 | **Produkcja, Kompletacja i Magazyn** | DEV 03 | Plan produkcji, FEFO, HACCP, pakowanie, etykiety, Smart Inventory |
+| 4 | **Logistyka i Dostawy** | DEV 04 | Trasy, kierowcy, pojazdy, geokodowanie (OpenStreetMap) |
+| 5 | **Administracja, HR i Komunikacja** | DEV 05 | Tickety, grafiki pracy, zarządzanie użytkownikami |
 
-### 2. Klonowanie repozytorium
+## 🔐 Role w Systemie
+
+| Rola | Dostęp |
+|------|--------|
+| `Client` | Portal B2C — zamówienia, profil, płatności |
+| `Kitchen` | Panel kuchni — produkcja, kompletacja, magazyn |
+| `Driver` | Panel kierowcy — trasy, dostawy |
+| `Admin` | Pełny dostęp — administracja, raporty, HR |
+
+---
+
+## 🚀 Wymagania Systemowe
+
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (8.0.x)
+- [Docker](https://docs.docker.com/get-docker/) (opcjonalnie, do konteneryzacji)
+- Visual Studio 2022+ / VS Code / Rider
+
+---
+
+## ⚡ Szybki Start (lokalne uruchomienie)
+
+### 1. Klonowanie repozytorium
 
 ```bash
 git clone https://github.com/lMamacl/Kuchnia-Cygana.git
 cd Kuchnia-Cygana
 ```
 
-### 3. Przygotowanie zmiennych srodowiskowych
+> **⚠️ UWAGA — WAŻNE:** Wszystkie poniższe komendy (`dotnet`, `docker-compose`) **muszą** być uruchamiane z poziomu **głównego katalogu repozytorium** (tam, gdzie znajduje się plik `KuchniaUCygana.sln`), a **NIE** wewnątrz folderu `src/KuchniaUCygana.Web`!
+
+### 2. Przygotowanie zmiennych srodowiskowych
 
 ```bash
 cp .env.example .env
 ```
+W pliku `.env` uzupelnij nastepujace pola:
 
-Nastepnie uzupelnij w `.env` co najmniej:
+```
+- `MSSQL_SA_PASSWORD` = Twoje super tajne hasło!
+- `MSSQL_DB_NAME` = `KuchniaUCygana`
+- opcjonalnie `MSSQL_PORT` = `1433`
+- `MSSQL_MEMORY_LIMIT_MB` = `768` (limit RAM dla silnika SQL)
+- `MSSQL_CONTAINER_MEMORY_LIMIT` = `1g` (limit dla kontenera SQL)
+- `WEB_CONTAINER_MEMORY_LIMIT` = `512m` (limit dla kontenera Web)
+```
+# Opcjonalnie — klucze API (możesz pominąć jeśli nie testujesz integracji)
+dotnet user-secrets set "Stripe:SecretKey" "sk_test_..." --project src/KuchniaUCygana.Web
+dotnet user-secrets set "OpenAI:ApiKey" "sk-..." --project src/KuchniaUCygana.Web
 
-- `MSSQL_SA_PASSWORD`
-- `MSSQL_DB_NAME`
-- opcjonalnie `MSSQL_PORT`
-
+> **Alternatywa:** Skopiuj `appsettings.Development.json.example` lub utwórz plik `src/KuchniaUCygana.Web/appsettings.Development.json` z wartościami. Plik ten jest w `.gitignore` i nie zostanie scommitowany.
 > Uwaga: `.env` zawiera sekrety i nie moze byc commitowany do repozytorium.
 
-### 4. Przywrocenie zaleznosci
+### 3. Przywrocenie zaleznosci
 
 ```bash
 dotnet restore KuchniaUCygana.sln
 ```
 
-### 5. Uruchomienie w Dockerze (zalecane)
+---
+
+## 🐳 Docker
+
+
+### 4. Uruchomienie w Dockerze (zalecane)
 
 ```bash
 docker compose up --build
@@ -66,17 +119,41 @@ docker compose up --build
 
 Po starcie aplikacja jest dostepna pod `http://localhost:8080`.
 
+Dane SQL Server persystują w named volume `mssql_data`. Pliki uploadowane w `uploads_data`.
 ## Uruchomienie lokalne bez Dockera
+
+### 5. Zatrzymanie
+
+```bash
+docker compose down            # zatrzymaj kontenery
+docker compose down -v         # zatrzymaj i usuń dane (volumes)
+```
+### Pelny reset danych (greenfield rebuild)
+
+```bash
+docker compose down -v --remove-orphans
+docker compose up --build
+```
+
+Co robi reset:
+- usuwa kontenery i sieci projektu,
+- usuwa volume `mssql_data` (tracisz wszystkie dane bazy),
+- usuwa osierocone kontenery compose,
+- po ponownym starcie tworzy czysta baze od zera przez migracje.
+
+### 6. Uruchomienie lokalne bez Dockera
+
 
 Mozesz uruchomic aplikacje lokalnie, ale baza dalej powinna wskazywac na SQL Server.
 
 1. Przygotuj `src/KuchniaUCygana.Web/appsettings.Development.json` (na bazie `appsettings.Development.json.example`).
 2. Ustaw poprawny `ConnectionStrings:DefaultConnection` do SQL Server.
 3. Uruchom:
-
 ```bash
 dotnet run --project src/KuchniaUCygana.Web
 ```
+
+---
 
 ## Baza danych, migracje i seeding
 
@@ -87,76 +164,138 @@ dotnet run --project src/KuchniaUCygana.Web
 - W `Production` startup seeding jest wylaczony.
 
 Reczne uruchomienie seedingu:
-
 ```bash
 dotnet run --project src/KuchniaUCygana.Web -- seed
 ```
 
-## Docker - zatrzymanie i bezpieczny reset bazy
 
-### Zwykle zatrzymanie kontenerow
+## 🧪 Testy
 
-```bash
-docker compose down
-```
-
-### Pelny reset danych (greenfield rebuild)
-
-```bash
-docker compose down -v --remove-orphans
-docker compose up --build
-```
-
-Co robi reset:
-
-- usuwa kontenery i sieci projektu,
-- usuwa volume `mssql_data` (tracisz wszystkie dane bazy),
-- usuwa osierocone kontenery compose,
-- po ponownym starcie tworzy czysta baze od zera przez migracje.
-
-### Sygnały poprawnego startu
-
-W logach powinny pojawic sie miedzy innymi:
-
-- `Container kuchnia_sqlserver Healthy`
-- `Starting up database 'KuchniaUCygana'`
-
-## Diagnostyka startupu (runbook)
-
-- `18456` przed stanem `Healthy` - zwykle transient przy zimnym starcie SQL Server.
-- `4060 Cannot open database ...` - zla nazwa bazy lub brak utworzenia DB.
-- `17836 Length specified in network packet payload ...` - najczesciej probe/klient wysyla niepoprawny pakiet.
-
-Regula alarmowa: powtarzalne `4060` lub `18456` po uzyskaniu `Healthy` dla SQL Server oznaczaja blad konfiguracji.
-
-## Testy
-
-Wszystkie testy:
+### Uruchomienie testów
 
 ```bash
 dotnet test KuchniaUCygana.sln
 ```
 
-Tylko testy integracyjne:
-
+### Tylko testy integracyjne:
 ```bash
 dotnet test KuchniaUCygana.sln --filter "Category=Integration"
 ```
-
-Tylko testy poza integracyjnymi:
-
+### Tylko testy jednostkowe:
 ```bash
 dotnet test KuchniaUCygana.sln --filter "Category!=Integration"
 ```
 
-## Dokumentacja deweloperska
+### Z raportem pokrycia kodu
 
-Szczegolowe wytyczne implementacyjne (encje, migracje, repozytoria, testy, workflow) sa w:
+```bash
+dotnet test KuchniaUCygana.sln --collect:"XPlat Code Coverage" --results-directory ./TestResults
+```
 
-- `docs/guides/Developer_Manual.md`
+Raport Cobertura XML znajdziesz w `./TestResults/`. Wymagane pokrycie: **≥ 70%** głównej logiki aplikacji.
 
-## Workflow zespolu
+### Struktura testów
+```
+tests/KuchniaUCygana.Tests/
+├── Unit/           # Testy jednostkowe (Services, Validators, Mappings)
+├── Integration/    # Testy integracyjne (Repositories, Controllers)
+├── Domain/         # Testy logiki domenowej
+├── Fixtures/       # Test fixtures i konfiguracja
+└── TestData/       # Seedery testowe (Bogus)
+```
+---
 
-- Praca na branchach `feature/*` od `develop`.
-- Merge do `develop` przez PR z zielonym CI.
-- `main` aktualizowany tylko przez kontrolowany merge z `develop`.
+
+## 🔄 Workflow Zespołu
+
+```
+main ← develop ← feature/devX-opis-zadania
+```
+
+1. **Praca na branchach** `feature/devX-*` (np. `feature/dev3-warehouse-entities`) od `develop`
+2. **Pull Request:** `feature/* → develop` — wymaga przejścia CI i code review
+3. **`main`** aktualizowany tylko przez merge z `develop`
+4. **Pliki współdzielone** (`DependencyInjection.cs`, migracje) — uzgodnij z właścicielem
+### 🚀 Sygnały poprawnego startu
+Po uruchomieniu `docker compose up`, w logach powinieneś zobaczyć:
+- `Container kuchnia_sqlserver Healthy` — SQL Server jest gotowy.
+- `Starting up database 'KuchniaUCygana'` — Migracje zostały pomyślnie wykonane.
+- `Application started. Press Ctrl+C to shut down.` — Aplikacja Web działa.
+
+### Zakresy migracji (per deweloper)
+
+| Deweloper | Zakres numerów migracji |
+|-----------|------------------------|
+| DEV 01 | 100–199 |
+| DEV 02 | 200–299 |
+| DEV 03 | 001–099 (legacy) + 300–399 |
+| DEV 04 | 400–499 |
+| DEV 05 | 500–599 |
+
+
+## 📖 Dokumentacja
+
+| Dokument | Opis |
+|----------|------|
+| [`docs/architecture/ARCHITEKTURA_KuchniaUCygana.html`](docs/architecture/ARCHITEKTURA_KuchniaUCygana.html) | Pełna dokumentacja architektoniczna (otwórz w przeglądarce) |
+| [`docs/PLAN_PROJEKTU.md`](docs/PLAN_PROJEKTU.md) | Ogólny roadmap projektu (7 faz) |
+| [`docs/module-3/PLAN_MODUL_3.md`](docs/module-3/PLAN_MODUL_3.md) | Szczegółowy plan Modułu 3 |
+| [`docs/Decisions_Log.md`](docs/Decisions_Log.md) | Dziennik decyzji architektonicznych |
+| [`docs/guides/Developer_Manual.md`](docs/guides/Developer_Manual.md) | Podręcznik dewelopera (OPRÓCZ PLANU NAJWAŻNIEJSZE) |
+
+## 🛠️ Narzędzia i Konwencje
+Wszystkie testy:
+
+- **ORM:** ServiceStack OrmLite (bliżej SQL niż EF Core, brak lazy loading — jawne JOINy)
+- **Migracje:** FluentMigrator — jedyne źródło DDL (nie `db.CreateTableIfNotExists`!)
+- **Mapowania:** AutoMapper — 1 plik Profile per moduł
+- **Walidacja:** FluentValidation (serwer) + jQuery Validation Unobtrusive (klient)
+- **Testy:** xUnit + Moq + FluentAssertions + Bogus
+- **PDF:** QuestPDF (licencja Community)
+- **Jakość kodu:** StyleCop + Roslynator + SonarAnalyzer (via `Directory.Build.props`)
+- **Logowanie:** Serilog (Console + File)
+- **Frontend:** HTMX 2.x (partial swap) + Alpine.js 3.x (lokalna reaktywność) + Bootstrap 5
+
+## 🎨 Architektura Frontendowa
+
+**Wybrany stack: Razor Views + HTMX + Alpine.js** (decyzja 2026-05-04)
+
+B2C (klient):           _LayoutPublic.cshtml
+                         Navbar | Body | Footer
+
+ERP back-office:        _LayoutAdmin.cshtml
+                         Sidebar | Breadcrumb | Body
+
+### Zasady
+
+- **Interaktywność bez reload** — HTMX pobiera fragmenty HTML (Partial Views) i wkleja je w DOM bez przeładowania strony
+- **Lokalna reaktywność** — Alpine.js (`x-data`, `x-show`, `@click`) do modali, toggleów, potwierdzeń
+- **Zero JS boilerplate dla CRUD** — filtry, paginacja, zatwierdzanie pozycji przez atrybuty `hx-*`
+- **Walidacja** — FluentValidation (server) + jQuery Validation Unobtrusive (client); HTMX nie wysła formularza przed walidacją kliencką
+- **CSRF** — jednorazowa konfiguracja globalna w `htmx-config.js`; wszystkie żądania HTMX automatycznie dostarczają token
+
+### Wzorzec kontrolera (dual response)
+
+```csharp
+// Akcja zwraca pełną stronę LUB fragment — zależnie od żądania
+public async Task<IActionResult> PlanItems(DateOnly date)
+{
+    var items = await _productionService.GetPlanItemsAsync(date);
+    if (Request.Headers.ContainsKey("HX-Request"))
+        return PartialView("_PlanItemsTable", items); // HTMX — fragment
+    return View(items);                                // przeglądarka — cała strona
+}
+```
+
+### Wzorzec widoku (HTMX)
+
+```html
+<!-- Filtr dat — aktualizuje tylko tabelę -->
+<input type="date" hx-get="/Production/PlanItems"
+       hx-target="#plan-table" hx-trigger="change" />
+<div id="plan-table">
+    @await Html.PartialAsync("_PlanItemsTable", Model.Items)
+</div>
+```
+
+> Pełne porównanie Razor+jQuery vs Razor+HTMX: [`docs/frontend-comparison.html`](docs/frontend-comparison.html)
