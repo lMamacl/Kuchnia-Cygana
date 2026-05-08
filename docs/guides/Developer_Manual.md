@@ -1,123 +1,150 @@
-﻿# Podrecznik Dewelopera - Kuchnia u Cygana
+📖 Podręcznik Dewelopera – Kuchnia U Cygana
 
-Dokument opisuje praktyczne zasady pracy po migracji na SQL Server.
+Witaj w technicznym przewodniku dla deweloperów systemu ERP Platformy
+Cateringowej. Niniejszy dokument opisuje architekturę bazową na gałęzi develop
+oraz standardy budowy modułów po migracji na SQL Server.
 
-## 1. Kontekst techniczny
+🧭 Nawigacja po Dokumentacji
 
-- Runtime bazy: **MS SQL Server** uruchamiany w Dockerze.
-- ORM: **ServiceStack.OrmLite**.
-- Schemat bazy: **FluentMigrator**.
-- Strategia danych: **greenfield-only** (nie migrujemy danych ze SQLite).
+  - ARCHITEKTURA PROJEKTU – Definicje bazy, Clean Architecture.
+  - DZIENNIK DECYZJI (Decisions Log) – Uzasadnienie technologii (DDD, Soft
+    Delete).
+  - PLAN PROJEKTU – Status realizacji etapów.
 
-## 2. Szybki start dla dewelopera
+1. Kontekst Techniczny i Stack
 
-1. Skopiuj `.env.example` do `.env` i uzupelnij `MSSQL_SA_PASSWORD`, `MSSQL_DB_NAME`.
-2. Uruchom SQL + aplikacje:
+System oparty jest na architekturze Clean Architecture i wzorcach DDD
+(Domain-Driven Design).
 
-```bash
-docker compose up --build
-```
+  - Runtime Bazy: MS SQL Server (Docker).
+  - ORM: ServiceStack.OrmLite (Micro-ORM).
+  - Migracje: FluentMigrator.
+  - Strategia: Greenfield (brak migracji ze starego SQLite).
+  - Gałąź develop: Zawiera czysty szablon architektoniczny (Infrastruktura,
+    Pipeline CI, Auth Cookie) bez logiki biznesowej modułów.
 
-3. Sprawdz logi:
+2. Szybki Start (Developer Onboarding)
 
-- `Container kuchnia_sqlserver Healthy`
-- `Starting up database 'KuchniaUCygana'`
+1.  **Konfiguracja:** Skopiuj `.env.example` do `.env` i uzupełnij `MSSQL_SA_PASSWORD`
+    oraz `MSSQL_DB_NAME`.
+2.  **Uruchomienie:**
+    ```bash
+    docker compose up --build
+    ```
+3.  **Weryfikacja:** Sprawdź logi pod kątem komunikatu: `Container kuchnia_sqlserver Healthy`.
+4.  **Seeding (opcjonalnie):**
+    ```bash
+    dotnet run --project src/KuchniaUCygana.Web -- seed
+    ```
 
-4. Opcjonalnie uruchom seeding recznie:
+### 💡 Limity Pamięci (RAM)
+W pliku `.env` możesz dostosować limity pamięci dla kontenerów (domyślne wartości zoptymalizowane pod lokalne dev):
+- `MSSQL_MEMORY_LIMIT_MB=768` (limit silnika SQL)
+- `MSSQL_CONTAINER_MEMORY_LIMIT=1g` (limit kontenera Docker)
+- `WEB_CONTAINER_MEMORY_LIMIT=512m` (limit kontenera aplikacji)
 
-```bash
-dotnet run --project src/KuchniaUCygana.Web -- seed
-```
+3. Fundamenty DDD (Warstwa Domain)
 
-## 3. Jak tworzyc encje (klasy domenowe)
+Kluczem do pracy z danymi są encje bazowe w Domain/Common/. Każda nowa encja
+musi dziedziczyć po jednej z poniższych klas.
 
-### Zasady bazowe
+🔸 BaseEntity<T>
 
-- Dla danych biznesowych dziedzicz po `AuditableEntity<TId>`.
-- Dla prostych slownikow dziedzicz po `BaseEntity<TId>`.
-- Uzywaj `DateTimeOffset` dla pol czasowych.
-- Dla mapowania tabel stosuj `[Alias("NazwaTabeli")]`, gdy nazwa klasy i tabeli nie pokrywa sie 1:1.
-- Nie opieraj sie na relacjach nawigacyjnych EF Core; w OrmLite trzymaj jawne klucze i zapytania.
+  - Zastosowanie: Proste słowniki, tagi, jednostki miar (np. kg, g), kody
+    błędów.
+  - Funkcje: Posiada Id (klucz główny) oraz CreatedAt (DateTimeOffset UTC).
+  - Zaleta: Ułatwia hydrację danych przez OrmLite i testowanie (publiczne
+    settery ID).
 
-### Typowy szablon encji
+🔸 AuditableEntity<T> (Zalecane dla biznesu)
 
-1. Klasa w `Domain/Entities/...`.
-2. Klucz i pola audytowe zapewnia klasa bazowa.
-3. Relacje przez identyfikatory i atrybuty OrmLite (`[References]`).
+  - Zastosowanie: Wszystkie kluczowe dane biznesowe: Zamówienia, Receptury,
+    Partie towaru.
+  - Funkcje:
+      - Audyt: CreatedBy, UpdatedBy (automatyczne śledzenie użytkownika).
+      - Soft Delete: Implementuje ISoftDeletable. Rekordy nie są usuwane
+        fizycznie (DELETE), lecz oznaczane flagą IsDeleted = true.
+  - Wymóg: Zawsze używaj dla danych wymagających historii dla Sanepidu lub
+    księgowości.
 
-## 4. Jak tworzyc migracje (FluentMigrator)
+🔸 Zdarzenia Domenowe (IDomainEvent)
 
-### Reguly
+Służą do komunikacji między modułami bez tworzenia sztywnych zależności.
 
-- Nie edytuj starych, wykonanych migracji produkcyjnych.
-- Kazda zmiana schematu to nowy plik migracji z kolejnym numerem.
-- DDL jest tylko w migracjach (nie w kodzie startupowym repozytoriow).
+  - Przykład: Moduł Magazynu rzuca BatchExpiredEvent, a Moduł Komunikacji wysyła
+    e-mail do menedżera.
 
-### Proces krok po kroku
+4. Praca z Bazą Danych (FluentMigrator & OrmLite)
 
-1. Dodaj nowa klase migracji w `src/KuchniaUCygana.Infrastructure/Persistence/Migrations`.
-2. W `Up()` opisz zmiane (tabela/kolumna/indeks/fk).
-3. W `Down()` dodaj bezpieczny rollback, jesli jest wykonalny.
-4. Uruchom aplikacje i sprawdz, czy migracja przechodzi na czystej bazie.
-5. Zweryfikuj typy SQL (szczegolnie `decimal` i `datetimeoffset`).
+W tym projekcie nie używamy EF Core. Migracje i zapytania obsługujemy ręcznie.
 
-## 5. Jak uruchomic cala baze od zera
+📜 Zasady Tworzenia Migracji
 
-Pelny reset (usuniecie danych i odbudowa):
+1.  Lokalizacja: Infrastructure/Persistence/Migrations/.
+2.  Numeracja: Trzymaj się przedziałów dla swojego modułu (np.
+    Moduł 3: 300-399).
+3.  Audyt (Ważne!): Dla encji AuditableEntity musisz ręcznie dodać kolumny w
+    migracji: CreatedBy, UpdatedBy, IsDeleted, DeletedAt, DeletedBy.
+4.  SQL: Używaj precyzyjnych typów (np. decimal(18,2) dla cen, datetimeoffset
+    dla dat).
 
-```bash
-docker compose down -v --remove-orphans
-docker compose up --build
-```
+🗄️ Implementacja Repozytoriów
 
-Efekt:
+  - Dziedziczenie: Zawsze dziedzicz po BaseRepository<T, TId>. Otrzymasz gotowy
+    CRUD z obsługą Soft Delete.
+  - Relacje: Brak relacji nawigacyjnych (Lazy Loading nie istnieje). Używaj
+    jawnych kluczy obcych (CategoryId) i złączeń JOIN w zapytaniach.
+  - Zapytania: Wykorzystuj SqlExpression z OrmLite.
 
-- tworzony jest nowy, pusty wolumen SQL,
-- migracje odtwarzaja schemat,
-- seeding uruchamia sie zgodnie z konfiguracja srodowiska.
+5. Standardy Kodowania Modułu (Krok po Kroku)
 
-## 6. Jak pisac repozytoria magazynu
+1.  Definicja Encji: Stwórz klasę w Domain/Entities/, dziedzicząc po
+    AuditableEntity.
+2.  Migracja: Stwórz plik migracji dodający tabelę w bazie danych.
+3.  Interfejs: Zdefiniuj IMyRepository w Domain/Interfaces/.
+4.  Implementacja: Stwórz MyRepository w
+    Infrastructure/Persistence/Repositories/.
+5.  Logika: Dodaj serwisy aplikacyjne w warstwie Application.
 
-Dotyczy m.in. `BatchRepository` i `InventoryTransactionRepository`.
+6. Testowanie i Jakość Kodu
 
-### Wymagania implementacyjne
+Wymagamy wysokiej jakości kodu potwierdzonej testami:
 
-- Filtry soft-delete musza byc spojne (`IsDeleted`, `IsDepleted` tam, gdzie ma sens).
-- Logika FEFO:
-  - daty waznosci rosnaco,
-  - `ExpiryDate == null` zawsze na koncu.
-- Porownania czasu prowadzone w `DateTimeOffset`, bez niepotrzebnego przejscia na `DateTime`.
+  - Testy Jednostkowe: xUnit + Moq. Używaj biblioteki Bogus do generowania
+    realistycznych danych testowych.
+  - Testy Integracyjne: Obowiązkowe dla repozytoriów. Używamy Testcontainers +
+    SQL Server, aby testować realne zapytania SQL.
+  - Asercje: Stosuj FluentAssertions dla lepszej czytelności:
+    result.Should().NotBeNull();.
+  - Logika Magazynowa (FEFO): Testy muszą uwzględniać sortowanie po dacie
+    ważności (rosnąco) z ExpiryDate == null na samym końcu.
 
-## 7. Testy integracyjne (obowiazkowe dla warstwy danych)
+7. Workflow i Commitowanie
 
-Repozytoria magazynu musza byc weryfikowane na **Testcontainers + SQL Server**.
+Używamy Conventional Commits. Każdy commit musi być poprzedzony prefiksem:
 
-Minimalny zestaw scenariuszy:
+  - feat: – nowa funkcjonalność.
+  - fix: – poprawka błędu.
+  - refactor: – zmiany w kodzie bez zmiany logiki.
+  - docs: – zmiany w dokumentacji.
+  - test: – dodanie lub poprawa testów.
 
-1. FEFO sort + `ExpiryDate == null` na koncu.
-2. `GetExpiringBeforeAsync` z granica (wartosc rowna cutoff ma byc uwzgledniona).
-3. `GetByDateRangeAsync` z granicami `from/to` wlacznie.
-4. Spojnosc typow SQL po migracjach (`datetimeoffset`, `decimal`).
+✅ Lista kontrolna przed Pull Requestem (PR):
 
-Uruchamianie:
+- [ ] dotnet build przechodzi bez błędów.
+- [ ] Wszystkie testy jednostkowe i integracyjne przechodzą (dotnet test).
+- [ ] Brak twardo zapisanych haseł/kluczy (używaj user-secrets).
+- [ ] Dokumentacja (jeśli wymagana) jest zaktualizowana w języku polskim.
+- [ ] Kod jest sformatowany zgodnie ze standardami projektu.
 
-```bash
-dotnet test KuchniaUCygana.sln --filter "Category=Integration"
-```
+⚠️ Ważne Uwagi Techniczne
 
-## 8. Seeder danych testowych (`WarehouseDataSeeder`)
-
-Wymagania:
-
-- dane deterministyczne (staly `seed`),
-- realistyczne zakresy dat i temperatur,
-- dane wspierajace scenariusze FEFO i testy graniczne,
-- brak przypadkowych flakow zaleznych od aktualnej daty systemowej.
-
-## 9. Lista kontrolna przed PR
-
-1. `dotnet build` przechodzi.
-2. `dotnet test --filter "Category!=Integration"` przechodzi.
-3. `dotnet test --filter "Category=Integration"` przechodzi.
-4. Dokumentacja jest aktualna i po polsku.
-5. Brak nowych krytycznych warningow w plikach dotknietych zmianami.
+  - DateTime: Zawsze używaj DateTimeOffset, aby uniknąć problemów ze strefami
+    czasowymi.
+  - Usuwanie: Nigdy nie używaj db.Delete() na encjach biznesowych. Korzystaj z
+    metod repozytorium wspierających Soft Delete.
+  - Reset Środowiska: Aby całkowicie wyczyścić bazę i wolumeny Docker:
+    ```bash
+    docker compose down -v --remove-orphans
+    docker compose up --build
+    ```
