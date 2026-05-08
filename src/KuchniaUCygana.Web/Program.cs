@@ -3,6 +3,7 @@ using FluentValidation.AspNetCore;
 using KuchniaUCygana.Application;
 using KuchniaUCygana.Infrastructure;
 using KuchniaUCygana.Infrastructure.Persistence.Migrations;
+using KuchniaUCygana.Infrastructure.Persistence.Seeding;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.DataProtection;
@@ -10,6 +11,11 @@ using QuestPDF.Infrastructure;
 using System.IO;
 
 using Serilog;
+
+var isSeedCommand = args.Any(x =>
+    x.Equals("seed", StringComparison.OrdinalIgnoreCase) ||
+    x.Equals("--seed", StringComparison.OrdinalIgnoreCase) ||
+    x.Equals("db:seed", StringComparison.OrdinalIgnoreCase));
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -73,7 +79,19 @@ var app = builder.Build();
 app.UseSerilogRequestLogging();
 
 QuestPDF.Settings.License = LicenseType.Community;
-MigrationRunner.RunMigrations(app.Services);
+MigrationRunner.RunMigrations(app.Services, app.Logger);
+await DatabaseSeedingBootstrapper.TrySeedAsync(
+    app.Services,
+    app.Configuration,
+    app.Environment,
+    app.Logger,
+    isSeedCommand ? SeedingTrigger.Command : SeedingTrigger.Startup);
+
+if (isSeedCommand)
+{
+    app.Logger.LogInformation("Seed command completed. Exiting without starting web host.");
+    return;
+}
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

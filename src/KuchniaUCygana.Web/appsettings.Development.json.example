@@ -1,6 +1,11 @@
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Data Source=kuchniaucygana_dev.db"
+    "DefaultConnection": "Server=localhost,1433;Database=KuchniaUCygana_Dev;User Id=sa;Password=YourStrong!Passw0rd;Encrypt=True;TrustServerCertificate=True;"
+  },
+  "DatabaseSeeding": {
+    "Enabled": true,
+    "Mode": "Both",
+    "Profile": "MinimalRealistic"
   },
   "Stripe": {
     "SecretKey": ""
