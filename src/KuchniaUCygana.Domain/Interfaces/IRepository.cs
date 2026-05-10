@@ -6,6 +6,9 @@ using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Interfaces;
 
+/// <summary>
+/// Generyczny interfejs repozytorium obsługujący dowolny typ klucza głównego.
+/// </summary>
 public interface IRepository<TEntity, TId>
     where TEntity : BaseEntity<TId>
 {
@@ -22,6 +25,9 @@ public interface IRepository<TEntity, TId>
     Task<bool> DeleteAsync(TId id);
 }
 
+/// <summary>
+/// Skrót dla encji z kluczem int (zachowanie wstecznej kompatybilności).
+/// </summary>
 public interface IRepository<TEntity> : IRepository<TEntity, int>
     where TEntity : BaseEntity<int>
 {
