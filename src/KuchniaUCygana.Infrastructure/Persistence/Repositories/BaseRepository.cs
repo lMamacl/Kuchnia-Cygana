@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Linq.Expressions;
+using System.Threading.Tasks;
 using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
@@ -21,6 +25,12 @@ public class BaseRepository<T> : IRepository<T>
         return await db.DeleteByIdAsync<T>(id) > 0;
     }
 
+    public async Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate)
+    {
+        using var db = Factory.CreateConnection();
+        return await db.SelectAsync(predicate);
+    }
+
     public async Task<IEnumerable<T>> GetAllAsync()
     {
         using var db = Factory.CreateConnection();
@@ -35,14 +45,14 @@ public class BaseRepository<T> : IRepository<T>
 
     public async Task<int> InsertAsync(T entity)
     {
-        entity.CreatedAt = DateTime.UtcNow;
+        entity.CreatedAt = DateTimeOffset.UtcNow;
         using var db = Factory.CreateConnection();
         return (int)await db.InsertAsync(entity, selectIdentity: true);
     }
 
     public async Task<bool> UpdateAsync(T entity)
     {
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
         using var db = Factory.CreateConnection();
         return await db.UpdateAsync(entity) > 0;
     }
