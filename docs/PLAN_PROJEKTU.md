@@ -77,7 +77,7 @@ Ten dokument definiuje **kolejność realizacji komponentów** — od infrastruk
 
 | # | Zadanie | Status |
 |---|---------|--------|
-| 0.1 | Docker: Dockerfile + docker-compose z named volumes (SQLite + uploads) | ✅ |
+| 0.1 | Docker: Dockerfile + docker-compose z named volumes (MSSQL + uploads) | ✅ |
 | 0.2 | `.editorconfig`, `stylecop.json`, `Directory.Build.props` — jakość kodu | ✅ |
 | 0.3 | GitHub Actions CI (`ci.yml`): build + test + coverage | ✅ (XPlat Code Coverage + artifact upload) |
 | 0.4 | `.env` / `user-secrets` — zarządzanie sekretami | ✅ (UserSecretsId + .env.example + appsettings.Development.json.example) |
