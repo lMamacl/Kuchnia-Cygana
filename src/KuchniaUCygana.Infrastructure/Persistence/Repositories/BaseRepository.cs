@@ -6,7 +6,7 @@ using ServiceStack.OrmLite;
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public class BaseRepository<T> : IRepository<T>
-    where T : BaseEntity
+    where T : BaseEntity<int>
 {
     protected readonly IDbConnectionFactory Factory;
 

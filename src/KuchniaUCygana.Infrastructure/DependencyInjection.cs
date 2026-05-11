@@ -1,15 +1,21 @@
 using FluentMigrator.Runner;
+using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Auth;
+using KuchniaUCygana.Domain.Entities.Customers;
+using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Interfaces;
+using KuchniaUCygana.Domain.Interfaces.External;
+using KuchniaUCygana.Domain.Interfaces.Orders;
 using KuchniaUCygana.Infrastructure.Cache;
 using KuchniaUCygana.Infrastructure.ExternalServices.AI;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 using KuchniaUCygana.Infrastructure.ExternalServices.Stripe;
 using KuchniaUCygana.Infrastructure.FileStorage;
+using KuchniaUCygana.Infrastructure.Pdf;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Infrastructure.Persistence.Mocks;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
-using KuchniaUCygana.Infrastructure.Pdf;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceStack.OrmLite;
@@ -50,6 +56,18 @@ public static class DependencyInjection
             client.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
             client.DefaultRequestHeaders.Add("User-Agent", "KuchniaUCygana/1.0");
         });
+
+        services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<IOrderItemRepository, OrderItemRepository>();
+        services.AddScoped<IDeliveryCalendarRepository, DeliveryCalendarRepository>();
+        services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<IAddressRepository, AddressRepository>();
+        services.AddScoped<IDiscountCodeRepository, DiscountCodeRepository>();
+        services.AddScoped<IDeliveryWindowRepository, DeliveryWindowRepository>();
+        services.AddScoped<ICustomerProfileRepository, CustomerProfileRepository>();
+
+        // Kontrakt dla Modu³u 3 — tymczasowy mock (do zmiany na OrderDataProvider w Fazie 5)
+        services.AddScoped<IOrderDataProvider, OrderDataProviderMock>();
 
         return services;
     }

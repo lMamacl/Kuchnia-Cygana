@@ -1,3 +1,5 @@
+using KuchniaUCygana.Application.Interfaces;
+
 namespace KuchniaUCygana.Infrastructure.ExternalServices.Stripe;
 
 public sealed class StripePaymentService : IPaymentService

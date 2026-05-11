@@ -3,7 +3,7 @@ using KuchniaUCygana.Domain.Common;
 namespace KuchniaUCygana.Domain.Interfaces;
 
 public interface IRepository<T>
-    where T : BaseEntity
+    where T : BaseEntity<int>
 {
     Task<T?> GetByIdAsync(int id);
 
