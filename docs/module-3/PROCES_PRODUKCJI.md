@@ -126,45 +126,67 @@ QuestPDF generuje kartę A4 z:
 
 ---
 
-## 4. Kierunek Przepływu: M3 → M4 (nie odwrotnie!)
+## 4. Kierunek Przepływu: M3 → M4 (Model B-lite — etapowy rozwóz)
 
-### 4.1 Kto jest pierwszy — Produkcja czy Logistyka?
+### 4.1 Strategia: Plan z ETA → Trasy → Stopniowy Wyjazd
 
-**Odpowiedź: Produkcja jest pierwsza.**
+System udostępnia plan produkcji do M4 **tuż po wygenerowaniu** (D-1, 22:05)
+lub **po zatwierdzeniu przez Szefa Kuchni** (D, rano).
+Plan zawiera **grupy produkcyjne z szacowanym czasem gotowości (ETA)**,
+co pozwala M4 zaplanować trasy uwzględniające czas produkcji.
 
 ```
-Zamówienia (M1) → Plan Produkcji (M3) → Gotowanie (M3)
-                                              ↓
-                                    Gotowe pudełka (M3)
-                                              ↓
-                              ┌───────────────────────────────┐
-                              │ M4 tworzy trasy na podstawie: │
-                              │ - listy gotowych zamówień      │
-                              │ - adresów klientów (M1)        │
-                              │ - okien dostawy                │
-                              └───────────────────────────────┘
-                                              ↓
-                              M4 zwraca trasy → M3 pakuje wg tras
+22:00  System → generuje Plan z grupami + ETA per grupa
+22:05  M3 → M4: Plan na jutro (4 grupy: ETA 06:30, 07:30, 08:30, 09:00)
+       M4 planuje trasy z uwzględnieniem ETA + bufor 30 min
+
+05:00  Szef Kuchni zatwierdza plan (lub auto-aktywacja)
+       Korekty → event "plan zaktualizowany" → M4
+
+07:00  Grupa 1 (zimne/śniadania) gotowa → pakowanie → Auto 1 wyjeżdża
+08:00  Grupa 2 (zupy) gotowa → pakowanie → Auto 2 wyjeżdża
+09:00  Grupa 3+4 (główne, sałatki) gotowe → Auto 3-4 wyjeżdżają
 ```
 
-### 4.2 Przepływ danych między modułami
+### 4.2 Grupy Produkcyjne
+
+| Grupa | Typ dań | Szacowany ETA | Bufor |
+|-------|---------|---------------|-------|
+| 1 | Śniadania, dania zimne, przekąski | 06:30 | +30 min |
+| 2 | Zupy, buliony | 07:30 | +30 min |
+| 3 | Dania główne (ciepłe) | 08:30 | +30 min |
+| 4 | Sałatki, desery (świeżość!) | 09:00 | +30 min |
+
+Pola w encji `ProductionPlanItem`:
+- `ProductionGroup` (int?) — numer grupy 1-4
+- `EstimatedReadyTime` (TimeOnly?) — szacowany czas gotowości
+- `ActualReadyTime` (TimeOnly?) — rzeczywisty czas (po zatwierdzeniu)
+
+Pola w encji `ProductionPlan`:
+- `IsSharedWithLogistics` (bool) — czy wysłano do M4
+- `SharedAt` (DateTimeOffset?) — kiedy wysłano
+
+### 4.3 Przepływ danych między modułami
 
 | Krok | Kierunek | Co się dzieje |
 |------|----------|---------------|
 | 1 | M1 → M3 | Zamówienia na jutro → plan produkcji |
 | 2 | M2 → M3 | Receptury → food cost + karty gotowania |
-| 3 | M3 → M3 | Gotowanie → pudełka gotowe |
-| 4 | M3 → M4 | "Mam gotowe zamówienia X, Y, Z" → M4 planuje trasy |
-| 5 | M4 → M3 | Trasy + auta + kolejność stopów → M3 pakuje |
-| 6 | M3 → M3 | Pakowanie → etykiety wysyłkowe → załadunek |
+| 3 | **M3 → M4** | **Plan z ETA grup → M4 planuje trasy z buforami** |
+| 4 | M4 → M3 | Trasy + auta + stopy → przypisanie do PackingSessions |
+| 5 | M3 → M3 | Gotowanie → zatwierdza grupę → pakowanie etapowe |
+| 6 | M3 → M4 | Event "Grupa X gotowa" → auto może wyruszać |
 | 7 | M3 → M4 | Manifest załadunkowy → kierowca rusza |
 
-**Kluczowy punkt:** M3 **nie** określa kolejności gotowania na podstawie tras. Kolejność gotowania wynika z:
-- Czas przygotowania dania (zupy pierwsze, sałatki ostatnie)
-- Temperatura podawania (zimne na końcu)
-- Priorytet kucharza (sortowanie w planie produkcji)
+### 4.4 Fallback
 
-M4 (trasy) wpływa dopiero na **etap pakowania** — kolejność pakowania torb i załadunku do aut.
+Jeśli produkcja się opóźni (danie Failed, opóźnienie > bufor):
+- Auto czeka max 30 min, potem jedzie z tym co ma
+- Brakujący posiłek → powiadomienie klienta
+- System przełącza się na **Model A** (wszystko naraz) jako fallback
+
+**Kluczowy punkt:** Kolejność gotowania wynika z grupy produkcyjnej, nie z tras.
+M4 wpływa na **etap pakowania** — kolejność pakowania torb i załadunku do aut.
 
 ---
 

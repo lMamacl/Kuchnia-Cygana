@@ -44,4 +44,23 @@ public class ProductionPlanItem : AuditableEntity<int>
     /// Status realizacji pozycji.
     /// </summary>
     public ProductionItemStatus Status { get; set; } = ProductionItemStatus.Planned;
+
+    // === Model B-lite: przygotowanie pod etapowy rozwóz ===
+
+    /// <summary>
+    /// Grupa produkcyjna (1=zimne/śniadania, 2=zupy, 3=dania główne, 4=sałatki).
+    /// Determinuje kolejność gotowania i umożliwia etapowy wyjazd aut.
+    /// </summary>
+    public int? ProductionGroup { get; set; }
+
+    /// <summary>
+    /// Szacowany czas gotowości (np. 07:00) — wyliczany z typu dania i ilości.
+    /// Przekazywany do M4 do planowania tras.
+    /// </summary>
+    public TimeOnly? EstimatedReadyTime { get; set; }
+
+    /// <summary>
+    /// Rzeczywisty czas gotowości — ustawiany po zatwierdzeniu ugotowania.
+    /// </summary>
+    public TimeOnly? ActualReadyTime { get; set; }
 }

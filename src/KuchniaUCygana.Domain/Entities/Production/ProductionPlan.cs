@@ -28,4 +28,17 @@ public class ProductionPlan : AuditableEntity<int>
     /// </summary>
     [StringLength(500)]
     public string? Notes { get; set; }
+
+    // === Model B-lite: przygotowanie pod etapowy rozwóz ===
+
+    /// <summary>
+    /// Czy plan został udostępniony do Modułu 4 (Logistyka).
+    /// Pozwala M4 planować trasy z uwzględnieniem czasu produkcji.
+    /// </summary>
+    public bool IsSharedWithLogistics { get; set; }
+
+    /// <summary>
+    /// Kiedy plan został udostępniony do M4.
+    /// </summary>
+    public DateTimeOffset? SharedAt { get; set; }
 }

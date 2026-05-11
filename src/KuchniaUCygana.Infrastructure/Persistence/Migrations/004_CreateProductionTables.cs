@@ -17,6 +17,9 @@ public class CreateProductionTables : Migration
             .WithColumn("ProductionDate").AsDate().NotNullable()
             .WithColumn("Status").AsInt32().NotNullable().WithDefaultValue(0)
             .WithColumn("Notes").AsString(500).Nullable()
+            // Model B-lite: etapowy rozwóz
+            .WithColumn("IsSharedWithLogistics").AsBoolean().NotNullable().WithDefaultValue(false)
+            .WithColumn("SharedAt").AsDateTime().Nullable()
             // AuditableEntity fields
             .WithColumn("CreatedBy").AsString(50).Nullable()
             .WithColumn("UpdatedBy").AsString(50).Nullable()
@@ -42,6 +45,10 @@ public class CreateProductionTables : Migration
             .WithColumn("PlannedQuantity").AsInt32().NotNullable()
             .WithColumn("CookedQuantity").AsInt32().NotNullable().WithDefaultValue(0)
             .WithColumn("Status").AsInt32().NotNullable().WithDefaultValue(0)
+            // Model B-lite: grupy produkcyjne i ETA
+            .WithColumn("ProductionGroup").AsInt32().Nullable()
+            .WithColumn("EstimatedReadyTime").AsTime().Nullable()
+            .WithColumn("ActualReadyTime").AsTime().Nullable()
             // AuditableEntity fields
             .WithColumn("CreatedBy").AsString(50).Nullable()
             .WithColumn("UpdatedBy").AsString(50).Nullable()
