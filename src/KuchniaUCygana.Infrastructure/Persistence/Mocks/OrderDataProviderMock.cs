@@ -1,4 +1,4 @@
-﻿using KuchniaUCygana.Domain.Interfaces.External;
+using KuchniaUCygana.Domain.Interfaces.External;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Mocks;
 
@@ -28,5 +28,15 @@ public sealed class OrderDataProviderMock : IOrderDataProvider
                 }),
         };
         return Task.FromResult<IEnumerable<OrderDeliveryInfo>>(mockData);
+    }
+
+    public Task<IEnumerable<ActiveOrderEntry>> GetActiveOrdersAsync(DateOnly deliveryDate)
+    {
+        return Task.FromResult(Enumerable.Empty<ActiveOrderEntry>());
+    }
+
+    public Task<ActiveOrderEntry?> GetOrderByIdAsync(int orderId)
+    {
+        return Task.FromResult<ActiveOrderEntry?>(null);
     }
 }

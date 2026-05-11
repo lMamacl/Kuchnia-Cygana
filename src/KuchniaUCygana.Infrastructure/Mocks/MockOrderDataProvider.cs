@@ -61,4 +61,9 @@ public sealed class MockOrderDataProvider : IOrderDataProvider
 
         return Task.FromResult<ActiveOrderEntry?>(entry);
     }
+
+    public Task<IEnumerable<OrderDeliveryInfo>> GetDeliveriesForDateAsync(DateTime date)
+    {
+        return Task.FromResult(Enumerable.Empty<OrderDeliveryInfo>());
+    }
 }
