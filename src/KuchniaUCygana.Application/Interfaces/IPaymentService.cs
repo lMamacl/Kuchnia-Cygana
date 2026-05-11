@@ -1,4 +1,4 @@
-namespace KuchniaUCygana.Infrastructure.ExternalServices.Stripe;
+﻿namespace KuchniaUCygana.Application.Interfaces;
 
 public interface IPaymentService
 {

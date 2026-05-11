@@ -12,8 +12,14 @@ public static class DependencyInjection
     {
         services.AddAutoMapper(cfg => cfg.AddMaps(Assembly.GetExecutingAssembly()));
         services.AddValidatorsFromAssemblyContaining(typeof(DependencyInjection));
-        
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<ICartService, CartService>();
+        services.AddScoped<ICheckoutService, CheckoutService>();
+        services.AddScoped<IAddressService, AddressService>();
+        services.AddScoped<IDeliveryCalendarService, DeliveryCalendarService>();
+        services.AddScoped<IDiscountService, DiscountService>();
+        services.AddScoped<ICustomerProfileService, CustomerProfileService>();
         return services;
     }
 }

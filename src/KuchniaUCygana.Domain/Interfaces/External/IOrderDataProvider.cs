@@ -35,4 +35,8 @@ public interface IOrderDataProvider
     /// Pobiera zamówienie po ID.
     /// </summary>
     Task<ActiveOrderEntry?> GetOrderByIdAsync(int orderId);
+
+    // Zwraca listę dostaw zaplanowanych na podany dzień wraz z adresami,
+    // oknami czasowymi i pozycjami zamówień (diety + warianty).
+    Task<IEnumerable<OrderDeliveryInfo>> GetDeliveriesForDateAsync(DateTime date);
 }
