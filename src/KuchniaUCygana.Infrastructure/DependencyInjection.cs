@@ -31,7 +31,23 @@ public static class DependencyInjection
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
         services.AddScoped<IBatchRepository, BatchRepository>();
         services.AddScoped<IInventoryTransactionRepository, InventoryTransactionRepository>();
+        services.AddScoped<Domain.Interfaces.Warehouse.IStockItemRepository, Persistence.Repositories.Warehouse.StockItemRepository>();
+        services.AddScoped<Domain.Interfaces.Production.IProductionPlanRepository, Persistence.Repositories.Production.ProductionPlanRepository>();
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
+
+        // === Moduł 3: External Providers ===
+        // Mock M1 (zamówienia — moduł niedostępny)
+        services.AddScoped<Domain.Interfaces.External.IOrderDataProvider, Mocks.MockOrderDataProvider>();
+        // Prawdziwy adapter M2 (diety/receptury — moduł dostępny w Domain/Entities/Menu)
+        services.AddScoped<Domain.Interfaces.External.IDietDataProvider, Adapters.DietDataAdapter>();
+        // Mock M4 (logistyka — moduł niedostępny)
+        services.AddScoped<Domain.Interfaces.External.IDeliveryManifestProvider, Mocks.MockDeliveryManifestProvider>();
+
+        // === Moduł 3: Domain Services ===
+        services.AddScoped<Domain.Services.FefoService>();
+        services.AddScoped<Domain.Services.FoodCostCalculator>();
+        services.AddScoped<Domain.Services.SmartInventoryAnalyzer>();
+        services.AddScoped<Domain.Services.ProductionPlanGenerator>();
 
         services
             .AddFluentMigratorCore()
