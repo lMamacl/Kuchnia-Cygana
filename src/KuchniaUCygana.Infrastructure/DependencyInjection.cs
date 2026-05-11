@@ -7,7 +7,9 @@ using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 using KuchniaUCygana.Infrastructure.ExternalServices.Stripe;
 using KuchniaUCygana.Infrastructure.FileStorage;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
+using KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
 using KuchniaUCygana.Infrastructure.Pdf;
 using Microsoft.Extensions.Configuration;
@@ -27,6 +29,8 @@ public static class DependencyInjection
         services.AddSingleton(new OrmLiteConnectionFactory(connectionString, SqlServerDialect.Provider));
         services.AddSingleton<IDbConnectionFactory, SqlServerConnectionFactory>();
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
+        services.AddScoped<IBatchRepository, BatchRepository>();
+        services.AddScoped<IInventoryTransactionRepository, InventoryTransactionRepository>();
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
 
         services
