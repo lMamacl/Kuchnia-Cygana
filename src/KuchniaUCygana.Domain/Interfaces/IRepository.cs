@@ -1,17 +1,34 @@
+using System;
+using System.Collections.Generic;
+using System.Linq.Expressions;
+using System.Threading.Tasks;
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Interfaces;
 
-public interface IRepository<T>
-    where T : BaseEntity<int>
+/// <summary>
+/// Generyczny interfejs repozytorium obsługujący dowolny typ klucza głównego.
+/// </summary>
+public interface IRepository<TEntity, TId>
+    where TEntity : BaseEntity<TId>
 {
-    Task<T?> GetByIdAsync(int id);
+    Task<TEntity?> GetByIdAsync(TId id);
 
-    Task<IEnumerable<T>> GetAllAsync();
+    Task<IEnumerable<TEntity>> GetAllAsync();
 
-    Task<int> InsertAsync(T entity);
+    Task<IEnumerable<TEntity>> FindAsync(Expression<Func<TEntity, bool>> predicate);
 
-    Task<bool> UpdateAsync(T entity);
+    Task<TId> InsertAsync(TEntity entity);
 
-    Task<bool> DeleteAsync(int id);
+    Task<bool> UpdateAsync(TEntity entity);
+
+    Task<bool> DeleteAsync(TId id);
+}
+
+/// <summary>
+/// Skrót dla encji z kluczem int (zachowanie wstecznej kompatybilności).
+/// </summary>
+public interface IRepository<TEntity> : IRepository<TEntity, int>
+    where TEntity : BaseEntity<int>
+{
 }
