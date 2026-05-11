@@ -1,9 +1,12 @@
+﻿using ServiceStack.DataAnnotations;
+
 namespace KuchniaUCygana.Domain.Enums;
 
+[EnumAsInt]
 public enum InventoryTransactionType
 {
-    Receipt = 1,          // Przyjęcie
-    ProductionIssue = 2,  // Wydanie na produkcję
-    Adjustment = 3,       // Korekta inwentaryzacyjna
-    Waste = 4             // Strata / Przeterminowanie
+    Receipt = 1,
+    ProductionIssue = 2,
+    Adjustment = 3,
+    Waste = 4,
 }

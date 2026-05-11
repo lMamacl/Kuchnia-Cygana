@@ -94,10 +94,10 @@ Moduł 3 realizuje pełny cykl operacyjny kuchni cateringowej:
 | `PackingStatus` | `Pending`, `Packed`, `Labeled`, `Loaded`, `Dispatched` |
 
 #### A.5: Interfejsy Repozytoriów
-- `IProductionPlanRepository` — z `GetByDateAsync(DateOnly date)`
-- `IPackingSessionRepository` — z `GetActiveByDateAsync(DateOnly date)`
-- `IStockItemRepository` — z `GetBelowMinimumAsync()`
-- `ITemperatureLogRepository` — z `GetByDateRangeAsync()`
+- `IProductionPlanRepository` — z `GetByDateAsync(DateOnly date)` ✅
+- `IPackingSessionRepository` — z `GetActiveByDateAsync(DateOnly date)` ✅
+- `IStockItemRepository` — z `GetBelowMinimumAsync()` ✅
+- `ITemperatureLogRepository` — z `GetByDateRangeAsync()` ✅
 
 #### A.6: Mocki Modułów 1 i 2
 Interfejsy w `Domain/Interfaces/External/`:
@@ -125,10 +125,10 @@ Interfejsy w `Domain/Interfaces/External/`:
 
 | # | Repozytorium | Kluczowe metody |
 |---|-------------|-----------------|
-| C.1 | `StockItemRepository` | `GetBelowMinimumAsync()`, `GetByIngredientIdAsync()` |
-| C.2 | `ProductionPlanRepository` | `GetByDateAsync()`, `GetWithItemsAsync()` |
-| C.3 | `PackingSessionRepository` | `GetActiveByDateAsync()`, `GetWithItemsAsync()` |
-| C.4 | `TemperatureLogRepository` | `GetByDateRangeAsync()`, `GetByLocationAsync()` |
+| C.1 | `StockItemRepository` ✅ | `GetBelowMinimumAsync()`, `GetByIngredientIdAsync()` |
+| C.2 | `ProductionPlanRepository` ✅ | `GetByDateAsync()`, `GetWithItemsAsync()` |
+| C.3 | `PackingSessionRepository` ✅ | `GetActiveByDateAsync()`, `GetWithItemsAsync()` |
+| C.4 | `TemperatureLogRepository` ✅ | `GetByDateRangeAsync()`, `GetByLocationAsync()` |
 | C.5 | Rejestracja DI — aktualizacja `DependencyInjection.cs` |
 
 ---
@@ -300,8 +300,8 @@ ETAP A (Domain: Encje, Enumy, Interfejsy, Mocki)
 
 ## 6. Kryteria Ukończenia Modułu
 
-- [ ] Wszystkie encje zdefiniowane i zmigowane
-- [ ] Repozytoria z testami integracyjnymi (SQLite in-memory)
+- [x] Wszystkie encje zdefiniowane i zmigowane
+- [x] Repozytoria z testami integracyjnymi (SQLite in-memory)
 - [ ] Serwisy domenowe z testami jednostkowymi (≥ 80% coverage)
 - [ ] Serwisy aplikacyjne z testami jednostkowymi (Moq)
 - [ ] AutoMapper profiles z testami konfiguracji

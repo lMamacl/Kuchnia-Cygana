@@ -145,12 +145,12 @@ Moduły 1, 2 i 5 mogą być rozwijane **równolegle**, ponieważ mają minimalne
 
 | # | Zadanie | Status |
 |---|---------|--------|
-| 3.1 | Encje magazynowe: `StockItem`, `Batch`, `InventoryTransaction`, `TemperatureLog`, `UnitOfMeasure` | 🔨 |
-| 3.2 | Migration `002_CreateWarehouseTables` | 🔨 |
-| 3.3 | Repozytoria: `IBatchRepository`, `IInventoryTransactionRepository` | 🔨 |
-| 3.4 | Encje produkcyjne: `ProductionPlan`, `ProductionPlanItem`, `ProductionBatch` | ⬜ |
-| 3.5 | Encje kompletacji: `PackingSession`, `PackingItem`, `PackingLabel` | ⬜ |
-| 3.6 | Serwisy domenowe: FEFO, Food Cost, Smart Inventory | ⬜ |
+| 3.1 | Encje magazynowe: `StockItem`, `Batch`, `InventoryTransaction`, `TemperatureLog`, `UnitOfMeasure` | ✅ |
+| 3.2 | Migration `002_CreateWarehouseTables` | ✅ |
+| 3.3 | Repozytoria: `IBatchRepository`, `IInventoryTransactionRepository` | ✅ |
+| 3.4 | Encje produkcyjne: `ProductionPlan`, `ProductionPlanItem`, `ProductionBatch` | ✅ |
+| 3.5 | Encje kompletacji: `PackingSession`, `PackingItem`, `PackingLabel` | ✅ |
+| 3.6 | Serwisy domenowe: FEFO, Food Cost, Smart Inventory | ✅ |
 | 3.7 | DTOs + AutoMapper (`ProductionProfile`, `WarehouseProfile`) | ⬜ |
 | 3.8 | Serwisy aplikacyjne: `IProductionService`, `IWarehouseService` | ⬜ |
 | 3.9 | QuestPDF: Karta Produkcyjna (PDF) | ⬜ |

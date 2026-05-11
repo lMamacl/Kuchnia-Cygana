@@ -1,13 +1,16 @@
+﻿using ServiceStack.DataAnnotations;
+
 namespace KuchniaUCygana.Domain.Enums;
 
 /// <summary>
-/// Status cyklu kompletacji i załadunku paczki/torby.
+/// Status cyklu kompletacji i zaladunku paczki/torby.
 /// </summary>
+[EnumAsInt]
 public enum PackingStatus
 {
-    Pending = 0,      // Oczekuje na kompletację
-    Packed = 1,       // Skompletowana — pudełka w torbie
-    Labeled = 2,      // Oetykietowana — etykieta wysyłkowa naklejona
-    Loaded = 3,       // Załadowana — torba w aucie
-    Dispatched = 4    // Wydana — kurier przejął auto
+    Pending = 0,
+    Packed = 1,
+    Labeled = 2,
+    Loaded = 3,
+    Dispatched = 4,
 }

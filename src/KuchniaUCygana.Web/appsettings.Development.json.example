@@ -12,5 +12,6 @@
   },
   "OpenAI": {
     "ApiKey": ""
-  }
+  },
+  "OrderProvider": "Mock"
 }

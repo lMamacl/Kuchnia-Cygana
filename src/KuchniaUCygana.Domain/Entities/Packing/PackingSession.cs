@@ -48,4 +48,10 @@ public class PackingSession : AuditableEntity<int>
     /// Numer stopu na trasie.
     /// </summary>
     public int? StopNumber { get; set; }
+
+    /// <summary>
+    /// Lista pozycji w sesji pakowania.
+    /// </summary>
+    [Ignore]
+    public System.Collections.Generic.List<PackingItem> Items { get; set; } = new();
 }

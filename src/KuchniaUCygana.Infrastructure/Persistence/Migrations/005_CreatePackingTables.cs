@@ -18,7 +18,7 @@ public class CreatePackingTables : Migration
             .WithColumn("OrderId").AsInt32().Nullable() // Bridge do Modułu 1
             .WithColumn("ClientName").AsString(150).Nullable()
             .WithColumn("PackedBy").AsString(50).Nullable()
-            .WithColumn("Status").AsInt32().NotNullable().WithDefaultValue(0)
+            .WithColumn("Status").AsString(50).NotNullable().WithDefaultValue("Pending")
             .WithColumn("RouteId").AsInt32().Nullable() // Bridge do Modułu 4
             .WithColumn("StopNumber").AsInt32().Nullable()
             // AuditableEntity fields

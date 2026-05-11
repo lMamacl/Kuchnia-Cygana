@@ -6,16 +6,21 @@ using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces.Orders;
+using KuchniaUCygana.Domain.Interfaces.Packing;
+using KuchniaUCygana.Domain.Interfaces.Production;
+using KuchniaUCygana.Domain.Interfaces.Warehouse;
+using KuchniaUCygana.Infrastructure.Adapters;
 using KuchniaUCygana.Infrastructure.Cache;
 using KuchniaUCygana.Infrastructure.ExternalServices.AI;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 using KuchniaUCygana.Infrastructure.ExternalServices.Stripe;
 using KuchniaUCygana.Infrastructure.FileStorage;
+using KuchniaUCygana.Infrastructure.Mocks;
 using KuchniaUCygana.Infrastructure.Pdf;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using KuchniaUCygana.Domain.Interfaces.Warehouse;
-using KuchniaUCygana.Infrastructure.Persistence.Mocks;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
+using KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
+using KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
 using Microsoft.Extensions.Configuration;
@@ -35,21 +40,29 @@ public static class DependencyInjection
         services.AddSingleton(new OrmLiteConnectionFactory(connectionString, SqlServerDialect.Provider));
         services.AddSingleton<IDbConnectionFactory, SqlServerConnectionFactory>();
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
+
+        // Module 3 repositories.
         services.AddScoped<IBatchRepository, BatchRepository>();
         services.AddScoped<IInventoryTransactionRepository, InventoryTransactionRepository>();
-        services.AddScoped<Domain.Interfaces.Warehouse.IStockItemRepository, Persistence.Repositories.Warehouse.StockItemRepository>();
-        services.AddScoped<Domain.Interfaces.Production.IProductionPlanRepository, Persistence.Repositories.Production.ProductionPlanRepository>();
+        services.AddScoped<IStockItemRepository, StockItemRepository>();
+        services.AddScoped<IProductionPlanRepository, ProductionPlanRepository>();
+        services.AddScoped<IPackingSessionRepository, PackingSessionRepository>();
+        services.AddScoped<ITemperatureLogRepository, TemperatureLogRepository>();
+
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
 
-        // === ModuĹ‚ 3: External Providers ===
-        // Mock M1 (zamĂłwienia â€” moduĹ‚ niedostÄ™pny)
-        services.AddScoped<Domain.Interfaces.External.IOrderDataProvider, Mocks.MockOrderDataProvider>();
-        // Prawdziwy adapter M2 (diety/receptury â€” moduĹ‚ dostÄ™pny w Domain/Entities/Menu)
-        services.AddScoped<Domain.Interfaces.External.IDietDataProvider, Adapters.DietDataAdapter>();
-        // Mock M4 (logistyka â€” moduĹ‚ niedostÄ™pny)
-        services.AddScoped<Domain.Interfaces.External.IDeliveryManifestProvider, Mocks.MockDeliveryManifestProvider>();
+        if (configuration["OrderProvider"] == "M1")
+        {
+            services.AddScoped<IOrderDataProvider, M1OrderDataProvider>();
+        }
+        else
+        {
+            services.AddScoped<IOrderDataProvider, MockOrderDataProvider>();
+        }
 
-        // === ModuĹ‚ 3: Domain Services ===
+        services.AddScoped<IDietDataProvider, DietDataAdapter>();
+        services.AddScoped<IDeliveryManifestProvider, MockDeliveryManifestProvider>();
+
         services.AddScoped<Domain.Services.FefoService>();
         services.AddScoped<Domain.Services.FoodCostCalculator>();
         services.AddScoped<Domain.Services.SmartInventoryAnalyzer>();
@@ -86,10 +99,6 @@ public static class DependencyInjection
         services.AddScoped<IDeliveryWindowRepository, DeliveryWindowRepository>();
         services.AddScoped<ICustomerProfileRepository, CustomerProfileRepository>();
 
-        // Kontrakt dla Modułu 3 — tymczasowy mock (do zmiany na OrderDataProvider w Fazie 5)
-        services.AddScoped<IOrderDataProvider, OrderDataProviderMock>();
-
         return services;
     }
 }
-
