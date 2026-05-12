@@ -14,6 +14,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceStack.OrmLite;
 using ServiceStack.OrmLite.SqlServer;
+using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
+using KuchniaUCygana.Domain.Interfaces.Services.Menu;
+using KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
+using KuchniaUCygana.Infrastructure.Persistence.Services.Menu;
 
 namespace KuchniaUCygana.Infrastructure;
 
@@ -28,7 +32,12 @@ public static class DependencyInjection
         services.AddSingleton<IDbConnectionFactory, SqlServerConnectionFactory>();
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
-
+        // Serwisy Domenowe Modu³u 2
+        services.AddScoped<IRecipeEngine, RecipeEngine>();
+        services.AddScoped<IAllergenPropagationService, AllergenPropagationService>();
+        services.AddScoped<IDietVariantScaler, DietVariantScaler>();
+        services.AddScoped<INutritionCalculator, NutritionCalculator>();
+        services.AddScoped<IIngredientDeletionGuard, IngredientDeletionGuard>();
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(
