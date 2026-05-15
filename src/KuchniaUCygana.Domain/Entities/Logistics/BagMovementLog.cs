@@ -18,9 +18,9 @@ public sealed class BagMovementLog : BaseEntity
 
     public BagStatus ToStatus { get; set; }
 
-    private int? DriverId;
+    public int? DriverId {get; set;} 
 
-    private int? RouteStopId;
+    public int? RouteStopId {get; set;}
 
     public void UpdateStatus(BagStatus newStatus)
     {

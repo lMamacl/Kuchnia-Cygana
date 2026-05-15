@@ -30,7 +30,7 @@ public sealed class Vehicle : AuditableEntity
     public decimal MaxLoadKg { get; set; }
 
     /// <summary>
-    /// Status pojazdu (aktywny, do serwisu, wycofany).
+    /// Status pojazdu (aktywny, w serwisie, wycofany).
     /// </summary>
     [Required]
     public VehicleStatus Status { get; set; } = VehicleStatus.Active;

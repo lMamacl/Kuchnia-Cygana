@@ -17,9 +17,9 @@ public sealed class DeliveryRoute : AuditableEntity
 
     public RouteStatus Status { get; set; } = RouteStatus.Created;
 
-    private int? VehicleId { get; set; }
+    public int? VehicleId { get; set; }
 
-    private int? DriverId { get; set; }
+    public int? DriverId { get; set; }
 
     // nie ma właściwości nawigacyjnych typowych dla EF bo mamy ServiceStack.AI i nie potrzebujemy ich do mapowania relacji
 
