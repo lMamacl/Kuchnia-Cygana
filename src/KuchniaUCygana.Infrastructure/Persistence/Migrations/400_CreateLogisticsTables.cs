@@ -57,7 +57,7 @@ public class CreateLogisticsTables : Migration
             .WithColumn("Id").AsInt32().PrimaryKey().Identity()
             .WithColumn("RouteDate").AsDateTimeOffset().NotNullable()
             .WithColumn("TotalDistanceKm").AsDouble().NotNullable().WithDefaultValue(0)
-            .WithColumn("Status").AsInt32().NotNullable().WithDefaultValue(0)
+            .WithColumn("Status").AsInt32().NotNullable().WithDefaultValue(RouteStatus.Created)
             .WithColumn("VehicleId").AsInt32().Nullable().ForeignKey("Vehicles", "Id")
             .WithColumn("DriverId").AsInt32().Nullable().ForeignKey("Drivers", "Id")
             .WithColumn("CreatedAt").AsDateTimeOffset().NotNullable()
@@ -76,7 +76,7 @@ public class CreateLogisticsTables : Migration
             .WithColumn("SequenceNumber").AsInt32().NotNullable()
             .WithColumn("PlannedArrivalTime").AsDateTimeOffset().Nullable()
             .WithColumn("ActualArrivalTime").AsDateTimeOffset().Nullable()
-            .WithColumn("Status").AsInt32().NotNullable().WithDefaultValue(0)
+            .WithColumn("Status").AsInt32().NotNullable().WithDefaultValue(StopStatus.Created)
             .WithColumn("CreatedAt").AsDateTimeOffset().NotNullable()
             .WithColumn("UpdatedAt").AsDateTimeOffset().Nullable()
             .WithColumn("CreatedBy").AsString(256).Nullable()
@@ -89,7 +89,7 @@ public class CreateLogisticsTables : Migration
         Create.Table("ThermalBags")
             .WithColumn("Id").AsInt32().PrimaryKey().Identity()
             .WithColumn("SerialNumber").AsString(50).NotNullable()
-            .WithColumn("Status").AsInt32().NotNullable().WithDefaultValue(0)
+            .WithColumn("Status").AsInt32().NotNullable().WithDefaultValue(BagStatus.Available)
             .WithColumn("LastCustomerId").AsInt32().Nullable()
             .WithColumn("CreatedAt").AsDateTimeOffset().NotNullable()
             .WithColumn("UpdatedAt").AsDateTimeOffset().Nullable()
@@ -111,28 +111,11 @@ public class CreateLogisticsTables : Migration
             .WithColumn("CreatedAt").AsDateTimeOffset().NotNullable()
             .WithColumn("UpdatedAt").AsDateTimeOffset().Nullable();
 
-            //8. Address
-            Create.Table("Addresses")
-            .WithColumn("Id").AsInt32().PrimaryKey().Identity()
-            .WithColumn("Street").AsString(255).NotNullable()
-            .WithColumn("City").AsString(100).NotNullable()
-            .WithColumn("PostalCode").AsString(10).NotNullable()
-            .WithColumn("Latitude").AsDouble().Nullable()
-            .WithColumn("Longitude").AsDouble().Nullable()
-            .WithColumn("IsGeoCoded").AsBoolean().NotNullable().WithDefaultValue(false)
-            .WithColumn("CreatedAt").AsDateTimeOffset().NotNullable()
-            .WithColumn("UpdatedAt").AsDateTimeOffset().Nullable()
-            .WithColumn("CreatedBy").AsString(256).Nullable()
-            .WithColumn("UpdatedBy").AsString(256).Nullable()
-            .WithColumn("IsDeleted").AsBoolean().NotNullable().WithDefaultValue(false)
-            .WithColumn("DeletedAt").AsDateTimeOffset().Nullable()
-            .WithColumn("DeletedBy").AsString(256).Nullable();
     }
 
     public override void Down()
     {
         // Usuwanie w odwrotnej kolejności (żeby zachować integralność kluczy obcych)
-        Delete.Table("Addresses");
         Delete.Table("BagMovementLogs");
         Delete.Table("ThermalBags");
         Delete.Table("DeliveryRouteStops");
