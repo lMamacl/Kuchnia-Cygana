@@ -13,6 +13,7 @@ using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
 using KuchniaUCygana.Infrastructure.Pdf;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using KuchniaUCygana.Domain.Interfaces.Logistics;
 
 namespace KuchniaUCygana.Infrastructure;
 

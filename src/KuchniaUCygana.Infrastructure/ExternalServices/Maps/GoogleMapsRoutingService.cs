@@ -10,9 +10,9 @@ namespace KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 
 public class GoogleMapsRoutingService : IRouteOptimizer
 {
-    // Implementacja w kroku 5; odkomentuję jak złączę 1 z 4 bo używa Address z 1
-    //async Task<List<int>> IRouteOptimizer.OptimizeSequenceAsync(List<Address> stops)
-    //{
-    //    throw new NotImplementedException();
-    //}
+    // Implementacja w kroku 5
+    async Task<List<int>> IRouteOptimizer.OptimizeSequenceAsync(List<Address> stops)
+    {
+        throw new NotImplementedException();
+    }
 }

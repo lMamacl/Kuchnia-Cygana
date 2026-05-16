@@ -1,3 +1,5 @@
+using KuchniaUCygana.Domain.Interfaces.Logistics;
+
 namespace KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 
 public sealed class OpenStreetMapService : IGeocodeService

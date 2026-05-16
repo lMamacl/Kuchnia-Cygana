@@ -1,4 +1,5 @@
-namespace KuchniaUCygana.Infrastructure.ExternalServices.Maps;
+
+namespace KuchniaUCygana.Domain.Interfaces.Logistics;
 
 public interface IGeocodeService
 {

@@ -1,4 +1,5 @@
-using KuchniaUCygana.Domain.Entities.Logistics;
+using KuchniaUCygana.Domain.Entities.Orders;
+using KuchniaUCygana.Domain.Interfaces.Logistics;
 
 namespace KuchniaUCygana.Domain.Interfaces.Logistics;
 
