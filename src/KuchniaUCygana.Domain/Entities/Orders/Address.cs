@@ -24,6 +24,10 @@ public sealed class Address : AuditableEntity
 
     public string? DeliveryNotes { get; set; }
 
+    public double? Latitude { get; set; }
+
+    public double? Longitude { get; set; }
+
     // Pomocnicza właściwość — pełna linia adresu dla M3/logistyki.
     [Ignore]
     public string FullAddress =>

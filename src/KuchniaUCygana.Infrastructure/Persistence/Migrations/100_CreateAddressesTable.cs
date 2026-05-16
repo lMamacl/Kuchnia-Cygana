@@ -24,7 +24,9 @@ public sealed class CreateAddressesTable : Migration
             .WithColumn("UpdatedBy").AsString(256).Nullable()
             .WithColumn("IsDeleted").AsBoolean().NotNullable().WithDefaultValue(false)
             .WithColumn("DeletedAt").AsDateTimeOffset().Nullable()
-            .WithColumn("DeletedBy").AsString(256).Nullable();
+            .WithColumn("DeletedBy").AsString(256).Nullable()
+            .WithColumn("Latitude").AsDouble().Nullable()
+            .WithColumn("Longitude").AsDouble().Nullable();
     }
 
     public override void Down() => Delete.Table("Addresses");

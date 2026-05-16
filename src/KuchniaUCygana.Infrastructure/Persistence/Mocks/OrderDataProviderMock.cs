@@ -19,6 +19,8 @@ public sealed class OrderDataProviderMock : IOrderDataProvider
                 AddressFullLine: "ul. Testowa 1, 85-001 Bydgoszcz",
                 City: "Bydgoszcz",
                 PostalCode: "85-001",
+                Latitude: null,
+                Longitude: null,
                 DeliveryDate: date,
                 DeliveryWindowName: "6:00-10:00",
                 Items: new List<OrderItemInfo>
