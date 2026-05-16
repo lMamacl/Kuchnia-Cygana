@@ -1,4 +1,4 @@
-using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
+using KuchniaUCygana.Domain.Interfaces.Logistics;
 
 namespace KuchniaUCygana.Application.Services.Logistics;
 

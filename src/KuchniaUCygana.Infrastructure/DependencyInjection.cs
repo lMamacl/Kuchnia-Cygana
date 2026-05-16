@@ -14,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceStack.OrmLite;
 using ServiceStack.OrmLite.SqlServer;
+using KuchniaUCygana.Domain.Interfaces.Logistics;
 
 namespace KuchniaUCygana.Infrastructure;
 
