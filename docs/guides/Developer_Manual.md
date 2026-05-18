@@ -1,3 +1,7 @@
+﻿Oto uporządkowany, profesjonalny i czytelny Podręcznik Dewelopera dla systemu
+ERP Kuchnia U Cygana. Dokument został podzielony na logiczne sekcje, ułatwiające
+wdrożenie i codzienną pracę z kodem.
+
 📖 Podręcznik Dewelopera – Kuchnia U Cygana
 
 Witaj w technicznym przewodniku dla deweloperów systemu ERP Platformy
