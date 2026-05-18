@@ -1,4 +1,4 @@
-﻿namespace KuchniaUCygana.Domain.Interfaces.External;
+namespace KuchniaUCygana.Domain.Interfaces.External;
 
 // Dane jednej dostawy na dany dzień - zwracane Modułowi 3
 // w celu wygenerowania dziennego planu produkcji.
@@ -11,6 +11,8 @@ public sealed record OrderDeliveryInfo(
     string AddressFullLine,
     string City,
     string PostalCode,
+    double? Latitude,
+    double? Longitude,
     DateTime DeliveryDate,
     string DeliveryWindowName,
     IReadOnlyList<OrderItemInfo> Items);

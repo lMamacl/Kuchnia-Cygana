@@ -106,6 +106,8 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
                 delivery.AddressFullLine,
                 delivery.City,
                 delivery.PostalCode,
+                delivery.Latitude,
+                delivery.Longitude,
                 delivery.DeliveryDate,
                 delivery.DeliveryWindowName ?? string.Empty,
                 items.Select(item => new OrderItemInfo(
@@ -175,6 +177,8 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
             END AS AddressFullLine,
             a.City AS City,
             a.PostalCode AS PostalCode,
+            a.Latitude AS Latitude,
+            a.Longitude AS Longitude,
             dc.DeliveryDate AS DeliveryDate,
             dw.Name AS DeliveryWindowName
         FROM DeliveryCalendar dc
@@ -234,6 +238,10 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         public string City { get; set; } = string.Empty;
 
         public string PostalCode { get; set; } = string.Empty;
+
+        public double? Latitude { get; set; }
+
+        public double? Longitude { get; set; }
 
         public DateTime DeliveryDate { get; set; }
 

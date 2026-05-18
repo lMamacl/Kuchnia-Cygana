@@ -27,13 +27,17 @@ public sealed class RouteStopEntry
 {
     public int StopId { get; set; }
 
-    public int StopOrder { get; set; }
+    public int SequenceNumber { get; set; }
 
     public string DeliveryWindowFrom { get; set; } = string.Empty;
 
     public string DeliveryWindowTo { get; set; } = string.Empty;
 
-    public int OrderId { get; set; }
+    /// <summary>
+    /// FK do DeliveryCalendar (M1). Użyj JOINa DeliveryCalendar → Order,
+    /// jeśli potrzebujesz OrderId.
+    /// </summary>
+    public int DeliveryCalendarId { get; set; }
 }
 
 /// <summary>

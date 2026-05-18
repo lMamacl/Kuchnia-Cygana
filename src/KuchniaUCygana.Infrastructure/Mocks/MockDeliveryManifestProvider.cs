@@ -65,10 +65,10 @@ public sealed class MockDeliveryManifestProvider : IDeliveryManifestProvider
             stops.Add(new RouteStopEntry
             {
                 StopId = routeId * 100 + i,
-                StopOrder = i,
+                SequenceNumber = i,
                 DeliveryWindowFrom = windowStart.ToString("HH:mm"),
                 DeliveryWindowTo = windowEnd.ToString("HH:mm"),
-                OrderId = date.DayNumber * 100 + (routeId - 1) * count + i,
+                DeliveryCalendarId = date.DayNumber * 100 + (routeId - 1) * count + i,
             });
         }
 
