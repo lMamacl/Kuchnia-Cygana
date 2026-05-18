@@ -56,6 +56,7 @@ public class CreateLogisticsTables : Migration
         Create.Table("DeliveryRoutes")
             .WithColumn("Id").AsInt32().PrimaryKey().Identity()
             .WithColumn("RouteDate").AsDateTimeOffset().NotNullable()
+            .WithColumn("Name").AsString(100).NotNullable()
             .WithColumn("TotalDistanceKm").AsDouble().NotNullable().WithDefaultValue(0)
             .WithColumn("Status").AsInt32().NotNullable().WithDefaultValue(RouteStatus.Created)
             .WithColumn("VehicleId").AsInt32().Nullable().ForeignKey("Vehicles", "Id")

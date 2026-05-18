@@ -13,6 +13,8 @@ public sealed class DeliveryRoute : AuditableEntity
 {
     public DateTimeOffset RouteDate { get; set; }
 
+    public string Name { get; set; } = string.Empty;
+
     public double TotalDistanceKm { get; set; }
 
     public RouteStatus Status { get; set; } = RouteStatus.Created;

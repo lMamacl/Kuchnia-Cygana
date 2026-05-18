@@ -8,5 +8,6 @@ namespace KuchniaUCygana.Domain.Interfaces.Logistics;
 
 public interface IRouteOptimizer
 {
-    Task<List<int>> OptimizeSequenceAsync(List<Address> stops);
+    // adres pobiorę z modułu 1; odkomentuję jak złączę 1 z 4
+    //Task<List<int>> OptimizeSequenceAsync(List<Address> stops);
 }
