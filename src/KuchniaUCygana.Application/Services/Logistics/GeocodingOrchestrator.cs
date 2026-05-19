@@ -34,8 +34,6 @@ public class GeocodingOrchestrator
     /// </summary>
     public async Task<int> ProcessPendingAddressesAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Rozpoczynanie geokodowania adresów bez współrzędnych...");
-
         // Używamy generycznej metody FindAsync dostępnej w IAddressRepository (dziedziczonej z IRepository)
         var pendingAddresses = await _addressRepository.FindAsync(a => a.Latitude == null || a.Longitude == null);
         int processedCount = 0;
