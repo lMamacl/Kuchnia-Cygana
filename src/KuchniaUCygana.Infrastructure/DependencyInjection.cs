@@ -1,4 +1,4 @@
-﻿using FluentMigrator.Runner;
+using FluentMigrator.Runner;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Entities.Customers;
@@ -67,6 +67,12 @@ public static class DependencyInjection
         services.AddScoped<Domain.Services.FoodCostCalculator>();
         services.AddScoped<Domain.Services.SmartInventoryAnalyzer>();
         services.AddScoped<Domain.Services.ProductionPlanGenerator>();
+
+        // Module 3 application services.
+        services.AddScoped<IProductionService, Application.Services.ProductionService>();
+        services.AddScoped<IWarehouseService, Application.Services.WarehouseService>();
+        services.AddScoped<IPackingService, Application.Services.PackingService>();
+        services.AddScoped<ITemperatureService, Application.Services.TemperatureService>();
 
         services
             .AddFluentMigratorCore()
