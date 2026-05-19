@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddSingleton(new OrmLiteConnectionFactory(connectionString, SqlServerDialect.Provider));
         services.AddSingleton<IDbConnectionFactory, SqlServerConnectionFactory>();
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
+        services.AddScoped<IAddressRepository, AddressRepository>(); // moduł 1 już to dodał
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
 
         services
