@@ -30,7 +30,7 @@ public sealed class DailyGeocodingWorker : BackgroundService
     /// <param name="stoppingToken">Token anulowania – sygnalizuje zatrzymanie aplikacji.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("DailyGeocodingWorker started.");
+        _logger.LogInformation("DailyGeocodingWorker się uruchomił");
 
         // Nieskończona pętla – będzie działać dopóki aplikacja nie zostanie zatrzymana
         while (!stoppingToken.IsCancellationRequested)
@@ -43,7 +43,7 @@ public sealed class DailyGeocodingWorker : BackgroundService
             catch (Exception ex)
             {
                 // Logujemy błąd, ale nie przerywamy pętli – usługa ma dalej działać
-                _logger.LogError(ex, "Unhandled exception during geocoding work.");
+                _logger.LogError(ex, "Wystąpił nieoczekiwany błąd w DailyGeocodingWorker");
             }
 
             // Odczekaj zadany interwał (24h) lub do momentu anulowania
@@ -58,7 +58,7 @@ public sealed class DailyGeocodingWorker : BackgroundService
             }
         }
 
-        _logger.LogInformation("DailyGeocodingWorker stopped.");
+        _logger.LogInformation("DailyGeocodingWorker zakończył zadanie");
     }
 
     /// <summary>
@@ -68,7 +68,7 @@ public sealed class DailyGeocodingWorker : BackgroundService
     /// </summary>
     private async Task DoWorkAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Starting daily geocoding process.");
+        _logger.LogInformation("Rozpoczynam proces geokodowania");
 
         // Utworzenie nowego zakresu usług – pozwala na użycie scoped services
         using (var scope = _scopeFactory.CreateScope())
