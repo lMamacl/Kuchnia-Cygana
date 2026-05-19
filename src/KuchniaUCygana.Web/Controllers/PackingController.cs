@@ -6,9 +6,9 @@ namespace KuchniaUCygana.Web.Controllers;
 
 /// <summary>
 /// Kontroler kompletacji — sesje pakowania, pakowanie klientów, etykiety, wysyłka.
-/// TASK-M3-026 | Role: Kitchen, Admin
+/// TASK-M3-026 | Stanowisko: Packing | Szef: PackingManager
 /// </summary>
-[Authorize(Roles = "Kitchen,Admin")]
+[Authorize(Roles = "Packing,PackingManager,Admin")]
 [Route("packing")]
 public sealed class PackingController : Controller
 {
@@ -91,6 +91,7 @@ public sealed class PackingController : Controller
     /// POST /packing/dispatch/3
     /// </summary>
     [HttpPost("dispatch/{sessionId:int}")]
+    [Authorize(Roles = "PackingManager,Admin")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Dispatch(int sessionId)
     {

@@ -7,9 +7,9 @@ namespace KuchniaUCygana.Web.Controllers;
 
 /// <summary>
 /// Kontroler magazynu — stany, przyjęcia, odpisy, inwentaryzacja, temperatury, alerty.
-/// TASK-M3-025 | Role: Kitchen, Admin
+/// TASK-M3-025 | Stanowisko: Warehouse | Szef: WarehouseManager
 /// </summary>
-[Authorize(Roles = "Kitchen,Admin")]
+[Authorize(Roles = "Warehouse,WarehouseManager,Admin")]
 [Route("warehouse")]
 public sealed class WarehouseController : Controller
 {
@@ -125,6 +125,7 @@ public sealed class WarehouseController : Controller
     /// POST /warehouse/inventory
     /// </summary>
     [HttpPost("inventory")]
+    [Authorize(Roles = "WarehouseManager,Admin")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Inventory(List<StockItemAdjustment> adjustments)
     {
@@ -173,6 +174,7 @@ public sealed class WarehouseController : Controller
     /// GET /warehouse/haccp-report?from=2026-05-01&to=2026-05-18
     /// </summary>
     [HttpGet("haccp-report")]
+    [Authorize(Roles = "WarehouseManager,Admin")]
     public async Task<IActionResult> HaccpReport(DateOnly? from, DateOnly? to)
     {
         var dateFrom = from ?? DateOnly.FromDateTime(DateTime.Today.AddDays(-7));

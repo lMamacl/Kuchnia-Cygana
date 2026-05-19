@@ -7,9 +7,9 @@ namespace KuchniaUCygana.Web.Controllers;
 
 /// <summary>
 /// Kontroler produkcji — plan dnia, karty gotowania, zatwierdzanie.
-/// TASK-M3-024 | Role: Kitchen, Admin
+/// TASK-M3-024 | Stanowisko: Kitchen | Szef: KitchenManager
 /// </summary>
-[Authorize(Roles = "Kitchen,Admin")]
+[Authorize(Roles = "Kitchen,KitchenManager,Admin")]
 [Route("production")]
 public sealed class ProductionController : Controller
 {
@@ -38,6 +38,7 @@ public sealed class ProductionController : Controller
     /// POST /production/generate
     /// </summary>
     [HttpPost("generate")]
+    [Authorize(Roles = "KitchenManager,Admin")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Generate(CreateProductionPlanRequest request)
     {
@@ -82,6 +83,7 @@ public sealed class ProductionController : Controller
     /// POST /production/approve-cooking
     /// </summary>
     [HttpPost("approve-cooking")]
+    [Authorize(Roles = "KitchenManager,Admin")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ApproveCooking(int planItemId, decimal actualQuantity)
     {
@@ -97,6 +99,7 @@ public sealed class ProductionController : Controller
     /// POST /production/produce/5
     /// </summary>
     [HttpPost("produce/{planId:int}")]
+    [Authorize(Roles = "KitchenManager,Admin")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ProduceSemiFinished(int planId)
     {
