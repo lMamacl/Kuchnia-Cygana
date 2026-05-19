@@ -9,6 +9,8 @@ namespace KuchniaUCygana.Domain.Entities.Logistics;
 /// Reprezentuje pojazd w firmowej flocie.
 /// Encja audytowana — śledzi twórcę i autora zmian dla celów operacyjnych.
 /// </summary>
+
+[Alias("Vehicles")]
 public sealed class Vehicle : AuditableEntity
 {
     /// <summary>

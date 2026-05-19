@@ -5,7 +5,7 @@ using KuchniaUCygana.Application.Interfaces;
 
 namespace KuchniaUCygana.Web.Controllers;
 
-[Authorize]
+//[Authorize]
 public class VehiclesController : Controller
 {
     private readonly IVehicleService _vehicleService;
