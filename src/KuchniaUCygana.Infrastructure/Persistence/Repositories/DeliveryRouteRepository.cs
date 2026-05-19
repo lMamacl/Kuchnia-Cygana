@@ -22,6 +22,24 @@ public sealed class DeliveryRouteRepository : BaseRepository<DeliveryRoute>, IDe
     public async Task<DeliveryRoute?> GetRouteWithStopsAsync(int routeId)
     {
         using var db = Factory.CreateConnection();
-        return await db.SingleByIdAsync<DeliveryRoute>(routeId);
+        var route = await db.SingleByIdAsync<DeliveryRoute>(routeId);
+        if (route == null) return null;
+        var stops = await db.SelectAsync<DeliveryRouteStop>(s => s.RouteId == routeId && s.IsDeleted == false);
+        route.Stops = stops.OrderBy(s => s.SequenceNumber).ToList();
+        return route;
     }
+
+
+
+    public async Task<List<DeliveryRoute>> GetRoutesWithStopsAsync(DateTimeOffset date)
+{
+    using var db = Factory.CreateConnection();
+    var routes = await db.SelectAsync<DeliveryRoute>(r => r.RouteDate.Date == date.Date && r.IsDeleted == false);
+    foreach (var route in routes)
+    {
+        var stops = await db.SelectAsync<DeliveryRouteStop>(s => s.RouteId == route.Id && s.IsDeleted == false);
+        route.Stops = stops.OrderBy(s => s.SequenceNumber).ToList();
+    }
+    return routes;
+}
 }
