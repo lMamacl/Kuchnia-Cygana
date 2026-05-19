@@ -51,6 +51,11 @@ public static class DependencyInjection
             client.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
             client.DefaultRequestHeaders.Add("User-Agent", "KuchniaUCygana/1.0");
         });
+        services.AddScoped<IDeliveryRouteRepository, DeliveryRouteRepository>();
+        services.AddScoped<IDeliveryRouteStopRepository, DeliveryRouteStopRepository>();
+        services.AddScoped<IDriverRepository, DriverRepository>();
+        services.AddScoped<IVehicleRepository, VehicleRepository>();
+        services.AddScoped<IThermalBagRepository, ThermalBagRepository>();
 
         return services;
     }
