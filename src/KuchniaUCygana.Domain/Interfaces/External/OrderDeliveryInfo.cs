@@ -12,7 +12,7 @@ public sealed record OrderDeliveryInfo(
     string City,
     string PostalCode,
     double? Latitude,
-    double? Longitude,  
+    double? Longitude,
     DateTime DeliveryDate,
     string DeliveryWindowName,
     IReadOnlyList<OrderItemInfo> Items);

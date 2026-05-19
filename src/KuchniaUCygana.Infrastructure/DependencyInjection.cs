@@ -1,8 +1,6 @@
 using FluentMigrator.Runner;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Auth;
-using KuchniaUCygana.Domain.Entities.Customers;
-using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces.Orders;
@@ -13,13 +11,14 @@ using KuchniaUCygana.Infrastructure.ExternalServices.Stripe;
 using KuchniaUCygana.Infrastructure.FileStorage;
 using KuchniaUCygana.Infrastructure.Pdf;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using KuchniaUCygana.Infrastructure.Persistence.Mocks;
+using KuchniaUCygana.Infrastructure.Persistence.Migrations;
+using KuchniaUCygana.Infrastructure.Persistence.Providers;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using QuestPDF.Infrastructure;
 using ServiceStack.OrmLite;
-using ServiceStack.OrmLite.SqlServer;
 
 namespace KuchniaUCygana.Infrastructure;
 
@@ -57,6 +56,8 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.Add("User-Agent", "KuchniaUCygana/1.0");
         });
 
+        services.AddScoped<IRepository<User>>(sp => sp.GetRequiredService<IUserRepository>());
+        services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IOrderItemRepository, OrderItemRepository>();
         services.AddScoped<IDeliveryCalendarRepository, DeliveryCalendarRepository>();
@@ -66,8 +67,8 @@ public static class DependencyInjection
         services.AddScoped<IDeliveryWindowRepository, DeliveryWindowRepository>();
         services.AddScoped<ICustomerProfileRepository, CustomerProfileRepository>();
 
-        // Kontrakt dla Modu³u 3 — tymczasowy mock (do zmiany na OrderDataProvider w Fazie 5)
-        services.AddScoped<IOrderDataProvider, OrderDataProviderMock>();
+        // Kontrakt dla Modu³u 3
+        services.AddScoped<IOrderDataProvider, OrderDataProvider>();
 
         return services;
     }

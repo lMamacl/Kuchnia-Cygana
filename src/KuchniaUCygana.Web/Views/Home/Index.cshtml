@@ -1,8 +1,92 @@
 ﻿@{
-    ViewData["Title"] = "Home Page";
+    ViewData["Title"] = "Kuchnia u Cygana";
+    var isLoggedIn = User.Identity?.IsAuthenticated == true;
+    var userName = User.Identity?.Name;
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="text-center py-5">
+    <h1 class="display-5 fw-bold">🍽️ Kuchnia u Cygana</h1>
+    <p class="lead text-muted">Platforma zamówień diet cateringowych</p>
 </div>
+
+@if (isLoggedIn)
+{
+    <div class="alert alert-success d-flex align-items-center gap-2">
+        <span>✅ Zalogowano jako <strong>@userName</strong></span>
+        <form asp-controller="Account" asp-action="Logout" method="post" class="ms-auto mb-0">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Wyloguj</button>
+        </form>
+    </div>
+
+    <div class="row g-3 mt-2">
+        <div class="col-md-4">
+            <a asp-controller="Order" asp-action="Index" class="card text-decoration-none h-100 border-primary">
+                <div class="card-body text-center py-4">
+                    <div class="fs-1 mb-2">📋</div>
+                    <h5 class="card-title">Moje zamówienia</h5>
+                    <p class="card-text text-muted small">Historia i status zamówień</p>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-4">
+            <a asp-controller="Address" asp-action="Index" class="card text-decoration-none h-100">
+                <div class="card-body text-center py-4">
+                    <div class="fs-1 mb-2">📍</div>
+                    <h5 class="card-title">Moje adresy</h5>
+                    <p class="card-text text-muted small">Zarządzaj adresami dostawy</p>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-4">
+            <a asp-controller="Cart" asp-action="Index" class="card text-decoration-none h-100">
+                <div class="card-body text-center py-4">
+                    <div class="fs-1 mb-2">🛒</div>
+                    <h5 class="card-title">Koszyk</h5>
+                    <p class="card-text text-muted small">Złóż nowe zamówienie</p>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <hr class="my-4" />
+
+    <h6 class="text-muted mb-3">🧪 Testowe dodanie diety do koszyka (tymczasowe — M2 jeszcze nie gotowy)</h6>
+    <form asp-controller="Cart" asp-action="Add" method="post" class="row g-2 align-items-end">
+        <div class="col-auto">
+            <input type="hidden" name="DietId" value="1" />
+            <input type="hidden" name="DietVariantId" value="1" />
+            <input type="hidden" name="DietName" value="Dieta Standard" />
+            <input type="hidden" name="VariantName" value="1800 kcal" />
+            <input type="hidden" name="CaloriesPerDay" value="1800" />
+            <input type="hidden" name="PricePerDay" value="59.99" />
+            <label class="form-label">Liczba dni</label>
+            <input type="number" name="TotalDays" class="form-control" value="5" min="1" max="30" style="width:100px" />
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-outline-primary">+ Dodaj do koszyka</button>
+        </div>
+        <div class="col-auto text-muted small">
+            Dieta Standard · 1800 kcal · 59,99 zł/dzień
+        </div>
+    </form>
+}
+else
+{
+    <div class="row justify-content-center mt-3">
+        <div class="col-md-5">
+            <div class="card shadow-sm">
+                <div class="card-body text-center py-4">
+                    <p class="text-muted mb-4">Zaloguj się lub utwórz konto, aby złożyć zamówienie.</p>
+                    <div class="d-grid gap-2 d-sm-flex justify-content-center">
+                        <a asp-controller="Account" asp-action="Login" class="btn btn-primary px-4">
+                            Zaloguj się
+                        </a>
+                        <a asp-controller="Account" asp-action="Register" class="btn btn-outline-secondary px-4">
+                            Zarejestruj się
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}

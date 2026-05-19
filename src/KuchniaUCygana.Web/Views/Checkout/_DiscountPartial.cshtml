@@ -1,0 +1,38 @@
+﻿@model KuchniaUCygana.Web.Models.DiscountPartialViewModel
+@{
+    var culture = new System.Globalization.CultureInfo("pl-PL");
+}
+
+<div id="discount-section">
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">🏷️ Kod rabatowy</div>
+        <div class="card-body">
+
+            @if (Model.WasApplied)
+            {
+                <div class="alert alert-success py-2 mb-2">
+                    Kod zostal zastosowany! Rabat: <strong>-@Model.DiscountAmount.ToString("C", culture)</strong>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <div class="alert alert-danger py-2 mb-2">@Model.ErrorMessage</div>
+            }
+
+            <div class="input-group">
+                <input type="text" name="Code" class="form-control"
+                       placeholder="Wpisz kod rabatowy"
+                       value="@(Model.WasApplied? Model.AppliedCode: "")" />
+                <input type="hidden" name="OrderId" value="@Model.OrderId" />
+                <button class="btn btn-outline-secondary"
+                        hx-post="/Checkout/ApplyDiscount"
+                        hx-include="closest .card-body"
+                        hx-target="#discount-section"
+                        hx-swap="outerHTML">
+                    Zastosuj
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

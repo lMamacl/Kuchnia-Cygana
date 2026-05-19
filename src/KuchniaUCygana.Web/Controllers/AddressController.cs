@@ -1,8 +1,8 @@
-﻿using KuchniaUCygana.Application.DTOs.Orders;
+﻿using System.Security.Claims;
+using KuchniaUCygana.Application.DTOs.Orders;
 using KuchniaUCygana.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace KuchniaUCygana.Web.Controllers;
 
@@ -18,46 +18,76 @@ public sealed class AddressController : Controller
 
     public async Task<IActionResult> Index()
     {
-        var userId = GetCurrentUserId();
-        var addresses = await addressService.GetByUserIdAsync(userId);
+        var addresses = await addressService.GetByUserIdAsync(GetCurrentUserId());
         return View(addresses);
     }
 
-    public IActionResult Create() => View();
+    public IActionResult Create() => View(new CreateAddressRequest());
 
     [HttpPost]
     public async Task<IActionResult> Create(CreateAddressRequest request)
     {
-        throw new NotImplementedException();
+        if (!ModelState.IsValid) return View(request);
+
+        await addressService.CreateAsync(request, GetCurrentUserId());
+        TempData["Success"] = "Adres zostal dodany.";
+        return RedirectToAction(nameof(Index));
     }
 
     public async Task<IActionResult> Edit(int id)
     {
-        throw new NotImplementedException();
+        var address = await addressService.GetByIdAsync(id, GetCurrentUserId());
+        if (address is null) return NotFound();
+
+        var request = new UpdateAddressRequest
+        {
+            Id = address.Id,
+            Label = address.Label,
+            Street = address.Street,
+            BuildingNumber = address.BuildingNumber,
+            ApartmentNumber = address.ApartmentNumber,
+            City = address.City,
+            PostalCode = address.PostalCode,
+            DeliveryNotes = address.DeliveryNotes,
+        };
+
+        return View(request);
     }
 
     [HttpPost]
     public async Task<IActionResult> Edit(UpdateAddressRequest request)
     {
-        throw new NotImplementedException();
+        if (!ModelState.IsValid) return View(request);
+
+        var updated = await addressService.UpdateAsync(request, GetCurrentUserId());
+        if (!updated) return NotFound();
+
+        TempData["Success"] = "Adres zostal zaktualizowany.";
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> Delete(int id)
     {
-        throw new NotImplementedException();
+        await addressService.DeleteAsync(id, GetCurrentUserId());
+        TempData["Success"] = "Adres zostal usuniety.";
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> SetDefault(int id)
     {
-        throw new NotImplementedException();
+        var result = await addressService.SetDefaultAsync(id, GetCurrentUserId());
+        if (!result) return NotFound();
+
+        TempData["Success"] = "Domyslny adres zostal zmieniony.";
+        return RedirectToAction(nameof(Index));
     }
 
     private int GetCurrentUserId()
     {
         var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? throw new UnauthorizedAccessException("Brak identyfikatora użytkownika w tokenie.");
+            ?? throw new UnauthorizedAccessException();
         return int.Parse(value);
     }
 }
