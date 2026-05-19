@@ -1,0 +1,26 @@
+@model IEnumerable<VehicleDto>
+<h2>Pojazdy</h2>
+<a asp-action="Create" class="btn btn-primary">Dodaj pojazd</a>
+<table class="table">
+    <thead>
+        <tr><th>Rejestracja</th><th>Model</th><th>Ładowność (kg)</th><th>Status</th><th>Akcje</th></tr>
+    </thead>
+    <tbody>
+        @foreach (var v in Model)
+        {
+            <tr>
+                <td>@v.RegistrationNumber</td>
+                <td>@v.Model</td>
+                <td>@v.MaxLoadKg</td>
+                <td>@v.Status</td>
+                <td>
+                    <a asp-action="Edit" asp-route-id="@v.Id">Edytuj</a> |
+                    <form asp-action="Delete" asp-route-id="@v.Id" method="post" style="display:inline">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-link">Usuń</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
