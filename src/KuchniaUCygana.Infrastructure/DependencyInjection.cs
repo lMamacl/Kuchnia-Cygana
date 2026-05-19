@@ -56,6 +56,8 @@ public static class DependencyInjection
         services.AddScoped<IVehicleRepository, VehicleRepository>();
         services.AddScoped<IThermalBagRepository, ThermalBagRepository>();
 
+        services.AddHostedService<BackgroundJobs.DailyGeocodingWorker>();
+
         return services;
     }
 }
