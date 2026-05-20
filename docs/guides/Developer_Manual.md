@@ -1,3 +1,7 @@
+﻿Oto uporządkowany, profesjonalny i czytelny Podręcznik Dewelopera dla systemu
+ERP Kuchnia U Cygana. Dokument został podzielony na logiczne sekcje, ułatwiające
+wdrożenie i codzienną pracę z kodem.
+
 📖 Podręcznik Dewelopera – Kuchnia U Cygana
 
 Witaj w technicznym przewodniku dla deweloperów systemu ERP Platformy
@@ -42,6 +46,37 @@ W pliku `.env` możesz dostosować limity pamięci dla kontenerów (domyślne wa
 - `MSSQL_MEMORY_LIMIT_MB=768` (limit silnika SQL)
 - `MSSQL_CONTAINER_MEMORY_LIMIT=1g` (limit kontenera Docker)
 - `WEB_CONTAINER_MEMORY_LIMIT=512m` (limit kontenera aplikacji)
+
+### Panel staff i standard Tablera
+
+Back-office projektu korzysta ze wspólnego shellu Tabler. Celem jest to, żeby moduły kuchni, magazynu, diet, logistyki,
+administracji i testowe mockupy wyglądały spójnie, ale nie wymuszały zmian w Dockerze, DI ani migracjach.
+
+Podstawowe elementy shellu:
+
+- layout: `_LayoutStaff`;
+- style: `wwwroot/css/staff.css`;
+- skrypty: `wwwroot/js/staff-shell.js`;
+- katalog nawigacji: `StaffNavigationCatalog`;
+- katalog ikon: `StaffIconCatalog`;
+- główny punkt wejścia: `/staff`.
+
+Zasady dla nowych widoków staff/back-office:
+
+1. W widoku ustaw `Layout = "_LayoutStaff";`.
+2. Jeżeli widok ma być widoczny w menu lub wyszukiwarce, dopisz go w `StaffNavigationCatalog`.
+3. Jeżeli potrzeba nowej ikony, dopisz klucz w `StaffIconCatalog` i użyj go w katalogu nawigacji.
+4. Mockowe widoki mogą używać `_StaffPlaceholder`, dopóki moduł nie ma realnych danych.
+5. Dla samych widoków nie zmieniaj `DependencyInjection.cs`, `Program.cs`, migracji, `docker-compose.yml` ani `.env.example`.
+
+Zmiany Razor/CSS/JS w kontenerze Docker wymagają przebudowania obrazu `web`, nie bazy danych:
+
+```bash
+docker compose up -d --build --force-recreate web
+```
+
+`docker compose down -v` usuwa lokalny volume bazy SQL Server. Używaj go tylko wtedy, gdy świadomie chcesz wyczyścić
+dane, przetestować migracje od zera albo naprawiasz problem schematu.
 
 3. Fundamenty DDD (Warstwa Domain)
 
@@ -143,6 +178,9 @@ Używamy Conventional Commits. Każdy commit musi być poprzedzony prefiksem:
     czasowymi.
   - Usuwanie: Nigdy nie używaj db.Delete() na encjach biznesowych. Korzystaj z
     metod repozytorium wspierających Soft Delete.
+  - Widoki staff: dla mocków i ekranów back-office używaj `_LayoutStaff` oraz
+    `StaffNavigationCatalog`. Nie dopisuj rejestracji DI tylko po to, żeby
+    uruchomić statyczny widok testowy.
   - Reset Środowiska: Aby całkowicie wyczyścić bazę i wolumeny Docker:
     ```bash
     docker compose down -v --remove-orphans

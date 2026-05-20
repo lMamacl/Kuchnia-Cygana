@@ -1,0 +1,64 @@
+@{
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
+    var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
+
+    string ActiveLink(StaffNavItem item)
+    {
+        return item.Matches(controller, action) ? "active" : string.Empty;
+    }
+
+    string ActiveGroup(StaffNavSection section)
+    {
+        return section.IsActive(controller) ? "active" : string.Empty;
+    }
+
+    string OpenGroup(StaffNavSection section)
+    {
+        return section.IsActive(controller) ? "show" : string.Empty;
+    }
+
+    string Expanded(StaffNavSection section)
+    {
+        return section.IsActive(controller) ? "true" : "false";
+    }
+}
+
+<ul class="navbar-nav staff-sidebar-nav pt-lg-3">
+    @foreach (var navSection in StaffNavigationCatalog.Sections)
+    {
+        if (navSection.Items.Count == 1 || navSection.Key == "mobile")
+        {
+            var item = navSection.PrimaryItem;
+            <li class="nav-item staff-nav-single @ActiveGroup(navSection)">
+                <a class="nav-link @(navSection.IsActive(controller) ? "active" : string.Empty)" asp-controller="@item.Controller" asp-action="@item.Action">
+                    <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">@Html.Raw(StaffIconCatalog.Get(item.Icon))</span>
+                    <span class="nav-link-title">@navSection.Label</span>
+                </a>
+            </li>
+        }
+        else
+        {
+            var collapseId = $"staff-nav-{navSection.Key}";
+            <li class="nav-item staff-nav-group @ActiveGroup(navSection)">
+                <a class="nav-link dropdown-toggle @ActiveGroup(navSection)" href="#@collapseId" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(navSection)" aria-controls="@collapseId">
+                    <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">@Html.Raw(StaffIconCatalog.Get(navSection.Icon))</span>
+                    <span class="nav-link-title">@navSection.Label</span>
+                    <span class="badge bg-blue-lt text-blue ms-auto staff-nav-count">@navSection.Items.Count</span>
+                </a>
+                <div class="collapse @OpenGroup(navSection)" id="@collapseId">
+                    <ul class="nav nav-sm flex-column">
+                        @foreach (var item in navSection.Items)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link @ActiveLink(item)" asp-controller="@item.Controller" asp-action="@item.Action">
+                                    <span class="staff-nav-subicon">@Html.Raw(StaffIconCatalog.Get(item.Icon))</span>
+                                    <span>@item.Label</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </li>
+        }
+    }
+</ul>
