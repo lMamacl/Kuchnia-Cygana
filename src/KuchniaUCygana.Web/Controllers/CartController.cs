@@ -16,30 +16,34 @@ public sealed class CartController : Controller
     [HttpGet]
     public IActionResult Index()
     {
-        throw new NotImplementedException();
+        ViewData["Title"] = "Koszyk";
+        ViewData["Description"] = "Placeholder koszyka klienta.";
+        return View();
     }
 
     [HttpPost]
     public IActionResult Add(CartItemDto item)
     {
-        throw new NotImplementedException();
+        TempData["Success"] = "Dodawanie do koszyka jest pominiete w wersji preview.";
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public IActionResult Remove(int dietVariantId)
     {
-        throw new NotImplementedException();
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public IActionResult Clear()
     {
-        throw new NotImplementedException();
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> Checkout()
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        return RedirectToAction(nameof(CheckoutController.Index), "Checkout");
     }
 }

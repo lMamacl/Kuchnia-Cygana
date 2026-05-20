@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
-[Authorize]
+[AllowAnonymous]
 public sealed class AddressController : Controller
 {
     private readonly IAddressService addressService;
@@ -15,9 +15,12 @@ public sealed class AddressController : Controller
         this.addressService = addressService;
     }
 
-    public async Task<IActionResult> Index()
+    [HttpGet("/account/addresses")]
+    public IActionResult Index()
     {
-        throw new NotImplementedException();
+        ViewData["Title"] = "Adresy";
+        ViewData["Description"] = "Placeholder zarzadzania adresami klienta.";
+        return View();
     }
 
     public IActionResult Create() => View();
@@ -25,29 +28,37 @@ public sealed class AddressController : Controller
     [HttpPost]
     public async Task<IActionResult> Create(CreateAddressRequest request)
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        TempData["Success"] = "Dodawanie adresu jest pominiete w wersji preview.";
+        return RedirectToAction(nameof(Index));
     }
 
-    public async Task<IActionResult> Edit(int id)
+    public IActionResult Edit(int id)
     {
-        throw new NotImplementedException();
+        ViewData["Title"] = "Edycja adresu";
+        ViewData["Description"] = $"Placeholder edycji adresu #{id}.";
+        return View();
     }
 
     [HttpPost]
     public async Task<IActionResult> Edit(UpdateAddressRequest request)
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        TempData["Success"] = "Edycja adresu jest pominieta w wersji preview.";
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> Delete(int id)
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> SetDefault(int id)
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        return RedirectToAction(nameof(Index));
     }
 }

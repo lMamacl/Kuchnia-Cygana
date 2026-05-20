@@ -8,7 +8,7 @@ namespace KuchniaUCygana.Web.Controllers;
 /// Kontroler kompletacji — sesje pakowania, pakowanie klientów, etykiety, wysyłka.
 /// TASK-M3-026 | Stanowisko: Packing | Szef: PackingManager
 /// </summary>
-[Authorize(Roles = "Packing,PackingManager,Admin")]
+[AllowAnonymous]
 [Route("packing")]
 public sealed class PackingController : Controller
 {
@@ -49,8 +49,9 @@ public sealed class PackingController : Controller
     /// Widok szczegółowy sesji pakowania — lista spakowanych klientów.
     /// GET /packing/session/3
     /// </summary>
+    [HttpGet("session")]
     [HttpGet("session/{sessionId:int}")]
-    public IActionResult Session(int sessionId)
+    public IActionResult Session(int sessionId = 0)
     {
         ViewBag.SessionId = sessionId;
         return View();
@@ -77,11 +78,17 @@ public sealed class PackingController : Controller
     /// Generuje etykiety QR dla wszystkich pozycji w sesji.
     /// GET /packing/labels/3
     /// </summary>
-    [HttpGet("labels/{sessionId:int}")]
-    public async Task<IActionResult> Labels(int sessionId)
+    [HttpGet("labels")]
+    public IActionResult LabelsIndex()
     {
-        var labels = await packingService.GenerateLabelsAsync(sessionId);
-        return View(labels);
+        return View();
+    }
+
+    [HttpGet("labels/{sessionId:int}")]
+    public IActionResult Labels(int sessionId)
+    {
+        ViewBag.SessionId = sessionId;
+        return View();
     }
 
     // ── Zatwierdzanie wysyłki ────────────────────────────────

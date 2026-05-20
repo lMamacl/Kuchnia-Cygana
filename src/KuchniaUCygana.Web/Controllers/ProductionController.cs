@@ -9,7 +9,7 @@ namespace KuchniaUCygana.Web.Controllers;
 /// Kontroler produkcji — plan dnia, karty gotowania, zatwierdzanie.
 /// TASK-M3-024 | Stanowisko: Kitchen | Szef: KitchenManager
 /// </summary>
-[Authorize(Roles = "Kitchen,KitchenManager,Admin")]
+[AllowAnonymous]
 [Route("production")]
 public sealed class ProductionController : Controller
 {
@@ -28,6 +28,13 @@ public sealed class ProductionController : Controller
     /// </summary>
     [HttpGet("")]
     public IActionResult Index(DateOnly? date)
+    {
+        ViewBag.SelectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        return View();
+    }
+
+    [HttpGet("generate")]
+    public IActionResult Generate(DateOnly? date)
     {
         ViewBag.SelectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
         return View();
@@ -56,10 +63,17 @@ public sealed class ProductionController : Controller
     /// Widok szczegółowy planu produkcji.
     /// GET /production/plan/5
     /// </summary>
+    [HttpGet("plan")]
     [HttpGet("plan/{planId:int}")]
-    public IActionResult Plan(int planId)
+    public IActionResult Plan(int planId = 0)
     {
         ViewBag.PlanId = planId;
+        return View();
+    }
+
+    [HttpGet("cooking-cards")]
+    public IActionResult CookingCards()
+    {
         return View();
     }
 
@@ -69,11 +83,12 @@ public sealed class ProductionController : Controller
     /// Wyświetla kartę gotowania (receptura + ilości) dla pozycji planu.
     /// GET /production/cooking-card/12
     /// </summary>
+    [HttpGet("cooking-card")]
     [HttpGet("cooking-card/{planItemId:int}")]
-    public async Task<IActionResult> CookingCard(int planItemId)
+    public IActionResult CookingCard(int planItemId = 0)
     {
-        var card = await productionService.GetCookingCardAsync(planItemId);
-        return View(card);
+        ViewBag.PlanItemId = planItemId;
+        return View();
     }
 
     // ── Zatwierdzanie gotowania ──────────────────────────────

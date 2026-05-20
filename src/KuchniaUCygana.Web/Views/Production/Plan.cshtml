@@ -1,0 +1,8 @@
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] ??= "Szczegoly planu";
+    ViewData["Section"] ??= "Produkcja";
+    ViewData["Description"] ??= "Placeholder szczegolow planu produkcji.";
+}
+@await Html.PartialAsync("_StaffPlaceholder")
+

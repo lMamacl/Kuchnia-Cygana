@@ -4,7 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
-[Authorize]
+[AllowAnonymous]
+[Route("orders")]
 public sealed class OrderController : Controller
 {
     private readonly IOrderService orderService;
@@ -18,39 +19,52 @@ public sealed class OrderController : Controller
         this.deliveryCalendarService = deliveryCalendarService;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Index()
+    [HttpGet("")]
+    public IActionResult Index()
     {
-        throw new NotImplementedException();
+        ViewData["Title"] = "Zamowienia";
+        ViewData["Description"] = "Placeholder listy zamowien klienta.";
+        return View();
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Details(int orderId)
+    [HttpGet("{orderId:int?}")]
+    public IActionResult Details(int? orderId)
     {
-        throw new NotImplementedException();
+        ViewData["Title"] = "Szczegoly zamowienia";
+        ViewData["Description"] = orderId.HasValue
+            ? $"Placeholder zamowienia #{orderId}."
+            : "Placeholder szczegolow zamowienia.";
+        return View();
     }
 
     [HttpPost]
     public async Task<IActionResult> Cancel(int orderId)
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        return RedirectToAction(nameof(Index));
     }
 
-    [HttpGet]
-    public async Task<IActionResult> ChangeDelivery(int deliveryCalendarId)
+    [HttpGet("change-delivery/{deliveryCalendarId:int?}")]
+    public IActionResult ChangeDelivery(int? deliveryCalendarId)
     {
-        throw new NotImplementedException();
+        ViewData["Title"] = "Zmiana dostawy";
+        ViewData["Description"] = deliveryCalendarId.HasValue
+            ? $"Placeholder zmiany dostawy #{deliveryCalendarId}."
+            : "Placeholder zmiany terminu dostawy.";
+        return View();
     }
 
     [HttpPost]
     public async Task<IActionResult> ChangeDelivery(int deliveryCalendarId, DateTime newDate, int? newAddressId)
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> SkipDelivery(int deliveryCalendarId, string reason)
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        return RedirectToAction(nameof(Index));
     }
 }

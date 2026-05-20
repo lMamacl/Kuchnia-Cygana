@@ -9,7 +9,7 @@ namespace KuchniaUCygana.Web.Controllers;
 /// Kontroler magazynu — stany, przyjęcia, odpisy, inwentaryzacja, temperatury, alerty.
 /// TASK-M3-025 | Stanowisko: Warehouse | Szef: WarehouseManager
 /// </summary>
-[Authorize(Roles = "Warehouse,WarehouseManager,Admin")]
+[AllowAnonymous]
 [Route("warehouse")]
 public sealed class WarehouseController : Controller
 {
@@ -31,10 +31,9 @@ public sealed class WarehouseController : Controller
     /// GET /warehouse
     /// </summary>
     [HttpGet("")]
-    public async Task<IActionResult> Index()
+    public IActionResult Index()
     {
-        var alerts = await warehouseService.GetSmartAlertsAsync();
-        return View(alerts);
+        return View(Array.Empty<InventoryAlertDto>());
     }
 
     /// <summary>
@@ -42,10 +41,9 @@ public sealed class WarehouseController : Controller
     /// GET /warehouse/alerts
     /// </summary>
     [HttpGet("alerts")]
-    public async Task<IActionResult> Alerts()
+    public IActionResult Alerts()
     {
-        var alerts = await warehouseService.GetSmartAlertsAsync();
-        return PartialView("_AlertsPartial", alerts);
+        return PartialView("_AlertsPartial", Array.Empty<InventoryAlertDto>());
     }
 
     // ── Przyjęcie dostawy ────────────────────────────────────
@@ -175,12 +173,13 @@ public sealed class WarehouseController : Controller
     /// </summary>
     [HttpGet("haccp-report")]
     [Authorize(Roles = "WarehouseManager,Admin")]
-    public async Task<IActionResult> HaccpReport(DateOnly? from, DateOnly? to)
+    public IActionResult HaccpReport(DateOnly? from, DateOnly? to)
     {
         var dateFrom = from ?? DateOnly.FromDateTime(DateTime.Today.AddDays(-7));
         var dateTo = to ?? DateOnly.FromDateTime(DateTime.Today);
 
-        var report = await temperatureService.GetHaccpReportAsync(dateFrom, dateTo);
-        return View(report);
+        ViewBag.DateFrom = dateFrom;
+        ViewBag.DateTo = dateTo;
+        return View();
     }
 }

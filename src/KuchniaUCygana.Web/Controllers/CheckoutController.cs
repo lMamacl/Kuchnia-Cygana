@@ -5,7 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
-[Authorize]
+[AllowAnonymous]
+[Route("checkout")]
 public sealed class CheckoutController : Controller
 {
     private readonly ICheckoutService checkoutService;
@@ -22,40 +23,53 @@ public sealed class CheckoutController : Controller
         this.discountService = discountService;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Index(int orderId)
+    [HttpGet("")]
+    public IActionResult Index(int orderId = 0)
     {
-        throw new NotImplementedException();
+        ViewData["Title"] = "Checkout";
+        ViewData["Description"] = "Placeholder finalizacji zamowienia.";
+        return View();
     }
 
     [HttpPost]
     public async Task<IActionResult> Index(int orderId, CreateOrderRequest request)
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        return RedirectToAction(nameof(Summary), new { orderId });
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Summary(int orderId)
+    [HttpGet("summary/{orderId:int?}")]
+    public IActionResult Summary(int? orderId)
     {
-        throw new NotImplementedException();
+        ViewData["Title"] = "Podsumowanie";
+        ViewData["Description"] = orderId.HasValue
+            ? $"Placeholder podsumowania zamowienia #{orderId}."
+            : "Placeholder podsumowania zamowienia.";
+        return View();
     }
 
     [HttpPost]
     public async Task<IActionResult> ApplyDiscount(ApplyDiscountRequest request)
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> ConfirmOrder(int orderId)
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        return RedirectToAction(nameof(Payment), new { orderId });
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Payment(int orderId)
+    [HttpGet("payment/{orderId:int?}")]
+    public IActionResult Payment(int? orderId)
     {
-        throw new NotImplementedException();
+        ViewData["Title"] = "Platnosc";
+        ViewData["Description"] = orderId.HasValue
+            ? $"Placeholder platnosci zamowienia #{orderId}."
+            : "Placeholder platnosci.";
+        return View();
     }
 
     [AllowAnonymous]
@@ -63,12 +77,17 @@ public sealed class CheckoutController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> StripeWebhook()
     {
-        throw new NotImplementedException();
+        await Task.CompletedTask;
+        return Ok();
     }
 
-    [HttpGet]
-    public IActionResult Success(int orderId, string orderNumber)
+    [HttpGet("success")]
+    public IActionResult Success(int orderId = 0, string? orderNumber = null)
     {
-        throw new NotImplementedException();
+        ViewData["Title"] = "Zamowienie przyjete";
+        ViewData["Description"] = string.IsNullOrWhiteSpace(orderNumber)
+            ? "Placeholder sukcesu zamowienia."
+            : $"Placeholder sukcesu zamowienia {orderNumber}.";
+        return View();
     }
 }
