@@ -18,6 +18,7 @@ using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Domain.Interfaces.Services.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.Services.Menu;
+using KuchniaUCygana.Infrastructure.Adapters;
 
 namespace KuchniaUCygana.Infrastructure;
 
@@ -38,6 +39,9 @@ public static class DependencyInjection
         services.AddScoped<IDietVariantScaler, DietVariantScaler>();
         services.AddScoped<INutritionCalculator, NutritionCalculator>();
         services.AddScoped<IIngredientDeletionGuard, IngredientDeletionGuard>();
+        // Adapters
+        services.AddScoped<KuchniaUCygana.Application.Interfaces.Menu.IInternalAiService, InternalAiAdapter>();
+        services.AddScoped<KuchniaUCygana.Application.Interfaces.Menu.IInternalFileStorageService, InternalFileStorageAdapter>();
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(

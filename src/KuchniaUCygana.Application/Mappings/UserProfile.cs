@@ -1,5 +1,6 @@
 using AutoMapper;
 using KuchniaUCygana.Application.DTOs;
+using KuchniaUCygana.Application.DTOs.Menu;
 using KuchniaUCygana.Domain.Entities.Auth;
 
 namespace KuchniaUCygana.Application.Mappings;
