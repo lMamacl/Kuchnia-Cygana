@@ -2,50 +2,14 @@
     var pageSection = ViewData["Section"]?.ToString() ?? "Sprint 4B";
     var description = ViewData["Description"]?.ToString() ?? "Widok szkieletowy gotowy do podpiecia komponentow.";
     var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
-    var quickActions = new List<(string Text, string Controller, string Action)>();
-
-    switch (controller)
-    {
-        case "Production":
-            quickActions.Add(("Generuj plan", "Production", "Generate"));
-            quickActions.Add(("Plan dnia", "Production", "Plan"));
-            quickActions.Add(("Karty gotowania", "Production", "CookingCards"));
-            break;
-        case "Warehouse":
-            quickActions.Add(("Przyjecia dostaw", "Warehouse", "Receive"));
-            quickActions.Add(("Odpady", "Warehouse", "Waste"));
-            quickActions.Add(("Inwentaryzacja", "Warehouse", "Inventory"));
-            quickActions.Add(("Temperatury HACCP", "Warehouse", "Temperatures"));
-            break;
-        case "Ingredient":
-            quickActions.Add(("Dodaj skladnik", "Ingredient", "Create"));
-            quickActions.Add(("Wartosci odzywcze", "Ingredient", "Nutrition"));
-            break;
-        case "Packing":
-            quickActions.Add(("Aktywna sesja", "Packing", "Session"));
-            quickActions.Add(("Etykiety", "Packing", "LabelsIndex"));
-            break;
-        case "DietEditor":
-            quickActions.Add(("Nowa dieta", "DietEditor", "Create"));
-            quickActions.Add(("Posilki", "DietEditor", "Meals"));
-            quickActions.Add(("Przepisy", "DietEditor", "Recipes"));
-            break;
-        case "Logistics":
-            quickActions.Add(("Trasy", "Logistics", "Routes"));
-            quickActions.Add(("Mapa tras", "Logistics", "RouteMap"));
-            quickActions.Add(("Flota", "Logistics", "Vehicles"));
-            quickActions.Add(("Kierowcy", "Logistics", "Drivers"));
-            break;
-        case "Admin":
-            quickActions.Add(("Uzytkownicy", "Admin", "Users"));
-            quickActions.Add(("Role", "Admin", "Roles"));
-            quickActions.Add(("Ustawienia", "Admin", "Settings"));
-            break;
-    }
+    var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
+    var activeSection = StaffNavigationCatalog.FindSection(controller);
+    var activeItem = StaffNavigationCatalog.FindItem(controller, action);
 }
+
 <div class="row row-cards">
     <div class="col-12">
-        <div class="card">
+        <div class="card staff-overview-card">
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between gap-3">
                     <div>
@@ -59,7 +23,7 @@
         </div>
     </div>
     <div class="col-md-4">
-        <div class="card">
+        <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Status</div>
                 <div class="h2 mb-0">Gotowy shell</div>
@@ -67,7 +31,7 @@
         </div>
     </div>
     <div class="col-md-4">
-        <div class="card">
+        <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Dane</div>
                 <div class="h2 mb-0">Do podpiecia</div>
@@ -75,27 +39,76 @@
         </div>
     </div>
     <div class="col-md-4">
-        <div class="card">
+        <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Nawigacja</div>
                 <div class="h2 mb-0">Aktywna</div>
             </div>
         </div>
     </div>
-    @if (quickActions.Count > 0)
+
+    @if (activeSection?.Key == "dashboard")
     {
         <div class="col-12">
-            <div class="card">
-                <div class="card-body">
-                    <div class="text-secondary text-uppercase fw-bold small mb-3">Opcje dzialu</div>
-                    <div class="btn-list">
-                        @foreach (var item in quickActions)
-                        {
-                            <a class="btn btn-outline-primary" asp-controller="@item.Controller" asp-action="@item.Action">@item.Text</a>
-                        }
-                    </div>
+            <div class="d-flex align-items-center justify-content-between mt-2">
+                <div>
+                    <div class="text-secondary text-uppercase fw-bold small">Dzialy operacyjne</div>
+                    <h3 class="mb-0">Mapa panelu</h3>
                 </div>
+                <span class="text-secondary small">Szybkie wejscia z jednego katalogu</span>
             </div>
         </div>
+        @foreach (var navSection in StaffNavigationCatalog.Sections.Where(navSection => navSection.Key != "dashboard"))
+        {
+            var item = navSection.PrimaryItem;
+            <div class="col-sm-6 col-xl-4">
+                <a class="card staff-nav-card" asp-controller="@item.Controller" asp-action="@item.Action">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start gap-3">
+                            <span class="staff-nav-card-icon">@Html.Raw(StaffIconCatalog.Get(navSection.Icon))</span>
+                            <div>
+                                <h3 class="card-title mb-1">@navSection.Label</h3>
+                                <p class="text-secondary mb-0">@navSection.Description</p>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        }
+    }
+    else if (activeSection is not null)
+    {
+        <div class="col-12">
+            <div class="d-flex align-items-center justify-content-between mt-2">
+                <div>
+                    <div class="text-secondary text-uppercase fw-bold small">Opcje dzialu</div>
+                    <h3 class="mb-0">@activeSection.Label</h3>
+                </div>
+                <span class="text-secondary small">@activeSection.Items.Count widokow</span>
+            </div>
+        </div>
+        @foreach (var item in activeSection.Items)
+        {
+            var isCurrent = item == activeItem;
+            <div class="col-sm-6 col-xl-4">
+                <a class="card staff-nav-card @(isCurrent ? "active" : string.Empty)" asp-controller="@item.Controller" asp-action="@item.Action">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start gap-3">
+                            <span class="staff-nav-card-icon">@Html.Raw(StaffIconCatalog.Get(item.Icon))</span>
+                            <div>
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <h3 class="card-title mb-1">@item.Label</h3>
+                                    @if (isCurrent)
+                                    {
+                                        <span class="badge bg-primary-lt text-primary">Teraz</span>
+                                    }
+                                </div>
+                                <p class="text-secondary mb-0">@item.Description</p>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        }
     }
 </div>

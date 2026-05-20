@@ -2,140 +2,63 @@
     var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
     var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
 
-    var isDashboard = string.Equals(controller, "Staff", StringComparison.OrdinalIgnoreCase);
-    var isKitchen = string.Equals(controller, "Production", StringComparison.OrdinalIgnoreCase);
-    var isWarehouse = string.Equals(controller, "Warehouse", StringComparison.OrdinalIgnoreCase);
-    var isIngredients = string.Equals(controller, "Ingredient", StringComparison.OrdinalIgnoreCase);
-    var isPacking = string.Equals(controller, "Packing", StringComparison.OrdinalIgnoreCase);
-    var isDiets = string.Equals(controller, "DietEditor", StringComparison.OrdinalIgnoreCase);
-    var isLogistics = string.Equals(controller, "Logistics", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(controller, "DriverMobile", StringComparison.OrdinalIgnoreCase);
-    var isAdmin = string.Equals(controller, "Admin", StringComparison.OrdinalIgnoreCase);
-
-    string ActiveLink(string targetController, string? targetAction = null)
+    string ActiveLink(StaffNavItem item)
     {
-        var sameController = string.Equals(controller, targetController, StringComparison.OrdinalIgnoreCase);
-        var sameAction = targetAction is null || string.Equals(action, targetAction, StringComparison.OrdinalIgnoreCase);
-        return sameController && sameAction ? "active" : string.Empty;
+        return item.Matches(controller, action) ? "active" : string.Empty;
     }
 
-    string OpenGroup(bool isOpen) => isOpen ? "show" : string.Empty;
-    string Expanded(bool isOpen) => isOpen ? "true" : "false";
-    string ActiveGroup(bool isActive) => isActive ? "active" : string.Empty;
+    string ActiveGroup(StaffNavSection section)
+    {
+        return section.IsActive(controller) ? "active" : string.Empty;
+    }
+
+    string OpenGroup(StaffNavSection section)
+    {
+        return section.IsActive(controller) ? "show" : string.Empty;
+    }
+
+    string Expanded(StaffNavSection section)
+    {
+        return section.IsActive(controller) ? "true" : "false";
+    }
 }
 
 <ul class="navbar-nav staff-sidebar-nav pt-lg-3">
-    <li class="nav-item">
-        <a class="nav-link @ActiveLink("Staff", "Index")" asp-controller="Staff" asp-action="Index">
-            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">ST</span>
-            <span class="nav-link-title">Dashboard</span>
-        </a>
-    </li>
-
-    <li class="nav-item staff-nav-group">
-        <a class="nav-link dropdown-toggle @ActiveGroup(isKitchen)" href="#staff-nav-kitchen" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isKitchen)" aria-controls="staff-nav-kitchen">
-            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">KU</span>
-            <span class="nav-link-title">Kuchnia</span>
-        </a>
-        <div class="collapse @OpenGroup(isKitchen)" id="staff-nav-kitchen">
-            <ul class="nav nav-sm flex-column">
-                <li class="nav-item"><a class="nav-link @ActiveLink("Production", "Index")" asp-controller="Production" asp-action="Index">Pulpit kuchni</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Production", "Generate")" asp-controller="Production" asp-action="Generate">Generuj plan</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Production", "Plan")" asp-controller="Production" asp-action="Plan">Plan dnia</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Production", "CookingCards")" asp-controller="Production" asp-action="CookingCards">Karty gotowania</a></li>
-            </ul>
-        </div>
-    </li>
-
-    <li class="nav-item staff-nav-group">
-        <a class="nav-link dropdown-toggle @ActiveGroup(isWarehouse)" href="#staff-nav-warehouse" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isWarehouse)" aria-controls="staff-nav-warehouse">
-            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">MG</span>
-            <span class="nav-link-title">Magazyn</span>
-        </a>
-        <div class="collapse @OpenGroup(isWarehouse)" id="staff-nav-warehouse">
-            <ul class="nav nav-sm flex-column">
-                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "Index")" asp-controller="Warehouse" asp-action="Index">Stany i alerty</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "Receive")" asp-controller="Warehouse" asp-action="Receive">Przyjecia dostaw</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "Waste")" asp-controller="Warehouse" asp-action="Waste">Odpady</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "Inventory")" asp-controller="Warehouse" asp-action="Inventory">Inwentaryzacja</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "Temperatures")" asp-controller="Warehouse" asp-action="Temperatures">Temperatury HACCP</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "HaccpReport")" asp-controller="Warehouse" asp-action="HaccpReport">Raport HACCP</a></li>
-            </ul>
-        </div>
-    </li>
-
-    <li class="nav-item staff-nav-group">
-        <a class="nav-link dropdown-toggle @ActiveGroup(isIngredients)" href="#staff-nav-ingredients" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isIngredients)" aria-controls="staff-nav-ingredients">
-            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">SK</span>
-            <span class="nav-link-title">Skladniki</span>
-        </a>
-        <div class="collapse @OpenGroup(isIngredients)" id="staff-nav-ingredients">
-            <ul class="nav nav-sm flex-column">
-                <li class="nav-item"><a class="nav-link @ActiveLink("Ingredient", "Index")" asp-controller="Ingredient" asp-action="Index">Katalog skladnikow</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Ingredient", "Create")" asp-controller="Ingredient" asp-action="Create">Dodaj skladnik</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Ingredient", "Nutrition")" asp-controller="Ingredient" asp-action="Nutrition">Wartosci odzywcze</a></li>
-            </ul>
-        </div>
-    </li>
-
-    <li class="nav-item staff-nav-group">
-        <a class="nav-link dropdown-toggle @ActiveGroup(isPacking)" href="#staff-nav-packing" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isPacking)" aria-controls="staff-nav-packing">
-            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">PK</span>
-            <span class="nav-link-title">Kompletacja</span>
-        </a>
-        <div class="collapse @OpenGroup(isPacking)" id="staff-nav-packing">
-            <ul class="nav nav-sm flex-column">
-                <li class="nav-item"><a class="nav-link @ActiveLink("Packing", "Index")" asp-controller="Packing" asp-action="Index">Sesje pakowania</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Packing", "Session")" asp-controller="Packing" asp-action="Session">Aktywna sesja</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Packing", "LabelsIndex")" asp-controller="Packing" asp-action="LabelsIndex">Etykiety</a></li>
-            </ul>
-        </div>
-    </li>
-
-    <li class="nav-item staff-nav-group">
-        <a class="nav-link dropdown-toggle @ActiveGroup(isDiets)" href="#staff-nav-diets" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isDiets)" aria-controls="staff-nav-diets">
-            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">DT</span>
-            <span class="nav-link-title">Diety i przepisy</span>
-        </a>
-        <div class="collapse @OpenGroup(isDiets)" id="staff-nav-diets">
-            <ul class="nav nav-sm flex-column">
-                <li class="nav-item"><a class="nav-link @ActiveLink("DietEditor", "Index")" asp-controller="DietEditor" asp-action="Index">Edytor diet</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("DietEditor", "Create")" asp-controller="DietEditor" asp-action="Create">Nowa dieta</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("DietEditor", "Meals")" asp-controller="DietEditor" asp-action="Meals">Posilki</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("DietEditor", "Recipes")" asp-controller="DietEditor" asp-action="Recipes">Przepisy</a></li>
-            </ul>
-        </div>
-    </li>
-
-    <li class="nav-item staff-nav-group">
-        <a class="nav-link dropdown-toggle @ActiveGroup(isLogistics)" href="#staff-nav-logistics" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isLogistics)" aria-controls="staff-nav-logistics">
-            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">LG</span>
-            <span class="nav-link-title">Logistyka</span>
-        </a>
-        <div class="collapse @OpenGroup(isLogistics)" id="staff-nav-logistics">
-            <ul class="nav nav-sm flex-column">
-                <li class="nav-item"><a class="nav-link @ActiveLink("Logistics", "Index")" asp-controller="Logistics" asp-action="Index">Dashboard logistyki</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Logistics", "Routes")" asp-controller="Logistics" asp-action="Routes">Trasy</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Logistics", "RouteMap")" asp-controller="Logistics" asp-action="RouteMap">Mapa tras</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Logistics", "Vehicles")" asp-controller="Logistics" asp-action="Vehicles">Flota</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Logistics", "Drivers")" asp-controller="Logistics" asp-action="Drivers">Kierowcy</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("DriverMobile", "Index")" asp-controller="DriverMobile" asp-action="Index">Panel kierowcy</a></li>
-            </ul>
-        </div>
-    </li>
-
-    <li class="nav-item staff-nav-group">
-        <a class="nav-link dropdown-toggle @ActiveGroup(isAdmin)" href="#staff-nav-admin" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isAdmin)" aria-controls="staff-nav-admin">
-            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">AD</span>
-            <span class="nav-link-title">Administracja</span>
-        </a>
-        <div class="collapse @OpenGroup(isAdmin)" id="staff-nav-admin">
-            <ul class="nav nav-sm flex-column">
-                <li class="nav-item"><a class="nav-link @ActiveLink("Admin", "Index")" asp-controller="Admin" asp-action="Index">Dashboard admina</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Admin", "Users")" asp-controller="Admin" asp-action="Users">Uzytkownicy</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Admin", "Roles")" asp-controller="Admin" asp-action="Roles">Role</a></li>
-                <li class="nav-item"><a class="nav-link @ActiveLink("Admin", "Settings")" asp-controller="Admin" asp-action="Settings">Ustawienia</a></li>
-            </ul>
-        </div>
-    </li>
+    @foreach (var navSection in StaffNavigationCatalog.Sections)
+    {
+        if (navSection.Items.Count == 1 || navSection.Key == "mobile")
+        {
+            var item = navSection.PrimaryItem;
+            <li class="nav-item staff-nav-single @ActiveGroup(navSection)">
+                <a class="nav-link @(navSection.IsActive(controller) ? "active" : string.Empty)" asp-controller="@item.Controller" asp-action="@item.Action">
+                    <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">@Html.Raw(StaffIconCatalog.Get(item.Icon))</span>
+                    <span class="nav-link-title">@navSection.Label</span>
+                </a>
+            </li>
+        }
+        else
+        {
+            var collapseId = $"staff-nav-{navSection.Key}";
+            <li class="nav-item staff-nav-group @ActiveGroup(navSection)">
+                <a class="nav-link dropdown-toggle @ActiveGroup(navSection)" href="#@collapseId" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(navSection)" aria-controls="@collapseId">
+                    <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">@Html.Raw(StaffIconCatalog.Get(navSection.Icon))</span>
+                    <span class="nav-link-title">@navSection.Label</span>
+                    <span class="badge bg-blue-lt text-blue ms-auto staff-nav-count">@navSection.Items.Count</span>
+                </a>
+                <div class="collapse @OpenGroup(navSection)" id="@collapseId">
+                    <ul class="nav nav-sm flex-column">
+                        @foreach (var item in navSection.Items)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link @ActiveLink(item)" asp-controller="@item.Controller" asp-action="@item.Action">
+                                    <span class="staff-nav-subicon">@Html.Raw(StaffIconCatalog.Get(item.Icon))</span>
+                                    <span>@item.Label</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </li>
+        }
+    }
 </ul>
