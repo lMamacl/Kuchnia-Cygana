@@ -1,0 +1,8 @@
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] ??= "Generuj plan";
+    ViewData["Section"] ??= "Produkcja";
+    ViewData["Description"] ??= "Szkielet formularza generowania planu produkcji.";
+}
+@await Html.PartialAsync("_StaffPlaceholder")
+
