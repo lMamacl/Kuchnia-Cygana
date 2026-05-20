@@ -1,0 +1,49 @@
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="csrf-token" content="@Antiforgery.GetAndStoreTokens(Context).RequestToken" />
+    <title>@ViewData["Title"] - Panel | Kuchnia u Cygana</title>
+    <link rel="stylesheet" href="~/lib/tabler/css/tabler.min.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/staff.css" asp-append-version="true" />
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body class="layout-fluid">
+    <div class="page">
+        <aside class="navbar navbar-vertical navbar-expand-lg navbar-dark" data-bs-theme="dark">
+            <div class="container-fluid">
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
+                    <a asp-controller="Staff" asp-action="Index" class="navbar-brand-text">Kuchnia u Cygana</a>
+                </h1>
+                <div class="navbar-collapse collapse" id="sidebar-menu">
+                    @await Html.PartialAsync("_SidebarPartial")
+                </div>
+            </div>
+        </aside>
+        <div class="page-wrapper">
+            @await Html.PartialAsync("_HeaderStaffPartial")
+            <div class="page-body">
+                <div class="container-xl">
+                    @await Html.PartialAsync("_StaffAlertsPartial")
+                    <div id="htmx-alerts"></div>
+                    @RenderBody()
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/tabler/js/tabler.min.js" asp-append-version="true"></script>
+    <script src="~/lib/htmx/htmx.min.js"></script>
+    <script src="~/js/htmx-config.js" asp-append-version="true"></script>
+    <script defer src="~/lib/alpinejs/alpine.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
+

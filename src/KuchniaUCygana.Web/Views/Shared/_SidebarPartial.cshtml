@@ -1,0 +1,66 @@
+<ul class="navbar-nav pt-lg-3">
+    <li class="nav-item">
+        <a class="nav-link" asp-controller="Staff" asp-action="Index">
+            <span class="nav-link-icon d-md-none d-lg-inline-block">ST</span>
+            <span class="nav-link-title">Dashboard</span>
+        </a>
+    </li>
+
+    <li class="nav-item mt-3">
+        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Produkcja</span>
+    </li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Production" asp-action="Index"><span class="nav-link-title">Plan dnia</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Production" asp-action="Generate"><span class="nav-link-title">Generuj plan</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Production" asp-action="CookingCards"><span class="nav-link-title">Karty gotowania</span></a></li>
+
+    <li class="nav-item mt-3">
+        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Magazyn</span>
+    </li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="Index"><span class="nav-link-title">Stany i alerty</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="Receive"><span class="nav-link-title">Przyjecia dostaw</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="Waste"><span class="nav-link-title">Odpady</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="Inventory"><span class="nav-link-title">Inwentaryzacja</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="Temperatures"><span class="nav-link-title">Temperatury HACCP</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="HaccpReport"><span class="nav-link-title">Raport HACCP</span></a></li>
+
+    <li class="nav-item mt-3">
+        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Skladniki</span>
+    </li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Ingredient" asp-action="Index"><span class="nav-link-title">Katalog skladnikow</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Ingredient" asp-action="Create"><span class="nav-link-title">Dodaj skladnik</span></a></li>
+
+    <li class="nav-item mt-3">
+        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Kompletacja</span>
+    </li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Packing" asp-action="Index"><span class="nav-link-title">Sesje pakowania</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Packing" asp-action="LabelsIndex"><span class="nav-link-title">Etykiety</span></a></li>
+
+    <li class="nav-item mt-3">
+        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Diety</span>
+    </li>
+    <li class="nav-item"><a class="nav-link" asp-controller="DietEditor" asp-action="Index"><span class="nav-link-title">Edytor diet</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="DietEditor" asp-action="Recipes"><span class="nav-link-title">Przepisy</span></a></li>
+
+    <li class="nav-item mt-3">
+        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Logistyka</span>
+    </li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Logistics" asp-action="Index"><span class="nav-link-title">Dashboard logistyki</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Logistics" asp-action="Routes"><span class="nav-link-title">Trasy</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Logistics" asp-action="RouteMap"><span class="nav-link-title">Mapa tras</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Logistics" asp-action="Vehicles"><span class="nav-link-title">Flota</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Logistics" asp-action="Drivers"><span class="nav-link-title">Kierowcy</span></a></li>
+
+    <li class="nav-item mt-3">
+        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Admin</span>
+    </li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Index"><span class="nav-link-title">Dashboard admina</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Users"><span class="nav-link-title">Uzytkownicy</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Roles"><span class="nav-link-title">Role</span></a></li>
+    <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Settings"><span class="nav-link-title">Ustawienia</span></a></li>
+
+    <li class="nav-item mt-3">
+        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Mobile</span>
+    </li>
+    <li class="nav-item"><a class="nav-link" asp-controller="DriverMobile" asp-action="Index"><span class="nav-link-title">Panel kierowcy</span></a></li>
+</ul>
+

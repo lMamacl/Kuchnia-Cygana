@@ -1,0 +1,17 @@
+@{
+    var title = ViewData["Title"]?.ToString() ?? "Panel pracowniczy";
+}
+<div class="page-header d-print-none">
+    <div class="container-xl">
+        <div class="row g-2 align-items-center">
+            <div class="col">
+                <h2 class="page-title">@title</h2>
+                <div class="text-secondary">Otwarty podglad Sprint 4B, bez logowania i bez danych produkcyjnych.</div>
+            </div>
+            <div class="col-auto ms-auto d-print-none">
+                <span class="badge bg-yellow-lt text-yellow">Tryb podgladu</span>
+            </div>
+        </div>
+    </div>
+</div>
+
