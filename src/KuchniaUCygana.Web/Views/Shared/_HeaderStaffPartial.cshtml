@@ -1,17 +1,50 @@
 @{
     var title = ViewData["Title"]?.ToString() ?? "Panel pracowniczy";
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
+
+    var department = controller switch
+    {
+        "Production" => "Kuchnia",
+        "Warehouse" => "Magazyn",
+        "Ingredient" => "Skladniki",
+        "Packing" => "Kompletacja",
+        "DietEditor" => "Diety i przepisy",
+        "Logistics" => "Logistyka",
+        "DriverMobile" => "Logistyka mobile",
+        "Admin" => "Administracja",
+        _ => "Staff",
+    };
+
+    var departmentDescription = controller switch
+    {
+        "Production" => "Plan dnia, generowanie produkcji i karty gotowania w jednym dziale.",
+        "Warehouse" => "Stany, przyjecia, odpady, inwentaryzacja i HACCP.",
+        "Ingredient" => "Katalog skladnikow oraz wartosci odzywcze do podpiecia.",
+        "Packing" => "Sesje pakowania, etykiety i przygotowanie wysylki.",
+        "DietEditor" => "Konfiguracja diet, posilkow i przepisow.",
+        "Logistics" => "Trasy, mapa, flota i kierowcy.",
+        "DriverMobile" => "Mobilny podglad pracy kierowcy.",
+        "Admin" => "Uzytkownicy, role i ustawienia systemu.",
+        _ => "Centralny podglad wszystkich dzialow Sprint 4B.",
+    };
 }
-<div class="page-header d-print-none">
+<div class="page-header d-print-none staff-page-header">
     <div class="container-xl">
         <div class="row g-2 align-items-center">
             <div class="col">
-                <h2 class="page-title">@title</h2>
-                <div class="text-secondary">Otwarty podglad Sprint 4B, bez logowania i bez danych produkcyjnych.</div>
+                <div class="staff-department-label">Aktywny dzial</div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <h2 class="page-title mb-0">@title</h2>
+                    <span class="badge bg-primary-lt text-primary">@department</span>
+                </div>
+                <div class="text-secondary mt-1">@departmentDescription</div>
             </div>
             <div class="col-auto ms-auto d-print-none">
-                <span class="badge bg-yellow-lt text-yellow">Tryb podgladu</span>
+                <div class="btn-list">
+                    <span class="badge bg-yellow-lt text-yellow">Tryb podgladu</span>
+                    <a class="btn btn-outline-primary btn-sm" asp-controller="Staff" asp-action="Index">Mapa dzialow</a>
+                </div>
             </div>
         </div>
     </div>
 </div>
-

@@ -1,6 +1,47 @@
 @{
     var pageSection = ViewData["Section"]?.ToString() ?? "Sprint 4B";
     var description = ViewData["Description"]?.ToString() ?? "Widok szkieletowy gotowy do podpiecia komponentow.";
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
+    var quickActions = new List<(string Text, string Controller, string Action)>();
+
+    switch (controller)
+    {
+        case "Production":
+            quickActions.Add(("Generuj plan", "Production", "Generate"));
+            quickActions.Add(("Plan dnia", "Production", "Plan"));
+            quickActions.Add(("Karty gotowania", "Production", "CookingCards"));
+            break;
+        case "Warehouse":
+            quickActions.Add(("Przyjecia dostaw", "Warehouse", "Receive"));
+            quickActions.Add(("Odpady", "Warehouse", "Waste"));
+            quickActions.Add(("Inwentaryzacja", "Warehouse", "Inventory"));
+            quickActions.Add(("Temperatury HACCP", "Warehouse", "Temperatures"));
+            break;
+        case "Ingredient":
+            quickActions.Add(("Dodaj skladnik", "Ingredient", "Create"));
+            quickActions.Add(("Wartosci odzywcze", "Ingredient", "Nutrition"));
+            break;
+        case "Packing":
+            quickActions.Add(("Aktywna sesja", "Packing", "Session"));
+            quickActions.Add(("Etykiety", "Packing", "LabelsIndex"));
+            break;
+        case "DietEditor":
+            quickActions.Add(("Nowa dieta", "DietEditor", "Create"));
+            quickActions.Add(("Posilki", "DietEditor", "Meals"));
+            quickActions.Add(("Przepisy", "DietEditor", "Recipes"));
+            break;
+        case "Logistics":
+            quickActions.Add(("Trasy", "Logistics", "Routes"));
+            quickActions.Add(("Mapa tras", "Logistics", "RouteMap"));
+            quickActions.Add(("Flota", "Logistics", "Vehicles"));
+            quickActions.Add(("Kierowcy", "Logistics", "Drivers"));
+            break;
+        case "Admin":
+            quickActions.Add(("Uzytkownicy", "Admin", "Users"));
+            quickActions.Add(("Role", "Admin", "Roles"));
+            quickActions.Add(("Ustawienia", "Admin", "Settings"));
+            break;
+    }
 }
 <div class="row row-cards">
     <div class="col-12">
@@ -41,4 +82,20 @@
             </div>
         </div>
     </div>
+    @if (quickActions.Count > 0)
+    {
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="text-secondary text-uppercase fw-bold small mb-3">Opcje dzialu</div>
+                    <div class="btn-list">
+                        @foreach (var item in quickActions)
+                        {
+                            <a class="btn btn-outline-primary" asp-controller="@item.Controller" asp-action="@item.Action">@item.Text</a>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 </div>

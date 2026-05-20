@@ -1,4 +1,8 @@
 /* Drobne dopasowania panelu pracowniczego (Tabler); unikamy duplikacji Bootstrap z _Layout klienta. */
+.staff-layout {
+    background: var(--tblr-bg-surface-secondary);
+}
+
 .navbar-brand-text {
     color: inherit;
     text-decoration: none;
@@ -6,4 +10,173 @@
 
 .navbar-brand-text:hover {
     color: var(--tblr-primary);
+}
+
+.staff-topbar {
+    min-height: 3.75rem;
+    border-bottom: 1px solid var(--tblr-border-color);
+    background: var(--tblr-bg-surface);
+    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.staff-top-sections {
+    gap: 0.25rem;
+}
+
+.staff-top-sections .nav-link {
+    align-items: center;
+    border-bottom: 2px solid transparent;
+    color: var(--tblr-secondary);
+    display: flex;
+    gap: 0.45rem;
+    min-height: 3.75rem;
+    padding-inline: 0.75rem;
+}
+
+.staff-top-sections .nav-link.active {
+    border-bottom-color: var(--tblr-primary);
+    color: var(--tblr-primary);
+}
+
+.staff-top-icon,
+.staff-nav-icon {
+    align-items: center;
+    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+    border-radius: 0.35rem;
+    display: inline-flex;
+    font-size: 0.68rem;
+    font-weight: 700;
+    height: 1.45rem;
+    justify-content: center;
+    letter-spacing: 0;
+    line-height: 1;
+    width: 1.45rem;
+}
+
+.staff-top-actions {
+    align-items: center;
+    gap: 0.15rem;
+}
+
+.staff-icon-button {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: var(--tblr-secondary);
+    display: inline-flex;
+    min-height: 2.25rem;
+}
+
+.staff-icon-button:hover,
+.staff-user-button:hover {
+    color: var(--tblr-primary);
+}
+
+.staff-notification-dot {
+    border: 2px solid var(--tblr-bg-surface);
+    height: 0.68rem;
+    padding: 0;
+    position: absolute;
+    right: 0.2rem;
+    top: 0.35rem;
+    width: 0.68rem;
+}
+
+.staff-user-button {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: var(--tblr-body-color);
+    min-height: 2.5rem;
+}
+
+.staff-avatar {
+    background: var(--tblr-primary);
+    color: var(--tblr-primary-fg);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.staff-user-name,
+.staff-user-role {
+    display: block;
+    line-height: 1.1;
+}
+
+.staff-user-role {
+    color: var(--tblr-secondary);
+    font-size: 0.75rem;
+}
+
+.staff-dropdown {
+    min-width: 17rem;
+}
+
+.staff-page-header {
+    padding-top: 1.25rem;
+}
+
+.staff-department-label {
+    color: var(--tblr-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+}
+
+.staff-sidebar-nav {
+    gap: 0.15rem;
+}
+
+.staff-sidebar-nav .nav-link {
+    border-left: 3px solid transparent;
+}
+
+.staff-sidebar-nav .nav-link.active {
+    background: rgba(32, 107, 196, 0.18);
+    border-left-color: var(--tblr-primary);
+    color: #ffffff;
+}
+
+.staff-nav-group {
+    margin-top: 0.15rem;
+}
+
+.staff-nav-group > .nav-link {
+    font-weight: 600;
+}
+
+.staff-nav-group .nav-sm {
+    margin: 0.15rem 0 0.35rem 2.3rem;
+}
+
+.staff-nav-group .nav-sm .nav-link {
+    border-left: 0;
+    border-radius: 0.35rem;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.88rem;
+    padding-bottom: 0.4rem;
+    padding-top: 0.4rem;
+}
+
+.staff-nav-group .nav-sm .nav-link.active,
+.staff-nav-group .nav-sm .nav-link:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+[data-bs-theme="dark"] .staff-topbar,
+[data-bs-theme="dark"] .staff-notification-dot {
+    border-color: var(--tblr-border-color);
+}
+
+@media (max-width: 991.98px) {
+    .staff-top-sections .nav-link {
+        min-height: 2.5rem;
+    }
+
+    .staff-top-actions {
+        margin-left: auto;
+    }
 }

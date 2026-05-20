@@ -6,11 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="csrf-token" content="@Antiforgery.GetAndStoreTokens(Context).RequestToken" />
     <title>@ViewData["Title"] - Panel | Kuchnia u Cygana</title>
+    <script>
+        (function () {
+            var theme = localStorage.getItem("kuc.staff.theme");
+            if (theme === "dark") {
+                document.documentElement.setAttribute("data-bs-theme", "dark");
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="~/lib/tabler/css/tabler.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/staff.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
-<body class="layout-fluid">
+<body class="layout-fluid staff-layout">
     <div class="page">
         <aside class="navbar navbar-vertical navbar-expand-lg navbar-dark" data-bs-theme="dark">
             <div class="container-fluid">
@@ -26,6 +34,7 @@
             </div>
         </aside>
         <div class="page-wrapper">
+            @await Html.PartialAsync("_TopbarStaffPartial")
             @await Html.PartialAsync("_HeaderStaffPartial")
             <div class="page-body">
                 <div class="container-xl">
@@ -41,9 +50,9 @@
     <script src="~/lib/tabler/js/tabler.min.js" asp-append-version="true"></script>
     <script src="~/lib/htmx/htmx.min.js"></script>
     <script src="~/js/htmx-config.js" asp-append-version="true"></script>
+    <script src="~/js/staff-shell.js" asp-append-version="true"></script>
     <script defer src="~/lib/alpinejs/alpine.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
-

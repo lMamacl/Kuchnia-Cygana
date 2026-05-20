@@ -1,66 +1,141 @@
-<ul class="navbar-nav pt-lg-3">
+@{
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
+    var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
+
+    var isDashboard = string.Equals(controller, "Staff", StringComparison.OrdinalIgnoreCase);
+    var isKitchen = string.Equals(controller, "Production", StringComparison.OrdinalIgnoreCase);
+    var isWarehouse = string.Equals(controller, "Warehouse", StringComparison.OrdinalIgnoreCase);
+    var isIngredients = string.Equals(controller, "Ingredient", StringComparison.OrdinalIgnoreCase);
+    var isPacking = string.Equals(controller, "Packing", StringComparison.OrdinalIgnoreCase);
+    var isDiets = string.Equals(controller, "DietEditor", StringComparison.OrdinalIgnoreCase);
+    var isLogistics = string.Equals(controller, "Logistics", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(controller, "DriverMobile", StringComparison.OrdinalIgnoreCase);
+    var isAdmin = string.Equals(controller, "Admin", StringComparison.OrdinalIgnoreCase);
+
+    string ActiveLink(string targetController, string? targetAction = null)
+    {
+        var sameController = string.Equals(controller, targetController, StringComparison.OrdinalIgnoreCase);
+        var sameAction = targetAction is null || string.Equals(action, targetAction, StringComparison.OrdinalIgnoreCase);
+        return sameController && sameAction ? "active" : string.Empty;
+    }
+
+    string OpenGroup(bool isOpen) => isOpen ? "show" : string.Empty;
+    string Expanded(bool isOpen) => isOpen ? "true" : "false";
+    string ActiveGroup(bool isActive) => isActive ? "active" : string.Empty;
+}
+
+<ul class="navbar-nav staff-sidebar-nav pt-lg-3">
     <li class="nav-item">
-        <a class="nav-link" asp-controller="Staff" asp-action="Index">
-            <span class="nav-link-icon d-md-none d-lg-inline-block">ST</span>
+        <a class="nav-link @ActiveLink("Staff", "Index")" asp-controller="Staff" asp-action="Index">
+            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">ST</span>
             <span class="nav-link-title">Dashboard</span>
         </a>
     </li>
 
-    <li class="nav-item mt-3">
-        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Produkcja</span>
+    <li class="nav-item staff-nav-group">
+        <a class="nav-link dropdown-toggle @ActiveGroup(isKitchen)" href="#staff-nav-kitchen" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isKitchen)" aria-controls="staff-nav-kitchen">
+            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">KU</span>
+            <span class="nav-link-title">Kuchnia</span>
+        </a>
+        <div class="collapse @OpenGroup(isKitchen)" id="staff-nav-kitchen">
+            <ul class="nav nav-sm flex-column">
+                <li class="nav-item"><a class="nav-link @ActiveLink("Production", "Index")" asp-controller="Production" asp-action="Index">Pulpit kuchni</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Production", "Generate")" asp-controller="Production" asp-action="Generate">Generuj plan</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Production", "Plan")" asp-controller="Production" asp-action="Plan">Plan dnia</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Production", "CookingCards")" asp-controller="Production" asp-action="CookingCards">Karty gotowania</a></li>
+            </ul>
+        </div>
     </li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Production" asp-action="Index"><span class="nav-link-title">Plan dnia</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Production" asp-action="Generate"><span class="nav-link-title">Generuj plan</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Production" asp-action="CookingCards"><span class="nav-link-title">Karty gotowania</span></a></li>
 
-    <li class="nav-item mt-3">
-        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Magazyn</span>
+    <li class="nav-item staff-nav-group">
+        <a class="nav-link dropdown-toggle @ActiveGroup(isWarehouse)" href="#staff-nav-warehouse" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isWarehouse)" aria-controls="staff-nav-warehouse">
+            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">MG</span>
+            <span class="nav-link-title">Magazyn</span>
+        </a>
+        <div class="collapse @OpenGroup(isWarehouse)" id="staff-nav-warehouse">
+            <ul class="nav nav-sm flex-column">
+                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "Index")" asp-controller="Warehouse" asp-action="Index">Stany i alerty</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "Receive")" asp-controller="Warehouse" asp-action="Receive">Przyjecia dostaw</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "Waste")" asp-controller="Warehouse" asp-action="Waste">Odpady</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "Inventory")" asp-controller="Warehouse" asp-action="Inventory">Inwentaryzacja</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "Temperatures")" asp-controller="Warehouse" asp-action="Temperatures">Temperatury HACCP</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Warehouse", "HaccpReport")" asp-controller="Warehouse" asp-action="HaccpReport">Raport HACCP</a></li>
+            </ul>
+        </div>
     </li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="Index"><span class="nav-link-title">Stany i alerty</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="Receive"><span class="nav-link-title">Przyjecia dostaw</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="Waste"><span class="nav-link-title">Odpady</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="Inventory"><span class="nav-link-title">Inwentaryzacja</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="Temperatures"><span class="nav-link-title">Temperatury HACCP</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Warehouse" asp-action="HaccpReport"><span class="nav-link-title">Raport HACCP</span></a></li>
 
-    <li class="nav-item mt-3">
-        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Skladniki</span>
+    <li class="nav-item staff-nav-group">
+        <a class="nav-link dropdown-toggle @ActiveGroup(isIngredients)" href="#staff-nav-ingredients" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isIngredients)" aria-controls="staff-nav-ingredients">
+            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">SK</span>
+            <span class="nav-link-title">Skladniki</span>
+        </a>
+        <div class="collapse @OpenGroup(isIngredients)" id="staff-nav-ingredients">
+            <ul class="nav nav-sm flex-column">
+                <li class="nav-item"><a class="nav-link @ActiveLink("Ingredient", "Index")" asp-controller="Ingredient" asp-action="Index">Katalog skladnikow</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Ingredient", "Create")" asp-controller="Ingredient" asp-action="Create">Dodaj skladnik</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Ingredient", "Nutrition")" asp-controller="Ingredient" asp-action="Nutrition">Wartosci odzywcze</a></li>
+            </ul>
+        </div>
     </li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Ingredient" asp-action="Index"><span class="nav-link-title">Katalog skladnikow</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Ingredient" asp-action="Create"><span class="nav-link-title">Dodaj skladnik</span></a></li>
 
-    <li class="nav-item mt-3">
-        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Kompletacja</span>
+    <li class="nav-item staff-nav-group">
+        <a class="nav-link dropdown-toggle @ActiveGroup(isPacking)" href="#staff-nav-packing" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isPacking)" aria-controls="staff-nav-packing">
+            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">PK</span>
+            <span class="nav-link-title">Kompletacja</span>
+        </a>
+        <div class="collapse @OpenGroup(isPacking)" id="staff-nav-packing">
+            <ul class="nav nav-sm flex-column">
+                <li class="nav-item"><a class="nav-link @ActiveLink("Packing", "Index")" asp-controller="Packing" asp-action="Index">Sesje pakowania</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Packing", "Session")" asp-controller="Packing" asp-action="Session">Aktywna sesja</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Packing", "LabelsIndex")" asp-controller="Packing" asp-action="LabelsIndex">Etykiety</a></li>
+            </ul>
+        </div>
     </li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Packing" asp-action="Index"><span class="nav-link-title">Sesje pakowania</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Packing" asp-action="LabelsIndex"><span class="nav-link-title">Etykiety</span></a></li>
 
-    <li class="nav-item mt-3">
-        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Diety</span>
+    <li class="nav-item staff-nav-group">
+        <a class="nav-link dropdown-toggle @ActiveGroup(isDiets)" href="#staff-nav-diets" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isDiets)" aria-controls="staff-nav-diets">
+            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">DT</span>
+            <span class="nav-link-title">Diety i przepisy</span>
+        </a>
+        <div class="collapse @OpenGroup(isDiets)" id="staff-nav-diets">
+            <ul class="nav nav-sm flex-column">
+                <li class="nav-item"><a class="nav-link @ActiveLink("DietEditor", "Index")" asp-controller="DietEditor" asp-action="Index">Edytor diet</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("DietEditor", "Create")" asp-controller="DietEditor" asp-action="Create">Nowa dieta</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("DietEditor", "Meals")" asp-controller="DietEditor" asp-action="Meals">Posilki</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("DietEditor", "Recipes")" asp-controller="DietEditor" asp-action="Recipes">Przepisy</a></li>
+            </ul>
+        </div>
     </li>
-    <li class="nav-item"><a class="nav-link" asp-controller="DietEditor" asp-action="Index"><span class="nav-link-title">Edytor diet</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="DietEditor" asp-action="Recipes"><span class="nav-link-title">Przepisy</span></a></li>
 
-    <li class="nav-item mt-3">
-        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Logistyka</span>
+    <li class="nav-item staff-nav-group">
+        <a class="nav-link dropdown-toggle @ActiveGroup(isLogistics)" href="#staff-nav-logistics" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isLogistics)" aria-controls="staff-nav-logistics">
+            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">LG</span>
+            <span class="nav-link-title">Logistyka</span>
+        </a>
+        <div class="collapse @OpenGroup(isLogistics)" id="staff-nav-logistics">
+            <ul class="nav nav-sm flex-column">
+                <li class="nav-item"><a class="nav-link @ActiveLink("Logistics", "Index")" asp-controller="Logistics" asp-action="Index">Dashboard logistyki</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Logistics", "Routes")" asp-controller="Logistics" asp-action="Routes">Trasy</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Logistics", "RouteMap")" asp-controller="Logistics" asp-action="RouteMap">Mapa tras</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Logistics", "Vehicles")" asp-controller="Logistics" asp-action="Vehicles">Flota</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Logistics", "Drivers")" asp-controller="Logistics" asp-action="Drivers">Kierowcy</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("DriverMobile", "Index")" asp-controller="DriverMobile" asp-action="Index">Panel kierowcy</a></li>
+            </ul>
+        </div>
     </li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Logistics" asp-action="Index"><span class="nav-link-title">Dashboard logistyki</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Logistics" asp-action="Routes"><span class="nav-link-title">Trasy</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Logistics" asp-action="RouteMap"><span class="nav-link-title">Mapa tras</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Logistics" asp-action="Vehicles"><span class="nav-link-title">Flota</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Logistics" asp-action="Drivers"><span class="nav-link-title">Kierowcy</span></a></li>
 
-    <li class="nav-item mt-3">
-        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Admin</span>
+    <li class="nav-item staff-nav-group">
+        <a class="nav-link dropdown-toggle @ActiveGroup(isAdmin)" href="#staff-nav-admin" data-bs-toggle="collapse" role="button" aria-expanded="@Expanded(isAdmin)" aria-controls="staff-nav-admin">
+            <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">AD</span>
+            <span class="nav-link-title">Administracja</span>
+        </a>
+        <div class="collapse @OpenGroup(isAdmin)" id="staff-nav-admin">
+            <ul class="nav nav-sm flex-column">
+                <li class="nav-item"><a class="nav-link @ActiveLink("Admin", "Index")" asp-controller="Admin" asp-action="Index">Dashboard admina</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Admin", "Users")" asp-controller="Admin" asp-action="Users">Uzytkownicy</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Admin", "Roles")" asp-controller="Admin" asp-action="Roles">Role</a></li>
+                <li class="nav-item"><a class="nav-link @ActiveLink("Admin", "Settings")" asp-controller="Admin" asp-action="Settings">Ustawienia</a></li>
+            </ul>
+        </div>
     </li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Index"><span class="nav-link-title">Dashboard admina</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Users"><span class="nav-link-title">Uzytkownicy</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Roles"><span class="nav-link-title">Role</span></a></li>
-    <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Settings"><span class="nav-link-title">Ustawienia</span></a></li>
-
-    <li class="nav-item mt-3">
-        <span class="nav-link text-secondary text-uppercase fs-6 fw-bold px-3 py-2">Mobile</span>
-    </li>
-    <li class="nav-item"><a class="nav-link" asp-controller="DriverMobile" asp-action="Index"><span class="nav-link-title">Panel kierowcy</span></a></li>
 </ul>
-
