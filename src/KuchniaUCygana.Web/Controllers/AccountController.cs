@@ -1,10 +1,20 @@
-﻿using KuchniaUCygana.Web.Models;
+using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Hosting;
 
 namespace KuchniaUCygana.Web.Controllers;
 
 public sealed class AccountController : Controller
 {
+    private readonly IWebHostEnvironment env;
+
+    public AccountController(IWebHostEnvironment env)
+    {
+        this.env = env;
+    }
     [HttpGet]
     public IActionResult Index()
     {
@@ -50,11 +60,44 @@ public sealed class AccountController : Controller
     }
 
     [HttpPost]
+    [Route("account/dev-login")]
+    public async Task<IActionResult> DevLogin(string role, string? returnUrl = null)
+    {
+        if (!env.IsDevelopment())
+        {
+            return BadRequest("Logowanie deweloperskie jest wyłączone na tym środowisku.");
+        }
+
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.Name, $"dev-{role.ToLower()}@kuchniaucygana.pl"),
+            new Claim(ClaimTypes.Role, role)
+        };
+
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var principal = new ClaimsPrincipal(identity);
+
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+        TempData["Success"] = $"Zalogowano jako: {role} (Bypass HR).";
+
+        if (string.IsNullOrEmpty(returnUrl))
+        {
+            if (role.Contains("Kitchen")) return RedirectToAction("Index", "Production");
+            if (role.Contains("Warehouse")) return RedirectToAction("Index", "Warehouse");
+            if (role.Contains("Packing")) return RedirectToAction("Index", "Packing");
+            return RedirectToAction("Index", "Staff");
+        }
+
+        return Redirect(returnUrl);
+    }
+
+    [HttpPost]
     public async Task<IActionResult> Logout()
     {
-        await Task.CompletedTask;
-        TempData["Success"] = "Wylogowanie jest pominiete w wersji preview.";
-        return RedirectToAction(nameof(Index), "Home");
+        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        TempData["Success"] = "Pomyślnie wylogowano.";
+        return RedirectToAction("Index", "Home");
     }
 
     [HttpGet]
