@@ -1,8 +1,116 @@
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Etykiety sesji";
-    ViewData["Section"] ??= "Kompletacja";
-    ViewData["Description"] ??= "Placeholder etykiet QR dla sesji pakowania.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Etykiety Wysyłkowe z Kodem QR";
+    ViewData["Section"] = "Pakowanie";
+    ViewData["Description"] = "Wygenerowane naklejki na torby cateringowe. Zawierają kod QR do weryfikacji dostawy.";
 
+    int sessionId = ViewBag.SessionId > 0 ? ViewBag.SessionId : 302;
+    var date = DateTime.Today.AddDays(1);
+
+    var mockLabels = new[]
+    {
+        new { OrderId = 1001, ClientName = "Tomasz Jabłoński", DietType = "Sport 2500 kcal", Address = "Warszawa, ul. Złota 44/12", MealCount = 5, Route = "Trasa A-12", QR = "https://chart.googleapis.com/chart?cht=qr&chs=150&chl=order_1001" },
+        new { OrderId = 1002, ClientName = "Marta Kowalczyk", DietType = "Slim 1500 kcal", Address = "Warszawa, ul. Marszałkowska 10/4", MealCount = 5, Route = "Trasa B-04", QR = "https://chart.googleapis.com/chart?cht=qr&chs=150&chl=order_1002" },
+        new { OrderId = 1003, ClientName = "Paweł Wiśniewski", DietType = "Standard 2000 kcal", Address = "Piaseczno, ul. Szkolna 8", MealCount = 5, Route = "Trasa C-02", QR = "https://chart.googleapis.com/chart?cht=qr&chs=150&chl=order_1003" }
+    };
+}
+
+@section Styles {
+    <style>
+        .label-sticker {
+            border: 2px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 1.5rem;
+            background: #fff;
+            max-width: 450px;
+            margin: 0 auto;
+            position: relative;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        .label-qr {
+            width: 110px;
+            height: 110px;
+            border: 1px solid #e2e8f0;
+            padding: 4px;
+            background: #fff;
+        }
+
+        @@media print {
+            body * {
+                visibility: hidden;
+            }
+            .printable-area, .printable-area * {
+                visibility: visible;
+            }
+            .printable-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .label-sticker {
+                page-break-inside: avoid;
+                margin-bottom: 2cm;
+                border: 2px solid #000 !important;
+                box-shadow: none !important;
+            }
+            .d-print-none {
+                display: none !important;
+            }
+        }
+    </style>
+}
+
+<div class="card card-premium d-print-none mb-4">
+    <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+            <h3 class="mb-1 text-dark">Drukuj Etykiety Adresowe</h3>
+            <p class="text-secondary small mb-0">Etykiety są zoptymalizowane do druku na arkuszach samoprzylepnych A4 lub drukarkach etykiet.</p>
+        </div>
+        <div class="btn-list">
+            <button class="btn btn-primary" onclick="window.print();">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
+                Uruchom Druk
+            </button>
+            <a asp-action="Session" asp-route-sessionId="@sessionId" class="btn btn-outline-secondary">Wróć do sesji</a>
+        </div>
+    </div>
+</div>
+
+<div class="printable-area">
+    <div class="row g-4">
+        @foreach (var label in mockLabels)
+        {
+            <div class="col-md-6 col-xl-4">
+                <div class="label-sticker">
+                    <div class="d-flex justify-content-between align-items-start border-bottom pb-2 mb-3">
+                        <div>
+                            <div class="text-uppercase text-secondary small fw-bold" style="font-size: 0.75rem;">Catering u Cygana</div>
+                            <div class="h3 mb-0 text-dark">Zlecenie #@label.OrderId</div>
+                        </div>
+                        <span class="badge bg-dark-lt text-dark fw-bold">@label.Route</span>
+                    </div>
+
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <div class="h4 mb-1 text-dark">@label.ClientName</div>
+                            <div class="text-secondary small mb-2">@label.Address</div>
+                            
+                            <div class="mb-1">
+                                <span class="badge bg-indigo text-white fw-bold">@label.DietType</span>
+                            </div>
+                            <div class="small text-muted mt-2">
+                                Zawartość: <strong>@label.MealCount posiłków</strong><br />
+                                Data dostawy: <strong>@date.ToString("dd.MM.yyyy")</strong>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <img src="@label.QR" class="label-qr" alt="Kod QR zamówienia" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>

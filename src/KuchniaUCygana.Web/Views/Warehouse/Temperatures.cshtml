@@ -1,8 +1,127 @@
+@model KuchniaUCygana.Application.DTOs.Warehouse.LogTemperatureRequest
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Temperatury HACCP";
-    ViewData["Section"] ??= "Magazyn";
-    ViewData["Description"] ??= "Szkielet logowania temperatur i historii odczytow.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Temperatury i Kontrola HACCP";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = "Monitorowanie i rejestracja temperatur urządzeń chłodniczych zgodnie z procedurami sanitarnymi.";
 
+    var devices = new[]
+    {
+        "Lodówka #1 - Nabiał (Limit: 2°C do 6°C)",
+        "Chłodnia #2 - Mięso (Limit: 0°C do 4°C)",
+        "Zamrażarka #3 - Ryby (Limit: -22°C do -18°C)",
+        "Lodówka #4 - Warzywa (Limit: 4°C do 8°C)",
+        "Witryna Wydawcza (Limit: 2°C do 8°C)"
+    };
+
+    var mockLogs = new[]
+    {
+        new { Time = "Dzisiaj, 14:20", Device = "Lodówka #1 - Nabiał", Temp = 4.2m, Status = "OK", Color = "success" },
+        new { Time = "Dzisiaj, 12:00", Device = "Chłodnia #2 - Mięso", Temp = 2.1m, Status = "OK", Color = "success" },
+        new { Time = "Dzisiaj, 10:15", Device = "Zamrażarka #3 - Ryby", Temp = -19.5m, Status = "OK", Color = "success" },
+        new { Time = "Wczoraj, 18:30", Device = "Lodówka #4 - Warzywa", Temp = 9.2m, Status = "Ostrzeżenie (Zbyt wysoka)", Color = "warning" },
+        new { Time = "Wczoraj, 16:45", Device = "Lodówka #1 - Nabiał", Temp = 4.5m, Status = "OK", Color = "success" }
+    };
+}
+
+<div class="row g-4">
+    <!-- Rejestracja temperatury -->
+    <div class="col-lg-5">
+        <div class="card card-premium">
+            <div class="card-status-top bg-azure"></div>
+            <div class="card-header bg-transparent py-3">
+                <h3 class="card-title d-flex align-items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 13.5a2.5 2.5 0 1 0 4 0v-8.5a2 2 0 0 0 -4 0v8.5z" /><path d="M10 9l4 0" /><path d="M6.5 17h11" /></svg>
+                    Zarejestruj odczyt
+                </h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="LogTemperature" method="post" autocomplete="off">
+                    @Html.AntiForgeryToken()
+
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            <div class="text-secondary">Wykryto błędy formularza. Proszę poprawić pola poniżej.</div>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label required">Urządzenie / Lokalizacja</label>
+                        <select asp-for="DeviceNameOrLocation" class="form-select" required aria-label="Wybierz urządzenie">
+                            <option value="">-- Wybierz lokalizację --</option>
+                            @foreach (var dev in devices)
+                            {
+                                <option value="@dev.Split(" (")[0]">@dev</option>
+                            }
+                        </select>
+                        <span asp-validation-for="DeviceNameOrLocation" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label required">Odczytana temperatura (°C)</label>
+                        <div class="input-icon">
+                            <input type="number" step="0.1" asp-for="TemperatureCelsius" class="form-control" placeholder="0.0" required />
+                            <span class="input-icon-addon">
+                                °C
+                            </span>
+                        </div>
+                        <span asp-validation-for="TemperatureCelsius" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Uwagi / Działania korygujące</label>
+                        <textarea asp-for="Remarks" class="form-control" rows="3" placeholder="np. Drzwi niedomknięte, włączono odszranianie..."></textarea>
+                        <span asp-validation-for="Remarks" class="text-danger small"></span>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        Zapisz odczyt w dzienniku HACCP
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ostatnie pomiary i Raportowanie -->
+    <div class="col-lg-7">
+        <div class="card card-premium">
+            <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                <h3 class="card-title">Dziennik Pomiarów HACCP (Ostatnie 24h)</h3>
+                <a asp-action="HaccpReport" class="btn btn-sm btn-outline-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" /><path d="M9 17h6" /><path d="M9 13h6" /></svg>
+                    Pełny raport HACCP
+                </a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th>Godzina odczytu</th>
+                            <th>Urządzenie</th>
+                            <th class="text-end">Temperatura</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in mockLogs)
+                        {
+                            <tr>
+                                <td class="text-secondary small">@log.Time</td>
+                                <td class="font-weight-medium fw-bold text-dark">@log.Device</td>
+                                <td class="text-end font-weight-bold fw-bold text-@log.Color">
+                                    @log.Temp.ToString("F1")°C
+                                </td>
+                                <td>
+                                    <span class="badge bg-@log.Color-lt text-@log.Color">
+                                        @log.Status
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

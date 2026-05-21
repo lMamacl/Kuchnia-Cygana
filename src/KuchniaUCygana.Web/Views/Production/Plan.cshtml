@@ -1,8 +1,103 @@
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Szczegoly planu";
-    ViewData["Section"] ??= "Produkcja";
-    ViewData["Description"] ??= "Placeholder szczegolow planu produkcji.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Szczegóły Planu Produkcji";
+    ViewData["Section"] = "Kuchnia";
+    ViewData["Description"] = "Bieżące monitorowanie stanu przygotowania potraw, receptur oraz zatwierdzanie ugotowanych porcji.";
 
+    int planId = ViewBag.PlanId;
+    var planDate = DateTime.Today.AddDays(1);
+    
+    var mockPlanItems = new[]
+    {
+        new { Id = 101, Name = "Kurczak Teriyaki z ryżem jaśminowym i brokułami", Category = "Danie Główne", Portions = 240, Status = "Zakończone", Color = "success" },
+        new { Id = 102, Name = "Krem z pieczonej dyni z pestkami i imbirem", Category = "Zupa", Portions = 150, Status = "W toku", Color = "warning" },
+        new { Id = 103, Name = "Proteinowy sernik jagodowy bez cukru", Category = "Deser", Portions = 180, Status = "W toku", Color = "warning" },
+        new { Id = 104, Name = "Łosoś pieczony w ziołach z purée z batatów", Category = "Danie Główne", Portions = 110, Status = "Oczekuje", Color = "secondary" }
+    };
+}
+
+<div class="row row-cards">
+    <!-- Informacje o Planie -->
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body py-4">
+                <div class="row align-items-center g-3">
+                    <div class="col">
+                        <div class="text-uppercase text-secondary small fw-bold">Plan produkcji #@(planId > 0 ? planId.ToString() : "1049")</div>
+                        <h2 class="h1 mb-1 text-dark">Dzień produkcji: @planDate.ToString("dd.MM.yyyy")</h2>
+                        <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
+                            <span class="badge bg-warning-lt text-warning fw-bold d-inline-flex align-items-center gap-1">
+                                <span class="status-dot bg-warning status-dot-pulse" style="width: 6px; height: 6px;"></span>
+                                Produkcja w toku
+                            </span>
+                            <span class="text-secondary small">Utworzono: dzisiaj o 05:00 przez Szefa Kuchni</span>
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <form asp-action="ProduceSemiFinished" asp-route-planId="@(planId > 0 ? planId : 1049)" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-success me-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 10l5 -6l5 6v10a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1z" /><path d="M21 10l-2 8" /><path d="M3 10l2 8" /></svg>
+                                Zdejmij Składniki (FEFO)
+                            </button>
+                        </form>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Wróć do listy</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela Potraw w Planie -->
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Pozycje Planu Produkcyjnego</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th class="w-1">ID</th>
+                            <th>Nazwa Dania / Potrawy</th>
+                            <th>Kategoria</th>
+                            <th class="text-center">Zaplanowane Porcje</th>
+                            <th>Status realizacji</th>
+                            <th class="w-1 text-center">Operacje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in mockPlanItems)
+                        {
+                            <tr>
+                                <td class="text-secondary font-weight-medium">#@item.Id</td>
+                                <td>
+                                    <div class="font-weight-bold text-dark">@item.Name</div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary-lt">@item.Category</span>
+                                </td>
+                                <td class="text-center fw-bold text-dark">
+                                    @item.Portions szt.
+                                </td>
+                                <td>
+                                    <span class="badge bg-@item.Color-lt text-@item.Color d-inline-flex align-items-center gap-1">
+                                        <span class="status-dot bg-@item.Color @(item.Status == "W toku" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
+                                        @item.Status
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-list flex-nowrap justify-content-center">
+                                        <a asp-action="CookingCard" asp-route-planItemId="@item.Id" class="btn btn-sm btn-outline-primary">
+                                            Karta gotowania
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,8 +1,110 @@
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Sesja pakowania";
-    ViewData["Section"] ??= "Kompletacja";
-    ViewData["Description"] ??= "Placeholder szczegolow sesji pakowania.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Szczegóły Sesji Pakowania";
+    ViewData["Section"] = "Pakowanie";
+    ViewData["Description"] = "Kompletuj i przypisuj ugotowane posiłki do konkretnych zamówień klientów, a następnie drukuj etykiety wysyłkowe.";
 
+    int sessionId = ViewBag.SessionId > 0 ? ViewBag.SessionId : 302;
+    var packedBy = "Tomasz Nowak";
+    var date = DateTime.Today.AddDays(1);
+
+    var mockClients = new[]
+    {
+        new { OrderId = 1001, ClientName = "Tomasz Jabłoński", DietType = "Sport 2500 kcal", Address = "Warszawa, ul. Złota 44/12", Status = "Spakowane", Color = "success", ActionDisabled = true },
+        new { OrderId = 1002, ClientName = "Marta Kowalczyk", DietType = "Slim 1500 kcal", Address = "Warszawa, ul. Marszałkowska 10/4", Status = "Oczekuje", Color = "secondary", ActionDisabled = false },
+        new { OrderId = 1003, ClientName = "Paweł Wiśniewski", DietType = "Standard 2000 kcal", Address = "Piaseczno, ul. Szkolna 8", Status = "Oczekuje", Color = "secondary", ActionDisabled = false }
+    };
+}
+
+<div class="row row-cards">
+    <!-- Panel Kontrolny Sesji -->
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body py-4">
+                <div class="row align-items-center g-3">
+                    <div class="col">
+                        <div class="text-uppercase text-secondary small fw-bold">Sesja kompletacji #@sessionId</div>
+                        <h2 class="h1 mb-1 text-dark">Data pakowania: @date.ToString("dd.MM.yyyy")</h2>
+                        <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
+                            <span class="text-secondary small">Pakujący: <strong>@packedBy</strong></span>
+                            <span class="status-dot bg-warning status-dot-pulse ms-2" style="width: 6px; height: 6px;"></span>
+                            <span class="text-warning small fw-bold">Sesja otwarta</span>
+                        </div>
+                    </div>
+                    <div class="col-auto d-flex gap-2">
+                        <a asp-action="Labels" asp-route-sessionId="@sessionId" class="btn btn-outline-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" /><path d="M7 16h10" /><path d="M7 12h10" /><path d="M7 8h10" /></svg>
+                            Drukuj Etykiety QR
+                        </a>
+                        <form asp-action="Dispatch" asp-route-sessionId="@sessionId" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-success">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                                Wyślij do dostawy
+                            </button>
+                        </form>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Wróć</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista Zamówień Klientów do Spakowania -->
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Zestawy do skompletowania</h3>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th class="w-1">Zamówienie</th>
+                            <th>Odbiorca</th>
+                            <th>Dieta / Zestaw</th>
+                            <th>Adres Dostawy</th>
+                            <th>Status pakowania</th>
+                            <th class="w-1 text-center">Operacje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var client in mockClients)
+                        {
+                            <tr>
+                                <td class="font-weight-medium fw-bold text-dark">#@client.OrderId</td>
+                                <td class="font-weight-medium text-dark">@client.ClientName</td>
+                                <td>
+                                    <span class="badge bg-indigo-lt text-indigo">@client.DietType</span>
+                                </td>
+                                <td class="text-secondary small">@client.Address</td>
+                                <td>
+                                    <span class="badge bg-@client.Color-lt text-@client.Color d-inline-flex align-items-center gap-1">
+                                        <span class="status-dot bg-@client.Color" style="width: 6px; height: 6px;"></span>
+                                        @client.Status
+                                    </span>
+                                </td>
+                                <td>
+                                    <form asp-action="PackClient" method="post" class="text-center">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="sessionId" value="@sessionId" />
+                                        <input type="hidden" name="orderId" value="@client.OrderId" />
+                                        @if (client.ActionDisabled)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-success" disabled>Spakowane</button>
+                                        }
+                                        else
+                                        {
+                                            <button type="submit" class="btn btn-sm btn-success">Spakuj zestaw</button>
+                                        }
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

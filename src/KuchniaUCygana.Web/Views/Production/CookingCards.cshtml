@@ -1,8 +1,64 @@
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Karty gotowania";
-    ViewData["Section"] ??= "Produkcja";
-    ViewData["Description"] ??= "Lista kart gotowania gotowa na dane z planu.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Wykaz Kart Gotowania";
+    ViewData["Section"] = "Kuchnia";
+    ViewData["Description"] = "Zbiór wszystkich aktywnych receptur i instrukcji przygotowania potraw zaplanowanych na dzisiaj.";
 
+    var date = DateTime.Today;
+
+    var mockCards = new[]
+    {
+        new { Id = 101, Name = "Kurczak Teriyaki z ryżem jaśminowym i brokułami", Category = "Danie Główne", Portions = 240, Status = "Ukończone", Color = "success" },
+        new { Id = 102, Name = "Krem z pieczonej dyni z pestkami i imbirem", Category = "Zupa", Portions = 150, Status = "W toku", Color = "warning" },
+        new { Id = 103, Name = "Proteinowy sernik jagodowy bez cukru", Category = "Deser", Portions = 180, Status = "W toku", Color = "warning" },
+        new { Id = 104, Name = "Łosoś pieczony w ziołach z purée z batatów", Category = "Danie Główne", Portions = 110, Status = "Oczekuje", Color = "secondary" }
+    };
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                <h3 class="card-title">Aktywne Karty Gotowania na @date.ToString("dd.MM.yyyy")</h3>
+                <a asp-action="Index" class="btn btn-sm btn-outline-secondary">Wróć do Pulpitu</a>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th class="w-1">ID</th>
+                            <th>Nazwa Potrawy</th>
+                            <th>Kategoria</th>
+                            <th class="text-center">Porcje</th>
+                            <th>Status gotowania</th>
+                            <th class="w-1">Operacje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var card in mockCards)
+                        {
+                            <tr>
+                                <td class="text-secondary font-weight-medium">#@card.Id</td>
+                                <td class="font-weight-bold text-dark">@card.Name</td>
+                                <td><span class="badge bg-secondary-lt">@card.Category</span></td>
+                                <td class="text-center fw-bold">@card.Portions szt.</td>
+                                <td>
+                                    <span class="badge bg-@card.Color-lt text-@card.Color d-inline-flex align-items-center gap-1">
+                                        <span class="status-dot bg-@card.Color @(card.Status == "W toku" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
+                                        @card.Status
+                                    </span>
+                                </td>
+                                <td>
+                                    <a asp-action="CookingCard" asp-route-planItemId="@card.Id" class="btn btn-sm btn-outline-primary">
+                                        Otwórz Kartę
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

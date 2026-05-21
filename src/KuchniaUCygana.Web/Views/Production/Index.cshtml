@@ -1,8 +1,166 @@
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Plan produkcji";
-    ViewData["Section"] ??= "Produkcja";
-    ViewData["Description"] ??= "Plan dnia z pustym stanem gotowym na komponenty M3.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Pulpit Produkcji Kuchennej";
+    ViewData["Section"] = "Kuchnia";
+    ViewData["Description"] = "Zarządzanie dziennym planem gotowania, wskaźniki wydajności oraz interaktywne karty produkcyjne kucharzy.";
 
+    // Mockowe dane na potrzeby wersji pokazowej (estetycznej)
+    var todayPlanStatus = "Aktywny";
+    var percentComplete = 80; // 80% ukończenia produkcji
+
+    var mockProductionItems = new[]
+    {
+        new { Id = 101, Name = "Kurczak Teriyaki z ryżem jaśminowym i brokułami", Category = "Danie Główne", Portions = 240, Completed = 240, Status = "Zakończone", Color = "success", Image = "/img/chicken_teriyaki.png" },
+        new { Id = 102, Name = "Krem z pieczonej dyni z pestkami i imbirem", Category = "Zupa", Portions = 150, Completed = 120, Status = "W toku", Color = "warning", Image = "/img/pumpkin_soup.png" },
+        new { Id = 103, Name = "Proteinowy sernik jagodowy bez cukru", Category = "Deser", Portions = 180, Completed = 120, Status = "W toku", Color = "warning", Image = "/img/blueberry_cheesecake.png" },
+        new { Id = 104, Name = "Łosoś pieczony w ziołach z purée z batatów", Category = "Danie Główne", Portions = 110, Completed = 0, Status = "Oczekuje", Color = "secondary", Image = "/img/baked_salmon.png" }
+    };
+}
+
+<div class="row row-cards">
+    <!-- Statystyki produkcji -->
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader">Status Planu</div>
+                    <div class="ms-auto lh-1">
+                        <span class="status-dot-pulse bg-warning"></span>
+                    </div>
+                </div>
+                <div class="h1 mb-2 mt-1">@todayPlanStatus</div>
+                <div class="text-secondary small">Rozpoczęto dzisiaj o 05:00</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader">Zaplanowane Dania</div>
+                    <div class="ms-auto">
+                        <span class="text-blue">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 21l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12v9" /><path d="M20 7.5v9" /><path d="M4 7.5v9" /></svg>
+                        </span>
+                    </div>
+                </div>
+                <div class="h1 mb-2 mt-1">4</div>
+                <div class="text-secondary small">Kategorie diet: Standard, Slim, Sport</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader">Ugotowane Porcje</div>
+                    <div class="ms-auto">
+                        <span class="text-indigo">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z" /><path d="M13 13h4" /><path d="M13 9h4" /><path d="M9 9h.01" /><path d="M9 13h.01" /><path d="M3 5h2v14h-2z" /></svg>
+                        </span>
+                    </div>
+                </div>
+                <div class="h1 mb-2 mt-1">480 / 680</div>
+                <div class="text-secondary small">Postęp całkowity: @percentComplete%</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader">Czas realizacji</div>
+                    <div class="ms-auto">
+                        <span class="text-green">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 7v5l3 3" /></svg>
+                        </span>
+                    </div>
+                </div>
+                <div class="h1 mb-2 mt-1 text-green">+15 min</div>
+                <div class="text-secondary small">Wyprzedzamy plan dostaw</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pasek postępu globalnego -->
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h4 class="card-title mb-0">Postęp dzisiejszej produkcji</h4>
+                    <span class="badge bg-green-lt text-green fw-bold">@percentComplete% Ukończono</span>
+                </div>
+                <div class="progress progress-xl">
+                    <div class="progress-bar bg-green" style="width: @percentComplete%" role="progressbar" aria-valuenow="@percentComplete" aria-valuemin="0" aria-valuemax="100" aria-label="@percentComplete% Complete"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela Produkcyjna -->
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title">Dania do przygotowania na dzisiaj</h3>
+                <div class="btn-list">
+                    <a asp-action="Generate" class="btn btn-outline-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                        Nowy Plan
+                    </a>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th class="w-1">ID</th>
+                            <th>Nazwa Dania</th>
+                            <th>Kategoria</th>
+                            <th class="text-center">Zaplanowane Porcje</th>
+                            <th class="text-center">Przygotowano</th>
+                            <th>Status</th>
+                            <th class="w-1 text-center">Receptura</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in mockProductionItems)
+                        {
+                            var portionProgress = item.Portions > 0 ? (item.Completed * 100 / item.Portions) : 0;
+                            <tr>
+                                <td class="text-secondary">#@item.Id</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <span class="avatar avatar-md rounded-3" style="background-image: url(@item.Image); width: 48px; height: 48px; background-size: cover; background-position: center; border: 1px solid rgba(0, 0, 0, 0.08);"></span>
+                                        <div class="font-weight-medium fw-bold text-dark">@item.Name</div>
+                                    </div>
+                                </td>
+                                <td><span class="badge bg-secondary-lt">@item.Category</span></td>
+                                <td class="text-center fw-bold">@item.Portions szt.</td>
+                                <td class="text-center">
+                                    <div class="d-flex align-items-center justify-content-center gap-2">
+                                        <span class="fw-bold text-dark">@item.Completed</span>
+                                        <span class="text-secondary small">/ @item.Portions</span>
+                                        <div class="progress progress-xs w-50 ms-2 d-none d-md-flex">
+                                            <div class="progress-bar bg-@item.Color" style="width: @portionProgress%"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-@item.Color-lt text-@item.Color d-inline-flex align-items-center gap-1">
+                                        <span class="status-dot bg-@item.Color @(item.Status == "W toku" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
+                                        @item.Status
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <a asp-action="CookingCard" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">
+                                        Zobacz Kartę
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

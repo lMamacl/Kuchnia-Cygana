@@ -1,8 +1,226 @@
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.InventoryAlertDto>
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Magazyn";
-    ViewData["Section"] ??= "Magazyn";
-    ViewData["Description"] ??= "Przeglad stanow i alertow w wersji szkieletowej.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Pulpit Magazynu";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = "Inteligentne zarządzanie zapasami, kontrola FEFO oraz alerty o przeterminowaniu składników.";
 
+    // Przygotujmy mockowe alerty w przypadku, gdy baza jest pusta (wersja pokazowa)
+    var alerts = Model != null && Model.Any() ? Model.ToList() : new List<KuchniaUCygana.Application.DTOs.Warehouse.InventoryAlertDto>
+    {
+        new KuchniaUCygana.Application.DTOs.Warehouse.InventoryAlertDto
+        {
+            StockItemId = 2,
+            StockItemName = "Pierś z kurczaka świeża",
+            AlertType = "LOW_STOCK",
+            Message = "Niski stan magazynowy: pozostało 3.50 kg (Próg min: 10.00 kg)",
+            CurrentQuantity = 3.50m,
+            MinimumLevel = 10.00m
+        },
+        new KuchniaUCygana.Application.DTOs.Warehouse.InventoryAlertDto
+        {
+            StockItemId = 5,
+            StockItemName = "Masło Extra 82%",
+            AlertType = "EXPIRING_SOON",
+            Message = "Termin ważności partii #BAT-1029 (2.00 kg) upływa za 2 dni!",
+            CurrentQuantity = 8.00m,
+            DaysUntilExpiry = 2,
+            EarliestExpiry = DateTimeOffset.Now.AddDays(2)
+        }
+    };
+
+    // Mockowe stany magazynowe do prezentacji wizualnej
+    var mockStockItems = new[]
+    {
+        new { Id = 1, Name = "Mąka pszenna typ 500", Category = "Suche", Qty = 120.00m, Unit = "kg", Min = 50.00m, Expiry = DateTimeOffset.Now.AddDays(45), Status = "OK", StatusColor = "success", Icon = "🌾" },
+        new { Id = 2, Name = "Pierś z kurczaka świeża", Category = "Mięso", Qty = 3.50m, Unit = "kg", Min = 10.00m, Expiry = DateTimeOffset.Now.AddDays(3), Status = "Niski stan", StatusColor = "danger", Icon = "🍗" },
+        new { Id = 3, Name = "Śmietanka UHT 30%", Category = "Nabiał", Qty = 48.00m, Unit = "l", Min = 20.00m, Expiry = DateTimeOffset.Now.AddDays(14), Status = "OK", StatusColor = "success", Icon = "🥛" },
+        new { Id = 4, Name = "Pomidory krojone puszka", Category = "Suche", Qty = 15.00m, Unit = "szt", Min = 15.00m, Expiry = DateTimeOffset.Now.AddDays(180), Status = "Wskazana dostawa", StatusColor = "warning", Icon = "🍅" },
+        new { Id = 5, Name = "Masło Extra 82%", Category = "Nabiał", Qty = 8.00m, Unit = "kg", Min = 5.00m, Expiry = DateTimeOffset.Now.AddDays(2), Status = "Pilna ważność", StatusColor = "danger", Icon = "🧈" }
+    };
+}
+
+<div class="row row-cards">
+    <!-- Statystyki górne -->
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader">Stan ogólny</div>
+                    <div class="ms-auto lh-1">
+                        <span class="status-dot-pulse bg-success"></span>
+                    </div>
+                </div>
+                <div class="h1 mb-2 mt-1">Aktywny</div>
+                <div class="text-secondary small">Wszystkie lodówki w normie</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader">Pozycje asortymentu</div>
+                    <div class="ms-auto">
+                        <span class="text-blue">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 21l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12v9" /><path d="M20 7.5v9" /><path d="M4 7.5v9" /></svg>
+                        </span>
+                    </div>
+                </div>
+                <div class="h1 mb-2 mt-1">42</div>
+                <div class="text-secondary small">Składników w bazie danych</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader">Krytyczne alerty</div>
+                    <div class="ms-auto lh-1">
+                        <span class="status-dot-pulse bg-danger"></span>
+                    </div>
+                </div>
+                <div class="h1 mb-2 mt-1 text-danger">@alerts.Count</div>
+                <div class="text-secondary small">Wymaga natychmiastowej reakcji</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader">Wydajność FEFO</div>
+                    <div class="ms-auto">
+                        <span class="text-green">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                        </span>
+                    </div>
+                </div>
+                <div class="h1 mb-2 mt-1">98.4%</div>
+                <div class="text-secondary small">Brak strat z przeterminowania</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel Smart Alertów -->
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-status-top bg-danger"></div>
+            <div class="card-header bg-transparent py-3">
+                <h3 class="card-title text-danger d-flex align-items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-danger" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2z" /></svg>
+                    Inteligentne Alerty Magazynowe (Smart Analyzer)
+                </h3>
+            </div>
+            <div class="card-body py-2">
+                <div class="row g-3 my-1">
+                    @foreach (var alert in alerts)
+                    {
+                        var isDanger = alert.AlertType == "LOW_STOCK" || (alert.DaysUntilExpiry.HasValue && alert.DaysUntilExpiry <= 3);
+                        <div class="col-md-6">
+                            <div class="alert alert-premium-smart @(isDanger ? "alert-danger" : "alert-warning") d-flex align-items-start gap-3 p-3 mb-0">
+                                <span class="status-dot-pulse @(isDanger ? "bg-danger" : "bg-warning") mt-2"></span>
+                                <div class="flex-fill">
+                                    <div class="font-weight-bold fw-bold mb-1 text-dark">
+                                        @alert.StockItemName
+                                    </div>
+                                    <div class="text-secondary small">
+                                        @alert.Message
+                                    </div>
+                                </div>
+                                <span class="badge bg-secondary-lt">@alert.AlertType</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela Stanów i Wyszukiwarka -->
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <h3 class="card-title">Aktualne Stany Magazynowe</h3>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="input-icon">
+                        <span class="input-icon-addon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
+                        </span>
+                        <input type="text" class="form-control" placeholder="Szukaj składnika..." aria-label="Wyszukiwarka składników">
+                    </div>
+                    <button class="btn btn-outline-secondary">Filtry</button>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th class="w-1">ID</th>
+                            <th>Składnik</th>
+                            <th>Kategoria</th>
+                            <th class="text-end">Stan</th>
+                            <th class="text-end">Próg Min.</th>
+                            <th>Najbliższy Termin Ważności</th>
+                            <th>Status</th>
+                            <th class="w-1">Operacje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in mockStockItems)
+                        {
+                            <tr>
+                                <td class="text-secondary font-weight-medium">@item.Id</td>
+                                <td class="font-weight-medium fw-bold text-dark">@item.Name</td>
+                                <td>
+                                    <span class="badge bg-secondary-lt">@item.Category</span>
+                                </td>
+                                <td class="text-end font-weight-bold fw-bold text-dark">
+                                    @item.Qty.ToString("F2") @item.Unit
+                                </td>
+                                <td class="text-end text-secondary">
+                                    @item.Min.ToString("F2") @item.Unit
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2 text-secondary small">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon text-muted" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" /><path d="M16 3v4" /><path d="M8 3v4" /><path d="M4 11h16" /><path d="M11 15h1" /><path d="M12 15v3" /></svg>
+                                        @item.Expiry.ToString("dd.MM.yyyy")
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-@item.StatusColor-lt text-@item.StatusColor d-inline-flex align-items-center gap-1">
+                                        <span class="status-dot bg-@item.StatusColor" style="width: 6px; height: 6px;"></span>
+                                        @item.Status
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-list flex-nowrap">
+                                        <a asp-action="Receive" class="btn btn-sm btn-outline-success">Przyjmij</a>
+                                        <a asp-action="Waste" class="btn btn-sm btn-outline-danger">Odpad</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer bg-transparent d-flex align-items-center">
+                <p class="m-0 text-secondary">Pokazano <strong>5</strong> z <strong>5</strong> wyników</p>
+                <ul class="pagination m-0 ms-auto">
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#" tabindex="-1" aria-disabled="true">
+                            poprzednia
+                        </a>
+                    </li>
+                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                    <li class="page-item">
+                        <a class="page-link" href="#">
+                            następna
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,8 +1,110 @@
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Raport HACCP";
-    ViewData["Section"] ??= "Magazyn";
-    ViewData["Description"] ??= "Placeholder raportu HACCP za wybrany zakres dat.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Raport Zgodności HACCP";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = "Urzędowy raport rejestracji temperatur dla organów kontroli sanitarnej (Sanepid).";
 
+    DateOnly dateFrom = ViewBag.DateFrom;
+    DateOnly dateTo = ViewBag.DateTo;
+
+    var mockReportRows = new[]
+    {
+        new { Device = "Chłodnia #2 - Mięso", MinLimit = 0.0m, MaxLimit = 4.0m, AvgTemp = 1.9m, MinRecorded = 0.8m, MaxRecorded = 3.2m, Violations = 0 },
+        new { Device = "Lodówka #1 - Nabiał", MinLimit = 2.0m, MaxLimit = 6.0m, AvgTemp = 4.3m, MinRecorded = 3.1m, MaxRecorded = 5.8m, Violations = 0 },
+        new { Device = "Zamrażarka #3 - Ryby", MinLimit = -22.0m, MaxLimit = -18.0m, AvgTemp = -19.8m, MinRecorded = -21.5m, MaxRecorded = -18.1m, Violations = 0 },
+        new { Device = "Lodówka #4 - Warzywa", MinLimit = 4.0m, MaxLimit = 8.0m, AvgTemp = 6.1m, MinRecorded = 3.9m, MaxRecorded = 9.2m, Violations = 1 }
+    };
+}
+
+<div class="card card-premium d-print-none mb-4">
+    <div class="card-body">
+        <form method="get" asp-action="HaccpReport" class="row align-items-end g-3">
+            <div class="col-md-4">
+                <label class="form-label text-secondary small">Data początkowa</label>
+                <input type="date" name="from" class="form-control" value="@dateFrom.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label text-secondary small">Data końcowa</label>
+                <input type="date" name="to" class="form-control" value="@dateTo.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary flex-fill">Generuj Raport</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="window.print();">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
+                    Drukuj
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card card-premium">
+    <div class="card-body p-5">
+        <!-- Nagłówek raportu do wydruku -->
+        <div class="row align-items-center mb-4">
+            <div class="col">
+                <h1 class="h2 mb-1 text-dark">RAPORT KONTROLI TEMPERATUR (HACCP)</h1>
+                <div class="text-secondary small">
+                    Okres sprawozdawczy: <strong>@dateFrom.ToString("dd.MM.yyyy")</strong> do <strong>@dateTo.ToString("dd.MM.yyyy")</strong>
+                </div>
+            </div>
+            <div class="col-auto text-end">
+                <div class="h3 mb-0 text-dark">Kuchnia u Cygana</div>
+                <div class="text-secondary small">Dział Kontroli Jakości</div>
+            </div>
+        </div>
+
+        <hr class="my-4" />
+
+        <div class="table-responsive">
+            <table class="table table-vcenter table-premium table-bordered">
+                <thead>
+                    <tr class="bg-light">
+                        <th>Nazwa Urządzenia / Lokalizacja</th>
+                        <th class="text-center">Limit min.</th>
+                        <th class="text-center">Limit max.</th>
+                        <th class="text-center">Średnia temp.</th>
+                        <th class="text-center">Min. odczyt</th>
+                        <th class="text-center">Max. odczyt</th>
+                        <th class="text-center">Przekroczenia limitu</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in mockReportRows)
+                    {
+                        <tr>
+                            <td class="font-weight-medium fw-bold text-dark">@row.Device</td>
+                            <td class="text-center text-secondary">@row.MinLimit.ToString("F1")°C</td>
+                            <td class="text-center text-secondary">@row.MaxLimit.ToString("F1")°C</td>
+                            <td class="text-center font-weight-bold fw-bold text-dark">@row.AvgTemp.ToString("F1")°C</td>
+                            <td class="text-center text-success">@row.MinRecorded.ToString("F1")°C</td>
+                            <td class="text-center text-warning">@row.MaxRecorded.ToString("F1")°C</td>
+                            <td class="text-center">
+                                @if (row.Violations > 0)
+                                {
+                                    <span class="badge bg-danger-lt text-danger fw-bold">@row.Violations razy</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success-lt text-success">Zgodny</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Podpisy -->
+        <div class="row mt-5 pt-5 justify-content-between">
+            <div class="col-4 text-center">
+                <div class="border-bottom border-secondary pb-4" style="border-bottom-style: dotted !important;"></div>
+                <div class="text-secondary small mt-2">Sporządził (Weryfikator HACCP)</div>
+            </div>
+            <div class="col-4 text-center">
+                <div class="border-bottom border-secondary pb-4" style="border-bottom-style: dotted !important;"></div>
+                <div class="text-secondary small mt-2">Zatwierdził (Kierownik Magazynu)</div>
+            </div>
+        </div>
+    </div>
+</div>

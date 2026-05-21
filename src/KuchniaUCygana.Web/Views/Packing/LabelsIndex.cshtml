@@ -1,8 +1,22 @@
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Etykiety";
-    ViewData["Section"] ??= "Kompletacja";
-    ViewData["Description"] ??= "Lista etykiet do wygenerowania i wydruku.";
+    ViewData["Title"] = "Generator Etykiet";
+    ViewData["Section"] = "Pakowanie";
+    ViewData["Description"] = "Wyszukaj aktywną sesję pakowania w celu wygenerowania i wydrukowania etykiet.";
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card card-premium text-center p-4">
+            <div class="card-status-top bg-azure"></div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure icon-lg" width="48" height="48" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" /><path d="M7 16h10" /><path d="M7 12h10" /><path d="M7 8h10" /></svg>
+                </div>
+                <h2 class="h2 mb-2 text-dark">Wybierz sesję pakowania</h2>
+                <p class="text-secondary small mb-4">Aby wydrukować etykiety QR dla klientów, musisz najpierw otworzyć lub wyszukać sesję pakowania z widoku głównego.</p>
+                <a asp-action="Index" class="btn btn-primary">Przejdź do listy sesji</a>
+            </div>
+        </div>
+    </div>
+</div>
