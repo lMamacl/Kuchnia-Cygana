@@ -142,6 +142,15 @@ public sealed class OrderService : IOrderService
 
         order.Status = OrderStatus.Cancelled;
         order.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var deliveries = await deliveryCalendarRepository.GetByOrderIdAsync(orderId);
+        foreach (var delivery in deliveries)
+        {
+            delivery.Status = DeliveryStatus.Cancelled;
+            delivery.UpdatedAt = DateTimeOffset.UtcNow;
+            await deliveryCalendarRepository.UpdateAsync(delivery);
+        }
+
         return await orderRepository.UpdateAsync(order);
     }
 

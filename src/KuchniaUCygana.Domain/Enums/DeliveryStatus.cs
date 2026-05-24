@@ -1,5 +1,8 @@
-﻿namespace KuchniaUCygana.Domain.Enums;
+﻿using ServiceStack.DataAnnotations;
 
+namespace KuchniaUCygana.Domain.Enums;
+
+[EnumAsInt]
 public enum DeliveryStatus
 {
     Scheduled = 0,

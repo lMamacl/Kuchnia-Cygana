@@ -145,51 +145,7 @@
                         <tbody>
                             @foreach (var day in Model.DeliveryDays)
                             {
-                                var (dayBadge, dayText) = day.Status switch
-                                {
-                                    DeliveryStatus.Scheduled => ("bg-primary", "Zaplanowana"),
-                                    DeliveryStatus.Delivered => ("bg-success", "Dostarczona"),
-                                    DeliveryStatus.Skipped => ("bg-secondary", "Pominięta"),
-                                    DeliveryStatus.Cancelled => ("bg-danger", "Anulowana"),
-                                    _ => ("bg-secondary", "Nieznany")
-                                };
-
-                                <tr class="@(day.IsSkipped ? "table-secondary text-muted" : "")">
-                                    <td class="text-nowrap fw-semibold">
-                                        @day.DeliveryDate.ToString("dd.MM.yyyy")
-                                        <small class="text-muted fw-normal d-block">
-                                            @day.DeliveryDate.ToString("dddd", new System.Globalization.CultureInfo("pl-PL"))
-                                        </small>
-                                    </td>
-                                    <td>
-                                        @if (!string.IsNullOrEmpty(day.AddressFullLine))
-                                        {
-                                            @day.AddressFullLine
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted">—</span>
-                                        }
-                                    </td>
-                                    <td>
-                                        <span class="badge @dayBadge">@dayText</span>
-                                        @if (day.IsSkipped && !string.IsNullOrEmpty(day.DeliveryWindowName))
-                                        {
-                                            <br />
-                                            <small class="text-muted">@day.DeliveryWindowName</small>
-                                        }
-                                    </td>
-                                    <td class="text-end">
-                                        @if (day.Status == DeliveryStatus.Scheduled && !day.IsSkipped)
-                                        {
-                                            <a asp-action="ChangeDelivery"
-                                               asp-route-deliveryCalendarId="@day.Id"
-                                               class="btn btn-xs btn-outline-secondary btn-sm">
-                                                Zmień
-                                            </a>
-                                        }
-                                    </td>
-                                </tr>
+                                <partial name="_DeliveryDayRow" model="day" />
                             }
                         </tbody>
                     </table>

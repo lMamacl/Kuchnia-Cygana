@@ -32,3 +32,12 @@ public sealed class DiscountPartialViewModel
     public bool WasApplied { get; set; }
     public string? AppliedCode { get; set; }
 }
+
+public sealed class OrderChangeDeliveryViewModel
+{
+    public int DeliveryCalendarId { get; set; }
+    public DateTime CurrentDate { get; set; }
+    public DateTime NewDate { get; set; }
+    public int? NewAddressId { get; set; }
+    public IEnumerable<AddressDto> Addresses { get; set; } = [];
+}
