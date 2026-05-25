@@ -3,7 +3,6 @@ using KuchniaUCygana.Infrastructure;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using ServiceStack.OrmLite;
 using Xunit;
 
 namespace KuchniaUCygana.Tests.Unit.Infrastructure;
@@ -11,7 +10,7 @@ namespace KuchniaUCygana.Tests.Unit.Infrastructure;
 public sealed class DependencyInjectionTests
 {
     [Fact]
-    public void AddInfrastructure_Registers_OrmLiteFactory_AsSingleton()
+    public void AddInfrastructure_Registers_SqlConnectionFactory_AsSingleton()
     {
         // Arrange
         var config = new ConfigurationBuilder()
@@ -27,13 +26,10 @@ public sealed class DependencyInjectionTests
         services.AddInfrastructure(config);
         var provider = services.BuildServiceProvider();
 
-        var ormLiteFactory1 = provider.GetRequiredService<OrmLiteConnectionFactory>();
-        var ormLiteFactory2 = provider.GetRequiredService<OrmLiteConnectionFactory>();
         var dbFactory1 = provider.GetRequiredService<IDbConnectionFactory>();
         var dbFactory2 = provider.GetRequiredService<IDbConnectionFactory>();
 
         // Assert
-        ormLiteFactory1.Should().BeSameAs(ormLiteFactory2);
         dbFactory1.Should().BeSameAs(dbFactory2);
         dbFactory1.Should().BeOfType<SqlServerConnectionFactory>();
     }

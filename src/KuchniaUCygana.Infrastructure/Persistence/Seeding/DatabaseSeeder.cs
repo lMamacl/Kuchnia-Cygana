@@ -3,7 +3,7 @@ using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using Microsoft.Extensions.Logging;
-using ServiceStack.OrmLite;
+using Dapper;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Seeding;
 
@@ -40,7 +40,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
     private async Task SeedUsersAsync(System.Data.IDbConnection db, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        if (await db.CountAsync<User>(token: cancellationToken) > 0)
+        if (await db.ExecuteScalarAsync<int>(
+                new CommandDefinition("SELECT COUNT(1) FROM [Users];", cancellationToken: cancellationToken)) > 0)
         {
             return;
         }
@@ -76,7 +77,12 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             },
         };
 
-        await db.InsertAllAsync(users, cancellationToken);
+        const string sql = """
+            INSERT INTO [Users] ([Email], [PasswordHash], [FirstName], [LastName], [Role], [CreatedAt], [UpdatedAt])
+            VALUES (@Email, @PasswordHash, @FirstName, @LastName, @Role, @CreatedAt, @UpdatedAt);
+            """;
+
+        await db.ExecuteAsync(new CommandDefinition(sql, users, cancellationToken: cancellationToken));
         this.logger.LogInformation("Seeded {Count} users.", users.Length);
     }
 }
