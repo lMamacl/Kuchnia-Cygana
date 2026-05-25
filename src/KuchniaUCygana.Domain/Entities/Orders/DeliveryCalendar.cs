@@ -1,13 +1,14 @@
-﻿using KuchniaUCygana.Domain.Common;
+using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Orders;
 
 // Jeden rekord = jeden dzień dostawy w ramach zamówienia.
 // M3 pobiera rekordy na dany dzień, żeby wygenerować plan produkcji.
 
-[Alias("DeliveryCalendar")]
+[Table("DeliveryCalendar")]
 public sealed class DeliveryCalendar : AuditableEntity
 {
     public int OrderId { get; set; }

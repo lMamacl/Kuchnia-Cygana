@@ -1,12 +1,12 @@
-﻿using KuchniaUCygana.Domain.Common;
-using ServiceStack.DataAnnotations;
+using KuchniaUCygana.Domain.Common;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Customers;
 
-[Alias("CustomerProfiles")]
+[Table("CustomerProfiles")]
 public sealed class CustomerProfile : AuditableEntity
 {
-    [Index(Unique = true)]
     public int UserId { get; set; }
 
     public string? Phone { get; set; }

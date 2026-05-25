@@ -1,11 +1,12 @@
-﻿using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Menu;
 
+[Table("IngredientAllergens")]
 public sealed class IngredientAllergen
 {
-    [AutoIncrement]
-    [PrimaryKey]
+    [Key]
     public int Id { get; set; }
 
     public int IngredientId { get; set; }

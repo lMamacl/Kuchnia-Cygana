@@ -1,8 +1,7 @@
-﻿using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Enums;
-
-[EnumAsInt]
 public enum DeliveryStatus
 {
     Scheduled = 0,

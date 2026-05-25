@@ -20,5 +20,21 @@ public interface IPackingSessionRepository : IRepository<PackingSession>
     /// <summary>
     /// Pobiera pozycje sesji pakowania.
     /// </summary>
+    Task<PackingSession?> GetByDateAndOrderAsync(DateOnly date, int orderId);
+
+    Task<IEnumerable<PackingSession>> GetByDateWithItemsAsync(DateOnly date);
+
     Task<IEnumerable<PackingItem>> GetSessionItemsAsync(int sessionId);
+
+    Task<IEnumerable<PackingLabel>> GetLabelsBySessionAsync(int sessionId);
+
+    Task<PackingLabel?> GetShippingLabelAsync(int sessionId);
+
+    Task<PackingLabel?> GetProductLabelAsync(int packingItemId);
+
+    Task<IEnumerable<string>> GetMealIngredientsAsync(int mealId);
+
+    Task<IEnumerable<string>> GetMealAllergensAsync(int mealId);
+
+    Task<int?> GetMealCaloriesAsync(int mealId);
 }

@@ -1,13 +1,13 @@
 using System;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.Warehouse;
 
-[Alias("Batches")]
+[Table("Batches")]
 public class Batch : AuditableEntity<int>
 {
-    [References(typeof(StockItem))]
     public int StockItemId { get; set; }
 
     [Required]

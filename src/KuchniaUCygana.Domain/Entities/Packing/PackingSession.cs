@@ -1,5 +1,6 @@
 using System;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
 
@@ -9,7 +10,7 @@ namespace KuchniaUCygana.Domain.Entities.Packing;
 /// Sesja pakowania — odpowiada koncepcji Torba z class diagram.puml.
 /// Grupuje pudełka dla jednego zamówienia/klienta.
 /// </summary>
-[Alias("PackingSessions")]
+[Table("PackingSessions")]
 public class PackingSession : AuditableEntity<int>
 {
     /// <summary>
@@ -52,6 +53,6 @@ public class PackingSession : AuditableEntity<int>
     /// <summary>
     /// Lista pozycji w sesji pakowania.
     /// </summary>
-    [Ignore]
+    [NotMapped]
     public System.Collections.Generic.List<PackingItem> Items { get; set; } = new();
 }

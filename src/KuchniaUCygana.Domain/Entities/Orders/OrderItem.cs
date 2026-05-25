@@ -1,9 +1,10 @@
-﻿using KuchniaUCygana.Domain.Common;
-using ServiceStack.DataAnnotations;
+using KuchniaUCygana.Domain.Common;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Orders;
 
-[Alias("OrderItems")]
+[Table("OrderItems")]
 public sealed class OrderItem : AuditableEntity
 {
     public int OrderId { get; set; }

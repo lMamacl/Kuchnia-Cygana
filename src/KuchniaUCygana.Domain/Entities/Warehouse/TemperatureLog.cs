@@ -1,10 +1,11 @@
 using System;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.Warehouse;
 
-[Alias("TemperatureLogs")]
+[Table("TemperatureLogs")]
 public class TemperatureLog : AuditableEntity<long>
 {
     [Required]

@@ -1,4 +1,5 @@
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.Warehouse;
@@ -6,10 +7,9 @@ namespace KuchniaUCygana.Domain.Entities.Warehouse;
 /// <summary>
 /// Korekta inwentaryzacyjna — rejestracja różnic stanu rzeczywistego vs. systemowego.
 /// </summary>
-[Alias("InventoryAdjustments")]
+[Table("InventoryAdjustments")]
 public class InventoryAdjustment : AuditableEntity<int>
 {
-    [References(typeof(StockItem))]
     public int StockItemId { get; set; }
 
     /// <summary>

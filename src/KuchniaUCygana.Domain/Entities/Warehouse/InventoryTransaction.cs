@@ -1,13 +1,13 @@
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
 
 namespace KuchniaUCygana.Domain.Entities.Warehouse;
 
-[Alias("InventoryTransactions")]
+[Table("InventoryTransactions")]
 public class InventoryTransaction : BaseEntity<long>
 {
-    [References(typeof(Batch))]
     public int BatchId { get; set; }
 
     public InventoryTransactionType TransactionType { get; set; }

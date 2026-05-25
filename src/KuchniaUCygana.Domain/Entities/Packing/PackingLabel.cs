@@ -1,4 +1,5 @@
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.Packing;
@@ -7,7 +8,7 @@ namespace KuchniaUCygana.Domain.Entities.Packing;
 /// Etykieta — produktowa (na pudełko) lub wysyłkowa (na torbę).
 /// Powiązanie: EtykietaProduktowa + EtykietaWysylkowa z class diagram.puml
 /// </summary>
-[Alias("PackingLabels")]
+[Table("PackingLabels")]
 public class PackingLabel : BaseEntity<int>
 {
     /// <summary>

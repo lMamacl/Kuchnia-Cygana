@@ -1,11 +1,11 @@
-﻿using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Enums;
 
 /// <summary>
 /// Status realizacji pojedynczej pozycji planu produkcji.
 /// </summary>
-[EnumAsInt]
 public enum ProductionItemStatus
 {
     Planned = 0,

@@ -1,10 +1,11 @@
 using System.Collections.Generic;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.Warehouse;
 
-[Alias("UnitsOfMeasure")]
+[Table("UnitsOfMeasure")]
 public class UnitOfMeasure : BaseEntity<int>
 {
     [Required]

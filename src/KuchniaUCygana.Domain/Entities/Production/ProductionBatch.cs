@@ -1,4 +1,5 @@
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.Production;
@@ -7,10 +8,9 @@ namespace KuchniaUCygana.Domain.Entities.Production;
 /// Partia produkcyjna półproduktów (buliony, sosy, ciasta).
 /// Powiązanie: SubRecipe concept z class diagram.puml
 /// </summary>
-[Alias("ProductionBatches")]
+[Table("ProductionBatches")]
 public class ProductionBatch : AuditableEntity<int>
 {
-    [References(typeof(ProductionPlan))]
     public int ProductionPlanId { get; set; }
 
     /// <summary>

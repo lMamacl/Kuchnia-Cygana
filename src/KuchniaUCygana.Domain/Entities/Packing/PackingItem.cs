@@ -1,6 +1,8 @@
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Entities.Warehouse;
+using KuchniaUCygana.Domain.Enums;
 
 namespace KuchniaUCygana.Domain.Entities.Packing;
 
@@ -8,10 +10,9 @@ namespace KuchniaUCygana.Domain.Entities.Packing;
 /// Pozycja paczki — pojedyncze pudełko z posiłkiem w torbie.
 /// Powiązanie: Pudelko z class diagram.puml
 /// </summary>
-[Alias("PackingItems")]
+[Table("PackingItems")]
 public class PackingItem : AuditableEntity<int>
 {
-    [References(typeof(PackingSession))]
     public int PackingSessionId { get; set; }
 
     /// <summary>
@@ -33,13 +34,24 @@ public class PackingItem : AuditableEntity<int>
     /// <summary>
     /// Powiązanie z partią składnika (HACCP traceability).
     /// </summary>
-    [References(typeof(Batch))]
     public int? BatchId { get; set; }
+
+    [StringLength(100)]
+    public string? BoxCode { get; set; }
+
+    public PackingItemStatus Status { get; set; } = PackingItemStatus.Pending;
 
     /// <summary>
     /// Data ważności pudełka.
     /// </summary>
     public DateTimeOffset? ExpiryDate { get; set; }
+
+    public DateTimeOffset? FoilPrintedAt { get; set; }
+
+    public DateTimeOffset? PackedAt { get; set; }
+
+    [StringLength(50)]
+    public string? PackedBy { get; set; }
 
     /// <summary>
     /// Czy pudełko jest uszkodzone / zgłoszono brak.

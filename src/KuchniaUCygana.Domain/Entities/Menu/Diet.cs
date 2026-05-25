@@ -1,8 +1,11 @@
-﻿using KuchniaUCygana.Domain.Common;
+using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Menu;
 
+[Table("Diets")]
 public sealed class Diet : AuditableEntity
 {
     public string Name { get; set; } = string.Empty;

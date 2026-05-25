@@ -1,9 +1,10 @@
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.Warehouse;
 
-[Alias("StockItems")]
+[Table("StockItems")]
 public class StockItem : AuditableEntity<int>
 {
     [Required]
@@ -12,8 +13,6 @@ public class StockItem : AuditableEntity<int>
 
     // This acts as a bridge identifier to Module 2's Ingredient without strict foreign keys
     public int? BaseIngredientId { get; set; }
-
-    [References(typeof(UnitOfMeasure))]
     public int DefaultUnitOfMeasureId { get; set; }
 
     public decimal MinimumLevel { get; set; }

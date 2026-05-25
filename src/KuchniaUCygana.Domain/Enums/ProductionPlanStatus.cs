@@ -1,11 +1,11 @@
-﻿using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Enums;
 
 /// <summary>
 /// Status cyklu zycia planu produkcji.
 /// </summary>
-[EnumAsInt]
 public enum ProductionPlanStatus
 {
     Draft = 0,

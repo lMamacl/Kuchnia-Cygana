@@ -1,5 +1,6 @@
 using System;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
 
@@ -10,7 +11,7 @@ namespace KuchniaUCygana.Domain.Entities.Production;
 /// Generowany automatycznie (o 22:00) lub ręcznie przez Szefa Kuchni.
 /// Powiązanie: PlanProdukcji z class diagram.puml
 /// </summary>
-[Alias("ProductionPlans")]
+[Table("ProductionPlans")]
 public class ProductionPlan : AuditableEntity<int>
 {
     /// <summary>

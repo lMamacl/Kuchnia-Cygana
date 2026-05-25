@@ -1,4 +1,5 @@
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
 
@@ -8,10 +9,9 @@ namespace KuchniaUCygana.Domain.Entities.Production;
 /// Pozycja planu produkcji — ile porcji danego posiłku w danym wariancie ugotować.
 /// Powiązanie: PozycjaPlanu z class diagram.puml
 /// </summary>
-[Alias("ProductionPlanItems")]
+[Table("ProductionPlanItems")]
 public class ProductionPlanItem : AuditableEntity<int>
 {
-    [References(typeof(ProductionPlan))]
     public int ProductionPlanId { get; set; }
 
     /// <summary>
