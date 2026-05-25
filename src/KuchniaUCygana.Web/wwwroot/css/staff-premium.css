@@ -1,0 +1,180 @@
+/* Staff Premium Visual Styling */
+
+/* 1. Header Gradient */
+.bg-header-gradient {
+    background: linear-gradient(135deg, #1b2e4b 0%, #0f172a 100%);
+    color: #f8fafc;
+    border-radius: 0.75rem;
+    padding: 1.75rem 2rem;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.3);
+}
+
+.bg-header-gradient::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.bg-header-gradient::after {
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    left: 10%;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 60%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.bg-header-gradient .text-muted-light {
+    color: #94a3b8 !important;
+}
+
+/* 2. Card Hover Effects & Micro-animations */
+.card-premium {
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 4px rgba(15, 23, 42, 0.015);
+    background: var(--tblr-bg-surface);
+}
+
+[data-bs-theme="dark"] .card-premium {
+    border: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.card-premium-hoverable {
+    cursor: pointer;
+}
+
+.card-premium-hoverable:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px -10px rgba(15, 23, 42, 0.12);
+    border-color: var(--tblr-primary-border-subtle);
+}
+
+[data-bs-theme="dark"] .card-premium-hoverable:hover {
+    box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.4);
+    border-color: rgba(99, 102, 241, 0.4);
+}
+
+/* 3. Pulsating Badges & Status Indicators */
+.status-dot-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    position: relative;
+}
+
+.status-dot-pulse.bg-success {
+    background-color: var(--tblr-success) !important;
+    box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.4);
+    animation: pulse-success 2s infinite;
+}
+
+.status-dot-pulse.bg-warning {
+    background-color: var(--tblr-warning) !important;
+    box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.4);
+    animation: pulse-warning 2s infinite;
+}
+
+.status-dot-pulse.bg-danger {
+    background-color: var(--tblr-danger) !important;
+    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4);
+    animation: pulse-danger 2s infinite;
+}
+
+@keyframes pulse-success {
+    0% {
+        box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(46, 204, 113, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(46, 204, 113, 0);
+    }
+}
+
+@keyframes pulse-warning {
+    0% {
+        box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(241, 196, 15, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(241, 196, 15, 0);
+    }
+}
+
+@keyframes pulse-danger {
+    0% {
+        box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(231, 76, 60, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
+    }
+}
+
+/* 4. Glassmorphism cards / blur elements */
+.card-glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+[data-bs-theme="dark"] .card-glass {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* 5. Custom Table Premium Rows */
+.table-premium {
+    margin-bottom: 0;
+}
+
+.table-premium tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.table-premium tbody tr:hover {
+    background-color: rgba(32, 107, 196, 0.03) !important;
+}
+
+[data-bs-theme="dark"] .table-premium tbody tr:hover {
+    background-color: rgba(99, 102, 241, 0.04) !important;
+}
+
+/* 6. Smart Alert Banner styling */
+.alert-premium-smart {
+    border: 0;
+    border-left: 4px solid var(--tblr-warning);
+    background: color-mix(in srgb, var(--tblr-warning) 8%, var(--tblr-bg-surface));
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+}
+
+.alert-premium-smart.alert-danger {
+    border-left-color: var(--tblr-danger);
+    background: color-mix(in srgb, var(--tblr-danger) 8%, var(--tblr-bg-surface));
+}
+
+.alert-premium-smart.alert-success {
+    border-left-color: var(--tblr-success);
+    background: color-mix(in srgb, var(--tblr-success) 8%, var(--tblr-bg-surface));
+}
+

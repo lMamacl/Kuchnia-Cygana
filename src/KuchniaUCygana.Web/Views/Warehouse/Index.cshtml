@@ -1,0 +1,8 @@
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] ??= "Magazyn";
+    ViewData["Section"] ??= "Magazyn";
+    ViewData["Description"] ??= "Przeglad stanow i alertow w wersji szkieletowej.";
+}
+@await Html.PartialAsync("_StaffPlaceholder")
+

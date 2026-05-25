@@ -1,0 +1,38 @@
+@{
+    var title = ViewData["Title"]?.ToString() ?? "Panel pracowniczy";
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
+    var section = StaffNavigationCatalog.FindSection(controller);
+    var department = section?.Label ?? "Staff";
+    var departmentDescription = section?.Description ?? "Centralny podgląd wszystkich działów.";
+}
+<div class="page-header d-print-none staff-page-header mb-3">
+    <div class="container-xl">
+        <div class="bg-header-gradient">
+            <div class="row g-3 align-items-center">
+                <div class="col">
+                    <div class="text-uppercase fw-bold small text-muted-light">Aktywny dział</div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
+                        <h2 class="h1 mb-0 text-white">@title</h2>
+                        <span class="badge bg-indigo-lt text-white staff-department-badge" style="background: rgba(99, 102, 241, 0.25) !important;">
+                            @if (section is not null)
+                            {
+                                <span class="staff-badge-icon">@Html.Raw(StaffIconCatalog.Get(section.Icon))</span>
+                            }
+                            @department
+                        </span>
+                    </div>
+                    <div class="text-muted-light mt-2" style="font-size: 0.95rem;">@departmentDescription</div>
+                </div>
+                <div class="col-auto ms-auto d-print-none">
+                    <div class="btn-list">
+                        <span class="badge bg-yellow text-yellow-fg">Tryb podglądu</span>
+                        <a class="btn btn-primary" asp-controller="Staff" asp-action="Index">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3v-13" /><path d="M9 4v13" /><path d="M15 7v13" /></svg>
+                            Mapa działów
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
