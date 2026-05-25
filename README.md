@@ -4,7 +4,7 @@
 
 Platforma webowa dla firmy cateringowej łącząca **portal B2C** (zamawianie diet, płatności online) z **ERP back-office** (produkcja, magazyn, logistyka, HR, helpdesk).
 
-> **Technologie:** ASP.NET MVC 8 · MS SQL Server · ServiceStack OrmLite · HTMX 2.x · Alpine.js · Clean Architecture
+> **Technologie:** ASP.NET MVC 8 · MS SQL Server · Dapper · HTMX 2.x · Alpine.js · Clean Architecture
 
 ---
 
@@ -31,7 +31,7 @@ KuchniaUCygana.Application      ← BLL (Services, DTOs, AutoMapper, Validators)
     ↓ używa Interfejsów
 KuchniaUCygana.Domain           ← Core (Entities, Repository Interfaces, Events)
     ↑ implementuje Interfejsy
-KuchniaUCygana.Infrastructure   ← DAL (OrmLite, Migrations, External APIs, Cache)
+KuchniaUCygana.Infrastructure   ← DAL (Dapper, Migrations, External APIs, Cache)
 ```
 
 **Zasada:** Web → Application → Domain ← Infrastructure. Żadna warstwa nie może znać szczegółów warstwy powyżej.
@@ -246,6 +246,13 @@ dopięte pod `_LayoutStaff`, a nie przez osobne layouty ani przez przebudowę `_
 - Dla samych mocków/widoków nie zmieniaj `DependencyInjection.cs`, `Program.cs`, migracji ani `docker-compose.yml`.
 - Jeżeli Twój moduł ma realny serwis/repozytorium, dopisuj rejestrację DI addytywnie. Nie podmieniaj całego pliku.
 
+### Branch integration rules
+
+- `develop` przyjmuje tylko kompatybilną infrastrukturę DB na Dapperze, dokumentację i testy bazowe.
+- `Mamac` zostawia implementacje Modułu 3: Warehouse, Production, Packing, widoki, seeding demo i testy M3.
+- Branche deweloperskie po aktualizacji `develop` robią rebase albo merge i migrują własne repozytoria według `docs/guides/dapper-migration-guide.md`.
+- Nie przenoś pełnym merge'em branchy, które usuwają cudze kontrolery, widoki lub konfigurację Web; wybieraj cherry-pick właściwych plików.
+
 ### 🚀 Sygnały poprawnego startu
 Po uruchomieniu `docker compose up`, w logach powinieneś zobaczyć:
 - `Container kuchnia_sqlserver Healthy` — SQL Server jest gotowy.
@@ -272,11 +279,12 @@ Po uruchomieniu `docker compose up`, w logach powinieneś zobaczyć:
 | [`docs/module-3/PLAN_MODUL_3.md`](docs/module-3/PLAN_MODUL_3.md) | Szczegółowy plan Modułu 3 |
 | [`docs/Decisions_Log.md`](docs/Decisions_Log.md) | Dziennik decyzji architektonicznych |
 | [`docs/guides/Developer_Manual.md`](docs/guides/Developer_Manual.md) | Podręcznik dewelopera (OPRÓCZ PLANU NAJWAŻNIEJSZE) |
+| [`docs/guides/dapper-migration-guide.md`](docs/guides/dapper-migration-guide.md) | Wzorzec migracji repozytoriów i zasady integracji branchy |
 
 ## 🛠️ Narzędzia i Konwencje
 Wszystkie testy:
 
-- **ORM:** ServiceStack OrmLite (bliżej SQL niż EF Core, brak lazy loading — jawne JOINy)
+- **Dostęp do danych:** Dapper (bliżej SQL niż EF Core, brak lazy loading — jawne JOINy)
 - **Migracje:** FluentMigrator — jedyne źródło DDL (nie `db.CreateTableIfNotExists`!)
 - **Mapowania:** AutoMapper — 1 plik Profile per moduł
 - **Walidacja:** FluentValidation (serwer) + jQuery Validation Unobtrusive (klient)

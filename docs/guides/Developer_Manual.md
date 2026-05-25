@@ -21,7 +21,7 @@ System oparty jest na architekturze Clean Architecture i wzorcach DDD
 (Domain-Driven Design).
 
   - Runtime Bazy: MS SQL Server (Docker).
-  - ORM: ServiceStack.OrmLite (Micro-ORM).
+  - Dostep do danych: Dapper (Micro-ORM) + jawny SQL.
   - Migracje: FluentMigrator.
   - Strategia: Greenfield (brak migracji ze starego SQLite).
   - Gałąź develop: Zawiera czysty szablon architektoniczny (Infrastruktura,
@@ -88,7 +88,7 @@ musi dziedziczyć po jednej z poniższych klas.
   - Zastosowanie: Proste słowniki, tagi, jednostki miar (np. kg, g), kody
     błędów.
   - Funkcje: Posiada Id (klucz główny) oraz CreatedAt (DateTimeOffset UTC).
-  - Zaleta: Ułatwia hydrację danych przez OrmLite i testowanie (publiczne
+  - Zaleta: Ułatwia hydrację danych przez Dapper i testowanie (publiczne
     settery ID).
 
 🔸 AuditableEntity<T> (Zalecane dla biznesu)
@@ -109,7 +109,7 @@ Służą do komunikacji między modułami bez tworzenia sztywnych zależności.
   - Przykład: Moduł Magazynu rzuca BatchExpiredEvent, a Moduł Komunikacji wysyła
     e-mail do menedżera.
 
-4. Praca z Bazą Danych (FluentMigrator & OrmLite)
+4. Praca z Bazą Danych (FluentMigrator & Dapper)
 
 W tym projekcie nie używamy EF Core. Migracje i zapytania obsługujemy ręcznie.
 
@@ -129,7 +129,7 @@ W tym projekcie nie używamy EF Core. Migracje i zapytania obsługujemy ręcznie
     CRUD z obsługą Soft Delete.
   - Relacje: Brak relacji nawigacyjnych (Lazy Loading nie istnieje). Używaj
     jawnych kluczy obcych (CategoryId) i złączeń JOIN w zapytaniach.
-  - Zapytania: Wykorzystuj SqlExpression z OrmLite.
+  - Zapytania: Pisz jawny SQL parametryzowany przez Dapper.
 
 5. Standardy Kodowania Modułu (Krok po Kroku)
 
@@ -168,9 +168,18 @@ Używamy Conventional Commits. Każdy commit musi być poprzedzony prefiksem:
 
 - [ ] dotnet build przechodzi bez błędów.
 - [ ] Wszystkie testy jednostkowe i integracyjne przechodzą (dotnet test).
+- [ ] Guard migracji Dapper nie znajduje starych zależności ani obejść licencji.
 - [ ] Brak twardo zapisanych haseł/kluczy (używaj user-secrets).
 - [ ] Dokumentacja (jeśli wymagana) jest zaktualizowana w języku polskim.
 - [ ] Kod jest sformatowany zgodnie ze standardami projektu.
+
+8. Aktualizacja dokumentacji i integracja branchy
+
+- Szczegółowy wzorzec migracji repozytoriów jest w `docs/guides/dapper-migration-guide.md`.
+- `develop` przyjmuje tylko wspólną, kompatybilną warstwę infrastruktury DB, dokumentację i testy bazowe.
+- `Mamac` utrzymuje implementacje Modułu 3: Warehouse, Production, Packing, widoki, seeding demo i testy M3.
+- Branche deweloperskie po aktualizacji `develop` robią rebase albo merge i migrują własne repozytoria według wzorca Dapper.
+- Nie przenoś pełnym merge'em zmian, które usuwają cudze kontrolery, widoki albo konfigurację Web; wybieraj cherry-pick właściwych modułów.
 
 ⚠️ Ważne Uwagi Techniczne
 
