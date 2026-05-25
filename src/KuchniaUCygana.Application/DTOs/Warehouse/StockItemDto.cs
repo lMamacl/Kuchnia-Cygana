@@ -21,4 +21,14 @@ public sealed class StockItemDto
     /// Sumaryczny stan z aktywnych partii (obliczany w serwisie).
     /// </summary>
     public decimal CurrentStock { get; set; }
+
+    public string Category { get; set; } = string.Empty;
+
+    public string UnitSymbol { get; set; } = string.Empty;
+
+    public string Status { get; set; } = string.Empty;
+
+    public string StatusColor { get; set; } = string.Empty;
+
+    public System.DateTimeOffset? EarliestExpiryDate { get; set; }
 }

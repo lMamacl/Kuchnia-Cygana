@@ -32,7 +32,8 @@ public sealed class ProductionProfile : Profile
             .ForMember(d => d.FoodCostReport, o => o.Ignore());
 
         // PackingItem → PackingItemDto
-        CreateMap<PackingItem, PackingItemDto>();
+        CreateMap<PackingItem, PackingItemDto>()
+            .ForMember(d => d.Status, o => o.MapFrom(s => s.Status.ToString()));
 
         // PackingSession → PackingSessionDto (Items mapowane ręcznie)
         CreateMap<PackingSession, PackingSessionDto>()
@@ -42,6 +43,8 @@ public sealed class ProductionProfile : Profile
         // PackingLabel → PackingLabelDto
         CreateMap<PackingLabel, PackingLabelDto>()
             .ForMember(d => d.LabelType, o => o.MapFrom(s => s.LabelType.ToString()));
+
+        CreateMap<PackingManifest, PackingManifestDto>();
 
         // FoodCostReport → FoodCostReportDto (domain model → DTO)
         CreateMap<FoodCostReport, FoodCostReportDto>();

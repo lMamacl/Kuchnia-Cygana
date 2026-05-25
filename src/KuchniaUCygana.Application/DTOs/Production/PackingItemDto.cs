@@ -17,7 +17,17 @@ public sealed class PackingItemDto
 
     public int? BatchId { get; set; }
 
+    public string? BoxCode { get; set; }
+
+    public string Status { get; set; } = string.Empty;
+
     public DateTimeOffset? ExpiryDate { get; set; }
+
+    public DateTimeOffset? FoilPrintedAt { get; set; }
+
+    public DateTimeOffset? PackedAt { get; set; }
+
+    public string? PackedBy { get; set; }
 
     public bool IsDamaged { get; set; }
 

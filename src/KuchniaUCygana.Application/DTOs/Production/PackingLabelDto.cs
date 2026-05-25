@@ -28,4 +28,6 @@ public sealed class PackingLabelDto
     public string? RouteInfo { get; set; }
 
     public string? DeliveryWindow { get; set; }
+
+    public string? Ingredients { get; set; }
 }

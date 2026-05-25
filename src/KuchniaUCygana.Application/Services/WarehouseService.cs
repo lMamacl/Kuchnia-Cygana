@@ -1,8 +1,12 @@
 using AutoMapper;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Domain.Services;
 using Microsoft.Extensions.Logging;
@@ -17,6 +21,7 @@ public sealed class WarehouseService : IWarehouseService
     private readonly IBatchRepository _batchRepository;
     private readonly IStockItemRepository _stockItemRepository;
     private readonly IInventoryTransactionRepository _transactionRepository;
+    private readonly IRepository<UnitOfMeasure> _unitOfMeasureRepository;
     private readonly FefoService _fefoService;
     private readonly SmartInventoryAnalyzer _inventoryAnalyzer;
     private readonly IMapper _mapper;
@@ -26,6 +31,7 @@ public sealed class WarehouseService : IWarehouseService
         IBatchRepository batchRepository,
         IStockItemRepository stockItemRepository,
         IInventoryTransactionRepository transactionRepository,
+        IRepository<UnitOfMeasure> unitOfMeasureRepository,
         FefoService fefoService,
         SmartInventoryAnalyzer inventoryAnalyzer,
         IMapper mapper,
@@ -34,6 +40,7 @@ public sealed class WarehouseService : IWarehouseService
         _batchRepository = batchRepository;
         _stockItemRepository = stockItemRepository;
         _transactionRepository = transactionRepository;
+        _unitOfMeasureRepository = unitOfMeasureRepository;
         _fefoService = fefoService;
         _inventoryAnalyzer = inventoryAnalyzer;
         _mapper = mapper;
@@ -151,5 +158,93 @@ public sealed class WarehouseService : IWarehouseService
     {
         var alerts = await _inventoryAnalyzer.AnalyzeAsync();
         return _mapper.Map<IEnumerable<InventoryAlertDto>>(alerts);
+    }
+
+    /// <inheritdoc/>
+    public async Task<IEnumerable<StockItemDto>> GetStockOverviewAsync()
+    {
+        var items = await _stockItemRepository.GetAllAsync();
+        var units = (await _unitOfMeasureRepository.GetAllAsync()).ToDictionary(u => u.Id);
+
+        var dtoList = new List<StockItemDto>();
+
+        foreach (var item in items)
+        {
+            var activeBatches = (await _batchRepository.GetActiveBatchesByStockItemAsync(item.Id)).ToList();
+            var currentStock = activeBatches.Sum(b => b.CurrentQuantity);
+
+            DateTimeOffset? earliestExpiryDate = activeBatches.Any()
+                ? activeBatches.Min(b => b.ExpiryDate)
+                : null;
+
+            units.TryGetValue(item.DefaultUnitOfMeasureId, out var uom);
+            var unitSymbol = uom?.Symbol ?? string.Empty;
+
+            string category = DetermineCategory(item.Name);
+
+            string status = "OK";
+            string statusColor = "success";
+
+            if (currentStock <= 0)
+            {
+                status = "Brak zapasów";
+                statusColor = "danger";
+            }
+            else if (earliestExpiryDate.HasValue && earliestExpiryDate.Value <= DateTimeOffset.UtcNow.AddDays(3))
+            {
+                status = "Pilna ważność";
+                statusColor = "danger";
+            }
+            else if (currentStock < item.MinimumLevel)
+            {
+                status = "Niski stan";
+                statusColor = "danger";
+            }
+            else if (currentStock == item.MinimumLevel)
+            {
+                status = "Wskazana dostawa";
+                statusColor = "warning";
+            }
+            else if (earliestExpiryDate.HasValue && earliestExpiryDate.Value <= DateTimeOffset.UtcNow.AddDays(7))
+            {
+                status = "Krótka ważność";
+                statusColor = "warning";
+            }
+
+            dtoList.Add(new StockItemDto
+            {
+                Id = item.Id,
+                Name = item.Name,
+                BaseIngredientId = item.BaseIngredientId,
+                DefaultUnitOfMeasureId = item.DefaultUnitOfMeasureId,
+                MinimumLevel = item.MinimumLevel,
+                LeadTimeDays = item.LeadTimeDays,
+                CurrentStock = currentStock,
+                Category = category,
+                UnitSymbol = unitSymbol,
+                Status = status,
+                StatusColor = statusColor,
+                EarliestExpiryDate = earliestExpiryDate
+            });
+        }
+
+        return dtoList;
+    }
+
+    private static string DetermineCategory(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "Suche";
+
+        var lower = name.ToLowerInvariant();
+        if (lower.Contains("kurczak") || lower.Contains("łosoś") || lower.Contains("mięso") || lower.Contains("ryb") || lower.Contains("indyka"))
+            return "Mięso/Ryby";
+
+        if (lower.Contains("śmietanka") || lower.Contains("masło") || lower.Contains("ser ") || lower.Contains("gouda") || lower.Contains("jogurt") || lower.Contains("mleko"))
+            return "Nabiał";
+
+        if (lower.Contains("brokuł") || lower.Contains("dynia") || lower.Contains("batat") || lower.Contains("jagod") || lower.Contains("ziemniak") || (lower.Contains("pomidor") && !lower.Contains("puszka")))
+            return "Warzywa i owoce";
+
+        return "Suche";
     }
 }

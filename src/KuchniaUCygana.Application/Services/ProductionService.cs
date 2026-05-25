@@ -67,6 +67,34 @@ public sealed class ProductionService : IProductionService
     }
 
     /// <inheritdoc/>
+    public async Task<ProductionPlanDto?> GetDailyPlanByDateAsync(DateOnly date)
+    {
+        var plan = await _planRepository.GetByDateAsync(date);
+        if (plan == null) return null;
+
+        var items = await _planRepository.GetPlanItemsAsync(plan.Id);
+
+        var dto = _mapper.Map<ProductionPlanDto>(plan);
+        dto.Items = _mapper.Map<List<ProductionPlanItemDto>>(items);
+
+        return dto;
+    }
+
+    /// <inheritdoc/>
+    public async Task<ProductionPlanDto?> GetPlanByIdAsync(int planId)
+    {
+        var plan = await _planRepository.GetByIdAsync(planId);
+        if (plan == null) return null;
+
+        var items = await _planRepository.GetPlanItemsAsync(plan.Id);
+
+        var dto = _mapper.Map<ProductionPlanDto>(plan);
+        dto.Items = _mapper.Map<List<ProductionPlanItemDto>>(items);
+
+        return dto;
+    }
+
+    /// <inheritdoc/>
     public async Task<CookingCardDto> GetCookingCardAsync(int planItemId)
     {
         var item = await _itemRepository.GetByIdAsync(planItemId)
