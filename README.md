@@ -4,7 +4,7 @@
 
 Platforma webowa dla firmy cateringowej łącząca **portal B2C** (zamawianie diet, płatności online) z **ERP back-office** (produkcja, magazyn, logistyka, HR, helpdesk).
 
-> **Technologie:** ASP.NET MVC 8 · MS SQL Server · ServiceStack OrmLite · HTMX 2.x · Alpine.js · Clean Architecture
+> **Technologie:** ASP.NET MVC 8 · MS SQL Server · Dapper · FluentMigrator · HTMX 2.x · Alpine.js · Clean Architecture
 
 ---
 
@@ -31,7 +31,7 @@ KuchniaUCygana.Application      ← BLL (Services, DTOs, AutoMapper, Validators)
     ↓ używa Interfejsów
 KuchniaUCygana.Domain           ← Core (Entities, Repository Interfaces, Events)
     ↑ implementuje Interfejsy
-KuchniaUCygana.Infrastructure   ← DAL (OrmLite, Migrations, External APIs, Cache)
+KuchniaUCygana.Infrastructure   ← DAL (Dapper, Migrations, External APIs, Cache)
 ```
 
 **Zasada:** Web → Application → Domain ← Infrastructure. Żadna warstwa nie może znać szczegółów warstwy powyżej.
@@ -276,7 +276,7 @@ Po uruchomieniu `docker compose up`, w logach powinieneś zobaczyć:
 ## 🛠️ Narzędzia i Konwencje
 Wszystkie testy:
 
-- **ORM:** ServiceStack OrmLite (bliżej SQL niż EF Core, brak lazy loading — jawne JOINy)
+- **Dostęp do danych:** Dapper (blisko SQL, brak lazy loading — jawne JOINy)
 - **Migracje:** FluentMigrator — jedyne źródło DDL (nie `db.CreateTableIfNotExists`!)
 - **Mapowania:** AutoMapper — 1 plik Profile per moduł
 - **Walidacja:** FluentValidation (serwer) + jQuery Validation Unobtrusive (klient)

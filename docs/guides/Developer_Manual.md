@@ -21,7 +21,7 @@ System oparty jest na architekturze Clean Architecture i wzorcach DDD
 (Domain-Driven Design).
 
   - Runtime Bazy: MS SQL Server (Docker).
-  - ORM: ServiceStack.OrmLite (Micro-ORM).
+  - Dostęp do danych: Dapper + jawny SQL.
   - Migracje: FluentMigrator.
   - Strategia: Greenfield (brak migracji ze starego SQLite).
   - Gałąź develop: Zawiera czysty szablon architektoniczny (Infrastruktura,
@@ -88,7 +88,7 @@ musi dziedziczyć po jednej z poniższych klas.
   - Zastosowanie: Proste słowniki, tagi, jednostki miar (np. kg, g), kody
     błędów.
   - Funkcje: Posiada Id (klucz główny) oraz CreatedAt (DateTimeOffset UTC).
-  - Zaleta: Ułatwia hydrację danych przez OrmLite i testowanie (publiczne
+  - Zaleta: Ułatwia hydrację danych przez Dapper i testowanie (publiczne
     settery ID).
 
 🔸 AuditableEntity<T> (Zalecane dla biznesu)
@@ -109,7 +109,7 @@ Służą do komunikacji między modułami bez tworzenia sztywnych zależności.
   - Przykład: Moduł Magazynu rzuca BatchExpiredEvent, a Moduł Komunikacji wysyła
     e-mail do menedżera.
 
-4. Praca z Bazą Danych (FluentMigrator & OrmLite)
+4. Praca z Bazą Danych (FluentMigrator & Dapper)
 
 W tym projekcie nie używamy EF Core. Migracje i zapytania obsługujemy ręcznie.
 
@@ -129,7 +129,8 @@ W tym projekcie nie używamy EF Core. Migracje i zapytania obsługujemy ręcznie
     CRUD z obsługą Soft Delete.
   - Relacje: Brak relacji nawigacyjnych (Lazy Loading nie istnieje). Używaj
     jawnych kluczy obcych (CategoryId) i złączeń JOIN w zapytaniach.
-  - Zapytania: Wykorzystuj SqlExpression z OrmLite.
+  - Zapytania: używaj jawnego, parametryzowanego SQL przez Dapper. Nie dodawaj
+    zależności od komercyjnego ORM ani adnotacji ServiceStack w encjach.
 
 5. Standardy Kodowania Modułu (Krok po Kroku)
 
@@ -178,6 +179,16 @@ Używamy Conventional Commits. Każdy commit musi być poprzedzony prefiksem:
     czasowymi.
   - Usuwanie: Nigdy nie używaj db.Delete() na encjach biznesowych. Korzystaj z
     metod repozytorium wspierających Soft Delete.
+
+### Zasady integracji branchy po migracji na Dapper
+
+- `develop` zawiera tylko wspólną, legalną warstwę infrastruktury i nie powinien
+  przyjmować niedokończonych implementacji modułów.
+- Branche modułowe po aktualizacji `develop` wykonują rebase albo merge i
+  migrują własne repozytoria według wzorca Dapper.
+- Nie merge'ujemy pełnych branchy, które usuwają cudze kontrolery, widoki lub
+  zasoby Web. Takie zmiany należy wydzielać przez cherry-pick albo ręczne
+  przeniesienie właściwego modułu.
   - Widoki staff: dla mocków i ekranów back-office używaj `_LayoutStaff` oraz
     `StaffNavigationCatalog`. Nie dopisuj rejestracji DI tylko po to, żeby
     uruchomić statyczny widok testowy.
