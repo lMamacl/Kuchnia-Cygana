@@ -1,48 +1,40 @@
+@model KuchniaUCygana.Application.DTOs.Production.CookingCardDto
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Interaktywna Karta Gotowania";
     ViewData["Section"] = "Kuchnia";
     ViewData["Description"] = "Szczegółowa specyfikacja receptury z automatycznym przeliczaniem ilości składników na zadaną liczbę porcji.";
 
-    int planItemId = ViewBag.PlanItemId > 0 ? ViewBag.PlanItemId : 101;
+    var image = GetMealImage(Model.MealName);
+    var category = GetMealCategory(Model.MealName);
+}
 
-    // Definiujemy mockowe danie w zależności od ID dla uwiarygodnienia widoku
-    var dishName = "Kurczak Teriyaki z ryżem jaśminowym i brokułami";
-    var category = "Danie Główne";
-    var portions = 240;
-    var image = "/img/chicken_teriyaki.png";
-
-    if (planItemId == 102)
+@functions {
+    string GetMealImage(string mealName)
     {
-        dishName = "Krem z pieczonej dyni z pestkami i imbirem";
-        category = "Zupa";
-        portions = 150;
-        image = "/img/pumpkin_soup.png";
-    }
-    else if (planItemId == 103)
-    {
-        dishName = "Proteinowy sernik jagodowy bez cukru";
-        category = "Deser";
-        portions = 180;
-        image = "/img/blueberry_cheesecake.png";
-    }
-    else if (planItemId == 104)
-    {
-        dishName = "Łosoś pieczony w ziołach z purée z batatów";
-        category = "Danie Główne";
-        portions = 110;
-        image = "/img/baked_salmon.png";
+        if (mealName.Contains("Kurczak", StringComparison.OrdinalIgnoreCase)) return "/img/chicken_teriyaki.png";
+        if (mealName.Contains("dyni", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Zupa", StringComparison.OrdinalIgnoreCase)) return "/img/pumpkin_soup.png";
+        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Deser", StringComparison.OrdinalIgnoreCase)) return "/img/blueberry_cheesecake.png";
+        if (mealName.Contains("Łosoś", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Ryba", StringComparison.OrdinalIgnoreCase)) return "/img/baked_salmon.png";
+        return "/img/chicken_teriyaki.png"; // fallback
     }
 
-    // Składniki bazowe na 1 porcję
-    var ingredients = new[]
+    string GetMealCategory(string mealName)
     {
-        new { Name = "Pierś z kurczaka świeża", BaseQty = 0.15m, Unit = "kg" },
-        new { Name = "Sos Teriyaki domowy", BaseQty = 0.04m, Unit = "l" },
-        new { Name = "Ryż jaśminowy", BaseQty = 0.08m, Unit = "kg" },
-        new { Name = "Brokuły świeże", BaseQty = 0.06m, Unit = "kg" },
-        new { Name = "Sezam biały", BaseQty = 0.005m, Unit = "kg" }
-    };
+        if (mealName.Contains("zup", StringComparison.OrdinalIgnoreCase)) return "Zupa";
+        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase) || mealName.Contains("deser", StringComparison.OrdinalIgnoreCase) || mealName.Contains("ciast", StringComparison.OrdinalIgnoreCase)) return "Deser";
+        if (mealName.Contains("śniadan", StringComparison.OrdinalIgnoreCase) || mealName.Contains("owsian", StringComparison.OrdinalIgnoreCase)) return "Śniadanie";
+        return "Danie Główne";
+    }
+
+    string FormatWeight(decimal weightInGrams)
+    {
+        if (weightInGrams >= 1000m)
+        {
+            return $"{(weightInGrams / 1000m).ToString("F2")} kg";
+        }
+        return $"{weightInGrams.ToString("F0")} g";
+    }
 }
 
 <div class="row g-4">
@@ -55,8 +47,8 @@
                     <span class="avatar avatar-xl rounded-3" style="background-image: url(@image); width: 80px; height: 80px; background-size: cover; background-position: center; border: 1px solid rgba(0, 0, 0, 0.08);"></span>
                     <div>
                         <span class="badge bg-indigo-lt text-indigo mb-1">@category</span>
-                        <h2 class="h2 mb-0 text-dark">@dishName</h2>
-                        <div class="text-secondary small mt-1">Pozycja planu #@planItemId</div>
+                        <h2 class="h2 mb-0 text-dark">@Model.MealName</h2>
+                        <div class="text-secondary small mt-1">Pozycja planu #@Model.PlanItemId</div>
                     </div>
                 </div>
 
@@ -64,16 +56,16 @@
 
                 <div class="d-flex justify-content-between mb-3">
                     <span class="text-secondary">Wymagane porcje:</span>
-                    <strong class="text-dark">@portions szt.</strong>
+                    <strong class="text-dark">@Model.PlannedQuantity szt.</strong>
                 </div>
 
                 <form asp-action="ApproveCooking" method="post">
                     @Html.AntiForgeryToken()
-                    <input type="hidden" name="planItemId" value="@planItemId" />
+                    <input type="hidden" name="planItemId" value="@Model.PlanItemId" />
                     
                     <div class="mb-3">
                         <label class="form-label required">Ugotowana ilość rzeczywista (szt.)</label>
-                        <input type="number" name="actualQuantity" class="form-control form-control-lg text-center fw-bold" value="@portions" required min="0" />
+                        <input type="number" name="actualQuantity" class="form-control form-control-lg text-center fw-bold" value="@Model.PlannedQuantity" required min="0" />
                         <small class="form-hint text-center">Wpisz faktyczną liczbę gotowych porcji, która trafi do pakowania.</small>
                     </div>
 
@@ -94,7 +86,7 @@
         <div class="card card-premium">
             <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
                 <h3 class="card-title">Zapotrzebowanie na Składniki (Skalowane)</h3>
-                <span class="badge bg-azure-lt text-azure">Przeliczono na @portions porcji</span>
+                <span class="badge bg-azure-lt text-azure">Przeliczono na @Model.PlannedQuantity porcji</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table table-premium">
@@ -102,20 +94,19 @@
                         <tr>
                             <th>Składnik</th>
                             <th class="text-end">Na 1 porcję</th>
-                            <th class="text-end font-weight-bold fw-bold text-dark">Łącznie dla @portions porcji</th>
+                            <th class="text-end font-weight-bold fw-bold text-dark">Łącznie dla @Model.PlannedQuantity porcji</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var ing in ingredients)
+                        @foreach (var ing in Model.Ingredients)
                         {
-                            var totalQty = ing.BaseQty * portions;
                             <tr>
-                                <td class="font-weight-medium fw-bold text-dark">@ing.Name</td>
+                                <td class="font-weight-medium fw-bold text-dark">@ing.IngredientName</td>
                                 <td class="text-end text-secondary">
-                                    @ing.BaseQty.ToString("F3") @ing.Unit
+                                    @FormatWeight(ing.WeightPerServing)
                                 </td>
                                 <td class="text-end font-weight-bold fw-bold text-azure" style="font-size: 1.05rem;">
-                                    @totalQty.ToString("F2") @ing.Unit
+                                    @FormatWeight(ing.TotalWeight)
                                 </td>
                             </tr>
                         }

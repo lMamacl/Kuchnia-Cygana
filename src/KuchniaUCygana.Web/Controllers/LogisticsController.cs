@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
+[Authorize(Roles = "Driver,Admin")]
 [Route("logistics")]
 public sealed class LogisticsController : Controller
 {

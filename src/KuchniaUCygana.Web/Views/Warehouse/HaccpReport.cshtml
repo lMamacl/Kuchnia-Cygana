@@ -1,3 +1,4 @@
+@model KuchniaUCygana.Application.DTOs.Warehouse.HaccpReportDto
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Raport Zgodności HACCP";
@@ -7,13 +8,69 @@
     DateOnly dateFrom = ViewBag.DateFrom;
     DateOnly dateTo = ViewBag.DateTo;
 
-    var mockReportRows = new[]
-    {
-        new { Device = "Chłodnia #2 - Mięso", MinLimit = 0.0m, MaxLimit = 4.0m, AvgTemp = 1.9m, MinRecorded = 0.8m, MaxRecorded = 3.2m, Violations = 0 },
-        new { Device = "Lodówka #1 - Nabiał", MinLimit = 2.0m, MaxLimit = 6.0m, AvgTemp = 4.3m, MinRecorded = 3.1m, MaxRecorded = 5.8m, Violations = 0 },
-        new { Device = "Zamrażarka #3 - Ryby", MinLimit = -22.0m, MaxLimit = -18.0m, AvgTemp = -19.8m, MinRecorded = -21.5m, MaxRecorded = -18.1m, Violations = 0 },
-        new { Device = "Lodówka #4 - Warzywa", MinLimit = 4.0m, MaxLimit = 8.0m, AvgTemp = 6.1m, MinRecorded = 3.9m, MaxRecorded = 9.2m, Violations = 1 }
-    };
+    // Grupowanie pomiarów i obliczanie limitów dla urządzeń
+    var reportRows = Model.Readings
+        .GroupBy(r => r.DeviceNameOrLocation)
+        .Select(g =>
+        {
+            decimal minLimit = -25.0m;
+            decimal maxLimit = 8.0m;
+            
+            var name = g.Key.ToLower();
+            if (name.Contains("zamrażarka") || name.Contains("freezer"))
+            {
+                minLimit = -22.0m;
+                maxLimit = -18.0m;
+            }
+            else if (name.Contains("mięso"))
+            {
+                minLimit = 0.0m;
+                maxLimit = 4.0m;
+            }
+            else if (name.Contains("nabiał"))
+            {
+                minLimit = 2.0m;
+                maxLimit = 6.0m;
+            }
+            else if (name.Contains("warzywa"))
+            {
+                minLimit = 4.0m;
+                maxLimit = 8.0m;
+            }
+            else if (name.Contains("chłodnia"))
+            {
+                minLimit = 2.0m;
+                maxLimit = 8.0m;
+            }
+            else if (name.Contains("witryna"))
+            {
+                minLimit = 2.0m;
+                maxLimit = 8.0m;
+            }
+            else if (name.Contains("suchy"))
+            {
+                minLimit = 15.0m;
+                maxLimit = 25.0m;
+            }
+
+            var temps = g.Select(x => x.RecordedTemperatureCelsius).ToList();
+            var avgTemp = temps.Any() ? temps.Average() : 0m;
+            var minRecorded = temps.Any() ? temps.Min() : 0m;
+            var maxRecorded = temps.Any() ? temps.Max() : 0m;
+            var violations = g.Count(x => x.RecordedTemperatureCelsius < minLimit || x.RecordedTemperatureCelsius > maxLimit);
+
+            return new
+            {
+                Device = g.Key,
+                MinLimit = minLimit,
+                MaxLimit = maxLimit,
+                AvgTemp = avgTemp,
+                MinRecorded = minRecorded,
+                MaxRecorded = maxRecorded,
+                Violations = violations
+            };
+        })
+        .ToList();
 }
 
 <div class="card card-premium d-print-none mb-4">
@@ -35,6 +92,90 @@
                 </button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Podsumowanie statystyczne -->
+<div class="row g-3 mb-4 d-print-none">
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-sm">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <span class="bg-primary text-white avatar">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 13.5a2.5 2.5 0 1 0 4 0v-8.5a2 2 0 0 0 -4 0v8.5z" /><path d="M10 9l4 0" /><path d="M6.5 17h11" /></span>
+                    </div>
+                    <div class="col">
+                        <div class="font-weight-medium fw-bold">
+                            @Model.TotalReadings
+                        </div>
+                        <div class="text-secondary small">
+                            Wszystkie odczyty
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-sm">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <span class="bg-danger text-white avatar">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></span>
+                    </div>
+                    <div class="col">
+                        <div class="font-weight-medium fw-bold text-danger">
+                            @Model.OutOfRangeReadings
+                        </div>
+                        <div class="text-secondary small">
+                            Przekroczenia HACCP
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-sm">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <span class="bg-success text-white avatar">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></span>
+                    </div>
+                    <div class="col">
+                        <div class="font-weight-medium fw-bold text-success">
+                            @(Model.TotalReadings - Model.OutOfRangeReadings)
+                        </div>
+                        <div class="text-secondary small">
+                            Odczyty w normie
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-sm">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <span class="bg-info text-white avatar">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12h1M20 12h1M5.6 5.6l.7 .7M17.7 5.6l-.7 .7M9 16a5 5 0 1 1 6 0a3.5 3.5 0 0 0 -1 3a2 2 0 0 1 -4 0a3.5 3.5 0 0 0 -1 -3" /><path d="M9.7 17l4.6 0" /></span>
+                    </div>
+                    <div class="col">
+                        <div class="font-weight-medium fw-bold">
+                            @reportRows.Count
+                        </div>
+                        <div class="text-secondary small">
+                            Monitorowane urządzenia
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -70,26 +211,37 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var row in mockReportRows)
+                    @if (!reportRows.Any())
                     {
                         <tr>
-                            <td class="font-weight-medium fw-bold text-dark">@row.Device</td>
-                            <td class="text-center text-secondary">@row.MinLimit.ToString("F1")°C</td>
-                            <td class="text-center text-secondary">@row.MaxLimit.ToString("F1")°C</td>
-                            <td class="text-center font-weight-bold fw-bold text-dark">@row.AvgTemp.ToString("F1")°C</td>
-                            <td class="text-center text-success">@row.MinRecorded.ToString("F1")°C</td>
-                            <td class="text-center text-warning">@row.MaxRecorded.ToString("F1")°C</td>
-                            <td class="text-center">
-                                @if (row.Violations > 0)
-                                {
-                                    <span class="badge bg-danger-lt text-danger fw-bold">@row.Violations razy</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-success-lt text-success">Zgodny</span>
-                                }
+                            <td colspan="7" class="text-center py-4 text-secondary">
+                                Brak zarejestrowanych pomiarów w podanym zakresie dat.
                             </td>
                         </tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in reportRows)
+                        {
+                            <tr>
+                                <td class="font-weight-medium fw-bold text-dark">@row.Device</td>
+                                <td class="text-center text-secondary">@row.MinLimit.ToString("F1")°C</td>
+                                <td class="text-center text-secondary">@row.MaxLimit.ToString("F1")°C</td>
+                                <td class="text-center font-weight-bold fw-bold text-dark">@row.AvgTemp.ToString("F1")°C</td>
+                                <td class="text-center text-success">@row.MinRecorded.ToString("F1")°C</td>
+                                <td class="text-center text-warning">@row.MaxRecorded.ToString("F1")°C</td>
+                                <td class="text-center">
+                                    @if (row.Violations > 0)
+                                    {
+                                        <span class="badge bg-danger-lt text-danger fw-bold">@row.Violations razy</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success-lt text-success">Zgodny</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
                     }
                 </tbody>
             </table>

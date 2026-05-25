@@ -1,166 +1,287 @@
+@model KuchniaUCygana.Web.Models.ProductionDashboardViewModel
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Pulpit Produkcji Kuchennej";
     ViewData["Section"] = "Kuchnia";
     ViewData["Description"] = "Zarządzanie dziennym planem gotowania, wskaźniki wydajności oraz interaktywne karty produkcyjne kucharzy.";
 
-    // Mockowe dane na potrzeby wersji pokazowej (estetycznej)
-    var todayPlanStatus = "Aktywny";
-    var percentComplete = 80; // 80% ukończenia produkcji
-
-    var mockProductionItems = new[]
-    {
-        new { Id = 101, Name = "Kurczak Teriyaki z ryżem jaśminowym i brokułami", Category = "Danie Główne", Portions = 240, Completed = 240, Status = "Zakończone", Color = "success", Image = "/img/chicken_teriyaki.png" },
-        new { Id = 102, Name = "Krem z pieczonej dyni z pestkami i imbirem", Category = "Zupa", Portions = 150, Completed = 120, Status = "W toku", Color = "warning", Image = "/img/pumpkin_soup.png" },
-        new { Id = 103, Name = "Proteinowy sernik jagodowy bez cukru", Category = "Deser", Portions = 180, Completed = 120, Status = "W toku", Color = "warning", Image = "/img/blueberry_cheesecake.png" },
-        new { Id = 104, Name = "Łosoś pieczony w ziołach z purée z batatów", Category = "Danie Główne", Portions = 110, Completed = 0, Status = "Oczekuje", Color = "secondary", Image = "/img/baked_salmon.png" }
-    };
+    var hasPlan = Model.DailyPlan != null;
+    var totalPlanned = hasPlan ? Model.DailyPlan!.Items.Sum(i => i.PlannedQuantity) : 0;
+    var totalCooked = hasPlan ? Model.DailyPlan!.Items.Sum(i => i.CookedQuantity) : 0;
+    var percentComplete = totalPlanned > 0 ? (totalCooked * 100 / totalPlanned) : 0;
 }
 
-<div class="row row-cards">
-    <!-- Statystyki produkcji -->
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-premium card-premium-hoverable">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="subheader">Status Planu</div>
-                    <div class="ms-auto lh-1">
-                        <span class="status-dot-pulse bg-warning"></span>
-                    </div>
-                </div>
-                <div class="h1 mb-2 mt-1">@todayPlanStatus</div>
-                <div class="text-secondary small">Rozpoczęto dzisiaj o 05:00</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-premium card-premium-hoverable">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="subheader">Zaplanowane Dania</div>
-                    <div class="ms-auto">
-                        <span class="text-blue">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 21l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12v9" /><path d="M20 7.5v9" /><path d="M4 7.5v9" /></svg>
-                        </span>
-                    </div>
-                </div>
-                <div class="h1 mb-2 mt-1">4</div>
-                <div class="text-secondary small">Kategorie diet: Standard, Slim, Sport</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-premium card-premium-hoverable">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="subheader">Ugotowane Porcje</div>
-                    <div class="ms-auto">
-                        <span class="text-indigo">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z" /><path d="M13 13h4" /><path d="M13 9h4" /><path d="M9 9h.01" /><path d="M9 13h.01" /><path d="M3 5h2v14h-2z" /></svg>
-                        </span>
-                    </div>
-                </div>
-                <div class="h1 mb-2 mt-1">480 / 680</div>
-                <div class="text-secondary small">Postęp całkowity: @percentComplete%</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-premium card-premium-hoverable">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="subheader">Czas realizacji</div>
-                    <div class="ms-auto">
-                        <span class="text-green">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 7v5l3 3" /></svg>
-                        </span>
-                    </div>
-                </div>
-                <div class="h1 mb-2 mt-1 text-green">+15 min</div>
-                <div class="text-secondary small">Wyprzedzamy plan dostaw</div>
-            </div>
-        </div>
-    </div>
+@functions {
+    string GetMealImage(string mealName)
+    {
+        if (mealName.Contains("Kurczak", StringComparison.OrdinalIgnoreCase)) return "/img/chicken_teriyaki.png";
+        if (mealName.Contains("dyni", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Zupa", StringComparison.OrdinalIgnoreCase)) return "/img/pumpkin_soup.png";
+        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Deser", StringComparison.OrdinalIgnoreCase)) return "/img/blueberry_cheesecake.png";
+        if (mealName.Contains("Łosoś", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Ryba", StringComparison.OrdinalIgnoreCase)) return "/img/baked_salmon.png";
+        return "/img/chicken_teriyaki.png"; // fallback
+    }
 
-    <!-- Pasek postępu globalnego -->
-    <div class="col-12">
-        <div class="card card-premium">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h4 class="card-title mb-0">Postęp dzisiejszej produkcji</h4>
-                    <span class="badge bg-green-lt text-green fw-bold">@percentComplete% Ukończono</span>
-                </div>
-                <div class="progress progress-xl">
-                    <div class="progress-bar bg-green" style="width: @percentComplete%" role="progressbar" aria-valuenow="@percentComplete" aria-valuemin="0" aria-valuemax="100" aria-label="@percentComplete% Complete"></div>
-                </div>
-            </div>
-        </div>
-    </div>
+    string GetMealCategory(string mealName)
+    {
+        if (mealName.Contains("zup", StringComparison.OrdinalIgnoreCase)) return "Zupa";
+        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase) || mealName.Contains("deser", StringComparison.OrdinalIgnoreCase) || mealName.Contains("ciast", StringComparison.OrdinalIgnoreCase)) return "Deser";
+        if (mealName.Contains("śniadan", StringComparison.OrdinalIgnoreCase) || mealName.Contains("owsian", StringComparison.OrdinalIgnoreCase)) return "Śniadanie";
+        return "Danie Główne";
+    }
 
-    <!-- Tabela Produkcyjna -->
-    <div class="col-12">
-        <div class="card card-premium">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h3 class="card-title">Dania do przygotowania na dzisiaj</h3>
+    string GetStatusColor(string status)
+    {
+        return status switch
+        {
+            "Cooked" => "success",
+            "Cooking" => "warning",
+            "Pending" => "secondary",
+            _ => "secondary"
+        };
+    }
+
+    string TranslateStatus(string status)
+    {
+        return status switch
+        {
+            "Cooked" => "Zakończone",
+            "Cooking" => "W toku",
+            "Pending" => "Oczekuje",
+            _ => status
+        };
+    }
+
+    string TranslatePlanStatus(string status)
+    {
+        return status switch
+        {
+            "New" => "Nowy",
+            "InProgress" => "W toku",
+            "Completed" => "Zakończony",
+            _ => status
+        };
+    }
+
+    string GetPlanStatusColor(string status)
+    {
+        return status switch
+        {
+            "New" => "secondary",
+            "InProgress" => "warning",
+            "Completed" => "success",
+            _ => "secondary"
+        };
+    }
+}
+
+<!-- Pasek nawigacji datą -->
+<div class="card card-premium mb-4">
+    <div class="card-body py-3">
+        <form method="get" class="row align-items-center g-3">
+            <div class="col-auto">
+                <label class="form-label mb-0 fw-bold">Dzień produkcji:</label>
+            </div>
+            <div class="col-auto">
+                <input type="date" name="date" class="form-control" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" onchange="this.form.submit()" />
+            </div>
+            <div class="col-auto ms-auto">
                 <div class="btn-list">
-                    <a asp-action="Generate" class="btn btn-outline-primary">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
-                        Nowy Plan
+                    <a asp-action="Index" asp-route-date="@Model.SelectedDate.AddDays(-1)" class="btn btn-outline-secondary">
+                        &laquo; Poprzedni dzień
+                    </a>
+                    <a asp-action="Index" asp-route-date="@DateOnly.FromDateTime(DateTime.Today)" class="btn btn-outline-secondary">
+                        Dzisiaj
+                    </a>
+                    <a asp-action="Index" asp-route-date="@Model.SelectedDate.AddDays(1)" class="btn btn-outline-secondary">
+                        Następny dzień &raquo;
                     </a>
                 </div>
             </div>
-            <div class="table-responsive">
-                <table class="table table-vcenter card-table table-premium">
-                    <thead>
-                        <tr>
-                            <th class="w-1">ID</th>
-                            <th>Nazwa Dania</th>
-                            <th>Kategoria</th>
-                            <th class="text-center">Zaplanowane Porcje</th>
-                            <th class="text-center">Przygotowano</th>
-                            <th>Status</th>
-                            <th class="w-1 text-center">Receptura</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var item in mockProductionItems)
-                        {
-                            var portionProgress = item.Portions > 0 ? (item.Completed * 100 / item.Portions) : 0;
-                            <tr>
-                                <td class="text-secondary">#@item.Id</td>
-                                <td>
-                                    <div class="d-flex align-items-center gap-3">
-                                        <span class="avatar avatar-md rounded-3" style="background-image: url(@item.Image); width: 48px; height: 48px; background-size: cover; background-position: center; border: 1px solid rgba(0, 0, 0, 0.08);"></span>
-                                        <div class="font-weight-medium fw-bold text-dark">@item.Name</div>
-                                    </div>
-                                </td>
-                                <td><span class="badge bg-secondary-lt">@item.Category</span></td>
-                                <td class="text-center fw-bold">@item.Portions szt.</td>
-                                <td class="text-center">
-                                    <div class="d-flex align-items-center justify-content-center gap-2">
-                                        <span class="fw-bold text-dark">@item.Completed</span>
-                                        <span class="text-secondary small">/ @item.Portions</span>
-                                        <div class="progress progress-xs w-50 ms-2 d-none d-md-flex">
-                                            <div class="progress-bar bg-@item.Color" style="width: @portionProgress%"></div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="badge bg-@item.Color-lt text-@item.Color d-inline-flex align-items-center gap-1">
-                                        <span class="status-dot bg-@item.Color @(item.Status == "W toku" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
-                                        @item.Status
-                                    </span>
-                                </td>
-                                <td class="text-center">
-                                    <a asp-action="CookingCard" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">
-                                        Zobacz Kartę
-                                    </a>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+        </form>
+    </div>
+</div>
+
+@if (!hasPlan)
+{
+    <div class="row justify-content-center my-5">
+        <div class="col-md-8 text-center">
+            <div class="empty py-5">
+                <div class="empty-icon mb-4 text-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-calendar-off" width="64" height="64" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M9 5h9a2 2 0 0 1 2 2v9m-.18 3.84a2 2 0 0 1 -1.82 1.16h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 1.158 -1.815" />
+                        <path d="M16 3v4" />
+                        <path d="M8 3v1" />
+                        <path d="M4 11h7m4 0h5" />
+                        <path d="M3 3l18 18" />
+                    </svg>
+                </div>
+                <p class="empty-title h2 text-dark">Brak planu produkcji</p>
+                <p class="empty-subtitle text-secondary">
+                    Nie wygenerowano jeszcze planu produkcji na dzień <strong>@Model.SelectedDate.ToString("dd.MM.yyyy")</strong>.
+                </p>
+                <div class="empty-action mt-4">
+                    <a asp-action="Generate" asp-route-date="@Model.SelectedDate" class="btn btn-primary btn-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                        Generuj Plan dla tej daty
+                    </a>
+                </div>
             </div>
         </div>
     </div>
-</div>
+}
+else
+{
+    <div class="row row-cards">
+        <!-- Statystyki produkcji -->
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-premium card-premium-hoverable">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="subheader">Status Planu</div>
+                        <div class="ms-auto lh-1">
+                            <span class="status-dot-pulse bg-@GetPlanStatusColor(Model.DailyPlan!.Status)"></span>
+                        </div>
+                    </div>
+                    <div class="h1 mb-2 mt-1">@TranslatePlanStatus(Model.DailyPlan!.Status)</div>
+                    <div class="text-secondary small">ID Planu: #@Model.DailyPlan!.Id</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-premium card-premium-hoverable">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="subheader">Zaplanowane Dania</div>
+                        <div class="ms-auto">
+                            <span class="text-blue">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 21l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12v9" /><path d="M20 7.5v9" /><path d="M4 7.5v9" /></svg>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="h1 mb-2 mt-1">@Model.DailyPlan!.Items.Count</div>
+                    <div class="text-secondary small">Na dzień: @Model.SelectedDate.ToString("dd.MM.yyyy")</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-premium card-premium-hoverable">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="subheader">Ugotowane Porcje</div>
+                        <div class="ms-auto">
+                            <span class="text-indigo">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z" /><path d="M13 13h4" /><path d="M13 9h4" /><path d="M9 9h.01" /><path d="M9 13h.01" /><path d="M3 5h2v14h-2z" /></svg>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="h1 mb-2 mt-1">@totalCooked / @totalPlanned</div>
+                    <div class="text-secondary small">Postęp całkowity: @percentComplete%</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-premium card-premium-hoverable">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="subheader">Notatki</div>
+                        <div class="ms-auto">
+                            <span class="text-green">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 9h8" /><path d="M8 13h6" /><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z" /></svg>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="h3 mb-2 mt-1 text-truncate" title="@(Model.DailyPlan!.Notes ?? "Brak uwag")">
+                        @(Model.DailyPlan!.Notes ?? "Brak uwag")
+                    </div>
+                    <div class="text-secondary small">Instrukcje dla personelu</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pasek postępu globalnego -->
+        <div class="col-12">
+            <div class="card card-premium">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h4 class="card-title mb-0">Postęp produkcji planu #@Model.DailyPlan!.Id</h4>
+                        <span class="badge bg-green-lt text-green fw-bold">@percentComplete% Ukończono</span>
+                    </div>
+                    <div class="progress progress-xl">
+                        <div class="progress-bar bg-green" style="width: @percentComplete%" role="progressbar" aria-valuenow="@percentComplete" aria-valuemin="0" aria-valuemax="100" aria-label="@percentComplete% Complete"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabela Produkcyjna -->
+        <div class="col-12">
+            <div class="card card-premium">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="card-title">Dania do przygotowania</h3>
+                    <div class="btn-list">
+                        <a asp-action="Plan" asp-route-planId="@Model.DailyPlan!.Id" class="btn btn-outline-primary">
+                            Szczegóły i FEFO
+                        </a>
+                        <a asp-action="Generate" asp-route-date="@Model.SelectedDate" class="btn btn-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                            Nowy Plan
+                        </a>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-vcenter card-table table-premium">
+                        <thead>
+                            <tr>
+                                <th class="w-1">ID</th>
+                                <th>Nazwa Dania</th>
+                                <th>Kategoria</th>
+                                <th class="text-center">Zaplanowane Porcje</th>
+                                <th class="text-center">Przygotowano</th>
+                                <th>Status</th>
+                                <th class="w-1 text-center">Receptura</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.DailyPlan!.Items)
+                            {
+                                var portionProgress = item.PlannedQuantity > 0 ? (item.CookedQuantity * 100 / item.PlannedQuantity) : 0;
+                                <tr>
+                                    <td class="text-secondary">#@item.Id</td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-3">
+                                            <span class="avatar avatar-md rounded-3" style="background-image: url(@GetMealImage(item.MealName)); width: 48px; height: 48px; background-size: cover; background-position: center; border: 1px solid rgba(0, 0, 0, 0.08);"></span>
+                                            <div class="font-weight-medium fw-bold text-dark">@item.MealName</div>
+                                        </div>
+                                    </td>
+                                    <td><span class="badge bg-secondary-lt">@GetMealCategory(item.MealName)</span></td>
+                                    <td class="text-center fw-bold">@item.PlannedQuantity szt.</td>
+                                    <td class="text-center">
+                                        <div class="d-flex align-items-center justify-content-center gap-2">
+                                            <span class="fw-bold text-dark">@item.CookedQuantity</span>
+                                            <span class="text-secondary small">/ @item.PlannedQuantity</span>
+                                            <div class="progress progress-xs w-50 ms-2 d-none d-md-flex">
+                                                <div class="progress-bar bg-@GetStatusColor(item.Status)" style="width: @portionProgress%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@GetStatusColor(item.Status)-lt text-@GetStatusColor(item.Status) d-inline-flex align-items-center gap-1">
+                                            <span class="status-dot bg-@GetStatusColor(item.Status) @(item.Status == "Cooking" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
+                                            @TranslateStatus(item.Status)
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <a asp-action="CookingCard" asp-route-planItemId="@item.Id" class="btn btn-sm btn-outline-primary">
+                                            Zobacz Kartę
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}

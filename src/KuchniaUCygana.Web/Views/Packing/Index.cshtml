@@ -1,101 +1,117 @@
+@model KuchniaUCygana.Application.DTOs.Production.PackingBoardDto
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Sesje Kompletacji i Pakowania";
+    ViewData["Title"] = "Kompletacja toreb";
     ViewData["Section"] = "Pakowanie";
-    ViewData["Description"] = "Zarządzanie procesem pakowania zestawów dietetycznych oraz generowanie etykiet wysyłkowych z kodami QR.";
+    ViewData["Description"] = "Pakowanie pudelek do toreb. Zaladunek aut jest osobnym ekranem.";
 
-    DateOnly selectedDate = ViewBag.SelectedDate;
-
-    var mockSessions = new[]
-    {
-        new { Id = 301, Date = selectedDate, PackedBy = "Tomasz Nowak", Progress = "100%", Status = "Gotowe do wysyłki (Dispatched)", Color = "success", Qty = "120/120" },
-        new { Id = 302, Date = selectedDate, PackedBy = "Anna Kowalska", Progress = "75%", Status = "W trakcie pakowania", Color = "warning", Qty = "90/120" }
-    };
+    DateOnly selectedDate = ViewBag.SelectedDate ?? Model.PackingDate;
+    var progress = Model.TotalBags > 0 ? Model.PackedBags * 100 / Model.TotalBags : 0;
 }
 
 <div class="row row-cards">
-    <!-- Formularz Rozpoczęcia Nowej Sesji -->
-    <div class="col-md-5">
+    <div class="col-12">
         <div class="card card-premium">
-            <div class="card-status-top bg-azure"></div>
-            <div class="card-header bg-transparent py-3">
-                <h3 class="card-title d-flex align-items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 21l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12v9" /><path d="M20 7.5v9" /><path d="M4 7.5v9" /></svg>
-                    Nowa Sesja Pakowania
-                </h3>
-            </div>
-            <div class="card-body">
-                <form asp-action="Start" method="post" autocomplete="off">
-                    @Html.AntiForgeryToken()
-
-                    <div class="mb-3">
-                        <label class="form-label required">Data dostawy zestawów</label>
-                        <input type="date" name="date" class="form-control" value="@selectedDate.ToString("yyyy-MM-dd")" required />
+            <div class="card-body py-4">
+                <div class="row align-items-center g-3">
+                    <div class="col">
+                        <div class="text-uppercase text-secondary small fw-bold">Kompletacja toreb</div>
+                        <h2 class="h1 mb-1 text-dark">@selectedDate.ToString("dd.MM.yyyy")</h2>
+                        <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
+                            <span>Torby: <strong>@Model.TotalBags</strong></span>
+                            <span>Gotowe do zaladunku: <strong>@Model.PackedBags</strong></span>
+                        </div>
                     </div>
-
-                    <div class="mb-3">
-                        <label class="form-label required">Pakujący (Imię i Nazwisko)</label>
-                        <input type="text" name="packedBy" class="form-control" placeholder="np. Jan Kowalski" required />
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress progress-sm flex-fill">
+                                <div class="progress-bar bg-success" style="width: @progress%"></div>
+                            </div>
+                            <span class="fw-bold text-dark">@progress%</span>
+                        </div>
                     </div>
-
-                    <button type="submit" class="btn btn-primary w-100">
-                        Rozpocznij Sesję Pakowania
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Lista Sesji w Dniu -->
-    <div class="col-md-7">
-        <div class="card card-premium">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h3 class="card-title">Sesje Pakowania na @selectedDate.ToString("dd.MM.yyyy")</h3>
-                <div class="input-icon">
-                    <input type="date" class="form-control form-control-sm" value="@selectedDate.ToString("yyyy-MM-dd")" onchange="window.location.href='?date=' + this.value" aria-label="Filtruj po dacie" />
+                    <div class="col-auto d-flex flex-wrap gap-2">
+                        <input type="date"
+                               class="form-control"
+                               value="@selectedDate.ToString("yyyy-MM-dd")"
+                               onchange="window.location.href='?date=' + this.value"
+                               aria-label="Filtruj po dacie" />
+                        <a asp-action="Loading" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-indigo">Przejdz do zaladunku aut</a>
+                    </div>
                 </div>
             </div>
-            
-            <div class="table-responsive">
-                <table class="table table-vcenter card-table table-premium">
-                    <thead>
-                        <tr>
-                            <th class="w-1">Sesja</th>
-                            <th>Pakujący</th>
-                            <th>Postęp</th>
-                            <th>Status</th>
-                            <th class="w-1">Akcje</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var session in mockSessions)
-                        {
-                            <tr>
-                                <td class="font-weight-medium fw-bold text-dark">#@session.Id</td>
-                                <td>@session.PackedBy</td>
-                                <td>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="fw-bold text-dark">@session.Qty</span>
-                                        <div class="progress progress-xs w-50 d-none d-md-flex">
-                                            <div class="progress-bar bg-@session.Color" style="width: @session.Progress"></div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="badge bg-@session.Color-lt text-@session.Color">
-                                        @session.Status
-                                    </span>
-                                </td>
-                                <td>
-                                    <a asp-action="Session" asp-route-sessionId="@session.Id" class="btn btn-sm btn-outline-primary">
-                                        Otwórz
-                                    </a>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
         </div>
     </div>
+
+    @if (Model.TotalBags == 0)
+    {
+        <div class="col-12">
+            <div class="alert alert-info">Brak aktywnych zamowien do kompletacji dla wybranej daty.</div>
+        </div>
+    }
+
+    @foreach (var route in Model.Routes.Where(r => r.TotalBags > 0))
+    {
+        <div class="col-12">
+            <div class="card card-premium">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div>
+                        <h3 class="card-title mb-1">@route.RouteName</h3>
+                        <div class="text-secondary small">Auto @route.VehicleRegistration - @route.TotalBags torby</div>
+                    </div>
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="badge bg-success-lt text-success">@route.PackedBags gotowe</span>
+                        <a asp-action="Delivery" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-indigo">Ekran zaladunku</a>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-vcenter card-table table-premium">
+                        <thead>
+                            <tr>
+                                <th class="w-1">Stop</th>
+                                <th>Zamowienie</th>
+                                <th>Odbiorca</th>
+                                <th>Adres</th>
+                                <th>Pudelka</th>
+                                <th>Status torby</th>
+                                <th class="w-1 text-end">Akcja</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var bag in route.Bags)
+                            {
+                                <tr>
+                                    <td class="fw-bold text-dark">#@bag.StopNumber</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">#@bag.OrderId</div>
+                                        <div class="text-secondary small">@bag.DeliveryWindow</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@bag.ClientName</div>
+                                        <span class="badge bg-indigo-lt text-indigo">@bag.DietType</span>
+                                    </td>
+                                    <td class="text-secondary small">@bag.Address</td>
+                                    <td>
+                                        <span class="fw-bold text-dark">@bag.PackedBoxes/@bag.TotalBoxes</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@bag.StatusColor-lt text-@bag.StatusColor d-inline-flex align-items-center gap-1">
+                                            <span class="status-dot bg-@bag.StatusColor" style="width: 6px; height: 6px;"></span>
+                                            @bag.StatusText
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-list flex-nowrap justify-content-end">
+                                            <a asp-action="Session" asp-route-sessionId="@bag.PackingSessionId" class="btn btn-sm btn-outline-primary">Kompletuj</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
 </div>

@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
+[Authorize(Roles = "Dietitian,Admin")]
 [Route("diet-editor")]
 public sealed class DietEditorController : Controller
 {

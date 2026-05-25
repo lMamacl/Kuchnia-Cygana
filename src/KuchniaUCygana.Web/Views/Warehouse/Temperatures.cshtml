@@ -14,14 +14,25 @@
         "Witryna Wydawcza (Limit: 2°C do 8°C)"
     };
 
-    var mockLogs = new[]
+    var recentLogs = ViewBag.RecentLogs as IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.TemperatureLogDto>
+                     ?? Array.Empty<KuchniaUCygana.Application.DTOs.Warehouse.TemperatureLogDto>();
+
+    string FormatRecordedAt(DateTimeOffset dto)
     {
-        new { Time = "Dzisiaj, 14:20", Device = "Lodówka #1 - Nabiał", Temp = 4.2m, Status = "OK", Color = "success" },
-        new { Time = "Dzisiaj, 12:00", Device = "Chłodnia #2 - Mięso", Temp = 2.1m, Status = "OK", Color = "success" },
-        new { Time = "Dzisiaj, 10:15", Device = "Zamrażarka #3 - Ryby", Temp = -19.5m, Status = "OK", Color = "success" },
-        new { Time = "Wczoraj, 18:30", Device = "Lodówka #4 - Warzywa", Temp = 9.2m, Status = "Ostrzeżenie (Zbyt wysoka)", Color = "warning" },
-        new { Time = "Wczoraj, 16:45", Device = "Lodówka #1 - Nabiał", Temp = 4.5m, Status = "OK", Color = "success" }
-    };
+        var localTime = dto.ToLocalTime();
+        var today = DateTime.Today;
+        var yesterday = today.AddDays(-1);
+
+        if (localTime.Date == today)
+        {
+            return $"Dzisiaj, {localTime:HH:mm}";
+        }
+        if (localTime.Date == yesterday)
+        {
+            return $"Wczoraj, {localTime:HH:mm}";
+        }
+        return localTime.ToString("yyyy-MM-dd, HH:mm");
+    }
 }
 
 <div class="row g-4">
@@ -104,17 +115,25 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var log in mockLogs)
+                        @foreach (var log in recentLogs)
                         {
+                            var color = log.IsOutOfRange ? "danger" : "success";
+                            var statusText = log.IsOutOfRange ? "Ostrzeżenie (Poza normą)" : "OK";
                             <tr>
-                                <td class="text-secondary small">@log.Time</td>
-                                <td class="font-weight-medium fw-bold text-dark">@log.Device</td>
-                                <td class="text-end font-weight-bold fw-bold text-@log.Color">
-                                    @log.Temp.ToString("F1")°C
+                                <td class="text-secondary small">@FormatRecordedAt(log.RecordedAt)</td>
+                                <td class="font-weight-medium fw-bold text-dark">
+                                    @log.DeviceNameOrLocation
+                                    @if (!string.IsNullOrEmpty(log.Remarks))
+                                    {
+                                        <div class="text-secondary small fw-normal text-muted mt-1">@log.Remarks</div>
+                                    }
+                                </td>
+                                <td class="text-end font-weight-bold fw-bold text-@color">
+                                    @log.RecordedTemperatureCelsius.ToString("F1")°C
                                 </td>
                                 <td>
-                                    <span class="badge bg-@log.Color-lt text-@log.Color">
-                                        @log.Status
+                                    <span class="badge bg-@color-lt text-@color">
+                                        @statusText
                                     </span>
                                 </td>
                             </tr>

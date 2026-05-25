@@ -1,19 +1,67 @@
+@model KuchniaUCygana.Application.DTOs.Production.ProductionPlanDto
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Szczegóły Planu Produkcji";
     ViewData["Section"] = "Kuchnia";
     ViewData["Description"] = "Bieżące monitorowanie stanu przygotowania potraw, receptur oraz zatwierdzanie ugotowanych porcji.";
+}
 
-    int planId = ViewBag.PlanId;
-    var planDate = DateTime.Today.AddDays(1);
-    
-    var mockPlanItems = new[]
+@functions {
+    string GetMealCategory(string mealName)
     {
-        new { Id = 101, Name = "Kurczak Teriyaki z ryżem jaśminowym i brokułami", Category = "Danie Główne", Portions = 240, Status = "Zakończone", Color = "success" },
-        new { Id = 102, Name = "Krem z pieczonej dyni z pestkami i imbirem", Category = "Zupa", Portions = 150, Status = "W toku", Color = "warning" },
-        new { Id = 103, Name = "Proteinowy sernik jagodowy bez cukru", Category = "Deser", Portions = 180, Status = "W toku", Color = "warning" },
-        new { Id = 104, Name = "Łosoś pieczony w ziołach z purée z batatów", Category = "Danie Główne", Portions = 110, Status = "Oczekuje", Color = "secondary" }
-    };
+        if (mealName.Contains("zup", StringComparison.OrdinalIgnoreCase)) return "Zupa";
+        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase) || mealName.Contains("deser", StringComparison.OrdinalIgnoreCase) || mealName.Contains("ciast", StringComparison.OrdinalIgnoreCase)) return "Deser";
+        if (mealName.Contains("śniadan", StringComparison.OrdinalIgnoreCase) || mealName.Contains("owsian", StringComparison.OrdinalIgnoreCase)) return "Śniadanie";
+        return "Danie Główne";
+    }
+
+    string GetStatusColor(string status)
+    {
+        return status switch
+        {
+            "Cooked" => "success",
+            "Cooking" => "warning",
+            "Pending" => "secondary",
+            _ => "secondary"
+        };
+    }
+
+    string TranslateStatus(string status)
+    {
+        return status switch
+        {
+            "Cooked" => "Zakończone",
+            "Cooking" => "W toku",
+            "Pending" => "Oczekuje",
+            _ => status
+        };
+    }
+
+    string TranslatePlanStatus(string status)
+    {
+        return status switch
+        {
+            "Draft" => "Szkic",
+            "Active" => "Aktywny",
+            "InProgress" => "W toku",
+            "Completed" => "Zakończony",
+            "Cancelled" => "Anulowany",
+            _ => status
+        };
+    }
+
+    string GetPlanStatusColor(string status)
+    {
+        return status switch
+        {
+            "Draft" => "secondary",
+            "Active" => "blue",
+            "InProgress" => "warning",
+            "Completed" => "success",
+            "Cancelled" => "danger",
+            _ => "secondary"
+        };
+    }
 }
 
 <div class="row row-cards">
@@ -23,25 +71,42 @@
             <div class="card-body py-4">
                 <div class="row align-items-center g-3">
                     <div class="col">
-                        <div class="text-uppercase text-secondary small fw-bold">Plan produkcji #@(planId > 0 ? planId.ToString() : "1049")</div>
-                        <h2 class="h1 mb-1 text-dark">Dzień produkcji: @planDate.ToString("dd.MM.yyyy")</h2>
+                        <div class="text-uppercase text-secondary small fw-bold">Plan produkcji #@Model.Id</div>
+                        <h2 class="h1 mb-1 text-dark">Dzień produkcji: @Model.ProductionDate.ToString("dd.MM.yyyy")</h2>
                         <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
-                            <span class="badge bg-warning-lt text-warning fw-bold d-inline-flex align-items-center gap-1">
-                                <span class="status-dot bg-warning status-dot-pulse" style="width: 6px; height: 6px;"></span>
-                                Produkcja w toku
+                            <span class="badge bg-@GetPlanStatusColor(Model.Status)-lt text-@GetPlanStatusColor(Model.Status) fw-bold d-inline-flex align-items-center gap-1">
+                                <span class="status-dot bg-@GetPlanStatusColor(Model.Status) @(Model.Status == "InProgress" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
+                                Plan: @TranslatePlanStatus(Model.Status)
                             </span>
-                            <span class="text-secondary small">Utworzono: dzisiaj o 05:00 przez Szefa Kuchni</span>
+                            @if (Model.IsSharedWithLogistics)
+                            {
+                                <span class="badge bg-green-lt text-green fw-bold">Udostępniony logistyce</span>
+                            }
+                            @if (!string.IsNullOrEmpty(Model.Notes))
+                            {
+                                <span class="text-secondary small">Uwagi: @Model.Notes</span>
+                            }
                         </div>
                     </div>
                     <div class="col-auto">
-                        <form asp-action="ProduceSemiFinished" asp-route-planId="@(planId > 0 ? planId : 1049)" method="post" class="d-inline">
-                            @Html.AntiForgeryToken()
-                            <button type="submit" class="btn btn-success me-2">
+                        @if (Model.Status == "Draft" || Model.Status == "Active")
+                        {
+                            <form asp-action="ProduceSemiFinished" asp-route-planId="@Model.Id" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-success me-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 10l5 -6l5 6v10a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1z" /><path d="M21 10l-2 8" /><path d="M3 10l2 8" /></svg>
+                                    Zdejmij Składniki (FEFO)
+                                </button>
+                            </form>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-success me-2" disabled>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 10l5 -6l5 6v10a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1z" /><path d="M21 10l-2 8" /><path d="M3 10l2 8" /></svg>
-                                Zdejmij Składniki (FEFO)
+                                Składniki Zdjęte
                             </button>
-                        </form>
-                        <a asp-action="Index" class="btn btn-outline-secondary">Wróć do listy</a>
+                        }
+                        <a asp-action="Index" asp-route-date="@Model.ProductionDate" class="btn btn-outline-secondary">Wróć do Pulpitu</a>
                     </div>
                 </div>
             </div>
@@ -67,23 +132,23 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var item in mockPlanItems)
+                        @foreach (var item in Model.Items)
                         {
                             <tr>
                                 <td class="text-secondary font-weight-medium">#@item.Id</td>
                                 <td>
-                                    <div class="font-weight-bold text-dark">@item.Name</div>
+                                    <div class="font-weight-bold text-dark">@item.MealName</div>
                                 </td>
                                 <td>
-                                    <span class="badge bg-secondary-lt">@item.Category</span>
+                                    <span class="badge bg-secondary-lt">@GetMealCategory(item.MealName)</span>
                                 </td>
                                 <td class="text-center fw-bold text-dark">
-                                    @item.Portions szt.
+                                    @item.PlannedQuantity szt.
                                 </td>
                                 <td>
-                                    <span class="badge bg-@item.Color-lt text-@item.Color d-inline-flex align-items-center gap-1">
-                                        <span class="status-dot bg-@item.Color @(item.Status == "W toku" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
-                                        @item.Status
+                                    <span class="badge bg-@GetStatusColor(item.Status)-lt text-@GetStatusColor(item.Status) d-inline-flex align-items-center gap-1">
+                                        <span class="status-dot bg-@GetStatusColor(item.Status) @(item.Status == "Cooking" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
+                                        @TranslateStatus(item.Status)
                                     </span>
                                 </td>
                                 <td>

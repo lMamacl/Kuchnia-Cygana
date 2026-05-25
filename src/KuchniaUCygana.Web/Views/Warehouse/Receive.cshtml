@@ -5,14 +5,8 @@
     ViewData["Section"] = "Magazyn";
     ViewData["Description"] = "Wprowadź dane nowej partii składnika dostarczonej do magazynu w celu rejestracji.";
 
-    var mockItemsList = new[]
-    {
-        new { Id = 1, Name = "Mąka pszenna typ 500 (kg)" },
-        new { Id = 2, Name = "Pierś z kurczaka świeża (kg)" },
-        new { Id = 3, Name = "Śmietanka UHT 30% (l)" },
-        new { Id = 4, Name = "Pomidory krojone puszka (szt)" },
-        new { Id = 5, Name = "Masło Extra 82% (kg)" }
-    };
+    var stockItems = ViewBag.StockItems as IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
+                     ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
 }
 
 <div class="row justify-content-center">
@@ -48,9 +42,9 @@
                         <label class="form-label required">Składnik magazynowy</label>
                         <select asp-for="StockItemId" class="form-select" aria-label="Wybierz składnik">
                             <option value="">-- Wybierz z listy --</option>
-                            @foreach (var item in mockItemsList)
+                            @foreach (var item in stockItems)
                             {
-                                <option value="@item.Id">@item.Name</option>
+                                <option value="@item.Id">@item.Name (@item.UnitSymbol)</option>
                             }
                         </select>
                         <span asp-validation-for="StockItemId" class="text-danger small"></span>

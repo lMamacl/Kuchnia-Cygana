@@ -1,5 +1,8 @@
+using System;
+using System.Threading.Tasks;
 using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,7 +12,7 @@ namespace KuchniaUCygana.Web.Controllers;
 /// Kontroler magazynu — stany, przyjęcia, odpisy, inwentaryzacja, temperatury, alerty.
 /// TASK-M3-025 | Stanowisko: Warehouse | Szef: WarehouseManager
 /// </summary>
-[AllowAnonymous]
+[Authorize(Roles = "Warehouse,WarehouseManager,Admin")]
 [Route("warehouse")]
 public sealed class WarehouseController : Controller
 {
@@ -31,9 +34,18 @@ public sealed class WarehouseController : Controller
     /// GET /warehouse
     /// </summary>
     [HttpGet("")]
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
-        return View(Array.Empty<InventoryAlertDto>());
+        var alerts = await warehouseService.GetSmartAlertsAsync();
+        var stockItems = await warehouseService.GetStockOverviewAsync();
+
+        var viewModel = new WarehouseDashboardViewModel
+        {
+            Alerts = alerts,
+            StockItems = stockItems
+        };
+
+        return View(viewModel);
     }
 
     /// <summary>
@@ -41,9 +53,10 @@ public sealed class WarehouseController : Controller
     /// GET /warehouse/alerts
     /// </summary>
     [HttpGet("alerts")]
-    public IActionResult Alerts()
+    public async Task<IActionResult> Alerts()
     {
-        return PartialView("_AlertsPartial", Array.Empty<InventoryAlertDto>());
+        var alerts = await warehouseService.GetSmartAlertsAsync();
+        return PartialView("_AlertsPartial", alerts);
     }
 
     // ── Przyjęcie dostawy ────────────────────────────────────
@@ -53,8 +66,9 @@ public sealed class WarehouseController : Controller
     /// GET /warehouse/receive
     /// </summary>
     [HttpGet("receive")]
-    public IActionResult Receive()
+    public async Task<IActionResult> Receive()
     {
+        ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
         return View(new ReceiveDeliveryRequest());
     }
 
@@ -68,6 +82,7 @@ public sealed class WarehouseController : Controller
     {
         if (!ModelState.IsValid)
         {
+            ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
             return View(request);
         }
 
@@ -83,8 +98,9 @@ public sealed class WarehouseController : Controller
     /// GET /warehouse/waste
     /// </summary>
     [HttpGet("waste")]
-    public IActionResult Waste()
+    public async Task<IActionResult> Waste()
     {
+        ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
         return View(new RegisterWasteRequest());
     }
 
@@ -98,6 +114,7 @@ public sealed class WarehouseController : Controller
     {
         if (!ModelState.IsValid)
         {
+            ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
             return View(request);
         }
 
@@ -113,9 +130,10 @@ public sealed class WarehouseController : Controller
     /// GET /warehouse/inventory
     /// </summary>
     [HttpGet("inventory")]
-    public IActionResult Inventory()
+    public async Task<IActionResult> Inventory()
     {
-        return View();
+        var stockItems = await warehouseService.GetStockOverviewAsync();
+        return View(stockItems);
     }
 
     /// <summary>
@@ -129,7 +147,8 @@ public sealed class WarehouseController : Controller
     {
         if (!ModelState.IsValid)
         {
-            return View();
+            var stockItems = await warehouseService.GetStockOverviewAsync();
+            return View(stockItems);
         }
 
         await warehouseService.PerformInventoryAsync(adjustments);
@@ -144,9 +163,12 @@ public sealed class WarehouseController : Controller
     /// GET /warehouse/temperatures
     /// </summary>
     [HttpGet("temperatures")]
-    public IActionResult Temperatures()
+    public async Task<IActionResult> Temperatures()
     {
-        return View();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var report = await temperatureService.GetHaccpReportAsync(today.AddDays(-1), today);
+        ViewBag.RecentLogs = report.Readings;
+        return View(new LogTemperatureRequest());
     }
 
     /// <summary>
@@ -159,6 +181,9 @@ public sealed class WarehouseController : Controller
     {
         if (!ModelState.IsValid)
         {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var report = await temperatureService.GetHaccpReportAsync(today.AddDays(-1), today);
+            ViewBag.RecentLogs = report.Readings;
             return View("Temperatures", request);
         }
 
@@ -173,13 +198,15 @@ public sealed class WarehouseController : Controller
     /// </summary>
     [HttpGet("haccp-report")]
     [Authorize(Roles = "WarehouseManager,Admin")]
-    public IActionResult HaccpReport(DateOnly? from, DateOnly? to)
+    public async Task<IActionResult> HaccpReport(DateOnly? from, DateOnly? to)
     {
         var dateFrom = from ?? DateOnly.FromDateTime(DateTime.Today.AddDays(-7));
         var dateTo = to ?? DateOnly.FromDateTime(DateTime.Today);
 
+        var report = await temperatureService.GetHaccpReportAsync(dateFrom, dateTo);
+
         ViewBag.DateFrom = dateFrom;
         ViewBag.DateTo = dateTo;
-        return View();
+        return View(report);
     }
 }

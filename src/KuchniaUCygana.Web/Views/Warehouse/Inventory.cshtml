@@ -1,17 +1,11 @@
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Inwentaryzacja Magazynu";
     ViewData["Section"] = "Magazyn";
     ViewData["Description"] = "Formularz rozliczenia inwentaryzacyjnego. Wprowadź rzeczywiste stany fizyczne składników.";
 
-    var mockStockItems = new[]
-    {
-        new { Id = 1, Name = "Mąka pszenna typ 500", Category = "Suche", Qty = 120.00m, Unit = "kg" },
-        new { Id = 2, Name = "Pierś z kurczaka świeża", Category = "Mięso", Qty = 3.50m, Unit = "kg" },
-        new { Id = 3, Name = "Śmietanka UHT 30%", Category = "Nabiał", Qty = 48.00m, Unit = "l" },
-        new { Id = 4, Name = "Pomidory krojone puszka", Category = "Suche", Qty = 15.00m, Unit = "szt" },
-        new { Id = 5, Name = "Masło Extra 82%", Category = "Nabiał", Qty = 8.00m, Unit = "kg" }
-    };
+    var stockItemsList = Model?.ToList() ?? new List<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
 }
 
 <div class="row justify-content-center">
@@ -44,9 +38,9 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @for (int i = 0; i < mockStockItems.Length; i++)
+                            @for (int i = 0; i < stockItemsList.Count; i++)
                             {
-                                var item = mockStockItems[i];
+                                var item = stockItemsList[i];
                                 <tr>
                                     <td class="text-secondary font-weight-medium">#@item.Id</td>
                                     <td>
@@ -56,13 +50,13 @@
                                         <span class="badge bg-secondary-lt">@item.Category</span>
                                     </td>
                                     <td class="text-end font-weight-bold fw-bold text-dark">
-                                        @item.Qty.ToString("F2") @item.Unit
+                                        @item.CurrentStock.ToString("F2") @item.UnitSymbol
                                     </td>
                                     <td>
                                         <input type="hidden" name="adjustments[@i].StockItemId" value="@item.Id" />
                                         <div class="input-group">
-                                            <input type="number" step="0.01" name="adjustments[@i].ActualQuantity" id="actual-@i" class="form-control text-end fw-bold" placeholder="0.00" required data-system-qty="@item.Qty.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)" />
-                                            <span class="input-group-text bg-transparent text-secondary">@item.Unit</span>
+                                            <input type="number" step="0.01" name="adjustments[@i].ActualQuantity" id="actual-@i" class="form-control text-end fw-bold" placeholder="0.00" required data-system-qty="@item.CurrentStock.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)" />
+                                            <span class="input-group-text bg-transparent text-secondary">@item.UnitSymbol</span>
                                         </div>
                                     </td>
                                     <td>
