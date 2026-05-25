@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Globalization;
 using System.Reflection;
 using Dapper;
 using KuchniaUCygana.Domain.Common;
@@ -55,7 +54,7 @@ public class BaseRepository<TEntity, TId> : IRepository<TEntity, TId>
         entity.CreatedAt = DateTimeOffset.UtcNow;
 
         using var db = Factory.CreateConnection();
-        var insertedId = await db.QuerySingleAsync<object>(
+        var insertedId = await db.ExecuteScalarAsync<TId>(
             $"""
             INSERT INTO {Metadata.TableName} ({Metadata.InsertColumns})
             OUTPUT INSERTED.{Metadata.KeyColumn}
@@ -63,10 +62,7 @@ public class BaseRepository<TEntity, TId> : IRepository<TEntity, TId>
             """,
             entity);
 
-        return (TId)Convert.ChangeType(
-            insertedId,
-            Nullable.GetUnderlyingType(typeof(TId)) ?? typeof(TId),
-            CultureInfo.InvariantCulture);
+        return insertedId!;
     }
 
     public virtual async Task<bool> UpdateAsync(TEntity entity)
