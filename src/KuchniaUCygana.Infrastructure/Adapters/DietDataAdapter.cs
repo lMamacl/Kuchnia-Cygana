@@ -1,11 +1,10 @@
+using Dapper;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Adapters;
 
@@ -32,12 +31,18 @@ public sealed class DietDataAdapter : IDietDataProvider
     {
         using var db = _connectionFactory.CreateConnection();
 
-        // JOIN: DietVariantMeal → Meal (tylko aktywne posiłki)
-        var query = db.From<DietVariantMeal>()
-            .Join<DietVariantMeal, Meal>((dvm, m) => dvm.MealId == m.Id)
-            .Where<Meal>(m => m.IsActive);
-
-        var dvMeals = await db.SelectAsync<DietVariantMealWithName>(query);
+        var dvMeals = await db.QueryAsync<DietVariantMealWithName>(
+            """
+            SELECT
+                dvm.MealId,
+                m.Name AS MealName,
+                dvm.DietVariantId,
+                dvm.ServingSizeMultiplier
+            FROM [DietVariantMeals] dvm
+            INNER JOIN [Meals] m ON m.Id = dvm.MealId
+            WHERE m.IsActive = 1
+            ORDER BY dvm.DietVariantId, dvm.SortOrder, dvm.Id;
+            """);
 
         return dvMeals.Select(dvm => new DietPlanEntry
         {
@@ -56,11 +61,19 @@ public sealed class DietDataAdapter : IDietDataProvider
     {
         using var db = _connectionFactory.CreateConnection();
 
-        var query = db.From<Recipe>()
-            .Join<Recipe, Ingredient>((r, ing) => r.IngredientId == ing.Id)
-            .Where<Recipe>(r => r.MealId == mealId);
-
-        var recipeRows = await db.SelectAsync<RecipeIngredientRow>(query);
+        var recipeRows = await db.QueryAsync<RecipeIngredientRow>(
+            """
+            SELECT
+                r.IngredientId,
+                i.Name AS IngredientName,
+                r.WeightInGrams,
+                r.IsOptional
+            FROM [Recipes] r
+            INNER JOIN [Ingredients] i ON i.Id = r.IngredientId
+            WHERE r.MealId = @mealId
+            ORDER BY r.Id;
+            """,
+            new { mealId });
 
         return recipeRows.Select(r => new RecipeIngredientEntry
         {
@@ -71,7 +84,7 @@ public sealed class DietDataAdapter : IDietDataProvider
         });
     }
 
-    // Wewnętrzne DTO do OrmLite JOIN projection
+    // Wewnetrzne DTO do projekcji Dapper JOIN.
     private sealed class DietVariantMealWithName
     {
         public int MealId { get; set; }

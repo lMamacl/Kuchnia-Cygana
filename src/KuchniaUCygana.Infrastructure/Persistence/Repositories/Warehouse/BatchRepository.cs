@@ -2,10 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
@@ -21,15 +21,18 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
     {
         using var db = Factory.CreateConnection();
 
-        var batches = await db.SelectAsync<Batch>(b =>
-            b.StockItemId == stockItemId &&
-            !b.IsDepleted &&
-            !b.IsDeleted);
-
-        // FEFO: najpierw najwczesniejsze daty waznosci, partie bez daty na koncu.
-        return batches
-            .OrderBy(b => b.ExpiryDate.HasValue ? 0 : 1)
-            .ThenBy(b => b.ExpiryDate);
+        return await db.QueryAsync<Batch>(
+            """
+            SELECT *
+            FROM [Batches]
+            WHERE [StockItemId] = @stockItemId
+              AND [IsDepleted] = 0
+              AND [IsDeleted] = 0
+            ORDER BY
+              CASE WHEN [ExpiryDate] IS NULL THEN 1 ELSE 0 END,
+              [ExpiryDate];
+            """,
+            new { stockItemId });
     }
 
     /// <inheritdoc />
@@ -37,10 +40,15 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
     {
         using var db = Factory.CreateConnection();
 
-        return await db.SelectAsync<Batch>(b =>
-            b.ExpiryDate != null &&
-            b.ExpiryDate <= date &&
-            !b.IsDepleted &&
-            !b.IsDeleted);
+        return await db.QueryAsync<Batch>(
+            """
+            SELECT *
+            FROM [Batches]
+            WHERE [ExpiryDate] IS NOT NULL
+              AND [ExpiryDate] <= @date
+              AND [IsDepleted] = 0
+              AND [IsDeleted] = 0;
+            """,
+            new { date });
     }
 }

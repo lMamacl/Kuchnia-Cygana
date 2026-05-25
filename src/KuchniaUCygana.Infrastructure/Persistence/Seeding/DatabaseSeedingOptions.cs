@@ -21,6 +21,7 @@ public enum DatabaseSeedingMode
 public enum DatabaseSeedingProfile
 {
     MinimalRealistic,
+    DemoData,
 }
 
 public enum SeedingTrigger

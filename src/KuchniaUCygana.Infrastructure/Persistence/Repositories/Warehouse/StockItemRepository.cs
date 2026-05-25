@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
@@ -25,35 +25,35 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
     {
         using var db = _connectionFactory.CreateConnection();
 
-        // Pobierz składniki, których łączny stan aktywnych partii < MinimumLevel
-        // Uwaga: sprawdzamy MinimumLevel > 0 (tylko te z ustawionym progiem)
-        var items = await db.SelectAsync<StockItem>(
-            si => !si.IsDeleted && si.MinimumLevel > 0);
-
-        var result = new List<StockItem>();
-
-        foreach (var item in items)
-        {
-            // Sumuj aktywne partie
-            var totalQty = await db.ScalarAsync<decimal>(
-                db.From<Batch>()
-                    .Where(b => b.StockItemId == item.Id && !b.IsDepleted)
-                    .Select(b => Sql.Sum(b.CurrentQuantity)));
-
-            if (totalQty < item.MinimumLevel)
-            {
-                result.Add(item);
-            }
-        }
-
-        return result;
+        return await db.QueryAsync<StockItem>(
+            """
+            SELECT si.*
+            FROM [StockItems] si
+            OUTER APPLY (
+                SELECT COALESCE(SUM(b.[CurrentQuantity]), 0) AS TotalQuantity
+                FROM [Batches] b
+                WHERE b.[StockItemId] = si.[Id]
+                  AND b.[IsDepleted] = 0
+                  AND b.[IsDeleted] = 0
+            ) totals
+            WHERE si.[IsDeleted] = 0
+              AND si.[MinimumLevel] > 0
+              AND totals.TotalQuantity < si.[MinimumLevel];
+            """);
     }
 
     /// <inheritdoc />
     public async Task<StockItem?> GetByIngredientIdAsync(int baseIngredientId)
     {
         using var db = _connectionFactory.CreateConnection();
-        return await db.SingleAsync<StockItem>(
-            si => si.BaseIngredientId == baseIngredientId && !si.IsDeleted);
+
+        return await db.QuerySingleOrDefaultAsync<StockItem>(
+            """
+            SELECT TOP 1 *
+            FROM [StockItems]
+            WHERE [BaseIngredientId] = @baseIngredientId
+              AND [IsDeleted] = 0;
+            """,
+            new { baseIngredientId });
     }
 }

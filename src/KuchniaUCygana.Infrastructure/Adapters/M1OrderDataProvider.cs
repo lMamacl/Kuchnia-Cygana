@@ -1,7 +1,7 @@
+using Dapper;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Adapters;
 
@@ -23,7 +23,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         var from = deliveryDate.ToDateTime(TimeOnly.MinValue);
         var to = from.AddDays(1);
 
-        var rows = await db.SqlListAsync<ActiveOrderRow>(
+        var rows = await db.QueryAsync<ActiveOrderRow>(
             ActiveOrdersSql,
             new
             {
@@ -48,7 +48,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
     {
         using var db = connectionFactory.CreateConnection();
 
-        var row = await db.SingleAsync<ActiveOrderRow>(
+        var row = await db.QuerySingleOrDefaultAsync<ActiveOrderRow>(
             ActiveOrderByIdSql,
             new
             {
@@ -79,7 +79,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         var from = date.Date;
         var to = from.AddDays(1);
 
-        var deliveries = await db.SqlListAsync<OrderDeliveryRow>(
+        var deliveries = (await db.QueryAsync<OrderDeliveryRow>(
             DeliveriesForDateSql,
             new
             {
@@ -88,13 +88,13 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
                 paidStatus = (int)OrderStatus.Paid,
                 inProductionStatus = (int)OrderStatus.InProduction,
                 scheduledStatus = (int)DeliveryStatus.Scheduled,
-            });
+            })).ToList();
 
         var result = new List<OrderDeliveryInfo>(deliveries.Count);
 
         foreach (var delivery in deliveries)
         {
-            var items = await db.SqlListAsync<OrderItemRow>(
+            var items = await db.QueryAsync<OrderItemRow>(
                 OrderItemsForDeliverySql,
                 new { orderId = delivery.OrderId });
 
@@ -177,8 +177,8 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
             END AS AddressFullLine,
             a.City AS City,
             a.PostalCode AS PostalCode,
-            a.Latitude AS Latitude,
-            a.Longitude AS Longitude,
+            CAST(NULL AS float) AS Latitude,
+            CAST(NULL AS float) AS Longitude,
             dc.DeliveryDate AS DeliveryDate,
             dw.Name AS DeliveryWindowName
         FROM DeliveryCalendar dc
