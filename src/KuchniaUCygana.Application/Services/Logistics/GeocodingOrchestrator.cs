@@ -34,8 +34,7 @@ public class GeocodingOrchestrator
     /// </summary>
     public async Task<int> ProcessPendingAddressesAsync(CancellationToken cancellationToken)
     {
-        // Używamy generycznej metody FindAsync dostępnej w IAddressRepository (dziedziczonej z IRepository)
-        var pendingAddresses = await _addressRepository.FindAsync(a => a.Latitude == null || a.Longitude == null);
+        var pendingAddresses = await _addressRepository.GetPendingAddressesAsync();
         int processedCount = 0;
 
         foreach (var address in pendingAddresses)

@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 

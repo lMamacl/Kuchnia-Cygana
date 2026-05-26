@@ -2,8 +2,10 @@ using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 using System.Data;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
+using Dapper;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
@@ -23,7 +25,7 @@ public sealed class ThermalBagRepository : BaseRepository<ThermalBag>, IThermalB
     public async Task<ThermalBag?> GetBySerialNumberAsync(string serialNumber)
     {
         using var db = _connectionFactory.CreateConnection();
-        // W ServiceStack.OrmLite używamy SingleAsync do pobrania jednego elementu po warunku
-        return await db.SingleAsync<ThermalBag>(t => t.SerialNumber == serialNumber);
+        return await db.QueryFirstOrDefaultAsync<ThermalBag>
+        ("SELECT * FROM [ThermalBags] WHERE [SerialNumber] = @SerialNumber AND [IsDeleted] = 0", new { SerialNumber = serialNumber });
     }
 }

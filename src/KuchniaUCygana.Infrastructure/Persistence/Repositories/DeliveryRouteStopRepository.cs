@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
+using Dapper;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
@@ -21,9 +21,13 @@ public sealed class DeliveryRouteStopRepository : BaseRepository<DeliveryRouteSt
     public async Task<IEnumerable<DeliveryRouteStop>> GetStopsForRouteAsync(int routeId)
     {
         using var db = Factory.CreateConnection();
-        var stops = await db.SelectAsync<DeliveryRouteStop>(
-            q => q.RouteId == routeId && 
-                 q.IsDeleted == false);
-        return stops.OrderBy(s => s.SequenceNumber);
+        var sql = @"
+            SELECT * FROM [DeliveryRouteStops] 
+            WHERE [RouteId] = @RouteId 
+            AND [IsDeleted] = 0 
+            ORDER BY [SequenceNumber]";
+        
+        var stops = await db.QueryAsync<DeliveryRouteStop>(sql, new { RouteId = routeId });
+        return stops;
     }
 }

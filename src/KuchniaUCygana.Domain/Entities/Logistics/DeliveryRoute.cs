@@ -1,5 +1,7 @@
 ﻿using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations; 
 
 namespace KuchniaUCygana.Domain.Entities.Logistics;
 
@@ -34,6 +36,6 @@ public sealed class DeliveryRoute : AuditableEntity
         this.VehicleId = vehicleid;
     }
 
-    [Ignore]
+    [NotMapped]
     public List<DeliveryRouteStop> Stops { get; set; } = new();
 }

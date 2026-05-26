@@ -1,6 +1,5 @@
 ﻿using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
-using ServiceStack.AI;
 
 namespace KuchniaUCygana.Domain.Entities.Logistics;
 
