@@ -27,6 +27,7 @@ public static class DependencyInjection
 
         services.AddSingleton<IDbConnectionFactory>(_ => new SqlServerConnectionFactory(connectionString));
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
+        services.AddScoped<IAddressRepository, AddressRepository>(); // moduł 1 już to dodał
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
 
         services
