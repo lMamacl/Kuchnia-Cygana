@@ -14,6 +14,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssemblyContaining(typeof(DependencyInjection));
         
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<Services.Logistics.GeocodingOrchestrator>();
         return services;
     }
 }
