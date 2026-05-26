@@ -9,6 +9,7 @@ using KuchniaUCygana.Infrastructure.FileStorage;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
+using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
 using KuchniaUCygana.Infrastructure.Pdf;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,11 +30,12 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-        services.AddSingleton(new OrmLiteConnectionFactory(connectionString, SqlServerDialect.Provider));
-        services.AddSingleton<IDbConnectionFactory, SqlServerConnectionFactory>();
+        DapperTypeHandlers.Register();
+
+        services.AddSingleton<IDbConnectionFactory>(_ => new SqlServerConnectionFactory(connectionString));
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
-        // Serwisy Domenowe Modu³u 2
+        // Serwisy Domenowe Moduï¿½u 2
         services.AddScoped<IRecipeEngine, RecipeEngine>();
         services.AddScoped<IAllergenPropagationService, AllergenPropagationService>();
         services.AddScoped<IDietVariantScaler, DietVariantScaler>();

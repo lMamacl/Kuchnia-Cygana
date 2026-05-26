@@ -1,10 +1,10 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
-using ServiceStack.DataAnnotations;
 
 namespace KuchniaUCygana.Domain.Entities.Auth;
 
-[Alias("Users")]
+[Table("Users")]
 public sealed class User : BaseEntity
 {
     public string Email { get; set; } = string.Empty;

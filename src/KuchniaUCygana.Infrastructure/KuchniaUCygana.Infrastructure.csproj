@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
+    <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="FluentMigrator" Version="8.0.1" />
     <PackageReference Include="FluentMigrator.Runner" Version="8.0.1" />
     <PackageReference Include="FluentMigrator.Runner.SqlServer" Version="8.0.1" />
@@ -15,7 +16,6 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
     <PackageReference Include="OpenAI" Version="2.10.0" />
     <PackageReference Include="QuestPDF" Version="2026.2.4" />
-    <PackageReference Include="ServiceStack.OrmLite.SqlServer" Version="10.0.6" />
     <PackageReference Include="Stripe.net" Version="51.0.0" />
   </ItemGroup>
 

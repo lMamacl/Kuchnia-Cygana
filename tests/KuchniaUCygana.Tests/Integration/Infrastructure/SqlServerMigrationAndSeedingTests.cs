@@ -1,4 +1,8 @@
 using FluentAssertions;
+using KuchniaUCygana.Domain.Entities.Auth;
+using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Infrastructure.Persistence.Repositories;
 using Microsoft.Data.SqlClient;
 using Xunit;
 
@@ -65,5 +69,29 @@ public sealed class SqlServerMigrationAndSeedingTests
         rolesCommand.CommandText = "SELECT COUNT(1) FROM [Users] WHERE [Role] IN (N'Admin', N'Kitchen', N'Driver')";
         var knownRolesCount = (int)(await rolesCommand.ExecuteScalarAsync() ?? 0);
         knownRolesCount.Should().BeGreaterThanOrEqualTo(3);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task BaseRepository_InsertAsync_ShouldReturnGeneratedIdentity()
+    {
+        var connectionFactory = new SqlServerConnectionFactory(this.fixture.AppConnectionString);
+        var repository = new BaseRepository<User>(connectionFactory);
+        var unique = Guid.NewGuid().ToString("N")[..8];
+
+        var userId = await repository.InsertAsync(new User
+        {
+            Email = $"repo-{unique}@kuchnia.local",
+            PasswordHash = "test",
+            FirstName = "Repo",
+            LastName = "Insert",
+            Role = UserRoles.Client,
+        });
+
+        userId.Should().BeGreaterThan(0);
+
+        var persisted = await repository.GetByIdAsync(userId);
+        persisted.Should().NotBeNull();
+        persisted!.Email.Should().Be($"repo-{unique}@kuchnia.local");
     }
 }

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Kierowca | Kuchnia u Cygana</title>
+    <link rel="stylesheet" href="~/lib/tabler/css/tabler.min.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/staff.css" asp-append-version="true" />
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+    <div class="page">
+        <div class="page-wrapper">
+            <div class="page-header">
+                <div class="container-tight">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <h2 class="page-title">@ViewData["Title"]</h2>
+                            <div class="text-secondary">Mobilny podglad trasy</div>
+                        </div>
+                        <div class="col-auto">
+                            <a asp-controller="Staff" asp-action="Index" class="btn btn-outline-secondary btn-sm">Staff</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="page-body">
+                <div class="container-tight">
+                    @RenderBody()
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="~/lib/tabler/js/tabler.min.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
+
