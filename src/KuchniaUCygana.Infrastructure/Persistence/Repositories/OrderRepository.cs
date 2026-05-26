@@ -1,7 +1,7 @@
 ﻿using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Interfaces.Orders;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
+using Dapper;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
@@ -12,30 +12,24 @@ public sealed class OrderRepository : BaseRepository<Order>, IOrderRepository
     public async Task<IEnumerable<Order>> GetByCustomerIdAsync(int customerId)
     {
         using var db = Factory.CreateConnection();
-        var q = db.From<Order>()
-            .Where(x => x.CustomerId == customerId && x.IsDeleted == false)
-            .OrderByDescending(x => x.CreatedAt);
-        return await db.SelectAsync(q);
+        const string sql = "SELECT * FROM Orders WHERE CustomerId = @CustomerId AND IsDeleted = 0 ORDER BY CreatedAt DESC";
+        return await db.QueryAsync<Order>(sql, new { CustomerId = customerId });
     }
 
     public async Task<Order?> GetWithItemsAndDeliveryAsync(int orderId)
     {
         using var db = Factory.CreateConnection();
 
-        var order = await db.SingleAsync<Order>(x =>
-            x.Id == orderId && x.IsDeleted == false);
+        const string sqlOrder = "SELECT * FROM Orders WHERE Id = @OrderId AND IsDeleted = 0";
+        var order = await db.QuerySingleOrDefaultAsync<Order>(sqlOrder, new { OrderId = orderId });
 
         if (order is null) return null;
 
-        var items = await db.SelectAsync<OrderItem>(x =>
-            x.OrderId == orderId && x.IsDeleted == false);
-        order.Items = items.ToList();
+        const string sqlItems = "SELECT * FROM OrderItems WHERE OrderId = @OrderId AND IsDeleted = 0";
+        order.Items = (await db.QueryAsync<OrderItem>(sqlItems, new { OrderId = orderId })).ToList();
 
-        var deliveryDays = await db.SelectAsync(
-            db.From<DeliveryCalendar>()
-                .Where(x => x.OrderId == orderId && x.IsDeleted == false)
-                .OrderBy(x => x.DeliveryDate));
-        order.DeliveryDays = deliveryDays.ToList();
+        const string sqlDays = "SELECT * FROM DeliveryCalendar WHERE OrderId = @OrderId AND IsDeleted = 0 ORDER BY DeliveryDate";
+        order.DeliveryDays = (await db.QueryAsync<DeliveryCalendar>(sqlDays, new { OrderId = orderId })).ToList();
 
         return order;
     }
@@ -46,24 +40,23 @@ public sealed class OrderRepository : BaseRepository<Order>, IOrderRepository
         var dateOnly = date.Date;
         var nextDay = dateOnly.AddDays(1);
 
-        // Zamówienia mające zaplanowaną dostawę na dany dzień
-        var q = db.From<Order>()
-            .Join<DeliveryCalendar>((o, d) => o.Id == d.OrderId)
-            .Where<Order>(o => o.IsDeleted == false)
-            .And<DeliveryCalendar>(d =>
-                d.DeliveryDate >= dateOnly &&
-                d.DeliveryDate < nextDay &&
-                d.IsDeleted == false &&
-                d.IsSkipped == false);
+        const string sql = @"
+            SELECT o.* FROM Orders o
+            INNER JOIN DeliveryCalendar d ON o.Id = d.OrderId
+            WHERE o.IsDeleted = 0
+              AND d.DeliveryDate >= @DateOnly 
+              AND d.DeliveryDate < @NextDay 
+              AND d.IsDeleted = 0 
+              AND d.IsSkipped = 0";
 
-        return await db.SelectAsync(q);
+        return await db.QueryAsync<Order>(sql, new { DateOnly = dateOnly, NextDay = nextDay });
     }
 
     public async Task<Order?> GetByOrderNumberAsync(string orderNumber)
     {
         using var db = Factory.CreateConnection();
-        return await db.SingleAsync<Order>(x =>
-            x.OrderNumber == orderNumber && x.IsDeleted == false);
+        const string sql = "SELECT * FROM Orders WHERE OrderNumber = @OrderNumber AND IsDeleted = 0";
+        return await db.QuerySingleOrDefaultAsync<Order>(sql, new { OrderNumber = orderNumber });
     }
 
     public async Task<string> GenerateOrderNumberAsync()
@@ -72,9 +65,8 @@ public sealed class OrderRepository : BaseRepository<Order>, IOrderRepository
         var today = DateTime.UtcNow.Date;
         var tomorrow = today.AddDays(1);
 
-        // Zlicza zamówienia z dzisiaj (od północy do końca dnia)
-        var count = await db.CountAsync<Order>(x =>
-            x.CreatedAt >= today && x.CreatedAt < tomorrow);
+        const string sql = "SELECT COUNT(1) FROM Orders WHERE CreatedAt >= @Today AND CreatedAt < @Tomorrow";
+        var count = await db.ExecuteScalarAsync<int>(sql, new { Today = today, Tomorrow = tomorrow });
 
         var dateStr = DateTime.UtcNow.ToString("yyyyMMdd");
         return $"ORD-{dateStr}-{(count + 1):D4}";

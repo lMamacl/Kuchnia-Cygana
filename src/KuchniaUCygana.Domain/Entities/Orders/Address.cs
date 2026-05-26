@@ -1,9 +1,10 @@
 ﻿using KuchniaUCygana.Domain.Common;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Orders;
 
-[Alias("Addresses")]
+[Table("Addresses")]
 public sealed class Address : AuditableEntity
 {
     public int UserId { get; set; }
@@ -29,7 +30,7 @@ public sealed class Address : AuditableEntity
     public double? Longitude { get; set; }
 
     // Pomocnicza właściwość — pełna linia adresu dla M3/logistyki.
-    [Ignore]
+    [NotMapped]
     public string FullAddress =>
         string.IsNullOrWhiteSpace(ApartmentNumber)
             ? $"{Street} {BuildingNumber}, {PostalCode} {City}"

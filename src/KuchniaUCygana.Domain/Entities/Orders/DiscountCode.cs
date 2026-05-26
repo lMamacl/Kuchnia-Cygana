@@ -1,13 +1,13 @@
 ﻿using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Orders;
 
-[Alias("DiscountCodes")]
+[Table("DiscountCodes")]
 public sealed class DiscountCode : AuditableEntity
 {
-    [Index(Unique = true)]
     public string Code { get; set; } = string.Empty;
 
     public DiscountType DiscountType { get; set; }

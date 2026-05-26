@@ -1,7 +1,7 @@
 ﻿using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Interfaces.Orders;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
+using Dapper;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
@@ -12,7 +12,7 @@ public sealed class OrderItemRepository : BaseRepository<OrderItem>, IOrderItemR
     public async Task<IEnumerable<OrderItem>> GetByOrderIdAsync(int orderId)
     {
         using var db = Factory.CreateConnection();
-        return await db.SelectAsync<OrderItem>(x =>
-            x.OrderId == orderId && x.IsDeleted == false);
+        const string sql = "SELECT * FROM OrderItems WHERE OrderId = @OrderId AND IsDeleted = 0";
+        return await db.QueryAsync<OrderItem>(sql, new { OrderId = orderId });
     }
 }

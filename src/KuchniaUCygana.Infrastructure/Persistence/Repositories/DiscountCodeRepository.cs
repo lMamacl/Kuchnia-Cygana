@@ -1,7 +1,7 @@
 ﻿using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
+using Dapper;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
@@ -12,18 +12,14 @@ public sealed class DiscountCodeRepository : BaseRepository<DiscountCode>, IDisc
     public async Task<DiscountCode?> GetByCodeAsync(string code)
     {
         using var db = Factory.CreateConnection();
-        return await db.SingleAsync<DiscountCode>(x =>
-            x.Code == code && x.IsDeleted == false);
+        const string sql = "SELECT * FROM DiscountCodes WHERE Code = @Code AND IsDeleted = 0";
+        return await db.QuerySingleOrDefaultAsync<DiscountCode>(sql, new { Code = code });
     }
 
     public async Task IncrementUsageAsync(int discountCodeId)
     {
         using var db = Factory.CreateConnection();
-        var code = await db.SingleByIdAsync<DiscountCode>(discountCodeId);
-        if (code is null) return;
-
-        code.UsedCount++;
-        code.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.UpdateAsync(code);
+        const string sql = "UPDATE DiscountCodes SET UsedCount = UsedCount + 1, UpdatedAt = @UpdatedAt WHERE Id = @Id";
+        await db.ExecuteAsync(sql, new { Id = discountCodeId, UpdatedAt = DateTimeOffset.UtcNow });
     }
 }

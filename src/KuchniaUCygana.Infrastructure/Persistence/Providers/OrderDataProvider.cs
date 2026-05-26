@@ -3,13 +3,12 @@ using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
+using Dapper;
+using System.Data;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Providers;
 
-// IOrderDataProvider zastepuje OrderDataProviderMock - Modul 3 dostaje teraz dane z bazy.
-// Uzywa bezposredniego dostepu do DB (batch loading)
-
+// IOrderDataProvider zastępuje OrderDataProviderMock - Moduł 3 dostaje teraz dane z bazy za pomocą Dappera.
 public sealed class OrderDataProvider : IOrderDataProvider
 {
     private readonly IDbConnectionFactory factory;
@@ -26,13 +25,21 @@ public sealed class OrderDataProvider : IOrderDataProvider
         var dateOnly = date.Date;
         var nextDay = dateOnly.AddDays(1);
 
-        // 1. Pobierz zaplanowane dostawy na dany dzien
-        var deliveries = await db.SelectAsync<DeliveryCalendar>(x =>
-            x.DeliveryDate >= dateOnly &&
-            x.DeliveryDate < nextDay &&
-            x.Status == DeliveryStatus.Scheduled &&
-            x.IsSkipped == false &&
-            x.IsDeleted == false);
+        // 1. Pobierz zaplanowane dostawy na dany dzień za pomocą Dappera
+        const string sqlDeliveries = @"
+            SELECT * FROM DeliveryCalendar 
+            WHERE DeliveryDate >= @DateOnly 
+              AND DeliveryDate < @NextDay 
+              AND Status = @Status 
+              AND IsSkipped = 0 
+              AND IsDeleted = 0";
+
+        var deliveries = (await db.QueryAsync<DeliveryCalendar>(sqlDeliveries, new
+        {
+            DateOnly = dateOnly,
+            NextDay = nextDay,
+            Status = (int)DeliveryStatus.Scheduled
+        })).ToList();
 
         if (!deliveries.Any())
             return Enumerable.Empty<OrderDeliveryInfo>();
@@ -46,35 +53,35 @@ public sealed class OrderDataProvider : IOrderDataProvider
             .Distinct()
             .ToList();
 
-        // 3. Ladujemy zamowienia
-        var orders = (await db.SelectAsync<Order>(x =>
-            Sql.In(x.Id, orderIds) && x.IsDeleted == false))
+        // 3. Ładujemy zamówienia
+        const string sqlOrders = "SELECT * FROM [Order] WHERE Id IN @OrderIds AND IsDeleted = 0";
+        var orders = (await db.QueryAsync<Order>(sqlOrders, new { OrderIds = orderIds }))
             .ToDictionary(o => o.Id);
 
-        // 4. Ladujemy klientow (Users)
+        // 4. Ładujemy klientów (Users)
         var customerIds = orders.Values.Select(o => o.CustomerId).Distinct().ToList();
-        var customers = (await db.SelectAsync<User>(x =>
-            Sql.In(x.Id, customerIds)))
+        const string sqlCustomers = "SELECT * FROM [User] WHERE Id IN @CustomerIds";
+        var customers = (await db.QueryAsync<User>(sqlCustomers, new { CustomerIds = customerIds }))
             .ToDictionary(u => u.Id);
 
-        // 5. Ladujemy adresy
-        var addresses = (await db.SelectAsync<Address>(x =>
-            Sql.In(x.Id, addressIds) && x.IsDeleted == false))
+        // 5. Ładujemy adresy
+        const string sqlAddresses = "SELECT * FROM Address WHERE Id IN @AddressIds AND IsDeleted = 0";
+        var addresses = (await db.QueryAsync<Address>(sqlAddresses, new { AddressIds = addressIds }))
             .ToDictionary(a => a.Id);
 
-        // 6. Ladujemy okna czasowe
+        // 6. Ładujemy okna czasowe
         var windows = windowIds.Any()
-            ? (await db.SelectAsync<DeliveryWindow>(x => Sql.In(x.Id, windowIds)))
+            ? (await db.QueryAsync<DeliveryWindow>("SELECT * FROM DeliveryWindow WHERE Id IN @WindowIds", new { WindowIds = windowIds }))
                 .ToDictionary(w => w.Id)
             : new Dictionary<int, DeliveryWindow>();
 
-        // 7. Ladujemy pozycje zamowien
-        var allItems = (await db.SelectAsync<OrderItem>(x =>
-            Sql.In(x.OrderId, orderIds) && x.IsDeleted == false))
+        // 7. Ładujemy pozycje zamówień
+        const string sqlItems = "SELECT * FROM OrderItem WHERE OrderId IN @OrderIds AND IsDeleted = 0";
+        var allItems = (await db.QueryAsync<OrderItem>(sqlItems, new { OrderIds = orderIds }))
             .GroupBy(i => i.OrderId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // 8. Budujemy wynik
+        // 8. Budujemy wynik (Reszta Twojego kodu bez zmian)
         var result = new List<OrderDeliveryInfo>();
 
         foreach (var delivery in deliveries)

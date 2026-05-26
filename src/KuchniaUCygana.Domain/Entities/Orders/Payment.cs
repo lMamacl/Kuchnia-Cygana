@@ -1,10 +1,11 @@
 ﻿using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Orders;
 
-[Alias("Payments")]
+[Table("Payments")]
 public sealed class Payment : AuditableEntity
 {
     public int OrderId { get; set; }

@@ -1,8 +1,5 @@
-﻿using ServiceStack.DataAnnotations;
+﻿namespace KuchniaUCygana.Domain.Enums;
 
-namespace KuchniaUCygana.Domain.Enums;
-
-[EnumAsInt]
 public enum PaymentStatus
 {
     Pending = 0,

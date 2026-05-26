@@ -1,15 +1,15 @@
 ﻿using System.Security.Claims;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Web.Models;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
-using KuchniaUCygana.Domain.Entities.Auth;
+using Microsoft.Extensions.Hosting;
 
 namespace KuchniaUCygana.Web.Controllers;
 
@@ -21,13 +21,16 @@ public sealed class AccountController : Controller
 
     public AccountController(
         IUserRepository userRepository,
-        ICustomerProfileService customerProfileService)
-    public AccountController(IWebHostEnvironment env)
+        ICustomerProfileService customerProfileService,
+        IWebHostEnvironment env)
     {
         this.userRepository = userRepository;
         this.customerProfileService = customerProfileService;
+        this.env = env;
     }
+
     [HttpGet]
+    [Authorize]
     public IActionResult Index()
     {
         ViewData["Title"] = "Konto";
@@ -36,6 +39,7 @@ public sealed class AccountController : Controller
     }
 
     [HttpGet]
+    [Authorize]
     public IActionResult Profile()
     {
         ViewData["Title"] = "Profil klienta";
@@ -61,9 +65,9 @@ public sealed class AccountController : Controller
 
         if (user is null || !BCrypt.Net.BCrypt.Verify(model.Password, user.PasswordHash))
         {
-            ModelState.AddModelError(string.Empty, "Nieprawidlowy adres e-mail lub haslo.");
+            ModelState.AddModelError(string.Empty, "Nieprawidłowy adres e-mail lub hasło.");
             return View(model);
-    }
+        }
 
         await SignInUserAsync(user);
         return RedirectToLocal(model.ReturnUrl);
@@ -84,19 +88,12 @@ public sealed class AccountController : Controller
         if (!ModelState.IsValid) return View(model);
 
         if (await userRepository.ExistsWithEmailAsync(model.Email))
-    [HttpPost]
-    [Route("account/dev-login")]
-    public async Task<IActionResult> DevLogin(string role, string? returnUrl = null)
-    {
-            ModelState.AddModelError(nameof(model.Email), "Konto z tym adresem e-mail juz istnieje.");
-            return View(model);
-        if (!env.IsDevelopment())
         {
-            return BadRequest("Logowanie deweloperskie jest wyłączone na tym środowisku.");
+            ModelState.AddModelError(nameof(model.Email), "Konto z tym adresem e-mail już istnieje.");
+            return View(model);
         }
 
         var user = new User
-        var claims = new List<Claim>
         {
             Email = model.Email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.Password),
@@ -104,7 +101,32 @@ public sealed class AccountController : Controller
             LastName = model.LastName,
             Role = UserRoles.Client,
             CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+        var userId = await userRepository.InsertAsync(user);
+        user.Id = userId;
+
+        await customerProfileService.EnsureProfileExistsAsync(userId);
+        await SignInUserAsync(user);
+
+        TempData["Success"] = "Konto zostało pomyślnie utworzone!";
+        return RedirectToAction("Index", "Home");
+    }
+
+    [HttpPost]
+    [Route("account/dev-login")]
+    public async Task<IActionResult> DevLogin(string role, string? returnUrl = null)
+    {
+        if (!env.IsDevelopment())
+        {
+            return BadRequest("Logowanie deweloperskie jest wyłączone na tym środowisku.");
+        }
+
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, "0"),
             new Claim(ClaimTypes.Name, $"dev-{role.ToLower()}@kuchniaucygana.pl"),
+            new Claim(ClaimTypes.Email, $"dev-{role.ToLower()}@kuchniaucygana.pl"),
             new Claim(ClaimTypes.Role, role)
         };
 
@@ -123,9 +145,7 @@ public sealed class AccountController : Controller
             return RedirectToAction("Index", "Staff");
         }
 
-        await customerProfileService.EnsureProfileExistsAsync(userId);
-        await SignInUserAsync(user);
-        return RedirectToAction("Index", "Home");
+        return Redirect(returnUrl);
     }
 
     [HttpPost]
@@ -134,7 +154,17 @@ public sealed class AccountController : Controller
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         HttpContext.Session.Clear();
-        return RedirectToAction("Login");
+
+        TempData["Success"] = "Pomyślnie wylogowano.";
+        return RedirectToAction("Index", "Home");
+    }
+
+    [HttpGet]
+    public IActionResult AccessDenied()
+    {
+        ViewData["Title"] = "Brak dostępu";
+        ViewData["Description"] = "Ten widok służy jako punkt integracji zabezpieczeń ról.";
+        return View();
     }
 
     private async Task SignInUserAsync(User user)

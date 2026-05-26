@@ -1,9 +1,10 @@
 ﻿using KuchniaUCygana.Domain.Common;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Orders;
 
-[Alias("DeliveryWindows")]
+[Table("DeliveryWindows")]
 public sealed class DeliveryWindow : BaseEntity
 {
     public string Name { get; set; } = string.Empty;

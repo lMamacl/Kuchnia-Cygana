@@ -1,15 +1,15 @@
 ﻿using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Orders;
 
-[Alias("Orders")]
+[Table("Orders")]
 public sealed class Order : AuditableEntity
 {
     public int CustomerId { get; set; }
 
-    [Index(Unique = true)]
     public string OrderNumber { get; set; } = string.Empty;
 
     public OrderStatus Status { get; set; } = OrderStatus.Draft;
@@ -28,9 +28,9 @@ public sealed class Order : AuditableEntity
 
     public DateTime? EndDate { get; set; }
 
-    [Ignore]
+    [NotMapped]
     public List<OrderItem> Items { get; set; } = new();
 
-    [Ignore]
+    [NotMapped]
     public List<DeliveryCalendar> DeliveryDays { get; set; } = new();
 }

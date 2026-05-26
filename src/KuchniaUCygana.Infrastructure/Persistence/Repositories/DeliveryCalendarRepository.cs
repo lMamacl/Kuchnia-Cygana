@@ -2,7 +2,7 @@
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Orders;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
+using Dapper;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
@@ -13,10 +13,8 @@ public sealed class DeliveryCalendarRepository : BaseRepository<DeliveryCalendar
     public async Task<IEnumerable<DeliveryCalendar>> GetByOrderIdAsync(int orderId)
     {
         using var db = Factory.CreateConnection();
-        var q = db.From<DeliveryCalendar>()
-            .Where(x => x.OrderId == orderId && x.IsDeleted == false)
-            .OrderBy(x => x.DeliveryDate);
-        return await db.SelectAsync(q);
+        const string sql = "SELECT * FROM DeliveryCalendar WHERE OrderId = @OrderId AND IsDeleted = 0 ORDER BY DeliveryDate";
+        return await db.QueryAsync<DeliveryCalendar>(sql, new { OrderId = orderId });
     }
 
     public async Task<IEnumerable<DeliveryCalendar>> GetScheduledForDateAsync(DateTime date)
@@ -25,12 +23,20 @@ public sealed class DeliveryCalendarRepository : BaseRepository<DeliveryCalendar
         var dateOnly = date.Date;
         var nextDay = dateOnly.AddDays(1);
 
-        return await db.SelectAsync<DeliveryCalendar>(x =>
-            x.DeliveryDate >= dateOnly &&
-            x.DeliveryDate < nextDay &&
-            x.Status == DeliveryStatus.Scheduled &&
-            x.IsSkipped == false &&
-            x.IsDeleted == false);
+        const string sql = @"
+            SELECT * FROM DeliveryCalendar 
+            WHERE DeliveryDate >= @DateOnly 
+              AND DeliveryDate < @NextDay 
+              AND Status = @Status 
+              AND IsSkipped = 0 
+              AND IsDeleted = 0";
+
+        return await db.QueryAsync<DeliveryCalendar>(sql, new
+        {
+            DateOnly = dateOnly,
+            NextDay = nextDay,
+            Status = (int)DeliveryStatus.Scheduled
+        });
     }
 
     public Task<bool> IsDateAvailableAsync(DateTime date)

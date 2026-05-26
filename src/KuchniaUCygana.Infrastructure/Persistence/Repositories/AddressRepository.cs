@@ -1,7 +1,7 @@
 ﻿using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
+using Dapper;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
@@ -12,42 +12,26 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
     public async Task<IEnumerable<Address>> GetByUserIdAsync(int userId)
     {
         using var db = Factory.CreateConnection();
-        var q = db.From<Address>()
-            .Where(x => x.UserId == userId && x.IsDeleted == false)
-            .OrderByDescending(x => x.IsDefault)
-            .ThenBy(x => x.Label);
-        return await db.SelectAsync(q);
+        const string sql = "SELECT * FROM Addresses WHERE UserId = @UserId AND IsDeleted = 0 ORDER BY IsDefault DESC, Label ASC";
+        return await db.QueryAsync<Address>(sql, new { UserId = userId });
     }
 
     public async Task<Address?> GetDefaultByUserIdAsync(int userId)
     {
         using var db = Factory.CreateConnection();
-        return await db.SingleAsync<Address>(x =>
-            x.UserId == userId && x.IsDefault == true && x.IsDeleted == false);
+        const string sql = "SELECT * FROM Addresses WHERE UserId = @UserId AND IsDefault = 1 AND IsDeleted = 0";
+        return await db.QuerySingleOrDefaultAsync<Address>(sql, new { UserId = userId });
     }
 
     public async Task SetDefaultAsync(int userId, int addressId)
     {
         using var db = Factory.CreateConnection();
+        var now = DateTimeOffset.UtcNow;
 
-        var currentDefaults = await db.SelectAsync<Address>(x =>
-            x.UserId == userId && x.IsDefault == true && x.IsDeleted == false);
+        const string resetSql = "UPDATE Addresses SET IsDefault = 0, UpdatedAt = @Now WHERE UserId = @UserId AND IsDefault = 1 AND IsDeleted = 0";
+        await db.ExecuteAsync(resetSql, new { UserId = userId, Now = now });
 
-        foreach (var addr in currentDefaults)
-        {
-            addr.IsDefault = false;
-            addr.UpdatedAt = DateTimeOffset.UtcNow;
-            await db.UpdateAsync(addr);
-        }
-
-        var newDefault = await db.SingleAsync<Address>(x =>
-            x.Id == addressId && x.UserId == userId && x.IsDeleted == false);
-
-        if (newDefault is not null)
-        {
-            newDefault.IsDefault = true;
-            newDefault.UpdatedAt = DateTimeOffset.UtcNow;
-            await db.UpdateAsync(newDefault);
-        }
+        const string setSql = "UPDATE Addresses SET IsDefault = 1, UpdatedAt = @Now WHERE Id = @Id AND UserId = @UserId AND IsDeleted = 0";
+        await db.ExecuteAsync(setSql, new { Id = addressId, UserId = userId, Now = now });
     }
 }
