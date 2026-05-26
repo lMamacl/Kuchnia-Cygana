@@ -21,7 +21,7 @@
 
 ## 1. Kontekst i Cel
 
-Projekt „Kuchnia u Cygana" to platforma webowa (B2C e-commerce + ERP back-office) dla firmy cateringowej. System składa się z **5 modułów domenowych** rozwijanych przez 5 deweloperów, osadzonych w architekturze N-Tier / Clean Architecture (ASP.NET MVC 8, SQLite + OrmLite, FluentMigrator).
+Projekt „Kuchnia u Cygana" to platforma webowa (B2C e-commerce + ERP back-office) dla firmy cateringowej. System składa się z **5 modułów domenowych** rozwijanych przez 5 deweloperów, osadzonych w architekturze N-Tier / Clean Architecture (ASP.NET MVC 8, SQL Server + Dapper, FluentMigrator).
 
 **Decyzja frontendowa (2026-05-04):** Wybrany stack to **Razor Views + HTMX + Alpine.js** (Opcja B). Szczegółowe porównanie z klasycznym jQuery w [`docs/frontend-comparison.html`](./frontend-comparison.html).
 
@@ -121,7 +121,7 @@ Moduły 1, 2 i 5 mogą być rozwijane **równolegle**, ponieważ mają minimalne
 |---|---------|
 | 2.2.1 | Encje: `Diet`, `DietVariant`, `Meal`, `Ingredient`, `Recipe`, `Allergen`, `MealAllergen`, `DietVariantMeal` |
 | 2.2.2 | Migracje (ManyToMany: Recipe, MealAllergen, DietVariantMeal) |
-| 2.2.3 | Repozytoria z JOINami (OrmLite explicit loading) |
+| 2.2.3 | Repozytoria z JOINami (jawne JOINy w Dapperze) |
 | 2.2.4 | DTOs + AutoMapper (`DietProfile`) |
 | 2.2.5 | Serwisy: `IDietService`, `IMealService` |
 | 2.2.6 | OpenAI: `IAiDescriptionService` → generowanie opisów posiłków |

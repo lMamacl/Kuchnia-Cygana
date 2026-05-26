@@ -1,38 +1,84 @@
 ﻿@model KuchniaUCygana.Web.Models.LoginViewModel
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 @{
-    ViewData["Title"] = "Logowanie";
+    ViewData["Title"] = "Zaloguj się";
 }
 
-<div class="row justify-content-center mt-5">
-    <div class="col-md-5 col-lg-4">
-        <div class="card shadow-sm">
-            <div class="card-body p-4">
-                <h4 class="card-title mb-4 text-center">Logowanie</h4>
+<div class="row justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <h2 class="fw-bold">Logowanie</h2>
+                    <p class="text-muted">Wpisz swoje dane, aby zalogować się do systemu</p>
+                </div>
 
-                <form asp-action="Login" method="post">
+                <form asp-action="Login" method="post" asp-route-returnUrl="@Model.ReturnUrl">
                     <input type="hidden" asp-for="ReturnUrl" />
                     <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
-
+                    
                     <div class="mb-3">
-                        <label asp-for="Email" class="form-label">Adres e-mail</label>
-                        <input asp-for="Email" class="form-control" autocomplete="email" />
+                        <label asp-for="Email" class="form-label">Adres E-mail</label>
+                        <input asp-for="Email" class="form-control" placeholder="nazwa@example.com" required />
                         <span asp-validation-for="Email" class="text-danger small"></span>
                     </div>
 
                     <div class="mb-4">
-                        <label asp-for="Password" class="form-label">Haslo</label>
-                        <input asp-for="Password" type="password" class="form-control" autocomplete="current-password" />
+                        <label asp-for="Password" class="form-label">Hasło</label>
+                        <input asp-for="Password" class="form-control" type="password" placeholder="••••••••" required />
                         <span asp-validation-for="Password" class="text-danger small"></span>
                     </div>
 
-                    <button type="submit" class="btn btn-primary w-100">Zaloguj sie</button>
+                    <button type="submit" class="btn btn-primary w-100 py-2 mb-3">Zaloguj się</button>
                 </form>
 
-                <hr class="my-3" />
-                <p class="text-center mb-0 small">
-                    Nie masz konta?
-                    <a asp-action="Register">Zarejestruj sie</a>
-                </p>
+                @if (Env.IsDevelopment())
+                {
+                    <hr class="my-4" />
+                    <div class="developer-bypass-panel text-center">
+                        <h5 class="text-warning fw-bold mb-3">
+                            <span class="badge bg-warning text-dark me-2">DEV</span> Panel Programisty (Bypass HR)
+                        </h5>
+                        <p class="text-muted small mb-3">Kliknij wybraną rolę, aby zalogować się testowo bez użycia bazy danych.</p>
+                        
+                        <div class="d-flex flex-wrap justify-content-center gap-2">
+                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                <input type="hidden" name="role" value="KitchenManager" />
+                                <button type="submit" class="btn btn-sm btn-outline-warning">Szef Kuchni (KitchenManager)</button>
+                            </form>
+                            
+                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                <input type="hidden" name="role" value="Kitchen" />
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">Kucharz (Kitchen)</button>
+                            </form>
+
+                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                <input type="hidden" name="role" value="WarehouseManager" />
+                                <button type="submit" class="btn btn-sm btn-outline-primary">Kierownik Magazynu (WarehouseManager)</button>
+                            </form>
+
+                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                <input type="hidden" name="role" value="Warehouse" />
+                                <button type="submit" class="btn btn-sm btn-outline-info">Magazynier (Warehouse)</button>
+                            </form>
+
+                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                <input type="hidden" name="role" value="PackingManager" />
+                                <button type="submit" class="btn btn-sm btn-outline-success">Kierownik Kompletacji (PackingManager)</button>
+                            </form>
+
+                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                <input type="hidden" name="role" value="Packing" />
+                                <button type="submit" class="btn btn-sm btn-outline-success opacity-75">Pakowacz (Packing)</button>
+                            </form>
+
+                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                <input type="hidden" name="role" value="Admin" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Administrator (Admin)</button>
+                            </form>
+                        </div>
+                    </div>
+                }
             </div>
         </div>
     </div>

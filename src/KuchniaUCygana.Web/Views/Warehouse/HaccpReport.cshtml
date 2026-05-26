@@ -1,0 +1,8 @@
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] ??= "Raport HACCP";
+    ViewData["Section"] ??= "Magazyn";
+    ViewData["Description"] ??= "Placeholder raportu HACCP za wybrany zakres dat.";
+}
+@await Html.PartialAsync("_StaffPlaceholder")
+

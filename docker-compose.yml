@@ -35,7 +35,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=${MSSQL_DB_NAME:?MSSQL_DB_NAME is required};User Id=sa;Password=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required};Encrypt=True;TrustServerCertificate=True;
       - DatabaseSeeding__Enabled=false

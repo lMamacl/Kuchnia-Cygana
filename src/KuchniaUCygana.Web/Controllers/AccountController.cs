@@ -3,8 +3,10 @@ using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Web.Models;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using KuchniaUCygana.Domain.Entities.Auth;
@@ -15,13 +17,30 @@ public sealed class AccountController : Controller
 {
     private readonly IUserRepository userRepository;
     private readonly ICustomerProfileService customerProfileService;
+    private readonly IWebHostEnvironment env;
 
     public AccountController(
         IUserRepository userRepository,
         ICustomerProfileService customerProfileService)
+    public AccountController(IWebHostEnvironment env)
     {
         this.userRepository = userRepository;
         this.customerProfileService = customerProfileService;
+    }
+    [HttpGet]
+    public IActionResult Index()
+    {
+        ViewData["Title"] = "Konto";
+        ViewData["Description"] = "Szkielet centrum konta klienta.";
+        return View();
+    }
+
+    [HttpGet]
+    public IActionResult Profile()
+    {
+        ViewData["Title"] = "Profil klienta";
+        ViewData["Description"] = "Placeholder profilu klienta.";
+        return View();
     }
 
     [HttpGet]
@@ -44,7 +63,7 @@ public sealed class AccountController : Controller
         {
             ModelState.AddModelError(string.Empty, "Nieprawidlowy adres e-mail lub haslo.");
             return View(model);
-        }
+    }
 
         await SignInUserAsync(user);
         return RedirectToLocal(model.ReturnUrl);
@@ -65,12 +84,19 @@ public sealed class AccountController : Controller
         if (!ModelState.IsValid) return View(model);
 
         if (await userRepository.ExistsWithEmailAsync(model.Email))
-        {
+    [HttpPost]
+    [Route("account/dev-login")]
+    public async Task<IActionResult> DevLogin(string role, string? returnUrl = null)
+    {
             ModelState.AddModelError(nameof(model.Email), "Konto z tym adresem e-mail juz istnieje.");
             return View(model);
+        if (!env.IsDevelopment())
+        {
+            return BadRequest("Logowanie deweloperskie jest wyłączone na tym środowisku.");
         }
 
         var user = new User
+        var claims = new List<Claim>
         {
             Email = model.Email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.Password),
@@ -78,10 +104,24 @@ public sealed class AccountController : Controller
             LastName = model.LastName,
             Role = UserRoles.Client,
             CreatedAt = DateTimeOffset.UtcNow,
+            new Claim(ClaimTypes.Name, $"dev-{role.ToLower()}@kuchniaucygana.pl"),
+            new Claim(ClaimTypes.Role, role)
         };
 
-        var userId = await userRepository.InsertAsync(user);
-        user.Id = userId;
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var principal = new ClaimsPrincipal(identity);
+
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+        TempData["Success"] = $"Zalogowano jako: {role} (Bypass HR).";
+
+        if (string.IsNullOrEmpty(returnUrl))
+        {
+            if (role.Contains("Kitchen")) return RedirectToAction("Index", "Production");
+            if (role.Contains("Warehouse")) return RedirectToAction("Index", "Warehouse");
+            if (role.Contains("Packing")) return RedirectToAction("Index", "Packing");
+            return RedirectToAction("Index", "Staff");
+        }
 
         await customerProfileService.EnsureProfileExistsAsync(userId);
         await SignInUserAsync(user);

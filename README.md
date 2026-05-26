@@ -4,7 +4,7 @@
 
 Platforma webowa dla firmy cateringowej łącząca **portal B2C** (zamawianie diet, płatności online) z **ERP back-office** (produkcja, magazyn, logistyka, HR, helpdesk).
 
-> **Technologie:** ASP.NET MVC 8 · MS SQL Server · ServiceStack OrmLite · HTMX 2.x · Alpine.js · Clean Architecture
+> **Technologie:** ASP.NET MVC 8 · MS SQL Server · Dapper · FluentMigrator · HTMX 2.x · Alpine.js · Clean Architecture
 
 ---
 
@@ -31,7 +31,7 @@ KuchniaUCygana.Application      ← BLL (Services, DTOs, AutoMapper, Validators)
     ↓ używa Interfejsów
 KuchniaUCygana.Domain           ← Core (Entities, Repository Interfaces, Events)
     ↑ implementuje Interfejsy
-KuchniaUCygana.Infrastructure   ← DAL (OrmLite, Migrations, External APIs, Cache)
+KuchniaUCygana.Infrastructure   ← DAL (Dapper, Migrations, External APIs, Cache)
 ```
 
 **Zasada:** Web → Application → Domain ← Infrastructure. Żadna warstwa nie może znać szczegółów warstwy powyżej.
@@ -117,9 +117,26 @@ dotnet restore KuchniaUCygana.sln
 docker compose up --build
 ```
 
-Po starcie aplikacja jest dostepna pod `http://localhost:8080`.
+Po starcie aplikacja jest dostępna pod `http://localhost:8080`.
 
 Dane SQL Server persystują w named volume `mssql_data`. Pliki uploadowane w `uploads_data`.
+
+### 4a. Visual Studio vs Docker: dlaczego czasem widzisz inny frontend
+
+Visual Studio uruchamia aplikację bezpośrednio z aktualnych plików źródłowych, zwykle pod `https://localhost:7296/`.
+Docker pod `http://localhost:8080` uruchamia ostatnio zbudowany obraz kontenera `web`. Jeżeli zmieniły się pliki Razor,
+CSS albo JavaScript, ale obraz nie został przebudowany, kontener może nadal pokazywać stary wygląd strony.
+
+Dla zmian frontendowych najczęściej wystarczy przebudować i odtworzyć tylko kontener aplikacji:
+
+```bash
+docker compose up -d --build --force-recreate web
+```
+
+Nie czyść wtedy bazy danych. `docker compose down -v` usuwa named volume `mssql_data`, czyli kasuje lokalne dane SQL
+Server. Używaj go tylko wtedy, gdy celowo potrzebujesz czystej bazy, naprawiasz migracje albo chcesz wykonać pełny
+greenfield rebuild. Zmiany w widokach, layoutach, plikach `wwwroot/css` i `wwwroot/js` nie wymagają przebudowy bazy.
+
 ## Uruchomienie lokalne bez Dockera
 
 ### 5. Zatrzymanie
@@ -128,7 +145,7 @@ Dane SQL Server persystują w named volume `mssql_data`. Pliki uploadowane w `up
 docker compose down            # zatrzymaj kontenery
 docker compose down -v         # zatrzymaj i usuń dane (volumes)
 ```
-### Pelny reset danych (greenfield rebuild)
+### Pełny reset danych (greenfield rebuild)
 
 ```bash
 docker compose down -v --remove-orphans
@@ -216,6 +233,19 @@ main ← develop ← feature/devX-opis-zadania
 2. **Pull Request:** `feature/* → develop` — wymaga przejścia CI i code review
 3. **`main`** aktualizowany tylko przez merge z `develop`
 4. **Pliki współdzielone** (`DependencyInjection.cs`, migracje) — uzgodnij z właścicielem
+
+### Standard web/back-office dla branchy modułowych
+
+Panel pracowniczy/back-office korzysta ze wspólnego shellu Tabler. Nowe testowe widoki operacyjne powinny być
+dopięte pod `_LayoutStaff`, a nie przez osobne layouty ani przez przebudowę `_Layout.cshtml` klienta B2C.
+
+- Widoki staff/back-office: `Layout = "_LayoutStaff";`.
+- Nawigacja: dopisz widok w `StaffNavigationCatalog`, zamiast ręcznie edytować kilka menu naraz.
+- Ikony: korzystaj z `StaffIconCatalog`; jeżeli brakuje ikony, dopisz klucz tam.
+- Style i skrypty shellu: `wwwroot/css/staff.css` oraz `wwwroot/js/staff-shell.js`.
+- Dla samych mocków/widoków nie zmieniaj `DependencyInjection.cs`, `Program.cs`, migracji ani `docker-compose.yml`.
+- Jeżeli Twój moduł ma realny serwis/repozytorium, dopisuj rejestrację DI addytywnie. Nie podmieniaj całego pliku.
+
 ### 🚀 Sygnały poprawnego startu
 Po uruchomieniu `docker compose up`, w logach powinieneś zobaczyć:
 - `Container kuchnia_sqlserver Healthy` — SQL Server jest gotowy.
@@ -246,7 +276,7 @@ Po uruchomieniu `docker compose up`, w logach powinieneś zobaczyć:
 ## 🛠️ Narzędzia i Konwencje
 Wszystkie testy:
 
-- **ORM:** ServiceStack OrmLite (bliżej SQL niż EF Core, brak lazy loading — jawne JOINy)
+- **Dostęp do danych:** Dapper (blisko SQL, brak lazy loading — jawne JOINy)
 - **Migracje:** FluentMigrator — jedyne źródło DDL (nie `db.CreateTableIfNotExists`!)
 - **Mapowania:** AutoMapper — 1 plik Profile per moduł
 - **Walidacja:** FluentValidation (serwer) + jQuery Validation Unobtrusive (klient)

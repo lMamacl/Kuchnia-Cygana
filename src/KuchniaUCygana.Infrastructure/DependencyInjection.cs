@@ -15,10 +15,10 @@ using KuchniaUCygana.Infrastructure.Persistence.Migrations;
 using KuchniaUCygana.Infrastructure.Persistence.Providers;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
+using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
+using KuchniaUCygana.Infrastructure.Pdf;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using QuestPDF.Infrastructure;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure;
 
@@ -29,8 +29,9 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-        services.AddSingleton(new OrmLiteConnectionFactory(connectionString, SqlServerDialect.Provider));
-        services.AddSingleton<IDbConnectionFactory, SqlServerConnectionFactory>();
+        DapperTypeHandlers.Register();
+
+        services.AddSingleton<IDbConnectionFactory>(_ => new SqlServerConnectionFactory(connectionString));
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
 
