@@ -1,3 +1,5 @@
+using KuchniaUCygana.Application.DTOs.Menu;
+using KuchniaUCygana.Application.Interfaces.Menu;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
@@ -5,6 +7,14 @@ namespace KuchniaUCygana.Web.Controllers;
 [Route("ingredients")]
 public sealed class IngredientController : Controller
 {
+    private readonly IIngredientManagementService _ingredientService;
+
+    public IngredientController(IIngredientManagementService ingredientService)
+    {
+        _ingredientService = ingredientService;
+    }
+
+    // GET
     [HttpGet("")]
     public IActionResult Index()
     {
@@ -44,5 +54,36 @@ public sealed class IngredientController : Controller
             ? $"Placeholder wartosci odzywczych skladnika #{id}."
             : "Placeholder wartosci odzywczych skladnika.";
         return View();
+    }
+    // POST
+    [HttpPost("create")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(IngredientDto dto)
+    {
+        if (!ModelState.IsValid) return View(dto);
+        await _ingredientService.CreateAsync(dto);
+        TempData["Success"] = "Sk³adnik dodany.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost("edit/{id:int}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, IngredientDto dto)
+    {
+        if (id != dto.Id) return BadRequest();
+        if (!ModelState.IsValid) return View(dto);
+        await _ingredientService.UpdateAsync(dto);
+        TempData["Success"] = "Sk³adnik zaktualizowany.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost("delete/{id:int}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var deleted = await _ingredientService.DeleteAsync(id);
+        if (!deleted) TempData["Error"] = "Nie mo¿na usun¹æ – sk³adnik u¿ywany w recepturach.";
+        else TempData["Success"] = "Sk³adnik usuniêty.";
+        return RedirectToAction(nameof(Index));
     }
 }
