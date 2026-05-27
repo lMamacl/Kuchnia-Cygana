@@ -28,6 +28,10 @@ using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Domain.Interfaces.Services.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.Services.Menu;
+using KuchniaUCygana.Domain.Interfaces.Logistics;
+using KuchniaUCygana.Infrastructure.BackgroundJobs;
+using KuchniaUCygana.Application.Services.Logistics;
+using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using MenuAppInterfaces = KuchniaUCygana.Application.Interfaces.Menu;
@@ -68,6 +72,13 @@ public static class DependencyInjection
         services.AddScoped<INutritionFactRepository, NutritionFactRepository>();
         services.AddScoped<IRecipeRepository, RecipeRepository>();
 
+        // Module 4 (Logistics) repositories.
+        services.AddScoped<IDeliveryRouteRepository, DeliveryRouteRepository>();
+        services.AddScoped<IDeliveryRouteStopRepository, DeliveryRouteStopRepository>();
+        services.AddScoped<IDriverRepository, DriverRepository>();
+        services.AddScoped<IThermalBagRepository, ThermalBagRepository>();
+        services.AddScoped<IVehicleRepository, VehicleRepository>();
+
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
 
         if (configuration["OrderProvider"] == "M1")
@@ -80,7 +91,7 @@ public static class DependencyInjection
         }
 
         services.AddScoped<IDietDataProvider, DietDataAdapter>();
-        services.AddScoped<IDeliveryManifestProvider, MockDeliveryManifestProvider>();
+        services.AddScoped<IDeliveryManifestProvider, M4DeliveryManifestProvider>();
 
         services.AddScoped<Domain.Services.FefoService>();
         services.AddScoped<Domain.Services.FoodCostCalculator>();
@@ -113,6 +124,12 @@ public static class DependencyInjection
         services.AddScoped<MenuAppInterfaces.IIngredientManagementService, MenuAppServices.IngredientManagementService>();
         services.AddScoped<MenuAppInterfaces.IMealManagementService, MenuAppServices.MealManagementService>();
         services.AddScoped<MenuAppInterfaces.INutritionService, MenuAppServices.NutritionService>();
+
+        // Module 4 (Logistics) services.
+        services.AddScoped<IVehicleService, VehicleService>();
+        services.AddScoped<GeocodingOrchestrator>();
+        services.AddScoped<IRouteOptimizer, GoogleMapsRoutingService>();
+        services.AddHostedService<DailyGeocodingWorker>();
 
         services
             .AddFluentMigratorCore()
