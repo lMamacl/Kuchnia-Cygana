@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Application.DTOs.Logistics;
+using KuchniaUCygana.Domain.Interfaces.Logistics;
+using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 
 namespace KuchniaUCygana.Web.Controllers;
 
@@ -9,10 +11,12 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class LogisticsController : Controller
 {
     private readonly IVehicleService _vehicleService;
+    private readonly IGeocodeService _geocodeService;
 
-    public LogisticsController(IVehicleService vehicleService)
+    public LogisticsController(IVehicleService vehicleService, IGeocodeService geocodeService)
     {
         _vehicleService = vehicleService;
+        _geocodeService = geocodeService;
     }
 
     [HttpGet("")]
@@ -144,5 +148,26 @@ public sealed class LogisticsController : Controller
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = "Lista kierowcow i przypisania do tras.";
         return View();
+    }
+
+    [HttpGet("test-geocode")]
+    public IActionResult TestGeokodowania()
+    {
+        ViewData["Title"] = "Test geokodowania";
+        ViewData["Section"] = "Logistyka";
+        ViewData["Description"] = "Test geokodowania.";
+        return View();
+    }
+
+    [HttpPost("test-geocode")]
+    public async Task<IActionResult> TestGeokodowania(string address)
+    {
+        var result = await _geocodeService.GeocodeAsync(address);
+
+        // Mapujemy wynik z ValueTuple na typ anonimowy, aby serializator JSON zadziałał prawidłowo
+        return Json(new { 
+            latitude = result.Latitude, 
+            longitude = result.Longitude 
+        });
     }
 }

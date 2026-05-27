@@ -1,0 +1,12 @@
+@{
+    ViewData["Title"] = "Test geokodowania";
+}
+
+<h2>Test geokodowania</h2>
+
+<form hx-post="/Logistics/TestGeocode" hx-target="#result" hx-swap="innerHTML">
+    <input type="text" name="address" placeholder="Wpisz adres" class="form-control" />
+    <button type="submit" class="btn btn-primary mt-2">Geokoduj</button>
+</form>
+
+<div id="result" class="mt-3"></div>
