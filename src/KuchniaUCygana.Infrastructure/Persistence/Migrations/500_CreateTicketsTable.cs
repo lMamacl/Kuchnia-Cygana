@@ -2,7 +2,7 @@ using FluentMigrator;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Migrations;
 
-[Migration(400)]
+[Migration(500)]
 public sealed class CreateTicketsTable : Migration
 {
     public override void Up()

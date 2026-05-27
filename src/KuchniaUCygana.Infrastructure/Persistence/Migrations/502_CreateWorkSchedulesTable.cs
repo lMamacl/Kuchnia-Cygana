@@ -2,7 +2,7 @@ using FluentMigrator;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Migrations;
 
-[Migration(402)]
+[Migration(502)]
 public sealed class CreateWorkSchedulesTable : Migration
 {
     public override void Up()
