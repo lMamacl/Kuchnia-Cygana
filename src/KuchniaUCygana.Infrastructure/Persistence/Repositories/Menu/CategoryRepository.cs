@@ -1,7 +1,7 @@
-﻿using KuchniaUCygana.Domain.Entities.Menu;
+﻿using Dapper;
+using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
@@ -15,7 +15,7 @@ public sealed class CategoryRepository : BaseRepository<Category>, ICategoryRepo
     public async Task<IEnumerable<Category>> GetOrderedAsync()
     {
         using var db = this.Factory.CreateConnection();
-        var query = db.From<Category>().OrderBy(c => c.SortOrder);
-        return await db.SelectAsync(query);
+        const string sql = "SELECT * FROM [Categories] ORDER BY [SortOrder];";
+        return await db.QueryAsync<Category>(sql);
     }
 }

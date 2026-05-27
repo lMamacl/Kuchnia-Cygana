@@ -1,7 +1,7 @@
 ﻿using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
+using Dapper;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
@@ -15,7 +15,7 @@ public sealed class AllergenRepository : BaseRepository<Allergen>, IAllergenRepo
     public async Task<IEnumerable<Allergen>> GetAllOrderedAsync()
     {
         using var db = this.Factory.CreateConnection();
-        var query = db.From<Allergen>().OrderBy(a => a.Name);
-        return await db.SelectAsync(query);
+        const string sql = "SELECT * FROM [Allergens] ORDER BY [Name];";
+        return await db.QueryAsync<Allergen>(sql);
     }
 }

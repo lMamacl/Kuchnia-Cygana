@@ -1,8 +1,8 @@
-﻿using KuchniaUCygana.Domain.Entities.Menu;
+﻿using Dapper;
+using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Domain.Interfaces.Services.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Services.Menu;
 
@@ -34,8 +34,8 @@ public sealed class DietVariantScaler : IDietVariantScaler
         }
 
         using var db = this.connectionFactory.CreateConnection();
-        var variantMeals = await db.SelectAsync<DietVariantMeal>(
-            dvm => dvm.DietVariantId == dietVariantId);
+        const string selectSql = "SELECT * FROM [DietVariantMeals] WHERE [DietVariantId] = @DietVariantId;";
+        var variantMeals = await db.QueryAsync<DietVariantMeal>(selectSql, new { DietVariantId = dietVariantId });
 
         if (!variantMeals.Any())
         {
@@ -58,7 +58,13 @@ public sealed class DietVariantScaler : IDietVariantScaler
             foreach (var vm in variantMeals)
             {
                 vm.ServingSizeMultiplier = multiplier;
-                await db.UpdateAsync(vm);
+
+                const string updateSql = @"
+                    UPDATE [DietVariantMeals]
+                    SET [ServingSizeMultiplier] = @Multiplier
+                    WHERE [Id] = @Id;";
+
+                await db.ExecuteAsync(updateSql, new { vm.Id, Multiplier = multiplier });
             }
         }
     }

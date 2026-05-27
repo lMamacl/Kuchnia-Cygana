@@ -1,7 +1,7 @@
-﻿using KuchniaUCygana.Domain.Entities.Menu;
+﻿using Dapper;
+using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
@@ -15,6 +15,8 @@ public sealed class IngredientRepository : BaseRepository<Ingredient>, IIngredie
     public async Task<bool> CanDeleteAsync(int ingredientId)
     {
         using var db = this.Factory.CreateConnection();
-        return await db.CountAsync<Recipe>(r => r.IngredientId == ingredientId) == 0;
+        const string sql = "SELECT COUNT(1) FROM [Recipes] WHERE [IngredientId] = @IngredientId;";
+        var count = await db.ExecuteScalarAsync<int>(sql, new { IngredientId = ingredientId });
+        return count == 0;
     }
 }

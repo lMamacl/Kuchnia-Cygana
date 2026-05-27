@@ -1,7 +1,7 @@
-﻿using KuchniaUCygana.Domain.Entities.Menu;
+﻿using Dapper;
+using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
@@ -15,13 +15,14 @@ public sealed class DietVariantRepository : BaseRepository<DietVariant>, IDietVa
     public async Task<IEnumerable<DietVariant>> GetByDietIdAsync(int dietId)
     {
         using var db = this.Factory.CreateConnection();
-        return await db.SelectAsync<DietVariant>(dv => dv.DietId == dietId && !dv.IsDeleted);
+        const string sql = "SELECT * FROM [DietVariants] WHERE [DietId] = @DietId AND [IsDeleted] = 0;";
+        return await db.QueryAsync<DietVariant>(sql, new { DietId = dietId });
     }
 
     public async Task<DietVariant?> GetDefaultForDietAsync(int dietId)
     {
         using var db = this.Factory.CreateConnection();
-        return await db.SingleAsync<DietVariant>(dv =>
-            dv.DietId == dietId && dv.IsDefault && !dv.IsDeleted);
+        const string sql = "SELECT TOP 1 * FROM [DietVariants] WHERE [DietId] = @DietId AND [IsDefault] = 1 AND [IsDeleted] = 0;";
+        return await db.QuerySingleOrDefaultAsync<DietVariant>(sql, new { DietId = dietId });
     }
 }

@@ -13,8 +13,6 @@ using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
 using KuchniaUCygana.Infrastructure.Pdf;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using ServiceStack.OrmLite;
-using ServiceStack.OrmLite.SqlServer;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Domain.Interfaces.Services.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;

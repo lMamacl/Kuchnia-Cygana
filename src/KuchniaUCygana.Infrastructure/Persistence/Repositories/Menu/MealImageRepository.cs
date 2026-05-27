@@ -1,7 +1,7 @@
-﻿using KuchniaUCygana.Domain.Entities.Menu;
+﻿using Dapper;
+using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
@@ -15,18 +15,22 @@ public sealed class MealImageRepository : BaseRepository<MealImage>, IMealImageR
     public async Task<IEnumerable<MealImage>> GetByMealIdAsync(int mealId)
     {
         using var db = this.Factory.CreateConnection();
-        return await db.SelectAsync<MealImage>(mi => mi.MealId == mealId);
+        const string sql = "SELECT * FROM [MealImages] WHERE [MealId] = @MealId;";
+        return await db.QueryAsync<MealImage>(sql, new { MealId = mealId });
     }
 
     public async Task<MealImage?> GetMainForMealAsync(int mealId)
     {
         using var db = this.Factory.CreateConnection();
-        return await db.SingleAsync<MealImage>(mi => mi.MealId == mealId && mi.IsMain);
+        const string sql = "SELECT TOP 1 * FROM [MealImages] WHERE [MealId] = @MealId AND [IsMain] = 1;";
+        return await db.QuerySingleOrDefaultAsync<MealImage>(sql, new { MealId = mealId });
     }
 
     public async Task<bool> DeleteByMealAsync(int mealId)
     {
         using var db = this.Factory.CreateConnection();
-        return await db.DeleteAsync<MealImage>(mi => mi.MealId == mealId) > 0;
+        const string sql = "DELETE FROM [MealImages] WHERE [MealId] = @MealId;";
+        var rows = await db.ExecuteAsync(sql, new { MealId = mealId });
+        return rows > 0;
     }
 }

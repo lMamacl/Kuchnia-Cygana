@@ -1,7 +1,7 @@
-﻿using KuchniaUCygana.Domain.Entities.Menu;
+﻿using Dapper;
+using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
-using ServiceStack.OrmLite;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
@@ -17,49 +17,58 @@ public sealed class MealAllergenRepository : IMealAllergenRepository
     public async Task<IEnumerable<MealAllergen>> GetByMealIdAsync(int mealId)
     {
         using var db = this.factory.CreateConnection();
-        return await db.SelectAsync<MealAllergen>(ma => ma.MealId == mealId);
+        const string sql = "SELECT * FROM [MealAllergens] WHERE [MealId] = @MealId;";
+        return await db.QueryAsync<MealAllergen>(sql, new { MealId = mealId });
     }
 
     public async Task RecalculateForMealAsync(int mealId)
     {
         using var db = this.factory.CreateConnection();
 
-        await db.DeleteAsync<MealAllergen>(ma => ma.MealId == mealId);
+        // 1. Usuń stare wpisy (DELETE)
+        const string deleteSql = "DELETE FROM [MealAllergens] WHERE [MealId] = @MealId;";
+        await db.ExecuteAsync(deleteSql, new { MealId = mealId });
 
-        var recipeIngredients = await db.SelectAsync<Recipe>(r => r.MealId == mealId);
-        var ingredientIds = recipeIngredients.Select(r => r.IngredientId).ToList();
+        // 2. Pobierz ID składników z przepisu
+        const string recipeSql = "SELECT [IngredientId] FROM [Recipes] WHERE [MealId] = @MealId;";
+        var ingredientIds = (await db.QueryAsync<int>(recipeSql, new { MealId = mealId })).ToList();
+        if (!ingredientIds.Any()) return;
 
-        if (ingredientIds.Count == 0)
-        {
-            return;
-        }
+        // 3. Pobierz powiązania składnik-alergen
+        const string allergenSql = @"
+            SELECT [AllergenId], [TraceAmount] 
+            FROM [IngredientAllergens] 
+            WHERE [IngredientId] IN @Ids;";
+        var ingredientAllergens = await db.QueryAsync<(int AllergenId, bool TraceAmount)>(
+            allergenSql, new { Ids = ingredientIds });
 
-        var ingredientAllergens = await db.SelectAsync<IngredientAllergen>(
-            ia => ingredientIds.Contains(ia.IngredientId));
+        if (!ingredientAllergens.Any()) return;
 
-        if (ingredientAllergens.Count == 0)
-        {
-            return;
-        }
-
+        // 4. Agreguj alergeny
         var allergenGroups = ingredientAllergens
             .GroupBy(ia => ia.AllergenId)
             .Select(g => new MealAllergen
             {
                 MealId = mealId,
                 AllergenId = g.Key,
-                IsTrace = g.All(ia => ia.TraceAmount),
+                IsTrace = g.All(ia => ia.TraceAmount)
             });
 
+        // 5. Wstaw nowe wpisy
+        const string insertSql = @"
+            INSERT INTO [MealAllergens] ([MealId], [AllergenId], [IsTrace]) 
+            VALUES (@MealId, @AllergenId, @IsTrace);";
         foreach (var ma in allergenGroups)
         {
-            await db.InsertAsync(ma);
+            await db.ExecuteAsync(insertSql, new { ma.MealId, ma.AllergenId, ma.IsTrace });
         }
     }
 
     public async Task<bool> DeleteByMealAsync(int mealId)
     {
         using var db = this.factory.CreateConnection();
-        return await db.DeleteAsync<MealAllergen>(ma => ma.MealId == mealId) > 0;
+        const string sql = "DELETE FROM [MealAllergens] WHERE [MealId] = @MealId;";
+        var rows = await db.ExecuteAsync(sql, new { MealId = mealId });
+        return rows > 0;
     }
 }
