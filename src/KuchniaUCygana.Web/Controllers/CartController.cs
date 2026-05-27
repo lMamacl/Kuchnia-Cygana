@@ -7,6 +7,7 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class CartController : Controller
 {
     private readonly ICartService cartService;
+    private const string CartSessionKey = "cart";
 
     public CartController(ICartService cartService)
     {
@@ -16,34 +17,67 @@ public sealed class CartController : Controller
     [HttpGet]
     public IActionResult Index()
     {
-        ViewData["Title"] = "Koszyk";
-        ViewData["Description"] = "Placeholder koszyka klienta.";
-        return View();
+        var cart = GetSessionCart();
+        return View(cart);
     }
 
     [HttpPost]
     public IActionResult Add(CartItemDto item)
     {
-        TempData["Success"] = "Dodawanie do koszyka jest pominiete w wersji preview.";
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var cart = GetSessionCart();
+        cart = cartService.AddItem(cart, item);
+        SaveSessionCart(cart);
+
+        if (Request.Headers.ContainsKey("HX-Request"))
+            return PartialView("_CartItems", cart);
+
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public IActionResult Remove(int dietVariantId)
     {
+        var cart = GetSessionCart();
+        cart = cartService.RemoveItem(cart, dietVariantId);
+        SaveSessionCart(cart);
+
+        if (Request.Headers.ContainsKey("HX-Request"))
+            return PartialView("_CartItems", cart);
+
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public IActionResult Clear()
     {
+        SaveSessionCart(cartService.ClearCart());
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
-    public async Task<IActionResult> Checkout()
+    public IActionResult Checkout()
     {
-        await Task.CompletedTask;
-        return RedirectToAction(nameof(CheckoutController.Index), "Checkout");
+        var cart = GetSessionCart();
+        if (!cart.Items.Any())
+        {
+            TempData["Error"] = "Koszyk jest pusty.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        return RedirectToAction("Index", "Checkout");
+    }
+
+    private CartDto GetSessionCart()
+    {
+        var serialized = HttpContext.Session.GetString(CartSessionKey);
+        return cartService.GetCart(serialized);
+    }
+
+    private void SaveSessionCart(CartDto cart)
+    {
+        HttpContext.Session.SetString(CartSessionKey, cartService.Serialize(cart));
     }
 }

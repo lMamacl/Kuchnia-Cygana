@@ -12,4 +12,6 @@ public sealed class AddressDto
     public bool IsDefault { get; set; }
     public string? DeliveryNotes { get; set; }
     public string FullAddress { get; set; } = string.Empty;
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
 }

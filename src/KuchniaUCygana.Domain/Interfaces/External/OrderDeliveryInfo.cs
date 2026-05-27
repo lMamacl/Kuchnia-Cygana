@@ -1,4 +1,4 @@
-namespace KuchniaUCygana.Domain.Interfaces.External;
+﻿namespace KuchniaUCygana.Domain.Interfaces.External;
 
 // Dane jednej dostawy na dany dzień - zwracane Modułowi 3
 // w celu wygenerowania dziennego planu produkcji.

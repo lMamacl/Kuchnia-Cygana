@@ -177,8 +177,8 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
             END AS AddressFullLine,
             a.City AS City,
             a.PostalCode AS PostalCode,
-            CAST(NULL AS float) AS Latitude,
-            CAST(NULL AS float) AS Longitude,
+            a.Latitude AS Latitude,
+            a.Longitude AS Longitude,
             dc.DeliveryDate AS DeliveryDate,
             dw.Name AS DeliveryWindowName
         FROM DeliveryCalendar dc

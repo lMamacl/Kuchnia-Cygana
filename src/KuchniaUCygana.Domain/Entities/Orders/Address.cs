@@ -1,4 +1,4 @@
-using KuchniaUCygana.Domain.Common;
+﻿using KuchniaUCygana.Domain.Common;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -24,6 +24,10 @@ public sealed class Address : AuditableEntity
     public bool IsDefault { get; set; }
 
     public string? DeliveryNotes { get; set; }
+
+    public double? Latitude { get; set; }
+
+    public double? Longitude { get; set; }
 
     // Pomocnicza właściwość — pełna linia adresu dla M3/logistyki.
     [NotMapped]

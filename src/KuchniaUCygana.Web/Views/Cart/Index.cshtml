@@ -1,6 +1,15 @@
-﻿@* Views/Cart/Index.cshtml *@
+﻿@model KuchniaUCygana.Application.DTOs.Orders.CartDto
 @{
-	ViewData["Title"] = "Koszyk";
+    ViewData["Title"] = "Koszyk";
 }
-<h1>Widok koszyka</h1>
-<p>TODO</p>
+
+<h2 class="mb-4">Koszyk</h2>
+
+@if (TempData["Error"] is string err)
+{
+    <div class="alert alert-warning">@err</div>
+}
+
+<div id="cart-contents">
+    <partial name="_CartItems" model="Model" />
+</div>

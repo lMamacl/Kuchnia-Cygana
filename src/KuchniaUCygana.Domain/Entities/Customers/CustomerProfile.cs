@@ -1,4 +1,4 @@
-using KuchniaUCygana.Domain.Common;
+﻿using KuchniaUCygana.Domain.Common;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 

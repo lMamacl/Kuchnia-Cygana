@@ -1,4 +1,4 @@
-using KuchniaUCygana.Domain.Common;
+﻿using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -9,6 +9,7 @@ namespace KuchniaUCygana.Domain.Entities.Orders;
 public sealed class Order : AuditableEntity
 {
     public int CustomerId { get; set; }
+
     public string OrderNumber { get; set; } = string.Empty;
 
     public OrderStatus Status { get; set; } = OrderStatus.Draft;

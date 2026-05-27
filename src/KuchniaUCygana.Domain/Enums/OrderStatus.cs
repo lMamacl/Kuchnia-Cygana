@@ -1,7 +1,5 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+﻿namespace KuchniaUCygana.Domain.Enums;
 
-namespace KuchniaUCygana.Domain.Enums;
 public enum OrderStatus
 {
     Draft = 0,
