@@ -24,8 +24,14 @@ using KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
 using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
+using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
+using KuchniaUCygana.Domain.Interfaces.Services.Menu;
+using KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
+using KuchniaUCygana.Infrastructure.Persistence.Services.Menu;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MenuAppInterfaces = KuchniaUCygana.Application.Interfaces.Menu;
+using MenuAppServices = KuchniaUCygana.Application.Services.Menu;
 
 namespace KuchniaUCygana.Infrastructure;
 
@@ -49,6 +55,18 @@ public static class DependencyInjection
         services.AddScoped<IProductionPlanRepository, ProductionPlanRepository>();
         services.AddScoped<IPackingSessionRepository, PackingSessionRepository>();
         services.AddScoped<ITemperatureLogRepository, TemperatureLogRepository>();
+
+        // Module 2 (Menu) repositories.
+        services.AddScoped<IAllergenRepository, AllergenRepository>();
+        services.AddScoped<ICategoryRepository, CategoryRepository>();
+        services.AddScoped<IDietRepository, DietRepository>();
+        services.AddScoped<IDietVariantRepository, DietVariantRepository>();
+        services.AddScoped<IIngredientRepository, IngredientRepository>();
+        services.AddScoped<IMealAllergenRepository, MealAllergenRepository>();
+        services.AddScoped<IMealImageRepository, MealImageRepository>();
+        services.AddScoped<IMealRepository, MealRepository>();
+        services.AddScoped<INutritionFactRepository, NutritionFactRepository>();
+        services.AddScoped<IRecipeRepository, RecipeRepository>();
 
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
 
@@ -74,6 +92,27 @@ public static class DependencyInjection
         services.AddScoped<IWarehouseService, Application.Services.WarehouseService>();
         services.AddScoped<IPackingService, Application.Services.PackingService>();
         services.AddScoped<ITemperatureService, Application.Services.TemperatureService>();
+
+        // Module 2 (Menu) Domain services.
+        services.AddScoped<IAllergenPropagationService, AllergenPropagationService>();
+        services.AddScoped<IDietVariantScaler, DietVariantScaler>();
+        services.AddScoped<IIngredientDeletionGuard, IngredientDeletionGuard>();
+        services.AddScoped<INutritionCalculator, NutritionCalculator>();
+        services.AddScoped<IRecipeEngine, RecipeEngine>();
+
+        // Module 2 (Menu) Adapters.
+        services.AddScoped<MenuAppInterfaces.IInternalAiService, InternalAiAdapter>();
+        services.AddScoped<MenuAppInterfaces.IInternalFileStorageService, InternalFileStorageAdapter>();
+
+        // Module 2 (Menu) Application services.
+        services.AddScoped<MenuAppInterfaces.IAiDescriptionService, MenuAppServices.AiDescriptionService>();
+        services.AddScoped<MenuAppInterfaces.IAllergenManagementService, MenuAppServices.AllergenManagementService>();
+        services.AddScoped<MenuAppInterfaces.ICategoryService, MenuAppServices.CategoryService>();
+        services.AddScoped<MenuAppInterfaces.IDietManagementService, MenuAppServices.DietManagementService>();
+        services.AddScoped<MenuAppInterfaces.IImageManagementService, MenuAppServices.ImageManagementService>();
+        services.AddScoped<MenuAppInterfaces.IIngredientManagementService, MenuAppServices.IngredientManagementService>();
+        services.AddScoped<MenuAppInterfaces.IMealManagementService, MenuAppServices.MealManagementService>();
+        services.AddScoped<MenuAppInterfaces.INutritionService, MenuAppServices.NutritionService>();
 
         services
             .AddFluentMigratorCore()
