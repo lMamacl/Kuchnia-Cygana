@@ -88,6 +88,11 @@ public sealed class LogisticsController : Controller
     [HttpPost("vehicles/create")]
     public async Task<IActionResult> CreateVehicle(CreateVehicleRequest request)
     {
+        if (await _vehicleService.GetByRegistrationNumberAsync(request.RegistrationNumber) != null)
+        {
+            ModelState.AddModelError("RegistrationNumber", "Vehicle with this registration number already exists.");
+        }
+
         if (!ModelState.IsValid)
         {
             ViewData["Title"] = "Nowy pojazd";
@@ -125,6 +130,12 @@ public sealed class LogisticsController : Controller
     [HttpPost("vehicles/edit/{id:int}")]
     public async Task<IActionResult> EditVehicle(int id, UpdateVehicleRequest request)
     {
+        if (await _vehicleService.GetByRegistrationNumberAsync(request.RegistrationNumber) is VehicleDto existingVehicle &&
+            existingVehicle.Id != id)
+        {
+            ModelState.AddModelError("RegistrationNumber", "Vehicle with this registration number already exists.");
+        }
+
         if (id != request.Id) return BadRequest();
         if (!ModelState.IsValid)
         {

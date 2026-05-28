@@ -1,3 +1,4 @@
+using Dapper;
 using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
@@ -15,5 +16,14 @@ public sealed class VehicleRepository : BaseRepository<Vehicle>, IVehicleReposit
         : base(connectionFactory)
     {
         _connectionFactory = connectionFactory;
+    }
+
+    public async Task<Vehicle?> GetByRegistrationNumberAsync(string registrationNumber)
+    {
+        using var db = _connectionFactory.CreateConnection();
+        var vehicle = await db.QuerySingleOrDefaultAsync<Vehicle>(
+            "SELECT * FROM Vehicles WHERE RegistrationNumber = @registrationNumber;",
+            new { registrationNumber });
+        return vehicle;
     }
 }
