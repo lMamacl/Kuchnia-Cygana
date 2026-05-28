@@ -75,13 +75,13 @@ public sealed class PackingService : IPackingService
         {
             if (existingSessions.TryGetValue(assignment.Order.OrderId, out var existing))
             {
-                var shouldUpdateRoute = existing.RouteId is null || existing.StopNumber is null;
+                var shouldUpdateCalendar = existing.DeliveryCalendarId is null;
                 var shouldUpdateClient = string.IsNullOrWhiteSpace(existing.ClientName);
 
-                if (shouldUpdateRoute || shouldUpdateClient)
+                if (shouldUpdateCalendar || shouldUpdateClient)
                 {
-                    existing.RouteId ??= assignment.Route.RouteId;
-                    existing.StopNumber ??= assignment.Stop.SequenceNumber;
+                    // TODO [Sprint 7.1.6]: DeliveryCalendarId powinien przychodzić z assignment.Stop
+                    existing.DeliveryCalendarId ??= assignment.Stop.DeliveryCalendarId;
                     existing.ClientName = string.IsNullOrWhiteSpace(existing.ClientName)
                         ? assignment.Order.ClientName
                         : existing.ClientName;
@@ -97,8 +97,8 @@ public sealed class PackingService : IPackingService
                 PackingDate = date,
                 OrderId = assignment.Order.OrderId,
                 ClientName = assignment.Order.ClientName,
-                RouteId = assignment.Route.RouteId,
-                StopNumber = assignment.Stop.SequenceNumber,
+                // TODO [Sprint 7.1.6]: DeliveryCalendarId powinien przychodzić z assignment.Stop
+                DeliveryCalendarId = assignment.Stop.DeliveryCalendarId,
                 Status = PackingStatus.Pending,
             };
 
@@ -647,9 +647,10 @@ public sealed class PackingService : IPackingService
 
     private static string CreateRouteInfo(PackingSession session)
     {
-        return session.RouteId.HasValue
-            ? $"Trasa {session.RouteId}, stop {session.StopNumber}"
-            : "Brak przypisanej trasy";
+        // TODO [Sprint 7.1.6]: Pobierać RouteId/StopNumber dynamicznie JOIN-em po DeliveryCalendarId
+        return session.DeliveryCalendarId.HasValue
+            ? $"Dostawa #{session.DeliveryCalendarId}"
+            : "Brak przypisanej dostawy";
     }
 
     private static string CreateBoxCode(PackingSession session, int sequence)

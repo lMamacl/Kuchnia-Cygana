@@ -45,12 +45,14 @@ public sealed class LoadingService : ILoadingService
         var session = await _sessionRepository.GetWithItemsAsync(packingSessionId)
             ?? throw new InvalidOperationException($"Torba pakowania {packingSessionId} nie istnieje.");
 
-        if (!session.RouteId.HasValue)
+        // Dynamiczne rozwiązanie routeId (ustalenia M3↔M4 z 28.05 — session nie ma już RouteId)
+        var resolvedRouteId = await ResolveRouteIdForSessionAsync(session);
+        if (!resolvedRouteId.HasValue)
         {
             throw new InvalidOperationException("Torba nie ma przypisanej trasy dostawy.");
         }
 
-        var manifest = await GetManifestAsync(session.PackingDate, session.RouteId.Value);
+        var manifest = await GetManifestAsync(session.PackingDate, resolvedRouteId.Value);
         if (manifest is null || !manifest.IsVerified)
         {
             throw new InvalidOperationException("Torbe mozna zaladowac dopiero po wygenerowaniu i weryfikacji manifestu dostawy.");
@@ -216,16 +218,18 @@ public sealed class LoadingService : ILoadingService
         var session = await _sessionRepository.GetWithItemsAsync(sessionId)
             ?? throw new InvalidOperationException($"Torba pakowania #{sessionId} nie istnieje.");
 
-        if (!session.RouteId.HasValue)
+        // Dynamiczne rozwiązanie routeId (session nie ma już RouteId — ustalenia M3↔M4)
+        var resolvedRouteId = await ResolveRouteIdForSessionAsync(session);
+        if (!resolvedRouteId.HasValue)
         {
             throw new InvalidOperationException($"Blad: Torba #{sessionId} nie ma przypisanej trasy.");
         }
 
-        if (session.RouteId.Value != routeId)
+        if (resolvedRouteId.Value != routeId)
         {
             var board = await _packingService.GetPackingBoardAsync(session.PackingDate);
-            var correctRoute = board.Routes.FirstOrDefault(r => r.RouteId == session.RouteId.Value);
-            var correctRouteName = correctRoute?.RouteName ?? $"Trasa #{session.RouteId}";
+            var correctRoute = board.Routes.FirstOrDefault(r => r.RouteId == resolvedRouteId.Value);
+            var correctRouteName = correctRoute?.RouteName ?? $"Trasa #{resolvedRouteId}";
             throw new InvalidOperationException($"Blad: Torba {transportCode} nalezy do innej trasy: {correctRouteName}!");
         }
 
@@ -373,5 +377,25 @@ public sealed class LoadingService : ILoadingService
             {
                 WriteIndented = true,
             });
+    }
+
+    /// <summary>
+    /// Dynamicznie rozwiązuje RouteId dla sesji pakowania.
+    /// Po usunięciu RouteId z PackingSession (ustalenia M3↔M4 z 28.05),
+    /// trasa jest pobierana z PackingBoardDto — torba jest wyszukiwana
+    /// po PackingSessionId w kontekście tras danego dnia.
+    /// TODO [Sprint 7.1.6]: Rozważyć dedykowaną metodę repo z JOIN-em
+    /// zamiast ładowania całego boardu.
+    /// </summary>
+    private async Task<int?> ResolveRouteIdForSessionAsync(PackingSession session)
+    {
+        if (!session.DeliveryCalendarId.HasValue)
+            return null;
+
+        var board = await _packingService.GetPackingBoardAsync(session.PackingDate);
+        var route = board.Routes.FirstOrDefault(r =>
+            r.Bags.Any(b => b.PackingSessionId == session.Id));
+
+        return route?.RouteId;
     }
 }
