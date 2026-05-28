@@ -1,6 +1,8 @@
 # PLAN SPRINTÓW — Moduł 3 (Produkcja + Magazyn + Kompletacja)
-**KuchniaUCygana · Wersja 2.0 — oparty na audycie kodu z 27.05.2026**
+**KuchniaUCygana · Wersja 2.1 — rewizja granic modułów z 28.05.2026**
 *Bazuje na: WIZJA_PRODUKCJA_v2.md (v3.0), WIZJA_MAGAZYN_v1.md (v1.1), WIZJA_KOMPLETACJA_v1.md (v1.1)*
+
+> **ZASADA KLUCZOWA (v2.1):** M3 = Produkcja + Magazyn + Kompletacja toreb. Załadunek aut (Loading) to **granica M3** — M3 zarządza manifestem i etykietami, ale widok kierowcy i Logistyka należą do **M4**. Encje Menu/Diety należą do **M2**. Użytkownicy/HR do **M5**.
 
 ---
 
@@ -53,12 +55,12 @@
 | **ProductionController** | ✅ | 273 linii. Akcje: Index, Generate (GET+POST), Plan, CookingCards, CookingCard, ApproveCooking, ProduceSemiFinished, FoilPrinting, FoilLabel, FoilLabelsBulk. **Brak**: Issues, Recipe widok (szczegółowy z instrukcją Markdown) |
 | **WarehouseController** | ✅ | 213 linii. Akcje: Index, Alerts, Receive (GET+POST), Waste (GET+POST), Inventory (GET+POST), Temperatures (GET+POST), HaccpReport. **Brak**: BatchDetails, Issue (ręczne wydanie), FefoReport, TransactionHistory, EditBatchExpiry, eksport CSV/PDF, endpoint temperature-chart-data |
 | **PackingController** | ✅ | 321 linii. **Zawiera zarówno pakowanie jak i załadunek** — Loading, Delivery, ScanBag, LoadBag, GenerateManifest, VerifyManifest, DispatchDelivery. Plus: Session, ScanBox, PackBag, Labels. Wizja wymaga refaktoru: wydzielenia `LoadingController` |
-| **DriverMobileController** | ⚠️ | Istnieje, 52 linie, ale **wszystkie widoki to placeholder** (88 bajtów każdy). Brak integracji z manifestami |
-| **LogisticsController** | ⚠️ | Istnieje, 74 linie, ale **wszystkie widoki to placeholder**. Nie w zakresie M3 |
+| **DriverMobileController** | 🚫 M4 | Istnieje jako placeholder (52 linie, widoki 88B) — **NALEŻY DO M4 (Logistyka)**. M3 nie implementuje widoków kierowcy. |
+| **LogisticsController** | 🚫 M4 | Istnieje jako placeholder — **NALEŻY DO M4 (Logistyka)**. M3 nie implementuje dashboardu logistycznego. |
 | **Views Produkcji** | ✅ | 8 widoków: Index (16KB), Plan (8KB), CookingCards (7KB), CookingCard (6KB), FoilPrinting (9KB), FoilLabel (4.5KB), FoilLabelsBulk (5KB), Generate (4.6KB). **Brak**: Recipe (szczegółowy), Issues, Boxing |
 | **Views Magazynu** | ✅ | 7 widoków: Index (11KB), Receive (6KB), Waste (5.7KB), Inventory (5.6KB), Temperatures (7.6KB), HaccpReport (12.8KB), _AlertsPartial (49B — prawie pusty). **Brak**: BatchDetails, Issue, FefoReport, TransactionHistory |
 | **Views Packingu** | ✅ | 6 widoków: Index (6KB), Session (12KB), Loading (3.6KB), Delivery (10.9KB), Labels (5.4KB), LabelsIndex (1.4KB). Dość rozbudowane, ale brak wydzielenia Loading/* |
-| **Views DriverMobile** | ❌ | 5 plików po 88 bajtów = same placeholdery |
+| **Views DriverMobile** | 🚫 M4 | 5 plików po 88 bajtów = same placeholdery — **implementacja należy do M4**. M3 tylko dostarcza dane manifestu przez `IDeliveryManifestProvider`. |
 | **Sidebar** | ✅ | `StaffNavigationCatalog.cs` ma sekcje: kitchen, warehouse, packing (z "Załadunek aut" pod Packing). `_SidebarPartial.cshtml` OK |
 
 ### 0.5 Testy
@@ -110,6 +112,42 @@
 
 ---
 
+## 0.7 GRANICE ODPOWIEDZIALNOŚCI — M3 vs ZEWNĘTRZNE MODUŁY
+
+> Ta sekcja precyzuje co **M3 buduje**, co **dostaje z zewnątrz** (jako kontrakty/interfejsy), i co **implementuje inny moduł**.
+
+### ✅ M3 buduje i jest właścicielem
+
+| Obszar | Zakres |
+|--------|--------|
+| **Produkcja** | `ProductionPlan`, `ProductionBatch`, `ProductionPlanItem`, karty gotowania, etykiety foliowe, (opcjonalnie: `ProductionIssue`, `CookingLog`, `ChefDailyNote`) |
+| **Magazyn** | `StockItem`, `Batch`, `InventoryTransaction`, `BatchExpiryChangeLog`, FEFO, HACCP, temperatury, alerty |
+| **Kompletacja (Packing)** | `PackingSession`, `PackingItem`, `PackingLabel`, `PackingManifest`, `PackingStatusLog`, skanowanie QR, etykiety transportowe |
+| **Załadunek (Loading)** | `LoadingController` — widok załadunku aut, generowanie/weryfikacja manifestu, druk etykiet załadunku. **M3 jest właścicielem manifestu, nie kierowcy.** |
+| **Interfejsy integracyjne** | `IOrderDataProvider`, `IDietDataProvider`, `IDeliveryManifestProvider` — M3 definiuje kontrakt, implementacje dostarczają M1/M4 |
+
+### 📦 M3 otrzymuje z zewnętrznych modułów (jako gotowe dane/interfejsy)
+
+| Moduł źródłowy | Co M3 dostaje | Jak M3 to konsumuje |
+|----------------|--------------|---------------------|
+| **M1 (Zamówienia)** | `IOrderDataProvider` impl, dane zamówień klientów, migracje 100-107 | `ProductionPlanGenerator`, `PackingController` — tylko czyta dane zamówień |
+| **M2 (Menu/Diety)** | `IDietDataProvider` impl, encje `Menu/Recipe` (istniejące), składniki posiłków, migracje 301-303 | Karty gotowania, dane do FEFO, foliowe etykiety. M3 **nie tworzy** `MealComponent`/`RecipeIngredient` — korzysta z tego co M2 udostępni |
+| **M4 (Logistyka)** | `IDeliveryManifestProvider` impl, zarządzanie kierowcami, widoki DriverMobile, LogisticsController, trasy dostaw | M3 generuje manifest → przekazuje przez interfejs → M4 wyświetla kierowcy. M3 **nie implementuje** widoku kierowcy. |
+| **M5 (HR/Admin)** | Zarządzanie użytkownikami, role, `AspNetUsers`, migracje 500-506 | `ICurrentUserService` — M3 pobiera dane zalogowanego user tylko przez ten interfejs |
+
+### 🚫 M3 NIE buduje (explicite poza zakresem)
+
+| Komponent | Dlaczego poza zakresem | Właściciel |
+|-----------|------------------------|------------|
+| `DriverMobileController` + widoki `/DriverMobile/*` | Widok kierowcy = domena logistyki dostawy | **M4 (Logistyka)** |
+| `LogisticsController` + widoki `/Logistics/*` | Dashboard logistyczny = domena logistyki | **M4 (Logistyka)** |
+| `DriverManifestDto` (pełne dane dla kierowcy) | DTO dla widoku kierowcy, M4 go konsumuje | **M4 (Logistyka)** |
+| Encje `MealComponent`, `RecipeIngredient` (z wizji produkcji) | Należą do domeny Menu | **M2 (Menu)** |
+| Zarządzanie zamówieniami klientów | Domena zamówień | **M1 (Zamówienia)** |
+| Trasy i planowanie dostaw | Domena logistyki | **M4 (Logistyka)** |
+
+---
+
 ## 1. STRATEGIA: DOSTOSOWANIE, NIE PRZEPISYWANIE
 
 > **Zasada:** Kod jest zaawansowany i działa. Plan skupia się na **uzupełnieniu brakujących elementów** i **refaktorze tam, gdzie to konieczne** — bez niepotrzebnego kasowania działających rzeczy.
@@ -118,8 +156,8 @@ Priorytety:
 1. **Migracje i Domain** — dodanie brakujących encji/pól/enumów (fundament)
 2. **Application gaps** — brakujące DTOs, walidatory, metody serwisów
 3. **Widoki Magazynu** — 4 nowe widoki + modyfikacja istniejących (HTMX, filtrowanie, Chart.js)
-4. **Refaktor Packing/Loading** — wydzielenie LoadingController
-5. **Produkcja — uzupełnienia** — Recipe widok, Issues, Boxing (jeśli encje M2 gotowe)
+4. **Refaktor Packing/Loading** — wydzielenie LoadingController (M3 = manifest + załadunek, **nie** widok kierowcy)
+5. **Produkcja — uzupełnienia** — Issues, CookingLog, ChefNotes (niezależne od M2). Recipe szczegółowy — **dopiero gdy M2 dostarczy API**.
 6. **Testy** — pokrycie serwisów i walidatorów
 
 ---
@@ -176,7 +214,8 @@ Priorytety:
 |---|---------|-------|-----------|
 | 5.1.1 | Przenieść Packing DTOs z `DTOs/Production/` do `DTOs/Packing/` (Packing*Dto, PackingBoardDto) | MOD ścieżki + `using` statements | 🟡 |
 | 5.1.2 | Nowe DTOs magazynu: `ManualIssueRequest`, `EditBatchExpiryRequest`, `BatchDetailsDto`, `FefoReportItemDto`, `TransactionHistoryDto`, `TransactionHistoryFilterDto`, `TemperatureChartDataDto`, `StockTableFilterDto` | NEW `DTOs/Warehouse/` | 🔴 |
-| 5.1.3 | Nowe DTOs kompletacji/loading: `ScanBoxResponse`, `ScanBagResponse`, `BulkPrintRequest`, `ManifestPreviewDto`, `DriverManifestDto` | NEW `DTOs/Packing/` | 🟡 |
+| 5.1.3 | Nowe DTOs kompletacji/loading: `ScanBoxResponse`, `ScanBagResponse`, `BulkPrintRequest`, `ManifestPreviewDto` | NEW `DTOs/Packing/` | 🟡 |
+| ~~5.1.4~~ | ~~`DriverManifestDto`~~ | 🚫 **Należy do M4** — M3 dostarcza `PackingManifest`, M4 tworzy własne DTO dla widoku kierowcy | — |
 
 **Punkt kontrolny:** `dotnet build` → ✅
 
@@ -201,9 +240,12 @@ Priorytety:
 **Punkt kontrolny:** `dotnet build` + `dotnet test` → ✅. Zapytać o kontynuację.
 
 ### Sprint 5.4 — Refaktor PackingService → wydzielenie LoadingService
+
+> **Zakres LoadingService:** Odpowiada za załadunek aut i manifesty — **po stronie M3** (kompletacja → załadunek). Widok kierowcy i DriverManifest są poza zakresem M3 (→ M4).
+
 | # | Zadanie | Pliki | Priorytet |
 |---|---------|-------|-----------|
-| 5.4.1 | Stworzyć `ILoadingService` z metodami: `LoadBagByCodeAsync`, `LoadOrderBagAsync`, `GenerateManifestAsync`, `GetManifestAsync`, `VerifyManifestAsync`, `DispatchAsync`, `GetRouteDetailsAsync`, `GetDriverManifestAsync` | NEW `Application/Interfaces/ILoadingService.cs` | 🔴 |
+| 5.4.1 | Stworzyć `ILoadingService` z metodami: `LoadBagByCodeAsync`, `LoadOrderBagAsync`, `GenerateManifestAsync`, `GetManifestAsync`, `VerifyManifestAsync`, `DispatchAsync`, `GetRouteDetailsAsync` (bez `GetDriverManifestAsync` — to M4) | NEW `Application/Interfaces/ILoadingService.cs` | 🔴 |
 | 5.4.2 | Stworzyć `LoadingService` — wyciągnąć logikę z `PackingService` (nie duplikować, przenieść) | NEW `Application/Services/LoadingService.cs` | 🔴 |
 | 5.4.3 | Usunąć przeniesione metody z `PackingService` i `IPackingService` | MOD oba pliki | 🔴 |
 | 5.4.4 | DI rejestracja `ILoadingService` | MOD `Infrastructure/DependencyInjection.cs` | 🔴 |
@@ -295,23 +337,25 @@ Priorytety:
 
 **Punkt kontrolny:** Docker → flow pakowania torby end-to-end → ✅
 
-### Sprint 7.3 — Ulepszenie widoków Loading + DriverMobile
+### Sprint 7.3 — Ulepszenie widoków Loading
 | # | Zadanie | Pliki | Priorytet |
 |---|---------|-------|-----------|
 | 7.3.1 | `Loading/Index.cshtml` — karty tras (nie tabela), KPI, postęp załadunku | MOD `Views/Loading/Index.cshtml` | 🟡 |
 | 7.3.2 | `Loading/Route.cshtml` — skanowanie QR toreb z weryfikacją trasy, panel operacji (generuj/weryfikuj/drukuj/wyślij) | MOD `Views/Loading/Route.cshtml` | 🟡 |
 | 7.3.3 | Nowy widok `Loading/ManifestPreview.cshtml` — podgląd manifestu (druk A4 backup) + akcja w LoadingController | NEW `Views/Loading/ManifestPreview.cshtml` | 🟡 |
-| 7.3.4 | `DriverMobileController` — podłączyć do `ILoadingService.GetDriverManifestAsync`. Widok `DriverMobile/Index.cshtml` — mini widok manifestu (read-only) zamiast placeholdera | MOD `Controllers/DriverMobileController.cs` + `Views/DriverMobile/Index.cshtml` | 🟡 |
+| ~~7.3.4~~ | ~~DriverMobileController + widoki DriverMobile~~ | 🚫 **POZA ZAKRESEM M3** — należy do M4. M3 jedynie generuje `PackingManifest` z danymi; M4 wyświetla je kierowcy. | — |
 
 **Punkt kontrolny:** Docker → pełny flow załadunku end-to-end (skan → manifest → kierowca widzi) → ✅
 
 ---
 
-## SPRINT 8 — PRODUKCJA: UZUPEŁNIENIA (opcjonalny, zależny od M2)
-**Cel:** Widoki, które wymagają danych z modułu Menu (M2 encje: MealComponent, Recipe).
-**Czas:** 1–2 tygodnie (zależne od gotowości M2)
+## SPRINT 8 — PRODUKCJA: UZUPEŁNIENIA (częściowo zależny od M2)
+**Cel:** Uzupełnienie produkcji o wewnętrzne encje M3 + integracja z tym co dostarczy M2.
+**Czas:** 1–2 tygodnie
 
-> ⚠️ **DEPENDENCY:** Encje `MealComponent`, `RecipeIngredient`, `BoxType` z wizji produkcji zakładają integrację z M2 (moduł Menu). Istniejące `Menu/Recipe` w Domain to **inna encja** (prostsza). Decyzja: albo rozbudować `Menu/Recipe` o pola z wizji, albo tworzyć osobne encje produkcyjne. **Wymaga decyzji użytkownika.**
+> ⚠️ **DEPENDENCY M2:** Encje `MealComponent`, `RecipeIngredient` **należą do M2 (Menu)** — M3 ich nie tworzy. M3 jedynie integruje przez `IDietDataProvider` i może je odczytać jeśli M2 udostępni je w bazie. Istniejące `Menu/Recipe` w Domain M3 to **inna, uproszczona encja** — decyzja czy ją rozbudować czy tylko linkować do M2 jest zadaniem M2 + M3 razem.
+>
+> ✅ **Niezależne od M2:** `ProductionIssue`, `CookingLog`, `ChefDailyNote`, `BoxLabel` — są **encjami M3** i można je budować bez M2.
 
 ### Sprint 8.1 — Widoki produkcji (niezależne od M2)
 | # | Zadanie | Pliki | Priorytet |
@@ -319,16 +363,24 @@ Priorytety:
 | 8.1.1 | `Production/Index.cshtml` — ulepszenie: baner cross-contamination (alergeny), alerty magazynowe (SmartInventoryAnalyzer) | MOD `Views/Production/Index.cshtml` | 🟡 |
 | 8.1.2 | `Production/CookingCard.cshtml` — pole temperatury rdzenia w formularzu zatwierdzenia (warunkowe: RequiresCoreTemperatureCheck) | MOD `Views/Production/CookingCard.cshtml` | 🟡 |
 
-### Sprint 8.2 — Encje produkcji (jeśli M2 gotowe)
+### Sprint 8.2 — Wewnętrzne encje produkcji M3 (niezależne od M2)
 | # | Zadanie | Pliki | Priorytet |
 |---|---------|-------|-----------|
 | 8.2.1 | Migracja 015: Tabela `BoxLabels` (Id, PackingItemId, PrintedAt, PrintedByUserId, ReprintCount, ReprintReason, ExpiryDate, SimulatedWeightGrams, LabelDataJson) | NEW migracja | 🟡 |
-| 8.2.2 | Migracja 016: Tabela `ProductionIssues` | NEW migracja | 🟢 |
-| 8.2.3 | Migracja 017: Tabela `CookingLogs` | NEW migracja | 🟢 |
-| 8.2.4 | Migracja 018: Tabela `ChefDailyNotes` | NEW migracja | 🟢 |
+| 8.2.2 | Migracja 016: Tabela `ProductionIssues` (Id, ProductionBatchId, ReportedByUserId, ReportedAt, Description, Resolution, ResolvedByUserId, ResolvedAt, Status) | NEW migracja | 🟢 |
+| 8.2.3 | Migracja 017: Tabela `CookingLogs` (Id, ProductionBatchId, CookedByUserId, CookedAt, CoreTempCelsius, Notes) | NEW migracja | 🟢 |
+| 8.2.4 | Migracja 018: Tabela `ChefDailyNotes` (Id, Date, AuthorUserId, Content, CreatedAt) | NEW migracja | 🟢 |
 | 8.2.5 | Encje Domain: `BoxLabel`, `ProductionIssue`, `CookingLog`, `ChefDailyNote` + enumy | NEW `Domain/Entities/Production/` | 🟡 |
 | 8.2.6 | Widok `Production/Issues.cshtml` — lista zgłoszeń, formularz, rozwiązywanie | NEW `Views/Production/Issues.cshtml` | 🟢 |
 | 8.2.7 | Rozszerzenie `IProductionService` o `ReportIssueAsync`, `ResolveIssueAsync`, `GetIssuesAsync` | MOD interfejs + serwis | 🟢 |
+
+### Sprint 8.3 — Integracja z M2 (ZALEŻNA od gotowości M2) ⏳
+| # | Zadanie | Pliki | Priorytet |
+|---|---------|-------|-----------|
+| 8.3.1 | Widok `Production/RecipeDetails.cshtml` — szczegóły receptury z M2 przez `IDietDataProvider` | NEW widok | 🟢 |
+| 8.3.2 | Uzupełnienie kart gotowania o składniki z M2 (kiedy M2 udostępni endpoint) | MOD `IProductionService` + `ProductionService` | 🟢 |
+
+> 📌 **Status: WSTRZYMANE** — czekamy na API M2. Mockowy `IDietDataProvider` pozostaje aktywny do czasu integracji.
 
 ---
 
@@ -348,9 +400,10 @@ Priorytety:
 ### Sprint 9.2 — Testy integracyjne + migracje
 | # | Zadanie | Pliki | Priorytet |
 |---|---------|-------|-----------|
-| 9.2.1 | Test migracji 010-014 (Up + Down) | NEW `Tests/Integration/Infrastructure/MigrationsTests.cs` | 🟡 |
+| 9.2.1 | Test migracji 010-018 (Up + Down) | NEW `Tests/Integration/Infrastructure/MigrationsTests.cs` | 🟡 |
 | 9.2.2 | Test: ScanBox — pudełko z innego zamówienia → odrzucenie | NEW `Tests/Integration/` | 🟡 |
-| 9.2.3 | Test: VerifyManifest → kierowca widzi manifest | NEW `Tests/Integration/` | 🟡 |
+| 9.2.3 | Test: GenerateManifest → manifest zawiera wszystkie torby trasy | NEW `Tests/Integration/` | 🟡 |
+| ~~9.2.4~~ | ~~Test: VerifyManifest → kierowca widzi manifest~~ | 🚫 **M4** — test widoku kierowcy należy do M4 | — |
 
 ### Sprint 9.3 — CSS Print + polish
 | # | Zadanie | Pliki | Priorytet |
@@ -417,7 +470,9 @@ graph TD
 |--------|--------|--------|-----------|
 | Refaktor PackingController/PackingService (S5.4 + S7.1) — regresje routingu | 🔴 Wys. | 🔴 | Osobny PR. Docker test. Zachować stare URL jako redirecty tymczasowo |
 | God Service PackingService (41KB) — trudny do podzielenia | 🟡 Śr. | 🟡 | Wyciągnąć metody loading 1:1, nie refaktorować logiki wewnętrznej |
-| Encje M2 (MealComponent, Recipe) nie gotowe → blokada Sprint 8 | 🟡 Śr. | 🟢 | Sprint 8 jest opcjonalny. Produkcja działa na mockach |
+| M2 (Menu) nie dostarcza API dla receptur → S8.3 zablokowany | 🟡 Śr. | 🟢 | S8.3 jest opcjonalny. `IDietDataProvider` Mock pozostaje aktywny |
+| M4 (Logistyka) nie dostarcza `IDeliveryManifestProvider` → Mock pozostaje | 🟡 Śr. | 🟢 | `MockDeliveryManifestProvider` istnieje. M3 nie blokuje się na M4 |
+| Niejasna granica M3/M4 w kwestii załadunku | 🟡 Śr. | 🟡 | M3 = manifest + załadunek aut. M4 = widok kierowcy + logistyka dostawy. Udokumentowane w sekcji 0.7 |
 | Numeracja migracji (wizja: 307+, kod: 010+) | 🟢 Nis. | 🟢 | Używamy kolejnych numerów (010+). Wizja ma inne numery — ignorujemy |
 | Backfill `StockItemId` w migracji 010 na pustej bazie dev | 🟢 Nis. | 🟢 | Backfill SQL z IF EXISTS. Na dev bazie to kilka rekordów |
 | Chart.js + HTMX w jednym widoku — konflikty JavaScript | 🟡 Śr. | 🟡 | Chart.js ładowany lazy, Alpine.js mediator |
@@ -426,15 +481,16 @@ graph TD
 
 ## METRYKI PROJEKTU
 
-| Metryka | Przed planem | Po planie (cel) |
-|---------|-------------|-----------------|
-| Widoki Produkcji | 8 | 8–10 (+Issues, +Recipe szczegóły) |
-| Widoki Magazynu | 7 (1 pusty partial) | 11 (+BatchDetails, +Issue, +FefoReport, +TransactionHistory) |
-| Widoki Packing | 6 | 7 (+BulkLabels) |
-| Widoki Loading | 0 (w Packing) | 3 (Index, Route, ManifestPreview) |
-| Widoki DriverMobile | 5 placeholderów | 1–2 działające |
-| Kontrolery M3 | 3 (Production, Warehouse, Packing) + placeholder (DriverMobile) | 4 (+ LoadingController) |
-| Migracje | 009 | 014–018 |
-| Testy jednostkowe M3 | 1 (BatchRepo) | ~10+ |
-| Application Services | 4 (Production, Warehouse, Packing, Temperature) | 5 (+ Loading) |
-| PackingService.cs | 41.6 KB (God Service) | ~25 KB + LoadingService ~15 KB |
+| Metryka | Przed planem | Po planie (cel) | Uwaga |
+|---------|-------------|-----------------|-------|
+| Widoki Produkcji | 8 | 9–10 (+Issues, +ChefNotes) | Recipe szczegółowy → zależy od M2 (S8.3) |
+| Widoki Magazynu | 7 (1 pusty partial) | 11 (+BatchDetails, +Issue, +FefoReport, +TransactionHistory) | — |
+| Widoki Packing | 6 | 7 (+BulkLabels) | — |
+| Widoki Loading | 0 (w Packing) | 3 (Index, Route, ManifestPreview) | — |
+| Widoki DriverMobile | 5 placeholderów | 🚫 **POZA M3** | Implementacja → M4 |
+| Widoki Logistics | placeholder | 🚫 **POZA M3** | Implementacja → M4 |
+| Kontrolery M3 | 3 (Production, Warehouse, Packing) | 4 (+LoadingController) | DriverMobileController → M4 |
+| Migracje M3 | 009 | 014–018 | Migracje M1(100+), M2(301+), M5(500+) → nie nasze |
+| Testy jednostkowe M3 | 1 (BatchRepo) | ~10+ | — |
+| Application Services | 4 (Production, Warehouse, Packing, Temperature) | 5 (+LoadingService) | — |
+| PackingService.cs | 41.6 KB (God Service) | ~25 KB + LoadingService ~15 KB | — |
