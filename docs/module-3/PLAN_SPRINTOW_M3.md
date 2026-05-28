@@ -209,47 +209,47 @@ Priorytety:
 **Cel:** Brakujące DTOs, walidatory, metody serwisów. Nie ruszamy istniejących metod.
 **Czas:** 1.5 tygodnia
 
-### Sprint 5.1 — DTOs i organizacja
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 5.1.1 | Przenieść Packing DTOs z `DTOs/Production/` do `DTOs/Packing/` (Packing*Dto, PackingBoardDto) | MOD ścieżki + `using` statements | 🟡 |
-| 5.1.2 | Nowe DTOs magazynu: `ManualIssueRequest`, `EditBatchExpiryRequest`, `BatchDetailsDto`, `FefoReportItemDto`, `TransactionHistoryDto`, `TransactionHistoryFilterDto`, `TemperatureChartDataDto`, `StockTableFilterDto` | NEW `DTOs/Warehouse/` | 🔴 |
-| 5.1.3 | Nowe DTOs kompletacji/loading: `ScanBoxResponse`, `ScanBagResponse`, `BulkPrintRequest`, `ManifestPreviewDto` | NEW `DTOs/Packing/` | 🟡 |
-| ~~5.1.4~~ | ~~`DriverManifestDto`~~ | 🚫 **Należy do M4** — M3 dostarcza `PackingManifest`, M4 tworzy własne DTO dla widoku kierowcy | — |
+### Sprint 5.1 — DTOs i organizacja (ZREALIZOWANO ✅)
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 5.1.1 | Przenieść Packing DTOs z `DTOs/Production/` do `DTOs/Packing/` (Packing*Dto, PackingBoardDto) | MOD ścieżki + `using` statements | 🟡 | ✅ |
+| 5.1.2 | Nowe DTOs magazynu: `ManualIssueRequest`, `EditBatchExpiryRequest`, `BatchDetailsDto`, `FefoReportItemDto`, `TransactionHistoryDto`, `TransactionHistoryFilterDto`, `TemperatureChartDataDto`, `StockTableFilterDto` | NEW `DTOs/Warehouse/` | 🔴 | ✅ |
+| 5.1.3 | Nowe DTOs kompletacji/loading: `ScanBoxResponse`, `ScanBagResponse`, `BulkPrintRequest`, `ManifestPreviewDto` | NEW `DTOs/Packing/` | 🟡 | ✅ |
+| ~~5.1.4~~ | ~~`DriverManifestDto`~~ | 🚫 **Należy do M4** — M3 dostarcza `PackingManifest`, M4 tworzy własne DTO dla widoku kierowcy | — | 🚫 |
 
 **Punkt kontrolny:** `dotnet build` → ✅
 
-### Sprint 5.2 — Walidatory (brakujące)
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 5.2.1 | `ManualIssueValidator` (StockItemId>0, Quantity>0, Reason not empty, IssuedTo not empty) | NEW `Validators/ManualIssueValidator.cs` | 🔴 |
-| 5.2.2 | `EditBatchExpiryValidator` (BatchId>0, NewExpiryDate≥dziś, Reason min 5 znaków) | NEW `Validators/EditBatchExpiryValidator.cs` | 🔴 |
-| 5.2.3 | `BulkPrintValidator` (SessionIds not empty, max 50) | NEW `Validators/BulkPrintValidator.cs` | 🟡 |
+### Sprint 5.2 — Walidatory (brakujące) (ZREALIZOWANO ✅)
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 5.2.1 | `ManualIssueValidator` (StockItemId>0, Quantity>0, Reason not empty, IssuedTo not empty) | NEW `Validators/ManualIssueValidator.cs` | 🔴 | ✅ |
+| 5.2.2 | `EditBatchExpiryValidator` (BatchId>0, NewExpiryDate≥dziś, Reason min 5 znaków) | NEW `Validators/EditBatchExpiryValidator.cs` | 🔴 | ✅ |
+| 5.2.3 | `BulkPrintValidator` (SessionIds not empty, max 50) | NEW `Validators/BulkPrintValidator.cs` | 🟡 | ✅ |
 
 **Punkt kontrolny:** `dotnet build` → ✅
 
-### Sprint 5.3 — Rozszerzenie IWarehouseService + WarehouseService
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 5.3.1 | Dodać metody do `IWarehouseService`: `IssueManualAsync`, `EditBatchExpiryAsync`, `GetBatchDetailsAsync`, `GetFefoReportAsync`, `GetTransactionHistoryAsync`, `GetStockTableAsync(filter)` | MOD `Application/Interfaces/IWarehouseService.cs` | 🔴 |
-| 5.3.2 | Implementacje w `WarehouseService` (9.6KB → ~15KB) | MOD `Application/Services/WarehouseService.cs` | 🔴 |
-| 5.3.3 | Rozszerzyć `ITemperatureService` o `GetChartDataAsync(device, days)`, `ExportHaccpCsvAsync(from, to)` | MOD `Application/Interfaces/ITemperatureService.cs` | 🟡 |
-| 5.3.4 | Implementacje w `TemperatureService` | MOD `Application/Services/TemperatureService.cs` | 🟡 |
-| 5.3.5 | Aktualizacja `WarehouseProfile` (AutoMapper) — dodanie mapowań nowych DTOs | MOD `Application/Mappings/WarehouseProfile.cs` | 🟡 |
+### Sprint 5.3 — Rozszerzenie IWarehouseService + WarehouseService (ZREALIZOWANO ✅)
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 5.3.1 | Dodać metody do `IWarehouseService`: `IssueManualAsync`, `EditBatchExpiryAsync`, `GetBatchDetailsAsync`, `GetFefoReportAsync`, `GetTransactionHistoryAsync`, `GetStockTableAsync(filter)` | MOD `Application/Interfaces/IWarehouseService.cs` | 🔴 | ✅ |
+| 5.3.2 | Implementacje w `WarehouseService` (9.6KB → ~15KB) | MOD `Application/Services/WarehouseService.cs` | 🔴 | ✅ |
+| 5.3.3 | Rozszerzyć `ITemperatureService` o `GetChartDataAsync(device, days)`, `ExportHaccpCsvAsync(from, to)` | MOD `Application/Interfaces/ITemperatureService.cs` | 🟡 | ✅ |
+| 5.3.4 | Implementacje w `TemperatureService` | MOD `Application/Services/TemperatureService.cs` | 🟡 | ✅ |
+| 5.3.5 | Aktualizacja `WarehouseProfile` (AutoMapper) — dodanie mapowań nowych DTOs | MOD `Application/Mappings/WarehouseProfile.cs` | 🟡 | ✅ |
 
 **Punkt kontrolny:** `dotnet build` + `dotnet test` → ✅. Zapytać o kontynuację.
 
-### Sprint 5.4 — Refaktor PackingService → wydzielenie LoadingService
+### Sprint 5.4 — Refaktor PackingService → wydzielenie LoadingService (ZREALIZOWANO ✅)
 
 > **Zakres LoadingService:** Odpowiada za załadunek aut i manifesty — **po stronie M3** (kompletacja → załadunek). Widok kierowcy i DriverManifest są poza zakresem M3 (→ M4).
 
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 5.4.1 | Stworzyć `ILoadingService` z metodami: `LoadBagByCodeAsync`, `LoadOrderBagAsync`, `GenerateManifestAsync`, `GetManifestAsync`, `VerifyManifestAsync`, `DispatchAsync`, `GetRouteDetailsAsync` (bez `GetDriverManifestAsync` — to M4) | NEW `Application/Interfaces/ILoadingService.cs` | 🔴 |
-| 5.4.2 | Stworzyć `LoadingService` — wyciągnąć logikę z `PackingService` (nie duplikować, przenieść) | NEW `Application/Services/LoadingService.cs` | 🔴 |
-| 5.4.3 | Usunąć przeniesione metody z `PackingService` i `IPackingService` | MOD oba pliki | 🔴 |
-| 5.4.4 | DI rejestracja `ILoadingService` | MOD `Infrastructure/DependencyInjection.cs` | 🔴 |
-| 5.4.5 | `PackingProfile` AutoMapper (wydzielić z `ProductionProfile` jeśli tam są mapowania packing) | MOD/NEW `Application/Mappings/PackingProfile.cs` | 🟡 |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 5.4.1 | Stworzyć `ILoadingService` z metodami: `LoadBagByCodeAsync`, `LoadOrderBagAsync`, `GenerateManifestAsync`, `GetManifestAsync`, `VerifyManifestAsync`, `DispatchAsync`, `GetRouteDetailsAsync` (bez `GetDriverManifestAsync` — to M4) | NEW `Application/Interfaces/ILoadingService.cs` | 🔴 | ✅ |
+| 5.4.2 | Stworzyć `LoadingService` — wyciągnąć logikę z `PackingService` (nie duplikować, przenieść) | NEW `Application/Services/LoadingService.cs` | 🔴 | ✅ |
+| 5.4.3 | Usunąć przeniesione metody z `PackingService` i `IPackingService` | MOD oba pliki | 🔴 | ✅ |
+| 5.4.4 | DI rejestracja `ILoadingService` | MOD `Infrastructure/DependencyInjection.cs` | 🔴 | ✅ |
+| 5.4.5 | `PackingProfile` AutoMapper (wydzielić z `ProductionProfile` jeśli tam są mapowania packing) | MOD/NEW `Application/Mappings/PackingProfile.cs` | 🟡 | ✅ |
 
 > ⚠️ **RYZYKO:** Ten refaktor dotknie wielu plików. Trzeba uruchomić Docker i przetestować wizualnie.
 
