@@ -207,13 +207,13 @@ Założenia:
 
 ```mermaid
 quadrantChart
-    title Identyfikacja Obciążenia Tabel (Wydajność)
-    x-axis Niska Częstotliwość Odczytu --> Wysoka Częstotliwość Odczytu
-    y-axis Niska Częstotliwość Zapisu --> Wysoka Częstotliwość Zapisu
+    title Identyfikacja Obciazenia Tabel (Wydajnosc)
+    x-axis Niska Czestotliwosc Odczytu --> Wysoka Czestotliwosc Odczytu
+    y-axis Niska Czestotliwosc Zapisu --> Wysoka Czestotliwosc Zapisu
     quadrant-1 Tabele Krytyczne (High Load)
-    quadrant-2 Głównie Zapis (Write-Heavy)
-    quadrant-3 Małe obciążenie
-    quadrant-4 Głównie Odczyt (Read-Heavy)
+    quadrant-2 Glownie Zapis (Write-Heavy)
+    quadrant-3 Male obciazenie
+    quadrant-4 Glownie Odczyt (Read-Heavy)
     "PackingItems" : [0.85, 0.88]
     "SystemLogs" : [0.2, 0.95]
     "TemperatureLogs" : [0.1, 0.9]
@@ -235,139 +235,166 @@ quadrantChart
 ---
 
 ## 8. Relacyjny Model Logiczny i Diagram Fizyczny (ERD)
-Poniższy diagram fizyczny przedstawia strukturę bazy danych z uwzględnieniem wszystkich 5 modułów (M1–M5), typów danych dla MS SQL Server oraz kluczy głównych (PK) i obcych (FK).
+Poniższy diagram ERD przedstawia główne encje systemu oraz kluczowe relacje między nimi (pominięto atrybuty niekluczowe dla czytelności). Diagram ten w zupełności wystarcza na etapie analizy wymagań – szczegółowa specyfikacja typów pól, indeksów i kluczy obcych zostanie zamieszczona w odrębnym dokumencie „Projekt bazy danych”.
+
+Uwaga: Diagram wygenerowano na podstawie rzeczywistych encji z projektu (Entities.cs). Relacje oznaczono zgodnie z konwencją: ||--|| – jeden do jednego, ||--o{ – jeden do wielu, }o--|| – wiele do jednego.
 
 ```mermaid
 erDiagram
-    %% Moduł 5: Administracja i HR (Paweł)
-    DEPARTMENTS {
+
+    %% ==============================
+    %% 1. MODUŁ ADMINISTRACJI I AUDYTU
+    %% ==============================
+    SystemLog {
         int Id PK
-        string Name
+        int UserId FK
+        string Action
+        string TargetEntity
+        string TargetId
+        string OldValue
+        string NewValue
+        datetimeoffset Timestamp
+        string IPAddress
+    }
+
+    Ticket {
+        int Id PK
+        string Title
         string Description
-        int HeadEmployeeId FK "nullable"
+        int ClientUserId FK
+        int AssignedToUserId FK
+        int Status
+        int Priority
+        datetimeoffset ClosedAt
     }
-    EMPLOYEES {
+
+    TicketAttachment {
         int Id PK
-        int UserId FK "unique"
-        string FirstName
-        string LastName
-        string Email
-        string PhoneNumber
-        date HireDate
-        date TerminationDate "nullable"
-        int DepartmentId FK
-        string Position
-        boolean IsActive
-        datetimeoffset CreatedAt
-        datetimeoffset UpdatedAt
+        int TicketId FK
+        string FileName
+        string FilePath
+        int UploadedByUserId
+        datetimeoffset UploadedAt
     }
-    WORKSCHEDULES {
+
+    WorkSchedule {
         int Id PK
         int UserId FK
         date ShiftDate
         int Shift
         string RoleAtShift
-        datetimeoffset CreatedAt
     }
-    LEAVEREQUESTS {
+
+    %% ==============================
+    %% 2. MODUŁ AUTORYZACJI I KLIENCI
+    %% ==============================
+    User {
+        int Id PK
+        string Email
+        string PasswordHash
+        string FirstName
+        string LastName
+        string Role
+    }
+
+    CustomerProfile {
+        int Id PK
+        int UserId FK
+        string Phone
+        string DietaryNotes
+        int DefaultAddressId FK
+    }
+
+    Address {
+        int Id PK
+        int UserId FK
+        string Label
+        string Street
+        string BuildingNumber
+        string ApartmentNumber
+        string City
+        string PostalCode
+        bool IsDefault
+        string DeliveryNotes
+        double Latitude
+        double Longitude
+    }
+
+    %% ==============================
+    %% 3. MODUŁ HR (PRACOWNICY)
+    %% ==============================
+    Department {
+        int Id PK
+        string Name
+        string Description
+        int HeadEmployeeId FK
+    }
+
+    Employee {
+        int Id PK
+        int UserId FK
+        string FirstName
+        string LastName
+        string Email
+        string PhoneNumber
+        date HireDate
+        date TerminationDate
+        int DepartmentId FK
+        string Position
+        bool IsActive
+    }
+
+    LeaveRequest {
         int Id PK
         int EmployeeId FK
         int LeaveType
         date StartDate
         date EndDate
         int Status
-        int ApprovedByEmployeeId FK "nullable"
-        string RejectionReason "nullable"
-        datetimeoffset CreatedAt
-    }
-    TICKETS {
-        int Id PK
-        string Title
-        string Description
-        int ClientUserId FK
-        int AssignedToUserId FK "nullable"
-        int Status
-        int Priority
-        datetimeoffset ClosedAt "nullable"
-        datetimeoffset CreatedAt
-    }
-    TICKETATTACHMENTS {
-        int Id PK
-        int TicketId FK
-        string FileUrl
-        string FileName
-        bigint FileSizeBytes
-        datetimeoffset CreatedAt
-    }
-    SYSTEMLOGS {
-        int Id PK
-        int UserId FK
-        string Action
-        string TargetEntity
-        string TargetId
-        string OldValue "NVARCHAR_MAX"
-        string NewValue "NVARCHAR_MAX"
-        datetimeoffset Timestamp
-        string IPAddress
+        int ApprovedByEmployeeId FK
+        string RejectionReason
     }
 
-    %% Moduł 1: E-commerce (Dawid)
-    USERS {
+    %% ==============================
+    %% 4. MODUŁ ZAMÓWIEŃ (E-COMMERCE)
+    %% ==============================
+    DiscountCode {
         int Id PK
-        string Email UK
-        string PasswordHash
-        string FirstName
-        string LastName
-        string Role
-        datetimeoffset CreatedAt
-        datetimeoffset UpdatedAt
-    }
-    CUSTOMERPROFILES {
-        int Id PK
-        int UserId FK "unique"
-        string PhoneNumber
-        string CompanyName "nullable"
-        string Nip "nullable"
-    }
-    ADDRESSES {
-        int Id PK
-        int CustomerProfileId FK
-        string Street
-        string HouseNumber
-        string ApartmentNumber "nullable"
-        string City
-        string PostalCode
-        boolean IsDefault
-    }
-    DISCOUNTCODES {
-        int Id PK
-        string Code UK
+        string Code
+        int DiscountType
         decimal DiscountValue
-        int Type
-        datetime ValidFrom
-        datetime ValidTo
+        bool IsActive
+        datetimeoffset ValidFrom
+        datetimeoffset ValidTo
+        int MaxUsageCount
+        int UsedCount
+        decimal MinimumOrderValue
     }
-    DELIVERYWINDOWS {
+
+    DeliveryWindow {
         int Id PK
         string Name
-        time StartTime
-        time EndTime
+        string StartTime
+        string EndTime
+        bool IsActive
+        int SortOrder
     }
-    ORDERS {
+
+    Order {
         int Id PK
-        int CustomerId FK "Users"
-        string OrderNumber UK
+        int CustomerId FK
+        string OrderNumber
         int Status
         decimal TotalPrice
         decimal DiscountAmount
         decimal FinalPrice
-        int DiscountCodeId FK "nullable"
-        string Notes "nullable"
+        int DiscountCodeId FK
+        string Notes
         datetime StartDate
         datetime EndDate
-        datetime CreatedAt
     }
-    ORDERITEMS {
+
+    OrderItem {
         int Id PK
         int OrderId FK
         int DietId
@@ -379,149 +406,179 @@ erDiagram
         int TotalDays
         decimal TotalPrice
     }
-    DELIVERYCALENDAR {
-        int Id PK
-        int OrderItemId FK
-        date DeliveryDate
-        int AddressId FK
-        int DeliveryWindowId FK
-        int Status
-        string ExcludeReason "nullable"
-    }
-    PAYMENTS {
+
+    DeliveryCalendar {
         int Id PK
         int OrderId FK
-        string StripeSessionId
-        decimal Amount
+        int AddressId FK
+        int DeliveryWindowId FK
+        datetime DeliveryDate
         int Status
-        datetime CreatedAt
+        bool IsSkipped
+        string SkipReason
+        datetimeoffset CutoffTime
     }
 
-    %% Moduł 2: Katalog Diet i Receptur (Gabriel)
-    CATEGORIES {
+    Payment {
+        int Id PK
+        int OrderId FK
+        string StripePaymentIntentId
+        string StripeClientSecret
+        decimal Amount
+        string Currency
+        int Status
+        int AttemptCount
+        datetimeoffset LastAttemptAt
+        string ErrorMessage
+        datetimeoffset PaidAt
+    }
+
+    %% ==============================
+    %% 5. MODUŁ KATALOGU (DIETY, POSIŁKI)
+    %% ==============================
+    Category {
         int Id PK
         string Name
-        string Description "nullable"
+        string Description
         int SortOrder
     }
-    ALLERGENS {
+
+    Allergen {
         int Id PK
         string Name
-        string Code UK
-        string IconUrl "nullable"
+        string Code
+        string IconUrl
     }
-    INGREDIENTS {
+
+    Ingredient {
         int Id PK
         string Name
         string Unit
         decimal CostPerUnit
-        boolean IsActive
+        string Notes
+        bool IsActive
     }
-    INGREDIENTALLERGENS {
+
+    IngredientAllergen {
         int Id PK
         int IngredientId FK
         int AllergenId FK
-        boolean TraceAmount
+        bool TraceAmount
     }
-    RECIPES {
-        int Id PK
-        int MealId FK
-        int IngredientId FK
-        decimal WeightInGrams
-        boolean IsOptional
-    }
-    MEALS {
+
+    Meal {
         int Id PK
         int CategoryId FK
         string Name
-        string Description "nullable"
-        string MarketingDescription "nullable"
-        string Status
+        string Description
+        string MarketingDescription
+        int Status
         int PreparationTimeMinutes
+        bool IsActive
     }
-    MEALALLERGENS {
+
+    MealAllergen {
         int Id PK
         int MealId FK
         int AllergenId FK
-        boolean IsTrace
+        bool IsTrace
     }
-    DIETS {
+
+    Diet {
         int Id PK
         string Name
-        string Description "nullable"
-        string Status
-        boolean IsActive
+        string Description
+        string MarketingDescription
+        int Status
+        bool IsActive
+        string ThumbnailUrl
     }
-    DIETVARIANTS {
+
+    DietVariant {
         int Id PK
         int DietId FK
         string Name
         int TargetCalories
         decimal PriceMultiplier
+        bool IsDefault
     }
-    DIETVARIANTMEALS {
+
+    DietVariantMeal {
         int Id PK
         int DietVariantId FK
         int MealId FK
         decimal ServingSizeMultiplier
         int SortOrder
     }
-    NUTRITIONFACTS {
+
+    Recipe {
         int Id PK
-        int MealId FK "nullable"
-        int IngredientId FK "nullable"
+        int MealId FK
+        int IngredientId FK
+        decimal WeightInGrams
+        bool IsOptional
+        string Notes
+    }
+
+    NutritionFact {
+        int Id PK
+        int MealId FK
+        int IngredientId FK
         decimal CaloriesPer100g
         decimal ProteinPer100g
         decimal CarbohydratesPer100g
         decimal FatPer100g
+        decimal FiberPer100g
     }
-    MEALIMAGES {
+
+    MealImage {
         int Id PK
         int MealId FK
         string Url
-        boolean IsMain
+        string FileName
+        bool IsMain
+        long FileSizeBytes
     }
 
-    %% Moduł 3: Produkcja i Magazyn (Maciej)
-    UNITSOFMEASURE {
+    %% ==============================
+    %% 6. MODUŁ MAGAZYNU (WMS) I HACCP
+    %% ==============================
+    UnitOfMeasure {
         int Id PK
         string Symbol
         string Name
+        string Description
     }
-    STOCKITEMS {
+
+    StockItem {
         int Id PK
         string Name
-        int BaseIngredientId FK "bridge_nullable"
+        int BaseIngredientId FK
         int DefaultUnitOfMeasureId FK
         decimal MinimumLevel
         int LeadTimeDays
-        boolean IsDeleted
     }
-    BATCHES {
+
+    Batch {
         int Id PK
         int StockItemId FK
         string SupplierBatchNumber
         decimal CurrentQuantity
-        datetimeoffset ExpiryDate "nullable"
+        datetimeoffset ExpiryDate
         datetimeoffset ReceivedDate
-        boolean IsDepleted
-        boolean IsDeleted
+        bool IsDepleted
     }
-    INVENTORYTRANSACTIONS {
+
+    InventoryTransaction {
         bigint Id PK
         int BatchId FK
         int TransactionType
         decimal QuantityChanged
-        string Reason "nullable"
-        string ReferenceDocument "nullable"
+        string Reason
+        string ReferenceDocument
     }
-    TEMPERATURELOGS {
-        bigint Id PK
-        string DeviceNameOrLocation
-        decimal RecordedTemperatureCelsius
-        datetimeoffset RecordedAt
-    }
-    INVENTORYADJUSTMENTS {
+
+    InventoryAdjustment {
         int Id PK
         int StockItemId FK
         decimal QuantityBefore
@@ -530,457 +587,313 @@ erDiagram
         string Reason
         string AdjustedBy
     }
-    PRODUCTIONPLANS {
+
+    TemperatureLog {
+        bigint Id PK
+        string DeviceNameOrLocation
+        decimal RecordedTemperatureCelsius
+        datetimeoffset RecordedAt
+        string Remarks
+    }
+
+    %% ==============================
+    %% 7. MODUŁ PRODUKCJI
+    %% ==============================
+    ProductionPlan {
         int Id PK
         date ProductionDate
         int Status
-        boolean IsSharedWithLogistics
+        bool IsSharedWithLogistics
+        datetimeoffset SharedAt
+        string Notes
     }
-    PRODUCTIONPLANITEMS {
+
+    ProductionPlanItem {
         int Id PK
         int ProductionPlanId FK
-        int MealId FK "bridge"
+        int MealId
         string MealName
-        int DietVariantId FK "bridge"
+        int DietVariantId
         int PlannedQuantity
         int CookedQuantity
         int Status
+        int ProductionGroup
+        time EstimatedReadyTime
+        time ActualReadyTime
     }
-    PRODUCTIONBATCHES {
+
+    ProductionBatch {
         int Id PK
         int ProductionPlanId FK
-        int MealId FK "bridge"
+        int MealId
         string Name
         decimal PlannedQuantity
         decimal ProducedQuantity
     }
-    PACKINGSESSIONS {
+
+    %% ==============================
+    %% 8. MODUŁ KOMPLETACJI (PACKING)
+    %% ==============================
+    PackingSession {
         int Id PK
         date PackingDate
-        int OrderId FK "bridge"
+        int OrderId FK
         string ClientName
+        string PackedBy
         int Status
-        int RouteId FK "bridge"
+        int RouteId FK
         int StopNumber
     }
-    PACKINGITEMS {
+
+    PackingItem {
         int Id PK
         int PackingSessionId FK
-        int MealId FK "bridge"
-        int DietVariantId FK "bridge"
-        int BatchId FK "HACCP"
-        boolean IsDamaged
+        int MealId
+        string MealName
+        int DietVariantId
+        int BatchId FK
         string BoxCode
         int Status
-        datetime FoilPrintedAt "nullable"
-        datetime PackedAt "nullable"
+        datetimeoffset ExpiryDate
+        datetimeoffset FoilPrintedAt
+        datetimeoffset PackedAt
+        string PackedBy
+        bool IsDamaged
+        string Remarks
     }
-    PACKINGLABELS {
+
+    PackingLabel {
         int Id PK
-        int PackingItemId FK "nullable"
-        int PackingSessionId FK "nullable"
+        int PackingItemId FK
+        int PackingSessionId FK
         int LabelType
-        string QrCode UK
-        string DishName "nullable"
-        string Allergens "nullable"
-        int Kcal "nullable"
+        string QrCode
+        string DishName
+        string Allergens
+        int Kcal
+        string ClientName
+        string RouteInfo
+        string DeliveryWindow
     }
-    PACKINGMANIFESTS {
+
+    PackingManifest {
         int Id PK
         date PackingDate
         string ManifestNumber
+        int RouteId
+        string RouteName
+        int VehicleId
+        string VehicleRegistration
         int RouteCount
         int BagCount
-        string PayloadJson "NVARCHAR_MAX"
-        int RouteId FK "bridge"
-        boolean IsVerified
+        datetimeoffset GeneratedAt
+        string GeneratedBy
+        bool IsVerified
+        datetimeoffset VerifiedAt
+        string VerifiedBy
+        string PayloadJson
     }
 
-    %% Moduł 4: Logistyka i Dostawy (Tomasz)
-    VEHICLES {
+    %% ==============================
+    %% 9. MODUŁ LOGISTYKI
+    %% ==============================
+    Vehicle {
         int Id PK
         string RegistrationNumber
         string Model
         decimal MaxLoadKg
         int Status
     }
-    DRIVERS {
+
+    Driver {
         int Id PK
         int UserId FK
         string LicenseNumber
-        boolean IsActive
+        bool IsActive
     }
-    DISPATCHERS {
+
+    Dispatcher {
         int Id PK
         int UserId FK
         string DeskPhoneNumber
-        boolean IsOnDuty
+        bool IsOnDuty
     }
-    DELIVERYROUTES {
+
+    DeliveryRoute {
         int Id PK
         datetimeoffset RouteDate
         string Name
         double TotalDistanceKm
         int Status
-        int VehicleId FK "nullable"
-        int DriverId FK "nullable"
+        int VehicleId FK
+        int DriverId FK
     }
-    DELIVERYROUTESTOPS {
+
+    DeliveryRouteStop {
         int Id PK
         int RouteId FK
-        int DeliveryCalendarId FK "bridge"
+        int DeliveryCalendarId FK
         int SequenceNumber
-        datetimeoffset PlannedArrivalTime "nullable"
-        datetimeoffset ActualArrivalTime "nullable"
+        datetimeoffset PlannedArrivalTime
+        datetimeoffset ActualArrivalTime
         int Status
     }
-    THERMALBAGS {
+
+    ThermalBag {
         int Id PK
         string SerialNumber
         int Status
-        int LastCustomerId FK "nullable"
+        int LastCustomerId FK
     }
-    BAGMOVEMENTLOGS {
+
+    BagMovementLog {
         int Id PK
         int ThermalBagId FK
         int FromStatus
         int ToStatus
-        int DriverId FK "nullable"
-        int RouteStopId FK "nullable"
-        datetimeoffset CreatedAt
+        int DriverId FK
+        int RouteStopId FK
     }
 
-    %% Relacje między modułami (M1-M5)
-    USERS ||--o{ CUSTOMERPROFILES : has
-    CUSTOMERPROFILES ||--o{ ADDRESSES : has
-    USERS ||--o{ ORDERS : places
-    ORDERS ||--|{ ORDERITEMS : contains
-    ORDERITEMS ||--o{ DELIVERYCALENDAR : schedules
-    ORDERS ||--o{ PAYMENTS : billing
-    DELIVERYCALENDAR ||--o{ DELIVERYROUTESTOPS : "assigned to"
-    EMPLOYEES ||--o{ LEAVEREQUESTS : requests
-    USERS ||--o{ TICKETS : opens
-    TICKETS ||--o{ TICKETATTACHMENTS : has
-    USERS ||--o{ SYSTEMLOGS : triggers
-    DEPARTMENTS ||--o{ EMPLOYEES : employs
-    EMPLOYEES ||--o{ DEPARTMENTS : manages
-    USERS ||--o{ EMPLOYEES : "has account"
-    USERS ||--o{ WORKSCHEDULES : scheduled_for
-    DRIVERS ||--o{ DELIVERYROUTES : drives
-    VEHICLES ||--o{ DELIVERYROUTES : assigned
-    DELIVERYROUTES ||--|{ DELIVERYROUTESTOPS : routes
-    THERMALBAGS ||--o{ BAGMOVEMENTLOGS : tracks
-    DRIVERS ||--o{ BAGMOVEMENTLOGS : moves
-    DELIVERYROUTESTOPS ||--o{ BAGMOVEMENTLOGS : logs
+    %% ============================================
+    %% RELACJE MIĘDZY MODUŁAMI
+    %% ============================================
+    User ||--o{ CustomerProfile : has
+    User ||--o{ Address : has
+    User ||--o{ Order : places
+    User ||--o{ Employee : "is (1:1)"
+    User ||--o{ Driver : "is (1:1)"
+    User ||--o{ Dispatcher : "is (1:1)"
+    User ||--o{ WorkSchedule : scheduled_for
+    User ||--o{ SystemLog : triggers
 
-    %% Relacje w menu i przepisach (M2)
-    CATEGORIES ||--o{ MEALS : contains
-    INGREDIENTS ||--o{ INGREDIENTALLERGENS : has
-    ALLERGENS ||--o{ INGREDIENTALLERGENS : categorizes
-    INGREDIENTS ||--o{ RECIPES : used_in
-    MEALS ||--o{ RECIPES : uses
-    ALLERGENS ||--o{ MEALALLERGENS : has
-    MEALS ||--o{ MEALALLERGENS : contains
-    DIETS ||--|{ DIETVARIANTS : has
-    DIETVARIANTS ||--|{ DIETVARIANTMEALS : schedules
-    MEALS ||--o{ DIETVARIANTMEALS : serves
-    MEALS ||--o{ NUTRITIONFACTS : analysis
-    INGREDIENTS ||--o{ NUTRITIONFACTS : analysis
-    MEALS ||--o{ MEALIMAGES : displays
+    CustomerProfile ||--o{ Address : has
+    CustomerProfile ||--|| Address : "default (DefaultAddressId)"
 
-    %% Relacje WMS (M3)
-    UNITSOFMEASURE ||--o{ STOCKITEMS : measures
-    STOCKITEMS ||--o{ BATCHES : stocks
-    BATCHES ||--o{ INVENTORYTRANSACTIONS : transact
-    STOCKITEMS ||--o{ INVENTORYADJUSTMENTS : adjusts
-    PRODUCTIONPLANS ||--|{ PRODUCTIONPLANITEMS : contains
-    PRODUCTIONPLANS ||--o{ PRODUCTIONBATCHES : prepares
-    PACKINGSESSIONS ||--|{ PACKINGITEMS : contains
-    PACKINGITEMS }o--|| BATCHES : "HACCP trace"
-    PACKINGSESSIONS ||--o{ PACKINGLABELS : prints
-    PACKINGITEMS ||--o{ PACKINGLABELS : prints
+    Order ||--|{ OrderItem : contains
+    Order ||--|{ DeliveryCalendar : scheduled
+    Order ||--|| Payment : billing
+    Order ||--o{ PackingSession : "packed into"
+
+    DeliveryCalendar ||--|| Address : "delivers to"
+    DeliveryCalendar ||--|| DeliveryWindow : "within"
+    DeliveryCalendar ||--o{ DeliveryRouteStop : "assigned to"
+
+    DeliveryRoute ||--|{ DeliveryRouteStop : "has stops"
+    DeliveryRoute ||--|| Vehicle : "assigned"
+    DeliveryRoute ||--|| Driver : "assigned"
+
+    ThermalBag ||--|{ BagMovementLog : tracks
+
+    Department ||--o{ Employee : employs
+    Employee ||--o{ LeaveRequest : requests
+    Employee ||--o{ Department : manages
+
+    Ticket ||--|{ TicketAttachment : has
+    Ticket ||--|| User : "opened by (ClientUserId)"
+    Ticket ||--|| User : "assigned to (AssignedToUserId)"
+
+    %% Relacje katalogu
+    Diet ||--|{ DietVariant : has
+    DietVariant ||--|{ DietVariantMeal : contains
+    Meal ||--o{ DietVariantMeal : "appears in"
+    Meal ||--o{ Recipe : "uses ingredients"
+    Ingredient ||--o{ Recipe : "used in"
+    Meal ||--o{ MealAllergen : has
+    Allergen ||--o{ IngredientAllergen : "associated with ingredient"
+    Ingredient ||--o{ IngredientAllergen : has
+    Allergen ||--o{ MealAllergen : "associated with meal"
+    Meal ||--o{ MealImage : displays
+    Meal ||--o{ NutritionFact : "nutrition data"
+    Ingredient ||--o{ NutritionFact : "nutrition data"
+
+    %% Relacje magazynu
+    StockItem ||--|{ Batch : stocks
+    Batch ||--|{ InventoryTransaction : transact
+    StockItem ||--o{ InventoryAdjustment : adjusts
+    UnitOfMeasure ||--o{ StockItem : measures
+
+    %% Relacje produkcji i packingu
+    ProductionPlan ||--|{ ProductionPlanItem : contains
+    ProductionPlan ||--o{ ProductionBatch : prepares
+
+    PackingSession ||--|{ PackingItem : contains
+    PackingItem ||--|| Batch : "HACCP trace"
+    PackingItem ||--o{ PackingLabel : prints
+    PackingSession ||--o{ PackingLabel : prints
+    PackingSession ||--|| Order : "belongs to"
+    PackingSession ||--|| DeliveryRoute : "loaded on"
+
+    PackingManifest ||--|| DeliveryRoute : "references"
+    PackingManifest ||--|| Vehicle : "references"
 ```
+---
+
+## 9. Logiczny Model Danych i Wymagania dotyczące przechowywania
+
+### 9.1. Główne grupy danych
+
+| Grupa | Zawartość | Wynika z wymagań (ID) |
+|-------|-----------|------------------------|
+| **Administracja i audyt** | Logi operacji (`SystemLog`), zgłoszenia (`Ticket`), załączniki (`TicketAttachment`), grafiki pracy (`WorkSchedule`) | F10, NF3 |
+| **Konta i klienci** | Użytkownicy, profile klientów, adresy | F1, F3 |
+| **HR i kadry** | Pracownicy, działy, wnioski urlopowe | (zakres modułu 5) |
+| **Zamówienia i płatności** | Zamówienia, pozycje, kalendarz dostaw, kody rabatowe, płatności Stripe | F1–F3 |
+| **Katalog diet i posiłków** | Diety, warianty, posiłki, składniki, alergeny, przepisy, wartości odżywcze | F4 |
+| **Magazyn i HACCP** | Składniki magazynowe, partie (FEFO), transakcje, korekty, logi temperatur | F5–F6, NF3 |
+| **Produkcja** | Plany produkcyjne, pozycje planu, partie półproduktów | F5 |
+| **Kompletacja (packing)** | Sesje pakowania (torby), pudełka, etykiety (produktowe i transportowe), manifesty | F7 |
+| **Logistyka** | Pojazdy, kierowcy, trasy, przystanki, torby termiczne, logi ruchu toreb | F8–F9 |
+
+### 9.2. Kluczowe założenia dotyczące przechowywania danych
+
+1. **Audytowalność (NF3)** – Większość encji biznesowych dziedziczy po `AuditableEntity`, co oznacza, że każda zmiana jest rejestrowana z datą, autorem i flagą miękkiego usunięcia. Tabela `SystemLog` przechowuje pełne historie zmian (stare i nowe wartości w formacie JSON) dla kluczowych operacji (zmiany ról, statusów zamówień, korekt magazynowych).
+
+2. **Śledzenie partii (FEFO, HACCP)** – Każdy składnik magazynowy (`StockItem`) składa się z wielu partii (`Batch`) z datą ważności. Każde wydanie (do produkcji, odpad, korekta) jest rejestrowane jako `InventoryTransaction` z referencją do partii, co zapewnia pełną identyfikowalność od dostawcy do gotowego pudełka.
+
+3. **Traceability posiłku** – Każde spakowane pudełko (`PackingItem`) zawiera `BatchId`, co pozwala odtworzyć, z jakich partii surowców pochodzi dany posiłek (wymóg HACCP i możliwość wycofania partii).
+
+4. **Denormalizacja dla wydajności** – Wybrane pola (np. `MealName` w `ProductionPlanItem`, `ClientName` w `PackingSession`) są denormalizowane, aby uniknąć kosztownych złączeń w krytycznych ścieżkach (kompletacja, raporty). Integralność tych pól jest utrzymywana na poziomie aplikacji.
+
+5. **Pliki (załączniki, obrazy)** – Nie są przechowywane w bazie danych, lecz w zewnętrznym magazynie obiektów (Azure Blob / AWS S3). W bazie przechowuje się tylko URL, nazwę pliku i rozmiar.
+
+### 9.3. Zasady integralności i wydajności
+
+- Klucze główne: `Id` (int lub long) z autoinkrementacją.
+- Klucze obce: tam, gdzie wymagana jest integralność referencyjna (np. `OrderItem.OrderId`), zakładamy klasyczne klucze obce. W przypadku luźnych powiązań między modułami (np. `PackingSession.OrderId`) – klucz obcy jest opcjonalny (bridge), ale zapewniamy spójność na poziomie aplikacji.
+- Indeksy są wymagane dla kolumn używanych w:
+  - Filtrowaniu (`DeliveryDate`, `PackingDate`, `Status`)
+  - Sortowaniu FEFO (`ExpiryDate`)
+  - Skanowaniu kodów QR (`BoxCode`, `QrCode`, `SerialNumber`)
+  - Wyszukiwaniu (`Email`, `OrderNumber`).
 
 ---
 
-## 9. Specyfikacja Fizyczna Tabel Bazodanowych (M1–M5)
-Poniżej znajduje się opis tabel bazodanowych z branchów programistów, które nie były ujęte w podstawowej wersji dokumentu.
+## 10. Wymagania dotyczące przetwarzania danych
 
-### 9.1. Moduł 4: Logistyka i Dostawy — Tomasz (Branch `Tomasz`)
+### 10.1. Reguły biznesowe wymuszane na poziomie bazy danych
 
-#### Tabela `Vehicles` (Pojazdy)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Autoinkrementacja (Identity) |
-| `RegistrationNumber`| `VARCHAR(50)` | NIE | - | Numer rejestracyjny (np. `BI 12345`) |
-| `Model` | `NVARCHAR(100)` | NIE | - | Marka i model (np. `Renault Kangoo`) |
-| `MaxLoadKg` | `DECIMAL(18,2)` | NIE | - | Maksymalna ładowność w kg |
-| `Status` | `INT` | NIE | - | Status pojazdu (Enum: Active, Service, Inactive) |
+| Reguła | Uzasadnienie |
+|--------|--------------|
+| Partia jest automatycznie oznaczana jako wyczerpana (`IsDepleted = true`), gdy `CurrentQuantity <= 0`. | Zapobiega uwzględnianiu pustych partii w algorytmie FEFO, redukuje złożoność zapytań. |
+| Unikalność kodu QR dla etykiet (`PackingLabels.QrCode`). | Gwarantuje, że każda etykieta może być jednoznacznie zeskanowana. |
+| W tabeli `WorkSchedules` nie może istnieć więcej niż jeden rekord dla tego samego pracownika, dnia i zmiany (unikalny klucz złożony). | Eliminuje konflikty w grafiku pracy. |
+| Nie można usunąć zamówienia, które ma status `Paid` lub `InProduction`. | Chroni integralność danych rozliczeniowych i produkcyjnych. |
+| Data ważności partii nie może być wcześniejsza niż data przyjęcia. | Zapewnia logiczną spójność dla algorytmu FEFO. |
 
-#### Tabela `Drivers` (Kierowcy)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Autoinkrementacja |
-| `UserId` | `INT` | NIE | FK | Referencja do konta użytkownika (`Users.Id`) |
-| `LicenseNumber` | `VARCHAR(50)` | NIE | - | Numer prawa jazdy |
-| `IsActive` | `BIT` | NIE | - | Czy kierowca jest aktywny zawodowo |
+### 10.2. Obszary wymagające zoptymalizowanego przetwarzania po stronie bazy danych
 
-#### Tabela `DeliveryRoutes` (Trasy Dostaw)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Autoinkrementacja |
-| `RouteDate` | `DATETIMEOFFSET(0)` | NIE | - | Data realizacji dostawy |
-| `Name` | `NVARCHAR(100)` | NIE | - | Nazwa trasy (np. `Trasa Śródmieście A`) |
-| `TotalDistanceKm` | `DOUBLE PRECISION` | NIE | - | Szacowany dystans trasy w km |
-| `Status` | `INT` | NIE | - | Status (Enum: Created, InProgress, Completed) |
-| `VehicleId` | `INT` | TAK | FK | Przypisany pojazd (`Vehicles.Id`) |
-| `DriverId` | `INT` | TAK | FK | Przypisany kurier (`Drivers.Id`) |
+- **Agregacja zapotrzebowania produkcyjnego** – złączenie tabel `DeliveryCalendar` → `OrderItems` → `DietVariantMeals` → `Meals` → `Recipes` jest wykonywane przy każdym generowaniu planu produkcji. Dopuszcza się implementację widoku zmaterializowanego lub procedury składowanej dla wydajności.
+- **Raport FEFO (lista aktywnych partii)** – zestawienie wszystkich niezużytych partii posortowanych według daty ważności, z danymi składników, powinno być realizowane jako widok lub procedura z parametrami (filtrowanie po kategorii, dniu ważności).
+- **Archiwizacja logów systemowych** – logi starsze niż 6 miesięcy muszą być automatycznie przenoszone do tabeli archiwalnej w celu utrzymania wydajności operacyjnej. Proces uruchamiany cyklicznie (np. nocny job).
 
-#### Tabela `DeliveryRouteStops` (Przystanki na Trasie)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Autoinkrementacja |
-| `RouteId` | `INT` | NIE | FK | Referencja do trasy (`DeliveryRoutes.Id`) |
-| `DeliveryCalendarId`| `INT` | NIE | - | Referencja do kalendarza dostaw (Bridge) |
-| `SequenceNumber` | `INT` | NIE | - | Kolejność przystanku na trasie |
-| `PlannedArrivalTime`| `DATETIMEOFFSET(0)` | TAK | - | Szacowana godzina dojazdu |
-| `ActualArrivalTime` | `DATETIMEOFFSET(0)` | TAK | - | Rzeczywista godzina dojazdu |
-| `Status` | `INT` | NIE | - | Status (Enum: Planned, Delivered, Failed) |
+### 10.3. Zapewnienie integralności danych
 
-#### Tabela `ThermalBags` (Torby Termiczne - Inwentarz Zwrotny)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Autoinkrementacja |
-| `SerialNumber` | `VARCHAR(50)` | NIE | UK | Numer seryjny torby (kod QR) |
-| `Status` | `INT` | NIE | - | Status torby (Enum: Available, InTransit, Lost) |
-| `LastCustomerId` | `INT` | TAK | - | U którego klienta torba aktualnie się znajduje |
-
-#### Tabela `BagMovementLogs` (Historia Obiegu Torby)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Autoinkrementacja |
-| `ThermalBagId` | `INT` | NIE | FK | Identyfikator torby (`ThermalBags.Id`) |
-| `FromStatus` | `INT` | NIE | - | Status poprzedni |
-| `ToStatus` | `INT` | NIE | - | Status nowy |
-| `DriverId` | `INT` | TAK | FK | Kurier dokonujący skanowania (`Drivers.Id`) |
-| `RouteStopId` | `INT` | TAK | FK | Przystanek, na którym dokonano operacji |
-| `CreatedAt` | `DATETIMEOFFSET(0)` | NIE | - | Data i godzina rejestracji zdarzenia |
-
----
-
-### 9.2. Moduł 5: Administracja, HR i Komunikacja — Paweł (Branch `Pawciot`)
-
-#### Tabela `Employees` (Pracownicy)
-Tabela połączona relacją 1:1 z tabelą `Users` w celu rozszerzenia danych o aspekty kadrowe.
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Autoinkrementacja |
-| `UserId` | `INT` | NIE | FK | Logiczne konto użytkownika (Unique, FK do `Users.Id` ) |
-| `FirstName` | `NVARCHAR(50)` | NIE | - | Imię |
-| `LastName` | `NVARCHAR(50)` | NIE | - | Nazwisko |
-| `Email` | `VARCHAR(100)` | NIE | - | Służbowy adres e-mail |
-| `PhoneNumber` | `VARCHAR(15)` | TAK | - | Służbowy telefon kontaktowy |
-| `HireDate` | `DATE` | NIE | - | Data zatrudnienia |
-| `TerminationDate` | `DATE` | TAK | - | Data rozwiązania umowy |
-| `DepartmentId` | `INT` | NIE | FK | Przynależność organizacyjna (`Departments.Id`) |
-| `Position` | `NVARCHAR(100)` | NIE | - | Stanowisko pracy (np. `Kucharz`, `Pakowacz`) |
-| `IsActive` | `BIT` | NIE | - | Status zatrudnienia |
-
-#### Tabela `WorkSchedules` (Grafiki Pracy)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Identyfikator wiersza |
-| `UserId` | `INT` | NIE | FK | Identyfikator konta pracownika (`Users.Id`) |
-| `ShiftDate` | `DATE` | NIE | - | Dzień roboczy |
-| `Shift` | `INT` | NIE | - | Zmiana (Enum: `1` - Poranna, `2` - Popołudniowa, `3` - Nocna) |
-| `RoleAtShift` | `NVARCHAR(50)` | TAK | - | Opcjonalna rola na zmianie (np. `Kierownik Kuchni`) |
-
-> [!NOTE]
-> Na tabeli `WorkSchedules` nałożono unikalny klucz złożony `UQ_WorkSchedules_User_Date_Shift` na kolumny (`UserId`, `ShiftDate`, `Shift`), co zapobiega dublowaniu planu pracy pracownika w tym samym czasie.
-
-#### Tabela `LeaveRequests` (Wnioski Urlopowe)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Identyfikator wniosku |
-| `EmployeeId` | `INT` | NIE | FK | Pracownik wnioskujący (`Employees.Id`) |
-| `LeaveType` | `INT` | NIE | - | Typ urlopu (Enum: Wypoczynkowy, Chorobowy, Bezpłatny) |
-| `StartDate` | `DATE` | NIE | - | Początek urlopu |
-| `EndDate` | `DATE` | NIE | - | Koniec urlopu |
-| `Status` | `INT` | NIE | - | Status (Enum: `0` - Oczekuje, `1` - Zatwierdzony, `2` - Odrzucony) |
-| `ApprovedByEmployeeId`| `INT`| TAK | FK | Manager rozpatrujący wniosek (`Employees.Id`) |
-| `RejectionReason` | `NVARCHAR(500)`| TAK | - | Powód ewentualnego odrzucenia |
-
-#### Tabela `Tickets` (Zgłoszenia Pomocy / Reklamacje)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Identyfikator zgłoszenia |
-| `Title` | `NVARCHAR(200)`| NIE | - | Temat reklamacji (np. `Uszkodzone opakowanie`) |
-| `Description` | `NVARCHAR(MAX)`| NIE | - | Treść zgłoszenia klienta |
-| `ClientUserId` | `INT` | NIE | FK | Klient zgłaszający (`Users.Id`) |
-| `AssignedToUserId`| `INT` | TAK | FK | Pracownik obsługi przypisany do zgłoszenia (`Users.Id` ) |
-| `Status` | `INT` | NIE | - | Status zgłoszenia (Enum: Open, InProgress, Resolved, Closed) |
-| `Priority` | `INT` | NIE | - | Priorytet (Enum: Low, Medium, High) |
-| `ClosedAt` | `DATETIMEOFFSET(0)`| TAK | - | Data zamknięcia zgłoszenia |
-
-#### Tabela `TicketAttachments` (Załączniki Zgłoszeń)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Identyfikator załącznika |
-| `TicketId` | `INT` | NIE | FK | Powiązane zgłoszenie (`Tickets.Id`) |
-| `FileUrl` | `NVARCHAR(1000)`| NIE | - | Ścieżka URL do pliku w Object Storage |
-| `FileName` | `NVARCHAR(500)`| NIE | - | Nazwa oryginalna pliku |
-| `FileSizeBytes` | `BIGINT` | NIE | - | Rozmiar pliku w bajtach |
-
-#### Tabela `SystemLogs` (Audyt Logów Transakcyjnych)
-| Kolumna | Typ Danych (SQL Server) | Null | PK/FK | Opis / Więzy |
-| :--- | :--- | :---: | :---: | :--- |
-| `Id` | `INT` | NIE | PK | Autoinkrementacja |
-| `UserId` | `INT` | NIE | FK | Osoba dokonująca operacji (`Users.Id`) |
-| `Action` | `VARCHAR(100)` | NIE | - | Typ operacji (np. `INSERT`, `UPDATE ROLE`, `DELETE`) |
-| `TargetEntity` | `VARCHAR(50)` | NIE | - | Zmodyfikowana tabela (np. `Users`, `Batches`) |
-| `TargetId` | `VARCHAR(100)` | NIE | - | Identyfikator rekordu zmienionego (PK) |
-| `OldValue` | `NVARCHAR(MAX)`| TAK | - | Zrzut danych przed zmianą (JSON) |
-| `NewValue` | `NVARCHAR(MAX)`| TAK | - | Zrzut danych po zmianie (JSON) |
-| `Timestamp` | `DATETIMEOFFSET(0)`| NIE | - | Dokładny czas transakcji |
-| `IPAddress` | `VARCHAR(45)` | TAK | - | Adres IP użytkownika |
-
----
-
-## 10. Procedury Składowane, Widoki, Wyzwalacze (Database Objects)
-W celu zoptymalizowania wydajności operacji oraz zabezpieczenia logiki biznesowej, na poziomie bazy MS SQL Server zaprojektowano i wdrożono dedykowane obiekty bazodanowe.
-
-### 10.1. Widoki Bazodanowe (Database Views)
-
-#### 1. `v_ActiveProductionDemand` (Zapotrzebowanie Produkcyjne)
-Widok agreguje aktywne dostawy na dany dzień z kalendarza dostaw i łączy je ze strukturą diet, wariantów, posiłków oraz recepturami. Zwalnia to aplikację z wykonywania kosztownych operacji łączenia tabel (7-way JOIN) po stronie C#.
-```sql
-CREATE VIEW dbo.v_ActiveProductionDemand AS
-SELECT 
-    c.DeliveryDate,
-    m.Id AS MealId,
-    m.Name AS MealName,
-    dv.Id AS DietVariantId,
-    dv.Name AS VariantName,
-    COUNT(c.Id) AS PlannedQuantity,
-    SUM(r.WeightInGrams * dvm.ServingSizeMultiplier) AS TotalRequiredIngredientWeightGrams,
-    i.Id AS IngredientId,
-    i.Name AS IngredientName
-FROM dbo.DeliveryCalendar c
-INNER JOIN dbo.OrderItems oi ON c.OrderItemId = oi.Id
-INNER JOIN dbo.DietVariants dv ON oi.DietVariantId = dv.Id
-INNER JOIN dbo.DietVariantMeals dvm ON dv.Id = dvm.DietVariantId
-INNER JOIN dbo.Meals m ON dvm.MealId = m.Id
-LEFT JOIN dbo.Recipes r ON m.Id = r.MealId
-LEFT JOIN dbo.Ingredients i ON r.IngredientId = i.Id
-WHERE c.Status = 1 -- Status: Opłacone/Do realizacji
-GROUP BY c.DeliveryDate, m.Id, m.Name, dv.Id, dv.Name, i.Id, i.Name;
-```
-
-#### 2. `v_TraceabilityAudit` (Ślad Sanitarny - HACCP)
-Widok konsoliduje ścieżkę audytową w łańcuchu pokarmowym: od dostawcy surowca, przez ugotowane posiłki, po klienta końcowego. Pozwala to na natychmiastowe wyszukiwanie w przypadku zatruć.
-```sql
-CREATE VIEW dbo.v_TraceabilityAudit AS
-SELECT 
-    pi.BoxCode,
-    pi.PackedAt,
-    b.SupplierBatchNumber,
-    b.ExpiryDate AS BatchExpiryDate,
-    si.Name AS StockItemName,
-    o.OrderNumber,
-    u.Email AS ClientEmail,
-    u.FirstName + ' ' + u.LastName AS ClientName,
-    adr.City + ', ' + adr.Street + ' ' + adr.HouseNumber AS DeliveryAddress
-FROM dbo.PackingItems pi
-INNER JOIN dbo.Batches b ON pi.BatchId = b.Id
-INNER JOIN dbo.StockItems si ON b.StockItemId = si.Id
-INNER JOIN dbo.PackingSessions ps ON pi.PackingSessionId = ps.Id
-INNER JOIN dbo.Orders o ON ps.OrderId = o.Id
-INNER JOIN dbo.Users u ON o.CustomerId = u.Id
-LEFT JOIN dbo.CustomerProfiles cp ON cp.UserId = u.Id
-LEFT JOIN dbo.Addresses adr ON adr.CustomerProfileId = cp.Id;
-```
-
-### 10.2. Wyzwalacze (Triggers)
-
-#### 1. `tr_AuditUserChanges` (Audyt Zmiany Ról)
-Bezpieczeństwo dostępu (RBAC) jest kluczowe. Każda modyfikacja roli użytkownika w tabeli `Users` musi automatycznie generować wpis w logu audytowym, uniemożliwiając cichą zmianę uprawnień.
-```sql
-CREATE TRIGGER dbo.tr_AuditUserChanges
-ON dbo.Users
-AFTER UPDATE
-AS
-BEGIN
-    SET NOCOUNT ON;
-    IF UPDATE(Role)
-    BEGIN
-        INSERT INTO dbo.SystemLogs (UserId, Action, TargetEntity, TargetId, OldValue, NewValue, Timestamp, IPAddress)
-        SELECT 
-            i.Id,
-            'ROLE_CHANGE',
-            'Users',
-            CAST(i.Id AS VARCHAR(100)),
-            (SELECT d.Role FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-            (SELECT i.Role FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-            SYSDATETIMEOFFSET(),
-            'SYSTEM_TRIGGER'
-        FROM inserted i
-        INNER JOIN deleted d ON i.Id = d.Id;
-    END
-END;
-```
-
-#### 2. `tr_UpdateBatchDepleted` (Automatyczne Wygaszanie Partii)
-Zarządza optymalizacją zapytań magazynowych. Gdy ilość w partii spada do 0, partia automatycznie oznaczana jest jako wyczerpana (`IsDepleted = 1`), co natychmiast wyklucza ją z kolejnych wywołań algorytmu FEFO.
-```sql
-CREATE TRIGGER dbo.tr_UpdateBatchDepleted
-ON dbo.Batches
-AFTER UPDATE
-AS
-BEGIN
-    SET NOCOUNT ON;
-    IF UPDATE(CurrentQuantity)
-    BEGIN
-        UPDATE dbo.Batches
-        SET IsDepleted = 1
-        FROM dbo.Batches b
-        INNER JOIN inserted i ON b.Id = i.Id
-        WHERE i.CurrentQuantity <= 0 AND b.IsDepleted = 0;
-    END
-END;
-```
-
-### 10.3. Procedury Składowane (Stored Procedures)
-
-#### 1. `sp_ArchiveSystemLogs` (Optymalizacja Rozmiaru Bazy)
-Procedura uruchamiana automatycznie w nocy (jako Job SQL Server Agent), przenosząca logi starsze niż 6 miesięcy do tabeli archiwalnej w celu utrzymania wysokiej wydajności zapytań produkcyjnych.
-```sql
-CREATE PROCEDURE dbo.sp_ArchiveSystemLogs
-    @RetentionMonths INT = 6
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @CutoffDate DATETIMEOFFSET = DATEADD(MONTH, -@RetentionMonths, SYSDATETIMEOFFSET());
-    
-    BEGIN TRANSACTION;
-    BEGIN TRY
-        -- Kopiowanie do zimnego magazynu (Cold Storage / Archiwum)
-        -- Zakładamy istnienie tabeli SystemLogsArchive o identycznej strukturze
-        INSERT INTO dbo.SystemLogsArchive
-        SELECT * FROM dbo.SystemLogs
-        WHERE Timestamp < @CutoffDate;
-        
-        -- Usunięcie z tabeli produkcyjnej
-        DELETE FROM dbo.SystemLogs
-        WHERE Timestamp < @CutoffDate;
-        
-        COMMIT TRANSACTION;
-    END TRY
-    BEGIN CATCH
-        ROLLBACK TRANSACTION;
-        THROW;
-    END CATCH
-END;
-```
+- `InventoryTransaction.QuantityChanged` dla typów `ProductionIssue` i `WasteDisposal` musi być wartością ujemną (walidacja na poziomie aplikacji).
+- `Batch.ExpiryDate` ≥ `Batch.ReceivedDate` (walidacja przy przyjęciu dostawy).
+- `DeliveryCalendar.DeliveryDate` nie może być w przeszłości przy tworzeniu nowego zamówienia.
+- `ThermalBag.SerialNumber` musi być unikalny w całym systemie (indeks unikalny).
+- Każda zmiana daty ważności partii (edycja ręczna) wymaga zapisu w tabeli `BatchExpiryChangeLog` (powód, data, autor).
 
 ---
 
