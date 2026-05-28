@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Application.DTOs.Logistics;
+using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 
@@ -133,7 +134,10 @@ public sealed class LogisticsController : Controller
             Id = id,
             RegistrationNumber = vehicle.RegistrationNumber,
             Model = vehicle.Model,
-            MaxLoadKg = vehicle.MaxLoadKg
+            MaxLoadKg = vehicle.MaxLoadKg,
+            Status = Enum.TryParse<VehicleStatus>(vehicle.Status, out var status)
+                ? status
+                : VehicleStatus.Active,
         };
         return View("VehiclesEdit", updateRequest);
     }
