@@ -223,14 +223,25 @@ quadrantChart
     "DietVariantMeals" : [0.9, 0.1]
     "DeliveryRouteStops" : [0.8, 0.4]
     "Users" : [0.7, 0.3]
+    "Batches" : [0.65, 0.75]
+    "ProductionPlanItems" : [0.78, 0.60]
+    "BagMovementLogs" : [0.35, 0.82]
+    "Orders" : [0.82, 0.55]
+    "Tickets" : [0.45, 0.38]
+    "WorkSchedules" : [0.55, 0.18]
 ```
 
 1.  **Tabele Krytyczne (High Write / High Read)**:
     *   `PackingItems`: Podczas kompletacji wieczornej (okienko 4-godzinowe) następuje skanowanie 2500 pudełek. Generuje to intensywny ruch zapisu (Insert statusów) oraz odczytu (wyszukiwanie po kodzie kreskowym). Wymaga optymalnego indeksu na `BoxCode`.
+    *   `Batches`: Intensywnie wykorzystywane przez algorytm FEFO (częste wyszukiwanie partii o najkrótszym terminie ważności oraz aktualizacja kolumny `CurrentQuantity` i flagi `IsDepleted`).
+    *   `ProductionPlanItems`: W nocy i rano kucharze aktualizują ugotowane ilości, co wiąże się z częstymi odczytami planów oraz zapisem raportów z postępu prac.
 2.  **Tabele typu Write-Heavy (Intensywny zapis, sporadyczny odczyt)**:
-    *   `SystemLogs` oraz `TemperatureLogs`: Ciągły napływ logów telemetrii i audytu. Tabele te wymagają partycjonowania oraz cyklicznej archiwizacji w celu ochrony przed degradacją wydajności zapytań.
+    *   `SystemLogs` oraz `TemperatureLogs`: Ciągły napływ logów telemetrii (temperatury z lodówek) i audytu operacji. Tabele te wymagają partycjonowania oraz cyklicznej archiwizacji.
+    *   `BagMovementLogs`: Rejestruje każde zeskanowanie torby termicznej przez kierowcę przy wydaniu/odbiorze. Generuje dużą liczbę wierszy logu w krótkim czasie.
 3.  **Tabele typu Read-Heavy (Intensywny odczyt, rzadki zapis)**:
-    *   `Recipes`, `DietVariantMeals` oraz `Meals`: Odczytywane przy każdym wyświetleniu menu przez klienta oraz podczas nocnego generowania planu produkcji i wyliczania food-costu. Wymagają agresywnego indeksowania i keszowania po stronie aplikacji.
+    *   `Recipes`, `DietVariantMeals` oraz `Meals`: Odczytywane przy każdym wyświetleniu menu przez klienta oraz podczas nocnego generowania planu produkcji i wyliczania food-costu. Wymagają agresywnego indeksowania i keszowania.
+    *   `Orders` & `DeliveryRouteStops`: Informacje o zamówieniach i punktach dostaw są masowo czytane przez system logistyki przy generowaniu tras oraz przez kurierów na urządzeniach mobilnych podczas dostaw.
+    *   `Users`: Tabele kont użytkowników, czytana przy każdym zapytaniu autoryzowanym (RBAC) w celu pobrania ról i danych sesyjnych. Rzadko aktualizowana.
 
 ---
 
