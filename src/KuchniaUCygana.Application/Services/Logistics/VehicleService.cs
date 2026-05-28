@@ -29,8 +29,19 @@ public class VehicleService : IVehicleService
         return vehicle == null ? null : _mapper.Map<VehicleDto>(vehicle);
     }
 
+    public async Task<VehicleDto?> GetByRegistrationNumberAsync(string registrationNumber)
+    {
+        var vehicle = await _vehicleRepo.GetByRegistrationNumberAsync(registrationNumber);
+        return vehicle == null ? null : _mapper.Map<VehicleDto>(vehicle);
+    }
+
     public async Task<VehicleDto> CreateAsync(CreateVehicleRequest request)
     {
+        var existing = await _vehicleRepo.GetByRegistrationNumberAsync(request.RegistrationNumber);
+
+        if (existing != null)
+            throw new InvalidOperationException($"Vehicle with registration number '{request.RegistrationNumber}' already exists.");
+
         var vehicle = _mapper.Map<Vehicle>(request);
         var id = await _vehicleRepo.InsertAsync(vehicle);
         var created = await _vehicleRepo.GetByIdAsync(id);

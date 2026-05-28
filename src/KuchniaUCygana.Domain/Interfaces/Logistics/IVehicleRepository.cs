@@ -9,5 +9,5 @@ namespace KuchniaUCygana.Domain.Interfaces.Logistics;
 
 public interface IVehicleRepository : IRepository<Vehicle>
 {
-    // 
+    public Task<Vehicle?> GetByRegistrationNumberAsync(string registrationNumber);
 }

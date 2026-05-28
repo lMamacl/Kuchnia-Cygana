@@ -9,4 +9,5 @@ public interface IVehicleService
     Task<VehicleDto> CreateAsync(CreateVehicleRequest request);
     Task<VehicleDto?> UpdateAsync(int id, UpdateVehicleRequest request);
     Task<bool> DeleteAsync(int id);
+    Task<VehicleDto?> GetByRegistrationNumberAsync(string registrationNumber);
 }
