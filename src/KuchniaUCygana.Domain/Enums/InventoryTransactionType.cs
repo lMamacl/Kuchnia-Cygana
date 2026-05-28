@@ -8,4 +8,7 @@ public enum InventoryTransactionType
     ProductionIssue = 2,
     Adjustment = 3,
     Waste = 4,
+    ManualIssue = 5,
+    ExpiryDateChanged = 6,
 }
+

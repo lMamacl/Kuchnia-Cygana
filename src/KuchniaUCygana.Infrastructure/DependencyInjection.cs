@@ -29,6 +29,7 @@ using KuchniaUCygana.Domain.Interfaces.Services.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.Services.Menu;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
+using KuchniaUCygana.Infrastructure.Auth;
 using KuchniaUCygana.Infrastructure.BackgroundJobs;
 using KuchniaUCygana.Application.Services.Logistics;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
@@ -103,6 +104,8 @@ public static class DependencyInjection
         services.AddScoped<Domain.Services.ProductionPlanGenerator>();
 
         // Module 3 application services.
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IProductionService, Application.Services.ProductionService>();
         services.AddScoped<IWarehouseService, Application.Services.WarehouseService>();
         services.AddScoped<IPackingService, Application.Services.PackingService>();

@@ -10,6 +10,12 @@ public class InventoryTransaction : BaseEntity<long>
 {
     public int BatchId { get; set; }
 
+    /// <summary>
+    /// Denormalizacja: ID składnika magazynowego (bez JOIN do Batches).
+    /// Wypełniane przez migrację 010 backfillem + przez serwis przy nowych transakcjach.
+    /// </summary>
+    public int? StockItemId { get; set; }
+
     public InventoryTransactionType TransactionType { get; set; }
 
     public decimal QuantityChanged { get; set; }
