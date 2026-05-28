@@ -71,4 +71,54 @@ public sealed class TemperatureService : ITemperatureService
             Readings = dtos,
         };
     }
+
+    /// <inheritdoc/>
+    public async Task<IEnumerable<TemperatureChartDataDto>> GetChartDataAsync(string device, int days)
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-days);
+        IEnumerable<TemperatureLog> logs;
+        if (string.IsNullOrWhiteSpace(device))
+        {
+            logs = (await _temperatureLogRepository.GetAllAsync())
+                .Where(l => l.RecordedAt >= cutoff);
+        }
+        else
+        {
+            logs = (await _temperatureLogRepository.GetByLocationAsync(device))
+                .Where(l => l.RecordedAt >= cutoff);
+        }
+
+        return logs
+            .OrderBy(l => l.RecordedAt)
+            .Select(l => new TemperatureChartDataDto
+            {
+                RecordedAt = l.RecordedAt,
+                Temperature = l.RecordedTemperatureCelsius,
+                DeviceName = l.DeviceNameOrLocation,
+                IsAlert = l.RecordedTemperatureCelsius < -25m || l.RecordedTemperatureCelsius > 8m
+            })
+            .ToList();
+    }
+
+    /// <inheritdoc/>
+    public async Task<string> ExportHaccpCsvAsync(DateTimeOffset from, DateTimeOffset to)
+    {
+        var logs = (await _temperatureLogRepository.GetByDateRangeAsync(from, to))
+            .OrderBy(l => l.RecordedAt)
+            .ToList();
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Id,RecordedAt,DeviceNameOrLocation,TemperatureCelsius,IsAlert,Remarks");
+
+        foreach (var l in logs)
+        {
+            var isAlert = l.RecordedTemperatureCelsius < -25m || l.RecordedTemperatureCelsius > 8m;
+            var deviceName = l.DeviceNameOrLocation.Replace(",", ";", StringComparison.OrdinalIgnoreCase);
+            var remarks = (l.Remarks ?? string.Empty).Replace(",", ";", StringComparison.OrdinalIgnoreCase);
+
+            sb.AppendLine($"{l.Id},{l.RecordedAt:yyyy-MM-dd HH:mm:ss},{deviceName},{l.RecordedTemperatureCelsius},{isAlert},{remarks}");
+        }
+
+        return sb.ToString();
+    }
 }

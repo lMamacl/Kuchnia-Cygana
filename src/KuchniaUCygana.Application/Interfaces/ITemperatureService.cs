@@ -16,4 +16,14 @@ public interface ITemperatureService
     /// Generuje raport HACCP za podany zakres dat.
     /// </summary>
     Task<HaccpReportDto> GetHaccpReportAsync(DateOnly from, DateOnly to);
+
+    /// <summary>
+    /// Pobiera dane do wykresu temperatur z danej lokalizacji.
+    /// </summary>
+    Task<IEnumerable<TemperatureChartDataDto>> GetChartDataAsync(string device, int days);
+
+    /// <summary>
+    /// Eksportuje logi temperatur do formatu CSV za podany okres.
+    /// </summary>
+    Task<string> ExportHaccpCsvAsync(DateTimeOffset from, DateTimeOffset to);
 }
