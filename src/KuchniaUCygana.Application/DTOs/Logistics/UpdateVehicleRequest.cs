@@ -1,3 +1,5 @@
+using KuchniaUCygana.Domain.Enums;
+
 namespace KuchniaUCygana.Application.DTOs.Logistics;
 
 public sealed class UpdateVehicleRequest
@@ -6,4 +8,5 @@ public sealed class UpdateVehicleRequest
     public string? RegistrationNumber { get; init; }
     public string? Model { get; init; }
     public decimal? MaxLoadKg { get; init; }
+    public VehicleStatus? Status { get; init; }
 }
