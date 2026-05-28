@@ -599,8 +599,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
             var sessionId = await db.ExecuteScalarAsync<int>(
                 """
-                INSERT INTO [PackingSessions] ([PackingDate], [OrderId], [ClientName], [PackedBy], [Status], [RouteId], [StopNumber], [CreatedBy], [CreatedAt])
-                VALUES (@packingDate, @orderId, @clientName, @packedBy, @status, @routeId, @stopNumber, @auditUser, @now);
+                INSERT INTO [PackingSessions] ([PackingDate], [OrderId], [ClientName], [PackedBy], [Status], [DeliveryCalendarId], [CreatedBy], [CreatedAt])
+                VALUES (@packingDate, @orderId, @clientName, @packedBy, @status, @deliveryCalendarId, @auditUser, @now);
                 SELECT CAST(SCOPE_IDENTITY() as int);
                 """,
                 new
@@ -610,8 +610,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                     clientName,
                     packedBy = sessionStatus == PackingStatus.Pending ? null : "DemoPacker",
                     status = (int)sessionStatus,
-                    routeId = 1,
-                    stopNumber = i + 1,
+                    deliveryCalendarId = (int?)null, // Demo: brak przypisanego DeliveryCalendarId
                     auditUser,
                     now
                 });
