@@ -16,7 +16,7 @@
 |-----------|--------|------|
 | **Encje Produkcji** | ⚠️ | `ProductionPlan`, `ProductionPlanItem`, `ProductionBatch` — istnieją. **Brak**: `MealComponent`, `Recipe` (z wizji — inne niż istniejące `Menu/Recipe`), `RecipeIngredient`, `ChefDailyNote`, `BoxType`, `BoxLabel`, `ProductionIssue`, `CookingLog` |
 | **Encje Magazynu** | ✅ | `StockItem`, `Batch`, `InventoryTransaction`, `InventoryAdjustment`, `TemperatureLog`, `UnitOfMeasure` — kompletne |
-| **Encje Packing** | ✅ | `PackingSession`, `PackingItem`, `PackingLabel`, `PackingManifest` — istnieją z polami `RouteId`, `StopNumber`, `ClientName`, `LabelType` |
+| **Encje Packing** | ⚠️ | `PackingSession`, `PackingItem`, `PackingLabel`, `PackingManifest` — istnieją z polami `RouteId`, `StopNumber`, `ClientName`, `LabelType`. **Planowana zmiana (ustalenia M3↔M4 28.05):** usunięcie `RouteId`/`StopNumber` z `PackingSession`, dodanie `DeliveryCalendarId` — dynamiczne trasowanie JOIN-em do `DeliveryRouteStops` (M4). Szczegóły: `intermodule_integration_qna.md` |
 | **Enumy** | ⚠️ | `InventoryTransactionType` (4 wartości: Receipt/ProductionIssue/Adjustment/Waste — **brak** `ManualIssue`, `ExpiryDateChanged`). `PackingStatus` (7 wartości, **zawiera** `Delivered`/`DeliveryFailed` — wizja sugeruje usunięcie). `PackingItemStatus` (5 wartości — OK). `ProductionItemStatus` (4 wartości — OK). `ProductionPlanStatus` (5 wartości — OK) |
 | **Domain Services** | ✅ | `FefoService`, `FoodCostCalculator`, `ProductionPlanGenerator`, `SmartInventoryAnalyzer` — istnieją |
 | **Interfaces Domain** | ⚠️ | Warehouse: `IBatchRepository`, `IInventoryTransactionRepository`, `IStockItemRepository`, `ITemperatureLogRepository` — OK. Production: `IProductionPlanRepository` — OK. Packing: `IPackingSessionRepository` — OK. **Brak**: `ICurrentUserService` (wizja wymaga) |
@@ -174,6 +174,7 @@ Priorytety:
 | 4.1.3 | Migracja 012: Tabela `PackingStatusLogs` (Id, PackingSessionId FK, OldStatus, NewStatus, ChangedByUserId, ChangedAt, Notes) | NEW `012_CreatePackingStatusLogs.cs` | 🟡 |
 | 4.1.4 | Migracja 013: Dodać do `PackingManifests`: `VerifiedByUserId` (int?), `DriverUserId` (int?) | NEW `013_ExtendPackingManifestsForDriver.cs` | 🟡 |
 | 4.1.5 | Migracja 014: Dodać do `PackingLabels`: `MealsList` (nvarchar(max)?), `ReprintReason` (nvarchar(250)?) | NEW `014_ExtendPackingLabelsForReprint.cs` | 🟡 |
+| 4.1.6 | **Migracja 015: Refaktor `PackingSessions` — dynamiczne trasowanie (ustalenia M3↔M4 z 28.05).** Dodać kolumnę `DeliveryCalendarId` (int?, nullable). Usunąć kolumny `RouteId` i `StopNumber`. Backfill opcjonalny (baza dev). Uzasadnienie: trasa i stop pobierane dynamicznie JOIN-em do `DeliveryRouteStops` (M4) po `DeliveryCalendarId`. Szczegóły w `intermodule_integration_qna.md`. | NEW `015_RefactorPackingSessionsDynamicRouting.cs` | 🔴 |
 
 > **Uwaga:** Numeracja migracji kontynuuje 010+ (nie 307+), ponieważ istniejące migracje M3 to 001-009, a wizja pisała o numerach 307-313 — ale to sprzeczne z aktualnym schematem numeracji. Używamy kolejnego numeru.
 
@@ -186,9 +187,10 @@ Priorytety:
 | 4.2.2 | Dodać `StockItemId` (int?) do encji `InventoryTransaction` | MOD `Domain/Entities/Warehouse/InventoryTransaction.cs` | 🔴 |
 | 4.2.3 | Encja `BatchExpiryChangeLog` | NEW `Domain/Entities/Warehouse/BatchExpiryChangeLog.cs` | 🟡 |
 | 4.2.4 | Encja `PackingStatusLog` | NEW `Domain/Entities/Packing/PackingStatusLog.cs` | 🟡 |
-| 4.2.5 | Interfejs `ICurrentUserService` (GetUserId, GetUserName) | NEW `Domain/Interfaces/ICurrentUserService.cs` | 🟡 |
-| 4.2.6 | Impl `CurrentUserService` (IHttpContextAccessor) | NEW `Infrastructure/Auth/CurrentUserService.cs` | 🟡 |
-| 4.2.7 | Rejestracja DI `ICurrentUserService` | MOD `Infrastructure/DependencyInjection.cs` | 🟡 |
+| 4.2.5 | **Refaktor encji `PackingSession`** — usunąć właściwości `RouteId` (int?) i `StopNumber` (int?), dodać `DeliveryCalendarId` (int?). Zachować `OrderId` (do danych klienta). Uzasadnienie: ustalenia M3↔M4 z 28.05 — dynamiczne trasowanie. | MOD `Domain/Entities/Packing/PackingSession.cs` | 🔴 |
+| 4.2.6 | Interfejs `ICurrentUserService` (GetUserId, GetUserName) | NEW `Domain/Interfaces/ICurrentUserService.cs` | 🟡 |
+| 4.2.7 | Impl `CurrentUserService` (IHttpContextAccessor) | NEW `Infrastructure/Auth/CurrentUserService.cs` | 🟡 |
+| 4.2.8 | Rejestracja DI `ICurrentUserService` | MOD `Infrastructure/DependencyInjection.cs` | 🟡 |
 
 **Punkt kontrolny:** `dotnet build` → ✅. Zapytać o kontynuację.
 
@@ -322,6 +324,7 @@ Priorytety:
 | 7.1.3 | Przenieść widoki: `Packing/Loading.cshtml` → `Loading/Index.cshtml`, `Packing/Delivery.cshtml` → `Loading/Route.cshtml` (lub `Delivery.cshtml`) | MOD/MOVE pliki widoków | 🔴 |
 | 7.1.4 | Stworzyć folder `Views/Loading/` + przenieść widoki | NEW folder + MOVE pliki | 🔴 |
 | 7.1.5 | Zaktualizować `StaffNavigationCatalog.cs` — osobna sekcja "loading" lub zmienić Items w "packing" na nowe kontrolery | MOD `Web/Models/StaffNavigationCatalog.cs` | 🔴 |
+| 7.1.6 | **Refaktor dynamicznego trasowania w `PackingService` i `LoadingService`** (ustalenia M3↔M4 z 28.05). `PackingService.AssignOrdersToRoutes()` — przypisanie torby do trasy na podstawie `DeliveryCalendarId` (JOIN `DeliveryRouteStops`), nie pozycyjnego indeksu. `PackingService.GetPackingBoardAsync()` — `RouteId`/`StopNumber` pobierane dynamicznie zamiast z pola encji. `LoadingService.LoadBagByCodeAsync()` — walidacja trasy torby dynamicznym JOIN-em. `LoadingService.LoadOrderBagAsync()` — j.w. Widoki załadunku — sortowanie LIFO (StopNumber DESC). Szczegóły w `intermodule_integration_qna.md`. | MOD `Application/Services/PackingService.cs`, `Application/Services/LoadingService.cs` | 🔴 |
 
 > ⚠️ **WYSOKIE RYZYKO** — ten refaktor zmienia routing. Wszystkie URL z `/packing/loading/...` zmienią się na `/loading/...`. Trzeba weryfikować w Docker.
 
@@ -472,10 +475,11 @@ graph TD
 | God Service PackingService (41KB) — trudny do podzielenia | 🟡 Śr. | 🟡 | Wyciągnąć metody loading 1:1, nie refaktorować logiki wewnętrznej |
 | M2 (Menu) nie dostarcza API dla receptur → S8.3 zablokowany | 🟡 Śr. | 🟢 | S8.3 jest opcjonalny. `IDietDataProvider` Mock pozostaje aktywny |
 | M4 (Logistyka) nie dostarcza `IDeliveryManifestProvider` → Mock pozostaje | 🟡 Śr. | 🟢 | `MockDeliveryManifestProvider` istnieje. M3 nie blokuje się na M4 |
-| Niejasna granica M3/M4 w kwestii załadunku | 🟡 Śr. | 🟡 | M3 = manifest + załadunek aut. M4 = widok kierowcy + logistyka dostawy. Udokumentowane w sekcji 0.7 |
+| Niejasna granica M3/M4 w kwestii załadunku | 🟡 Śr. | 🟡 | M3 = manifest + załadunek aut. M4 = widok kierowcy + logistyka dostawy. Udokumentowane w sekcji 0.7 + `intermodule_integration_qna.md` |
 | Numeracja migracji (wizja: 307+, kod: 010+) | 🟢 Nis. | 🟢 | Używamy kolejnych numerów (010+). Wizja ma inne numery — ignorujemy |
 | Backfill `StockItemId` w migracji 010 na pustej bazie dev | 🟢 Nis. | 🟢 | Backfill SQL z IF EXISTS. Na dev bazie to kilka rekordów |
 | Chart.js + HTMX w jednym widoku — konflikty JavaScript | 🟡 Śr. | 🟡 | Chart.js ładowany lazy, Alpine.js mediator |
+| **Migracja 015 — usunięcie `RouteId`/`StopNumber` z `PackingSessions`** | 🟡 Śr. | 🟡 | Zmiana schematu wymaga refaktoru serwisów `PackingService` + `LoadingService`. Wykonywane w S4.1.6 (migracja) + S4.2.5 (encja) + S7.1.6 (serwisy). Testować Docker end-to-end po każdym kroku. Dokument ustaleń: `intermodule_integration_qna.md` |
 
 ---
 
