@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dapper;
@@ -46,5 +46,22 @@ public class InventoryTransactionRepository : BaseRepository<InventoryTransactio
             ORDER BY [CreatedAt], [Id];
             """,
             new { fromUtc, toUtc });
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<InventoryTransaction>> GetByStockItemIdAsync(int stockItemId, int page = 1, int pageSize = 25)
+    {
+        using var db = Factory.CreateConnection();
+        var offset = (page - 1) * pageSize;
+
+        return await db.QueryAsync<InventoryTransaction>(
+            """
+            SELECT *
+            FROM [InventoryTransactions]
+            WHERE [StockItemId] = @stockItemId
+            ORDER BY [CreatedAt] DESC, [Id] DESC
+            OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
+            """,
+            new { stockItemId, offset, pageSize });
     }
 }

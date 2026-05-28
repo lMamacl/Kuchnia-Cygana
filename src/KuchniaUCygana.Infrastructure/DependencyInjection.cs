@@ -23,6 +23,7 @@ using KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
+using KuchniaUCygana.Domain.Interfaces.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Domain.Interfaces.Services.Menu;
@@ -60,6 +61,8 @@ public static class DependencyInjection
         services.AddScoped<IProductionPlanRepository, ProductionPlanRepository>();
         services.AddScoped<IPackingSessionRepository, PackingSessionRepository>();
         services.AddScoped<ITemperatureLogRepository, TemperatureLogRepository>();
+        services.AddScoped<IBatchExpiryChangeLogRepository, BatchExpiryChangeLogRepository>();
+        services.AddScoped<IPackingStatusLogRepository, PackingStatusLogRepository>();
 
         // Module 2 (Menu) repositories.
         services.AddScoped<IAllergenRepository, AllergenRepository>();
