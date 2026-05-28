@@ -4,6 +4,7 @@ using Dapper;
 using AutoMapper;
 using KuchniaUCygana.Application.Mappings;
 using KuchniaUCygana.Application.Services;
+using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Entities.Production;
@@ -151,6 +152,22 @@ public sealed class WarehouseRepositoriesSqlServerTests
             new MockDeliveryManifestProvider(),
             mapper,
             NullLogger<PackingService>.Instance);
+    }
+
+    private static LoadingService CreateLoadingService(IDbConnectionFactory connectionFactory, IPackingService packingService)
+    {
+        var mapperConfiguration = new MapperConfiguration(
+            cfg => cfg.AddProfile<ProductionProfile>(),
+            NullLoggerFactory.Instance);
+        var mapper = mapperConfiguration.CreateMapper();
+
+        return new LoadingService(
+            new PackingSessionRepository(connectionFactory),
+            new BaseRepository<PackingLabel>(connectionFactory),
+            new BaseRepository<PackingManifest>(connectionFactory),
+            packingService,
+            mapper,
+            NullLogger<LoadingService>.Instance);
     }
 
     private static async Task<int> CreateStockItemAsync(IDbConnectionFactory connectionFactory, string nameSuffix)
@@ -504,30 +521,31 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task PackingService_GeneratePackingManifestAsync_ShouldPersistJsonSnapshot()
+    public async Task LoadingService_GenerateManifestAsync_ShouldPersistJsonSnapshot()
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 14);
         var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate);
         var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate);
-        var service = CreatePackingService(connectionFactory);
+        var packingService = CreatePackingService(connectionFactory);
+        var loadingService = CreateLoadingService(connectionFactory, packingService);
 
-        var board = await service.GetPackingBoardAsync(deliveryDate);
+        var board = await packingService.GetPackingBoardAsync(deliveryDate);
         var route = board.Routes.Single(r => r.Bags.Any(b => b.OrderId == seededOne.OrderId));
 
         foreach (var bag in route.Bags)
         {
-            var boxes = (await service.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
+            var boxes = (await packingService.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
             foreach (var box in boxes)
             {
-                await service.MarkBoxPackedAsync(box.Id, "IntegrationTest");
+                await packingService.MarkBoxPackedAsync(box.Id, "IntegrationTest");
             }
 
-            await service.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
+            await packingService.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
         }
 
-        var manifest = await service.GeneratePackingManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
-        var latest = await service.GetLatestPackingManifestAsync(deliveryDate, route.RouteId);
+        var manifest = await loadingService.GenerateManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+        var latest = await loadingService.GetManifestAsync(deliveryDate, route.RouteId);
 
         latest.Should().NotBeNull();
         latest!.Id.Should().Be(manifest.Id);
@@ -544,33 +562,34 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task PackingService_LoadOrderBagAsync_ShouldRequireVerifiedRouteManifest()
+    public async Task LoadingService_LoadOrderBagAsync_ShouldRequireVerifiedRouteManifest()
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 15);
         var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate);
-        var service = CreatePackingService(connectionFactory);
-        var board = await service.GetPackingBoardAsync(deliveryDate);
+        var packingService = CreatePackingService(connectionFactory);
+        var loadingService = CreateLoadingService(connectionFactory, packingService);
+        var board = await packingService.GetPackingBoardAsync(deliveryDate);
         var route = board.Routes.Single(r => r.Bags.Any(b => b.OrderId == seeded.OrderId));
         var bag = route.Bags.Single(b => b.OrderId == seeded.OrderId);
 
-        var boxes = (await service.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
+        var boxes = (await packingService.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
         foreach (var box in boxes)
         {
-            await service.MarkBoxPackedAsync(box.Id, "IntegrationTest");
+            await packingService.MarkBoxPackedAsync(box.Id, "IntegrationTest");
         }
 
-        await service.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
+        await packingService.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
 
-        var loadBeforeManifest = async () => await service.LoadOrderBagAsync(bag.PackingSessionId);
+        var loadBeforeManifest = async () => await loadingService.LoadOrderBagAsync(bag.PackingSessionId);
         await loadBeforeManifest.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*manifestu*");
 
-        await service.GeneratePackingManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
-        await service.VerifyPackingManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
-        await service.LoadOrderBagAsync(bag.PackingSessionId);
+        await loadingService.GenerateManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+        await loadingService.VerifyManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+        await loadingService.LoadOrderBagAsync(bag.PackingSessionId);
 
-        var refreshed = await service.GetSessionByIdAsync(bag.PackingSessionId);
+        var refreshed = await packingService.GetSessionByIdAsync(bag.PackingSessionId);
         refreshed!.Status.Should().Be(PackingStatus.Loaded.ToString());
     }
 

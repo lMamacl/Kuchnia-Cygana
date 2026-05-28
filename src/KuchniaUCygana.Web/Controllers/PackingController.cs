@@ -13,10 +13,12 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class PackingController : Controller
 {
     private readonly IPackingService packingService;
+    private readonly ILoadingService loadingService;
 
-    public PackingController(IPackingService packingService)
+    public PackingController(IPackingService packingService, ILoadingService loadingService)
     {
         this.packingService = packingService;
+        this.loadingService = loadingService;
     }
 
     [HttpGet("")]
@@ -54,7 +56,7 @@ public sealed class PackingController : Controller
         {
             SelectedDate = selectedDate,
             Route = route,
-            Manifest = await packingService.GetLatestPackingManifestAsync(selectedDate, routeId),
+            Manifest = await loadingService.GetManifestAsync(selectedDate, routeId),
         });
     }
 
@@ -120,7 +122,7 @@ public sealed class PackingController : Controller
         try
         {
             var generatedBy = User.Identity?.Name ?? "Packing";
-            var manifest = await packingService.GeneratePackingManifestAsync(date, routeId, generatedBy);
+            var manifest = await loadingService.GenerateManifestAsync(date, routeId, generatedBy);
             TempData["Success"] = $"Zapisano manifest dostawy {manifest.ManifestNumber}.";
         }
         catch (InvalidOperationException ex)
@@ -138,7 +140,7 @@ public sealed class PackingController : Controller
         try
         {
             var verifiedBy = User.Identity?.Name ?? "Packing";
-            var manifest = await packingService.VerifyPackingManifestAsync(date, routeId, verifiedBy);
+            var manifest = await loadingService.VerifyManifestAsync(date, routeId, verifiedBy);
             TempData["Success"] = $"Manifest {manifest.ManifestNumber} zweryfikowany.";
         }
         catch (InvalidOperationException ex)
@@ -152,7 +154,7 @@ public sealed class PackingController : Controller
     [HttpGet("loading/{routeId:int}/manifest")]
     public async Task<IActionResult> ManifestJson(int routeId, DateOnly date)
     {
-        var manifest = await packingService.GetLatestPackingManifestAsync(date, routeId);
+        var manifest = await loadingService.GetManifestAsync(date, routeId);
         if (manifest is null)
         {
             TempData["Error"] = $"Brak zapisanego manifestu dla trasy #{routeId} z dnia {date:dd.MM.yyyy}.";
@@ -243,7 +245,7 @@ public sealed class PackingController : Controller
     {
         try
         {
-            await packingService.LoadOrderBagAsync(sessionId);
+            await loadingService.LoadOrderBagAsync(sessionId);
             TempData["Success"] = "Torba zaladowana do auta.";
         }
         catch (InvalidOperationException ex)
@@ -266,7 +268,7 @@ public sealed class PackingController : Controller
 
         try
         {
-            var bag = await packingService.LoadBagByCodeAsync(routeId, transportCode);
+            var bag = await loadingService.LoadBagByCodeAsync(routeId, transportCode);
             TempData["Success"] = $"Zeskanowano i załadowano torbę: {transportCode} (Zamówienie #{bag.OrderId}, Klient: {bag.ClientName})";
         }
         catch (InvalidOperationException ex)
@@ -307,7 +309,7 @@ public sealed class PackingController : Controller
     {
         try
         {
-            await packingService.DispatchDeliveryAsync(date, routeId);
+            await loadingService.DispatchAsync(date, routeId);
             TempData["Success"] = "Cala dostawa zatwierdzona do wysylki.";
         }
         catch (InvalidOperationException ex)

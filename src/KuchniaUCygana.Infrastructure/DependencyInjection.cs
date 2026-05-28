@@ -112,6 +112,7 @@ public static class DependencyInjection
         services.AddScoped<IProductionService, Application.Services.ProductionService>();
         services.AddScoped<IWarehouseService, Application.Services.WarehouseService>();
         services.AddScoped<IPackingService, Application.Services.PackingService>();
+        services.AddScoped<ILoadingService, Application.Services.LoadingService>();
         services.AddScoped<ITemperatureService, Application.Services.TemperatureService>();
 
         // Module 2 (Menu) Domain services.
