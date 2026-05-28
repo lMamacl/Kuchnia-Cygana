@@ -210,10 +210,10 @@ quadrantChart
     title Identyfikacja Obciazenia Tabel (Wydajnosc)
     x-axis Niska Czestotliwosc Odczytu --> Wysoka Czestotliwosc Odczytu
     y-axis Niska Czestotliwosc Zapisu --> Wysoka Czestotliwosc Zapisu
-    quadrant-1 Tabele Krytyczne (High Load)
-    quadrant-2 Glownie Zapis (Write-Heavy)
+    quadrant-1 Tabele Krytyczne High Load
+    quadrant-2 Glownie Zapis Write-Heavy
     quadrant-3 Male obciazenie
-    quadrant-4 Glownie Odczyt (Read-Heavy)
+    quadrant-4 Glownie Odczyt Read-Heavy
     "PackingItems" : [0.85, 0.88]
     "SystemLogs" : [0.2, 0.95]
     "TemperatureLogs" : [0.1, 0.9]
