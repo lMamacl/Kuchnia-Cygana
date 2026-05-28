@@ -1,65 +1,212 @@
+using System;
+using System.Threading.Tasks;
+using KuchniaUCygana.Application.DTOs.Warehouse;
+using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Web.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
+/// <summary>
+/// Kontroler magazynu — stany, przyjęcia, odpisy, inwentaryzacja, temperatury, alerty.
+/// TASK-M3-025 | Stanowisko: Warehouse | Szef: WarehouseManager
+/// </summary>
+[Authorize(Roles = "Warehouse,WarehouseManager,Admin")]
 [Route("warehouse")]
 public sealed class WarehouseController : Controller
 {
+    private readonly IWarehouseService warehouseService;
+    private readonly ITemperatureService temperatureService;
+
+    public WarehouseController(
+        IWarehouseService warehouseService,
+        ITemperatureService temperatureService)
+    {
+        this.warehouseService = warehouseService;
+        this.temperatureService = temperatureService;
+    }
+
+    // ── Stany magazynowe ─────────────────────────────────────
+
+    /// <summary>
+    /// Widok główny magazynu — przegląd stanów z alertami.
+    /// GET /warehouse
+    /// </summary>
     [HttpGet("")]
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
-        this.SetPreview("Magazyn", "Magazyn", "Przegląd stanów i alertów w wersji szkieletowej.");
-        return this.View();
+        var alerts = await warehouseService.GetSmartAlertsAsync();
+        var stockItems = await warehouseService.GetStockOverviewAsync();
+
+        var viewModel = new WarehouseDashboardViewModel
+        {
+            Alerts = alerts,
+            StockItems = stockItems
+        };
+
+        return View(viewModel);
     }
 
+    /// <summary>
+    /// Endpoint HTMX — lista alertów (partial).
+    /// GET /warehouse/alerts
+    /// </summary>
     [HttpGet("alerts")]
-    public IActionResult Alerts()
+    public async Task<IActionResult> Alerts()
     {
-        this.SetPreview("Alerty magazynowe", "Magazyn", "Pusty stan alertów magazynowych.");
-        return this.PartialView("_AlertsPartial");
+        var alerts = await warehouseService.GetSmartAlertsAsync();
+        return PartialView("_AlertsPartial", alerts);
     }
 
+    // ── Przyjęcie dostawy ────────────────────────────────────
+
+    /// <summary>
+    /// Formularz przyjęcia dostawy.
+    /// GET /warehouse/receive
+    /// </summary>
     [HttpGet("receive")]
-    public IActionResult Receive()
+    public async Task<IActionResult> Receive()
     {
-        this.SetPreview("Przyjęcia dostaw", "Magazyn", "Szkielet przyjmowania dostaw bez zapisu do bazy.");
-        return this.View();
+        ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
+        return View(new ReceiveDeliveryRequest());
     }
 
+    /// <summary>
+    /// Przetwarza przyjęcie dostawy — tworzy nową partię.
+    /// POST /warehouse/receive
+    /// </summary>
+    [HttpPost("receive")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Receive(ReceiveDeliveryRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
+            return View(request);
+        }
+
+        var batch = await warehouseService.ReceiveDeliveryAsync(request);
+        TempData["Success"] = $"Dostawa przyjęta. Partia #{batch.Id} ({batch.CurrentQuantity}) zarejestrowana.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    // ── Rejestracja odpadu ───────────────────────────────────
+
+    /// <summary>
+    /// Formularz rejestracji straty/odpadu.
+    /// GET /warehouse/waste
+    /// </summary>
     [HttpGet("waste")]
-    public IActionResult Waste()
+    public async Task<IActionResult> Waste()
     {
-        this.SetPreview("Odpady", "Magazyn", "Rejestr odpadów i strat w wersji preview.");
-        return this.View();
+        ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
+        return View(new RegisterWasteRequest());
     }
 
+    /// <summary>
+    /// Przetwarza rejestrację odpadu — zdejmuje ze stanu wg FEFO.
+    /// POST /warehouse/waste
+    /// </summary>
+    [HttpPost("waste")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Waste(RegisterWasteRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
+            return View(request);
+        }
+
+        await warehouseService.RegisterWasteAsync(request);
+        TempData["Success"] = "Odpad zarejestrowany i zdjęty z magazynu.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    // ── Inwentaryzacja ───────────────────────────────────────
+
+    /// <summary>
+    /// Formularz inwentaryzacyjny — lista składników do przeliczenia.
+    /// GET /warehouse/inventory
+    /// </summary>
     [HttpGet("inventory")]
-    public IActionResult Inventory()
+    public async Task<IActionResult> Inventory()
     {
-        this.SetPreview("Inwentaryzacja", "Magazyn", "Ekran inwentaryzacji gotowy do podpięcia usług.");
-        return this.View();
+        var stockItems = await warehouseService.GetStockOverviewAsync();
+        return View(stockItems);
     }
 
+    /// <summary>
+    /// Przetwarza wyniki inwentaryzacji — korekty stanów.
+    /// POST /warehouse/inventory
+    /// </summary>
+    [HttpPost("inventory")]
+    [Authorize(Roles = "WarehouseManager,Admin")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Inventory(List<StockItemAdjustment> adjustments)
+    {
+        if (!ModelState.IsValid)
+        {
+            var stockItems = await warehouseService.GetStockOverviewAsync();
+            return View(stockItems);
+        }
+
+        await warehouseService.PerformInventoryAsync(adjustments);
+        TempData["Success"] = $"Inwentaryzacja zakończona. Skorygowano {adjustments.Count} pozycji.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    // ── Temperatury / HACCP ──────────────────────────────────
+
+    /// <summary>
+    /// Widok logowania temperatur i historii.
+    /// GET /warehouse/temperatures
+    /// </summary>
     [HttpGet("temperatures")]
-    public IActionResult Temperatures()
+    public async Task<IActionResult> Temperatures()
     {
-        this.SetPreview("Temperatury HACCP", "Magazyn", "Monitoring temperatur HACCP w trybie mock.");
-        return this.View();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var report = await temperatureService.GetHaccpReportAsync(today.AddDays(-1), today);
+        ViewBag.RecentLogs = report.Readings;
+        return View(new LogTemperatureRequest());
     }
 
+    /// <summary>
+    /// Loguje odczyt temperatury.
+    /// POST /warehouse/temperatures
+    /// </summary>
+    [HttpPost("temperatures")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> LogTemperature(LogTemperatureRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var report = await temperatureService.GetHaccpReportAsync(today.AddDays(-1), today);
+            ViewBag.RecentLogs = report.Readings;
+            return View("Temperatures", request);
+        }
+
+        var log = await temperatureService.LogTemperatureAsync(request);
+        TempData["Success"] = $"Temperatura {log.RecordedTemperatureCelsius}°C zapisana ({log.DeviceNameOrLocation}).";
+        return RedirectToAction(nameof(Temperatures));
+    }
+
+    /// <summary>
+    /// Generuje raport HACCP za wybrany zakres dat.
+    /// GET /warehouse/haccp-report?from=2026-05-01&to=2026-05-18
+    /// </summary>
     [HttpGet("haccp-report")]
-    public IActionResult HaccpReport(DateOnly? from, DateOnly? to)
+    [Authorize(Roles = "WarehouseManager,Admin")]
+    public async Task<IActionResult> HaccpReport(DateOnly? from, DateOnly? to)
     {
-        this.ViewBag.DateFrom = from ?? DateOnly.FromDateTime(DateTime.Today.AddDays(-7));
-        this.ViewBag.DateTo = to ?? DateOnly.FromDateTime(DateTime.Today);
-        this.SetPreview("Raport HACCP", "Magazyn", "Raport kontrolny HACCP bez generowania danych domenowych.");
-        return this.View();
-    }
+        var dateFrom = from ?? DateOnly.FromDateTime(DateTime.Today.AddDays(-7));
+        var dateTo = to ?? DateOnly.FromDateTime(DateTime.Today);
 
-    private void SetPreview(string title, string section, string description)
-    {
-        this.ViewData["Title"] = title;
-        this.ViewData["Section"] = section;
-        this.ViewData["Description"] = description;
+        var report = await temperatureService.GetHaccpReportAsync(dateFrom, dateTo);
+
+        ViewBag.DateFrom = dateFrom;
+        ViewBag.DateTo = dateTo;
+        return View(report);
     }
 }

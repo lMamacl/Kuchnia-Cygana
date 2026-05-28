@@ -1,0 +1,184 @@
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Production.PackingSessionDto>
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Foliowanie dań i druk etykiet";
+    ViewData["Section"] = "Kuchnia";
+    ViewData["Description"] = "Ekran pomocniczy dla stanowiska foliowania. Drukowanie etykiet z kodem QR, składnikami, kaloriami i alergenami.";
+
+    DateOnly selectedDate = ViewBag.SelectedDate ?? DateOnly.FromDateTime(DateTime.Today);
+    var allBoxes = Model.SelectMany(s => s.Items.Select(item => new { Session = s, Item = item })).ToList();
+    var pendingCount = allBoxes.Count(b => b.Item.Status == "Pending");
+    var printedCount = allBoxes.Count(b => b.Item.Status == "FoilPrinted" || b.Item.Status == "Packed");
+}
+
+@functions {
+    string TranslateBoxStatus(string status)
+    {
+        return status switch
+        {
+            "Pending" => "Czeka na folię",
+            "FoilPrinted" => "Zafoliowane (Gotowe)",
+            "Packed" => "Kompletacja (Spakowane)",
+            _ => status
+        };
+    }
+
+    string BoxStatusColor(string status)
+    {
+        return status switch
+        {
+            "FoilPrinted" => "azure",
+            "Packed" => "success",
+            _ => "secondary"
+        };
+    }
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body py-4">
+                <div class="row align-items-center g-3">
+                    <div class="col">
+                        <div class="text-uppercase text-secondary small fw-bold">Stanowisko foliowania</div>
+                        <h2 class="h1 mb-1 text-dark">Etykiety posiłków: @selectedDate.ToString("dd.MM.yyyy")</h2>
+                        <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
+                            <span>Wszystkie dania: <strong class="text-dark">@allBoxes.Count</strong></span>
+                            <span>Do zafoliowania: <strong class="text-warning">@pendingCount</strong></span>
+                            <span>Gotowe/Zafoliowane: <strong class="text-success">@printedCount</strong></span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <input type="date"
+                               class="form-control"
+                               value="@selectedDate.ToString("yyyy-MM-dd")"
+                               onchange="window.location.href='?date=' + this.value"
+                               aria-label="Filtruj po dacie" />
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" id="btn-print-selected" class="btn btn-indigo" disabled>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
+                            Drukuj zaznaczone (<span id="selected-count">0</span>)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (allBoxes.Count == 0)
+    {
+        <div class="col-12">
+            <div class="alert alert-info">Brak posiłków do foliowania w wybranym dniu. Upewnij się, że kompletacja toreb została rozpoczęta.</div>
+        </div>
+    }
+    else
+    {
+        <div class="col-12">
+            <div class="card card-premium">
+                <div class="card-header">
+                    <h3 class="card-title">Lista dań do zafoliowania</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-vcenter card-table table-premium">
+                        <thead>
+                            <tr>
+                                <th class="w-1">
+                                    <input type="checkbox" id="select-all-boxes" class="form-check-input" />
+                                </th>
+                                <th>Kod pudełka</th>
+                                <th>Nazwa Posiłku</th>
+                                <th>Zamówienie / Odbiorca</th>
+                                <th>Status</th>
+                                <th class="w-1 text-end">Druk</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var box in allBoxes)
+                            {
+                                var color = BoxStatusColor(box.Item.Status);
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input box-select" data-id="@box.Item.Id" />
+                                    </td>
+                                    <td class="font-monospace fw-bold text-dark">@(box.Item.BoxCode ?? $"BOX-{box.Item.Id:D6}")</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@box.Item.MealName</div>
+                                        <div class="text-secondary small">Wariant diety: #@box.Item.DietVariantId</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark">Zamówienie #@box.Session.OrderId</div>
+                                        <div class="text-secondary small">Klient: @box.Session.ClientName</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@color-lt text-@color d-inline-flex align-items-center gap-1">
+                                            <span class="status-dot bg-@color" style="width: 6px; height: 6px;"></span>
+                                            @TranslateBoxStatus(box.Item.Status)
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-list flex-nowrap justify-content-end">
+                                            <a asp-action="FoilLabel" asp-route-packingItemId="@box.Item.Id" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
+                                                Etykieta
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const selectAll = document.getElementById("select-all-boxes");
+            const checkboxes = document.querySelectorAll(".box-select");
+            const btnPrint = document.getElementById("btn-print-selected");
+            const selectedCountSpan = document.getElementById("selected-count");
+
+            function updateUI() {
+                const checked = document.querySelectorAll(".box-select:checked");
+                selectedCountSpan.textContent = checked.length;
+                btnPrint.disabled = checked.length === 0;
+            }
+
+            if (selectAll) {
+                selectAll.addEventListener("change", function () {
+                    checkboxes.forEach(cb => {
+                        cb.checked = selectAll.checked;
+                    });
+                    updateUI();
+                });
+            }
+
+            checkboxes.forEach(cb => {
+                cb.addEventListener("change", function () {
+                    if (!this.checked && selectAll) {
+                        selectAll.checked = false;
+                    }
+                    updateUI();
+                });
+            });
+
+            if (btnPrint) {
+                btnPrint.addEventListener("click", function () {
+                    const checked = document.querySelectorAll(".box-select:checked");
+                    const ids = Array.from(checked).map(cb => cb.getAttribute("data-id")).join(",");
+                    if (ids) {
+                        const url = '@Url.Action("FoilLabelsBulk", "Production")?ids=' + ids;
+                        window.open(url, '_blank');
+                        setTimeout(function () {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                });
+            }
+        });
+    </script>
+}

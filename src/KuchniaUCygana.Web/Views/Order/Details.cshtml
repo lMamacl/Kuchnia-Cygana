@@ -1,0 +1,157 @@
+﻿@model KuchniaUCygana.Application.DTOs.Orders.OrderDto
+@using KuchniaUCygana.Domain.Enums
+@{
+    ViewData["Title"] = $"Zamówienie {Model.OrderNumber}";
+
+    var (badgeClass, statusText) = Model.Status switch
+    {
+        OrderStatus.Draft => ("bg-secondary", "Koszyk"),
+        OrderStatus.PendingPayment => ("bg-warning text-dark", "Oczekuje na płatność"),
+        OrderStatus.Paid => ("bg-success", "Opłacone"),
+        OrderStatus.InProduction => ("bg-info text-dark", "W produkcji"),
+        OrderStatus.Cancelled => ("bg-danger", "Anulowane"),
+        _ => ("bg-secondary", "Nieznany")
+    };
+}
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1">
+                <li class="breadcrumb-item">
+                    <a asp-action="Index">Moje zamówienia</a>
+                </li>
+                <li class="breadcrumb-item active">@Model.OrderNumber</li>
+            </ol>
+        </nav>
+        <h2 class="mb-0">
+            @Model.OrderNumber
+            <span class="badge @badgeClass fs-6 ms-2">@statusText</span>
+        </h2>
+        <small class="text-muted">
+            Złożone: @Model.CreatedAt.ToString("dd.MM.yyyy HH:mm")
+        </small>
+    </div>
+
+    @if (Model.Status == OrderStatus.PendingPayment || Model.Status == OrderStatus.Draft)
+    {
+        <form asp-action="Cancel" asp-route-orderId="@Model.Id" method="post"
+              x-data="{}"
+              x-on:submit.prevent="confirm('Czy na pewno chcesz anulować to zamówienie?') && $el.submit()">
+            <button type="submit" class="btn btn-outline-danger btn-sm">Anuluj zamówienie</button>
+        </form>
+    }
+</div>
+
+<div class="row g-4">
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header fw-semibold">🍽️ Diety w zamówieniu</div>
+            <div class="card-body p-0">
+                @if (!Model.Items.Any())
+                {
+                    <p class="text-muted p-3 mb-0">Brak pozycji.</p>
+                }
+                else
+                {
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Dieta</th>
+                                <th>Wariant</th>
+                                <th class="text-center">kcal/dzień</th>
+                                <th class="text-center">Liczba dni</th>
+                                <th class="text-end">Cena/dzień</th>
+                                <th class="text-end">Łącznie</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Items)
+                            {
+                                <tr>
+                                    <td><strong>@item.DietName</strong></td>
+                                    <td>@item.VariantName</td>
+                                    <td class="text-center">@item.CaloriesPerDay</td>
+                                    <td class="text-center">@item.TotalDays</td>
+                                    <td class="text-end">
+                                        @item.PricePerDay.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
+                                    </td>
+                                    <td class="text-end">
+                                        <strong>
+                                            @item.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
+                                        </strong>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <td colspan="5" class="text-end fw-semibold">Łącznie brutto:</td>
+                                <td class="text-end fw-semibold">
+                                    @Model.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
+                                </td>
+                            </tr>
+                            @if (Model.DiscountAmount > 0)
+                            {
+                                <tr class="text-success">
+                                    <td colspan="5" class="text-end">Rabat:</td>
+                                    <td class="text-end">
+                                        −@Model.DiscountAmount.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
+                                    </td>
+                                </tr>
+                            }
+                            <tr class="fw-bold">
+                                <td colspan="5" class="text-end">Do zapłaty:</td>
+                                <td class="text-end fs-5">
+                                    @Model.FinalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header fw-semibold">
+                📅 Kalendarz dostaw
+                @if (Model.StartDate.HasValue && Model.EndDate.HasValue)
+                {
+                    <span class="text-muted fw-normal ms-2">
+                        (@Model.StartDate.Value.ToString("dd.MM.yyyy") –
+                        @Model.EndDate.Value.ToString("dd.MM.yyyy"))
+                    </span>
+                }
+            </div>
+            <div class="card-body p-0">
+                @if (!Model.DeliveryDays.Any())
+                {
+                    <p class="text-muted p-3 mb-0">Brak zaplanowanych dostaw.</p>
+                }
+                else
+                {
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Data</th>
+                                <th>Adres dostawy</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var day in Model.DeliveryDays)
+                            {
+                                <partial name="_DeliveryDayRow" model="day" />
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+</div>

@@ -38,9 +38,9 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=${MSSQL_DB_NAME:?MSSQL_DB_NAME is required};User Id=sa;Password=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required};Encrypt=True;TrustServerCertificate=True;
-      - DatabaseSeeding__Enabled=false
+      - DatabaseSeeding__Enabled=true
       - DatabaseSeeding__Mode=Both
-      - DatabaseSeeding__Profile=MinimalRealistic
+      - DatabaseSeeding__Profile=DemoData
       - Stripe__SecretKey=${STRIPE_SECRET}
       - Stripe__PublishableKey=${STRIPE_PUBLISHABLE}
       - OpenAI__ApiKey=${OPENAI_KEY}

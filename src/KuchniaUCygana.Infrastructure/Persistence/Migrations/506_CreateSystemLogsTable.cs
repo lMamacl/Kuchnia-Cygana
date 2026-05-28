@@ -2,7 +2,7 @@ using FluentMigrator;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Migrations;
 
-[Migration(406)]
+[Migration(506)]
 public sealed class CreateSystemLogsTable : Migration
 {
     public override void Up()

@@ -66,7 +66,7 @@
     <a href="#instalacja">04. Instalacja krok po kroku</a>
     <a href="#sekrety">05. Dane i sekrety</a>
     <a href="#uruchamianie">06. Jak uruchamiac</a>
-    <a href="#db">07. Baza, OrmLite, Migrator</a>
+    <a href="#db">07. Baza, Dapper, Migrator</a>
     <a href="#workflow">08. Workflow codzienny</a>
     <a href="#troubleshoot">09. Najczestsze problemy</a>
     <a href="#checklisty">10. Checklisty gotowosci</a>
@@ -102,12 +102,12 @@
             <tr><td>Git + GitHub</td><td>Wersjonowanie i PR</td><td>Codzienna praca</td><td>Dostep do repo, branch workflow</td></tr>
             <tr><td>Docker Desktop</td><td>Uruchomienie aplikacji w kontenerze</td><td>Lokalny run przez compose</td><td>Plik <code>.env</code></td></tr>
             <tr><td>SQLite</td><td>Lokalna baza danych (plik)</td><td>Lokalnie i w kontenerze</td><td>Connection string</td></tr>
-            <tr><td>ServiceStack OrmLite</td><td>DML (CRUD, zapytania)</td><td>Warstwa Infrastructure</td><td>ConnectionFactory</td></tr>
+            <tr><td>Dapper</td><td>DML (CRUD, zapytania)</td><td>Warstwa Infrastructure</td><td>ConnectionFactory</td></tr>
             <tr><td>FluentMigrator</td><td>DDL (schemat tabel, wersjonowanie)</td><td>Migracje przy starcie app</td><td>Pliki migracji z numerami</td></tr>
           </tbody>
         </table>
       </div>
-      <div class="note"><strong>Wazne:</strong> W projekcie zakladamy podzial: <code>FluentMigrator = schema (DDL)</code>, <code>OrmLite = dane (DML)</code>.</div>
+      <div class="note"><strong>Wazne:</strong> W projekcie zakladamy podzial: <code>FluentMigrator = schema (DDL)</code>, <code>Dapper = dane (DML)</code>.</div>
     </section>
 
     <section id="repo" class="section">
@@ -119,7 +119,7 @@
 |  |- KuchniaUCygana.Web/              # MVC, Program.cs, appsettings
 |  |- KuchniaUCygana.Application/      # use-case, DTO, serwisy
 |  |- KuchniaUCygana.Domain/           # encje i kontrakty domenowe
-|  |- KuchniaUCygana.Infrastructure/   # OrmLite, migracje, integracje
+|  |- KuchniaUCygana.Infrastructure/   # Dapper, migracje, integracje
 |- tests/KuchniaUCygana.Tests/         # testy unit/integration
 |- docker/Dockerfile
 |- docker-compose.yml
@@ -229,12 +229,12 @@ docker compose down</pre></div>
     </section>
 
     <section id="db" class="section">
-      <h3>07. Baza danych, OrmLite i FluentMigrator</h3>
+      <h3>07. Baza danych, Dapper i FluentMigrator</h3>
       <h4>Jak to dziala technicznie</h4>
       <ul class="list">
         <li>Connection string jest pobierany z konfiguracji (appsettings/env).</li>
         <li><strong>FluentMigrator</strong> odpala migracje automatycznie przy starcie aplikacji.</li>
-        <li><strong>OrmLite</strong> obsluguje zapisy/odczyty danych w repozytoriach.</li>
+        <li><strong>Dapper</strong> obsluguje zapisy/odczyty danych w repozytoriach.</li>
       </ul>
       <div class="table-wrap">
         <table>

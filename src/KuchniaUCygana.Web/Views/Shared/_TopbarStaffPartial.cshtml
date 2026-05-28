@@ -1,4 +1,22 @@
+@using System.Security.Claims
 @{
+    var isAuthenticated = User.Identity?.IsAuthenticated == true;
+    var userName = isAuthenticated
+        ? User.Identity?.Name ?? "Uzytkownik"
+        : "Podglad uzytkownika";
+    var userRole = User.Claims
+        .Where(claim => claim.Type == ClaimTypes.Role)
+        .Select(claim => claim.Value)
+        .Distinct()
+        .FirstOrDefault() ?? "Brak roli";
+    var avatarText = isAuthenticated
+        ? new string(userName.Where(char.IsLetterOrDigit).Take(2).Select(char.ToUpperInvariant).ToArray())
+        : "PU";
+    if (string.IsNullOrWhiteSpace(avatarText))
+    {
+        avatarText = "PU";
+    }
+
     var searchItems = StaffNavigationCatalog.Sections
         .SelectMany(section => section.Items.Select(item => new
         {
@@ -57,15 +75,15 @@
 
             <div class="nav-item dropdown">
                 <button class="nav-link d-flex lh-1 text-reset p-0 staff-user-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Podglad uzytkownika" aria-label="Podglad uzytkownika">
-                    <span class="avatar avatar-sm staff-avatar">PU</span>
+                    <span class="avatar avatar-sm staff-avatar">@avatarText</span>
                     <span class="d-none d-xl-block ps-2 text-start">
-                        <span class="staff-user-name">Podglad uzytkownika</span>
-                        <span class="staff-user-role">Brak roli</span>
+                        <span class="staff-user-name">@userName</span>
+                        <span class="staff-user-role">@userRole</span>
                     </span>
                 </button>
                 <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
                     <div class="dropdown-header">Preview</div>
-                    <a class="dropdown-item" asp-controller="Staff" asp-action="Index">Profil preview</a>
+                    <a class="dropdown-item" asp-controller="Account" asp-action="Profile">Profil</a>
                     <a class="dropdown-item" asp-controller="Admin" asp-action="Settings">Ustawienia</a>
                 </div>
             </div>

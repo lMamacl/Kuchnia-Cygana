@@ -1,0 +1,96 @@
+﻿@model KuchniaUCygana.Application.DTOs.Orders.CheckoutSummaryDto
+@{
+    ViewData["Title"] = "Podsumowanie zamowienia";
+}
+
+<h2 class="mb-4">Podsumowanie zamowienia</h2>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+
+        {{!-- Pozycje --}}
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">🍽️ Diety</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Dieta</th>
+                            <th class="text-center">Dni</th>
+                            <th class="text-end">Kwota</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@item.DietName</strong>
+                                    <small class="text-muted d-block">@item.VariantName · @item.CaloriesPerDay kcal</small>
+                                </td>
+                                <td class="text-center">@item.TotalDays</td>
+                                <td class="text-end">@item.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {{!-- Adres --}}
+        @if (Model.SelectedAddress is not null)
+        {
+            <div class="card mb-3">
+                <div class="card-header fw-semibold">📍 Adres dostawy</div>
+                <div class="card-body">
+                    <strong>@Model.SelectedAddress.Label</strong><br />
+                    @Model.SelectedAddress.FullAddress
+                </div>
+            </div>
+        }
+
+        {{!-- Kod rabatowy (HTMX) --}}
+        <div id="discount-section">
+            <partial name="_DiscountPartial" model='new KuchniaUCygana.Web.Models.DiscountPartialViewModel
+                                             {
+                                                 OrderId = Model.OrderId,
+                                                 TotalPrice = Model.TotalPrice,
+                                                 DiscountAmount = Model.DiscountAmount,
+                                                 FinalPrice = Model.FinalPrice,
+                                                 WasApplied = Model.DiscountAmount > 0
+                                             }' />
+        </div>
+    </div>
+
+    {{!-- Akcja platnosci --}}
+    <div class="col-lg-4">
+        <div class="card sticky-top" style="top: 1rem;">
+            <div class="card-body">
+                <h5 class="mb-3">Razem do zaplaty</h5>
+                <div class="d-flex justify-content-between mb-1">
+                    <span>Wartosc zamowienia:</span>
+                    <span>@Model.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))</span>
+                </div>
+                @if (Model.DiscountAmount > 0)
+                {
+                    <div class="d-flex justify-content-between mb-1 text-success">
+                        <span>Rabat:</span>
+                        <span>-@Model.DiscountAmount.ToString("C", new System.Globalization.CultureInfo("pl-PL"))</span>
+                    </div>
+                }
+                <hr />
+                <div class="d-flex justify-content-between mb-3">
+                    <strong class="fs-5">Do zaplaty:</strong>
+                    <strong class="fs-5">@Model.FinalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))</strong>
+                </div>
+
+                <form asp-action="ConfirmOrder" method="post">
+                    <input type="hidden" name="orderId" value="@Model.OrderId" />
+                    <button type="submit" class="btn btn-success btn-lg w-100">
+                        Przejdz do platnosci →
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

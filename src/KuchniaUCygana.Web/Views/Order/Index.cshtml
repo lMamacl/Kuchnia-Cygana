@@ -1,0 +1,81 @@
+﻿@model IEnumerable<KuchniaUCygana.Application.DTOs.Orders.OrderSummaryDto>
+@using KuchniaUCygana.Domain.Enums
+@{
+    ViewData["Title"] = "Moje zamówienia";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Moje zamówienia</h2>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">
+        Nie masz jeszcze żadnych zamówień.
+        <a asp-controller="Cart" asp-action="Index" class="alert-link">
+            Przejdź do katalogu diet
+        </a>.
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Numer zamówienia</th>
+                    <th>Data złożenia</th>
+                    <th>Okres dostawy</th>
+                    <th>Status</th>
+                    <th class="text-end">Kwota</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var order in Model)
+                {
+                    var (badgeClass, statusText) = order.Status switch
+                    {
+                        OrderStatus.Draft => ("bg-secondary", "Koszyk"),
+                        OrderStatus.PendingPayment => ("bg-warning text-dark", "Oczekuje na płatność"),
+                        OrderStatus.Paid => ("bg-success", "Opłacone"),
+                        OrderStatus.InProduction => ("bg-info text-dark", "W produkcji"),
+                        OrderStatus.Cancelled => ("bg-danger", "Anulowane"),
+                        _ => ("bg-secondary", "Nieznany")
+                    };
+
+                    <tr>
+                        <td>
+                            <strong>@order.OrderNumber</strong>
+                        </td>
+                        <td class="text-nowrap">
+                            @order.CreatedAt.ToString("dd.MM.yyyy")
+                        </td>
+                        <td class="text-nowrap">
+                            @if (order.StartDate.HasValue && order.EndDate.HasValue)
+                            {
+                                @($"{order.StartDate.Value:dd.MM.yyyy} – {order.EndDate.Value:dd.MM.yyyy}")
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge @badgeClass">@statusText</span>
+                        </td>
+                        <td class="text-end text-nowrap">
+                            @order.FinalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
+                        </td>
+                        <td class="text-end">
+                            <a asp-action="Details" asp-route-orderId="@order.Id"
+                               class="btn btn-sm btn-outline-primary">
+                                Szczegóły
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

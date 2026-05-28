@@ -32,7 +32,7 @@ public sealed class SqlServerMigrationAndSeedingTests
 
         var checks = new (string TableName, string ColumnName, string ExpectedType)[]
         {
-            ("Users", "CreatedAt", "datetime"),
+            ("Users", "CreatedAt", "datetimeoffset"),
             ("Users", "Role", "nvarchar"),
             ("Users", "Email", "nvarchar"),
         };

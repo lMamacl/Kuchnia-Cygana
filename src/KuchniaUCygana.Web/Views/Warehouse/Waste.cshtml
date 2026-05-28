@@ -1,8 +1,96 @@
+@model KuchniaUCygana.Application.DTOs.Warehouse.RegisterWasteRequest
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Odpady";
-    ViewData["Section"] ??= "Magazyn";
-    ViewData["Description"] ??= "Szkielet rejestracji strat i odpisow.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Zarejestruj Odpad";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = "Zgłoś straty ilościowe lub jakościowe składnika w celu zdjęcia ich ze stanu według zasady FEFO.";
 
+    var stockItems = ViewBag.StockItems as IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
+                     ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
+
+    var reasons = new[]
+    {
+        "Przeterminowanie",
+        "Uszkodzenie opakowania",
+        "Wada jakościowa / organoleptyczna",
+        "Zanieczyszczenie",
+        "Błąd kulinarny"
+    };
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-xl-6">
+        <div class="card card-premium">
+            <div class="card-status-top bg-danger"></div>
+            <div class="card-header bg-transparent py-3">
+                <h3 class="card-title d-flex align-items-center gap-2 text-danger">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-danger" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
+                    Zgłoszenie straty / utylizacji
+                </h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="Waste" method="post" autocomplete="off">
+                    @Html.AntiForgeryToken()
+
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            <div class="d-flex">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
+                                </div>
+                                <div>
+                                    <h4 class="alert-title">Wykryto błędy formularza</h4>
+                                    <div class="text-secondary">Proszę poprawić poniższe pola, aby zgłosić stratę.</div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label required">Składnik magazynowy</label>
+                        <select asp-for="StockItemId" class="form-select" aria-label="Wybierz składnik">
+                            <option value="">-- Wybierz z listy --</option>
+                            @foreach (var item in stockItems)
+                            {
+                                <option value="@item.Id">@item.Name (@item.UnitSymbol)</option>
+                            }
+                        </select>
+                        <span asp-validation-for="StockItemId" class="text-danger small"></span>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required">Ilość do odpisu</label>
+                            <input type="number" step="0.01" asp-for="Quantity" class="form-control" placeholder="0.00" />
+                            <span asp-validation-for="Quantity" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required">Powód spisania</label>
+                            <select asp-for="Reason" class="form-select" aria-label="Wybierz powód">
+                                <option value="">-- Wybierz powód --</option>
+                                @foreach (var r in reasons)
+                                {
+                                    <option value="@r">@r</option>
+                                }
+                            </select>
+                            <span asp-validation-for="Reason" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Numer konkretnej partii (opcjonalnie)</label>
+                        <input type="number" asp-for="BatchId" class="form-control" placeholder="Pozostaw puste w celu automatycznego rozliczenia FEFO" />
+                        <span asp-validation-for="BatchId" class="text-danger small"></span>
+                        <small class="form-hint">Jeśli pole pozostanie puste, system pobierze ilość z najwcześniej wygasającej partii.</small>
+                    </div>
+
+                    <div class="card-footer bg-transparent p-0 pt-3 d-flex justify-content-between">
+                        <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
+                        <button type="submit" class="btn btn-danger">Zgłoś Odpad</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,8 +1,9 @@
 using FluentMigrator;
+using System.Data;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Migrations;
 
-[Migration(401)]
+[Migration(501)]
 public sealed class CreateTicketAttachmentsTable : Migration
 {
     public override void Up()

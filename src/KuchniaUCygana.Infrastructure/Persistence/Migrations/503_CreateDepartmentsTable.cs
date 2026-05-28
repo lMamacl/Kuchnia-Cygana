@@ -2,7 +2,7 @@ using FluentMigrator;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Migrations;
 
-[Migration(403)]
+[Migration(503)]
 public sealed class CreateDepartmentsTable : Migration
 {
     public override void Up()

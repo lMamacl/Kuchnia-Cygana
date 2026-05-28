@@ -79,13 +79,21 @@ var app = builder.Build();
 app.UseSerilogRequestLogging();
 
 QuestPDF.Settings.License = LicenseType.Community;
-MigrationRunner.RunMigrations(app.Services, app.Logger);
-await DatabaseSeedingBootstrapper.TrySeedAsync(
-    app.Services,
-    app.Configuration,
-    app.Environment,
-    app.Logger,
-    isSeedCommand ? SeedingTrigger.Command : SeedingTrigger.Startup);
+var skipDatabaseStartup = !isSeedCommand && app.Configuration.GetValue<bool>("DatabaseStartup:Skip");
+if (skipDatabaseStartup)
+{
+    app.Logger.LogInformation("Database startup tasks skipped by configuration.");
+}
+else
+{
+    MigrationRunner.RunMigrations(app.Services, app.Logger);
+    await DatabaseSeedingBootstrapper.TrySeedAsync(
+        app.Services,
+        app.Configuration,
+        app.Environment,
+        app.Logger,
+        isSeedCommand ? SeedingTrigger.Command : SeedingTrigger.Startup);
+}
 
 if (isSeedCommand)
 {

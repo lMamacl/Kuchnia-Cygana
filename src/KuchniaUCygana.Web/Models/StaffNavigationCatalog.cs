@@ -61,6 +61,7 @@ public static class StaffNavigationCatalog
                 new("Plan dnia", "Production", "Plan", "calendar", "Podglad planu produkcyjnego.", "plan dnia produkcji"),
                 new("Karty gotowania", "Production", "CookingCards", "clipboard", "Lista kart gotowania do realizacji.", "karty gotowania receptury"),
                 new("Karta gotowania", "Production", "CookingCard", "clipboard-check", "Podglad pojedynczej karty gotowania.", "karta gotowania szczegoly"),
+                new("Foliowanie dań", "Production", "FoilPrinting", "tag", "Ekran foliowania dań i druku etykiet produktowych.", "foliowanie etykiety pakowanie"),
             ]),
         new(
             "warehouse",
@@ -91,12 +92,12 @@ public static class StaffNavigationCatalog
             "packing",
             "Kompletacja",
             "packing",
-            "Sesje pakowania, etykiety i przygotowanie wysylki.",
+            "Kompletacja toreb, zaladunek aut i manifesty dostaw.",
             true,
             [
-                new("Sesje pakowania", "Packing", "Index", "packing", "Lista sesji pakowania.", "pakowanie kompletacja sesje"),
-                new("Aktywna sesja", "Packing", "Session", "box", "Podglad aktywnej sesji.", "aktywna sesja pakowania"),
-                new("Etykiety", "Packing", "LabelsIndex", "tag", "Etykiety i QR w trybie preview.", "etykiety qr pakowanie"),
+                new("Kompletacja toreb", "Packing", "Index", "packing", "Pakowanie pudelek do toreb.", "pakowanie kompletacja torby"),
+                new("Zaladunek aut", "Packing", "Loading", "truck", "Manifesty dostaw i zaladunek aut.", "zaladunek auta manifest dostawa"),
+                new("Etykiety transportowe", "Packing", "LabelsIndex", "tag", "Etykiety transportowe w trybie preview.", "etykiety qr transport"),
             ]),
         new(
             "diets",

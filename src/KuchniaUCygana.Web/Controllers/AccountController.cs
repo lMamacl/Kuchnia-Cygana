@@ -74,6 +74,22 @@ public sealed class AccountController : Controller
             new Claim(ClaimTypes.Role, role)
         };
 
+        // Manager automatycznie dostaje też claim bazowego pracownika
+        if (role.EndsWith("Manager", StringComparison.Ordinal))
+        {
+            var baseRole = role.Replace("Manager", string.Empty);
+            claims.Add(new Claim(ClaimTypes.Role, baseRole));
+        }
+
+        // Admin dostaje dostęp do wszystkiego — dodajemy wszystkie role
+        if (role == "Admin")
+        {
+            foreach (var r in new[] { "Kitchen", "KitchenManager", "Warehouse", "WarehouseManager", "Packing", "PackingManager", "Dietitian", "Driver" })
+            {
+                claims.Add(new Claim(ClaimTypes.Role, r));
+            }
+        }
+
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         var principal = new ClaimsPrincipal(identity);
 
@@ -86,6 +102,8 @@ public sealed class AccountController : Controller
             if (role.Contains("Kitchen")) return RedirectToAction("Index", "Production");
             if (role.Contains("Warehouse")) return RedirectToAction("Index", "Warehouse");
             if (role.Contains("Packing")) return RedirectToAction("Index", "Packing");
+            if (role.Contains("Dietitian")) return RedirectToAction("Index", "DietEditor");
+            if (role.Contains("Driver")) return RedirectToAction("Index", "DriverMobile");
             return RedirectToAction("Index", "Staff");
         }
 

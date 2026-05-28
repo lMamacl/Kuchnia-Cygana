@@ -1,0 +1,15 @@
+﻿@model KuchniaUCygana.Application.DTOs.Orders.CartDto
+@{
+    ViewData["Title"] = "Koszyk";
+}
+
+<h2 class="mb-4">Koszyk</h2>
+
+@if (TempData["Error"] is string err)
+{
+    <div class="alert alert-warning">@err</div>
+}
+
+<div id="cart-contents">
+    <partial name="_CartItems" model="Model" />
+</div>

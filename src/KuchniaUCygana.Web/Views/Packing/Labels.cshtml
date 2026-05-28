@@ -1,8 +1,129 @@
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Production.PackingLabelDto>
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Etykiety sesji";
-    ViewData["Section"] ??= "Kompletacja";
-    ViewData["Description"] ??= "Placeholder etykiet QR dla sesji pakowania.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Etykiety transportowe z kodem QR";
+    ViewData["Section"] = "Pakowanie";
+    ViewData["Description"] = "Naklejki transportowe na torby cateringowe. Folia pojedynczych dan jest osobnym etapem kuchni.";
 
+    object sessionIdValue = ViewBag.SessionId;
+    object routeIdValue = ViewBag.RouteId;
+    object selectedDateValue = ViewBag.SelectedDate;
+    int sessionId = sessionIdValue is int sessionValue ? sessionValue : 0;
+    int routeId = routeIdValue is int routeValue ? routeValue : 0;
+    DateOnly? selectedDate = selectedDateValue is DateOnly dateValue ? dateValue : null;
+}
+
+@section Styles {
+    <style>
+        .label-sticker {
+            border: 2px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 1.5rem;
+            background: #fff;
+            max-width: 450px;
+            margin: 0 auto;
+            position: relative;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            min-height: 220px;
+        }
+
+        .label-qr {
+            width: 110px;
+            height: 110px;
+            border: 1px solid #e2e8f0;
+            padding: 4px;
+            background: #fff;
+        }
+
+        @@media print {
+            body * {
+                visibility: hidden;
+            }
+
+            .printable-area,
+            .printable-area * {
+                visibility: visible;
+            }
+
+            .printable-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+
+            .label-sticker {
+                page-break-inside: avoid;
+                margin-bottom: 2cm;
+                border: 2px solid #000 !important;
+                box-shadow: none !important;
+            }
+
+            .d-print-none {
+                display: none !important;
+            }
+        }
+    </style>
+}
+
+<div class="card card-premium d-print-none mb-4">
+    <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+            <h3 class="mb-1 text-dark">Drukuj etykiete transportowa</h3>
+            <p class="text-secondary small mb-0">Ten wydruk dotyczy torby/paczki zamowienia. Nie generuje folii na pojedyncze dania.</p>
+        </div>
+        <div class="btn-list">
+            <button class="btn btn-primary" onclick="window.print();">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
+                Uruchom druk
+            </button>
+            @if (routeId > 0 && selectedDate.HasValue)
+            {
+                <a asp-action="Delivery" asp-route-routeId="@routeId" asp-route-date="@selectedDate.Value.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wroc do dostawy</a>
+            }
+            else if (sessionId > 0)
+            {
+                <a asp-action="Session" asp-route-sessionId="@sessionId" class="btn btn-outline-secondary">Wroc do torby</a>
+            }
+            else
+            {
+                <a asp-action="Index" class="btn btn-outline-secondary">Wroc do pakowania</a>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="printable-area">
+    <div class="row g-4">
+        @foreach (var label in Model)
+        {
+            <div class="col-md-6 col-xl-4">
+                <div class="label-sticker">
+                    <div class="d-flex justify-content-between align-items-start border-bottom pb-2 mb-3">
+                        <div>
+                            <div class="text-uppercase text-secondary small fw-bold" style="font-size: 0.75rem;">Kuchnia u Cygana</div>
+                            <h4 class="mb-0 text-dark">Etykieta transportowa #@label.Id</h4>
+                        </div>
+                        <span class="badge bg-azure-lt text-azure fw-bold">
+                            @(string.IsNullOrWhiteSpace(label.RouteInfo) ? "Transport" : label.RouteInfo)
+                        </span>
+                    </div>
+
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <div class="h3 mb-1 text-dark">@label.ClientName</div>
+                            <div class="text-secondary small mb-2">@(label.DeliveryWindow ?? "Brak okna dostawy")</div>
+                            <div class="small text-muted mt-2">
+                                Status: <strong>Do zaladunku</strong><br />
+                                Kod: <strong>@(label.QrCode.Length > 8 ? label.QrCode.Substring(0, 8) : label.QrCode)</strong>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=@(label.QrCode)" class="label-qr" alt="Kod QR" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>

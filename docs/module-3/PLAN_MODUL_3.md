@@ -49,14 +49,11 @@ Moduł 3 realizuje pełny cykl operacyjny kuchni cateringowej:
 - Migration `002_CreateWarehouseTables` — 5 tabel magazynowych
 
 ### Braki ⬜
-- Brak encji produkcyjnych (`ProductionPlan`, `ProductionPlanItem`)
-- Brak encji kompletacji (`PackingSession`, `PackingItem`, `PackingLabel`)
-- Brak serwisów domenowych i aplikacyjnych
-- Brak DTOs, AutoMapper Profiles, Walidatorów
-- Brak kontrolerów i widoków
-- Brak testów
-- Brak QuestPDF (Karta Produkcyjna)
-- Brak mocków dla M1/M2 (folder `Domain/Mocks` istnieje, ale pusty)
+- [ ] DTOs, AutoMapper Profiles, Walidatory (Sprint 3)
+- [ ] Serwisy aplikacyjne (Sprint 3)
+- [ ] Kontrolery i widoki (Sprint 4)
+- [ ] Testy jednostkowe serwisów i walidatorów
+- [ ] QuestPDF (Karta Produkcyjna, Etykiety)
 
 ---
 
@@ -66,27 +63,27 @@ Moduł 3 realizuje pełny cykl operacyjny kuchni cateringowej:
 **Priorytet:** 🔴 KRYTYCZNY  
 **Zależności:** Brak (korzysta z istniejącego Domain Core)
 
-#### A.1: Encje Produkcyjne
+#### A.1: Encje Produkcyjne ✅
 | Encja | Klasa bazowa | Opis |
 |-------|-------------|------|
 | `ProductionPlan` | `AuditableEntity` | Dzienny plan produkcji (data, status, powiązanie z zamówieniami) |
 | `ProductionPlanItem` | `AuditableEntity` | Pozycja planu: posiłek × ilość × status ugotowania |
 | `ProductionBatch` | `AuditableEntity` | Półprodukty (buliony, sosy) — powiązanie plan↔batch |
 
-#### A.2: Encje Kompletacji i Załadunku
+#### A.2: Encje Kompletacji i Załadunku ✅
 | Encja | Klasa bazowa | Opis |
 |-------|-------------|------|
 | `PackingSession` | `AuditableEntity` | Sesja pakowania (data, magazynier, status) |
 | `PackingItem` | `AuditableEntity` | Pozycja paczki: klient × dieta × wariant × status |
 | `PackingLabel` | `BaseEntity` | Etykieta QR z metadanymi (klient, alergeny, trasa) |
 
-#### A.3: Encje Nadzoru
+#### A.3: Encje Nadzoru i Korekt ✅
 | Encja | Klasa bazowa | Opis | Status |
 |-------|-------------|------|--------|
 | `TemperatureLog` | `AuditableEntity<long>` | Log temperatur HACCP | ✅ Gotowe |
-| `InventoryAdjustment` | `AuditableEntity` | Korekta inwentaryzacyjna |
+| `InventoryAdjustment` | `AuditableEntity` | Korekta inwentaryzacyjna | ✅ Gotowe |
 
-#### A.4: Enumy Produkcyjne
+#### A.4: Enumy Produkcyjne ✅
 | Enum | Wartości |
 |------|---------|
 | `ProductionPlanStatus` | `Draft`, `Active`, `InProgress`, `Completed`, `Cancelled` |
@@ -94,55 +91,55 @@ Moduł 3 realizuje pełny cykl operacyjny kuchni cateringowej:
 | `PackingStatus` | `Pending`, `Packed`, `Labeled`, `Loaded`, `Dispatched` |
 
 #### A.5: Interfejsy Repozytoriów
-- `IProductionPlanRepository` — z `GetByDateAsync(DateOnly date)`
-- `IPackingSessionRepository` — z `GetActiveByDateAsync(DateOnly date)`
-- `IStockItemRepository` — z `GetBelowMinimumAsync()`
-- `ITemperatureLogRepository` — z `GetByDateRangeAsync()`
+- `IProductionPlanRepository` — z `GetByDateAsync(DateOnly date)` ✅
+- `IPackingSessionRepository` — z `GetActiveByDateAsync(DateOnly date)` ✅
+- `IStockItemRepository` — z `GetBelowMinimumAsync()` ✅
+- `ITemperatureLogRepository` — z `GetByDateRangeAsync()` ✅
 
-#### A.6: Mocki Modułów 1 i 2
+#### A.6: Interfejsy zewnętrzne ✅
 Interfejsy w `Domain/Interfaces/External/`:
-- `IOrderDataProvider` — pobiera aktywne zamówienia (mock → potem adapter M1)
-- `IDietDataProvider` — pobiera receptury i plan posiłków (mock → potem adapter M2)
-- `IDeliveryManifestProvider` — pobiera przypisania aut (mock → potem adapter M4)
+- `IOrderDataProvider` — pobiera aktywne zamówienia (M1) ✅
+- `IDietDataProvider` — pobiera receptury i plan posiłków (M2) ✅
+- `IDeliveryManifestProvider` — pobiera przypisania aut (M4) ✅
 
 ---
 
-### ETAP B — Migracje Bazodanowe
+### ETAP B — Migracje Bazodanowe ✅
 **Priorytet:** 🔴 KRYTYCZNY  
 **Zależności:** ETAP A (encje muszą istnieć)
 
-| # | Migracja | Tabele |
-|---|----------|--------|
-| B.1 | `003_CreateProductionTables` | `ProductionPlans`, `ProductionPlanItems`, `ProductionBatches` |
-| B.2 | `004_CreatePackingTables` | `PackingSessions`, `PackingItems`, `PackingLabels` |
-| B.3 | `005_CreateInventoryAdjustments` | `InventoryAdjustments` |
+| # | Migracja | Tabele | Status |
+|---|----------|--------|--------|
+| B.1 | `004_CreateProductionTables` | `ProductionPlans`, `ProductionPlanItems`, `ProductionBatches` | ✅ |
+| B.2 | `005_CreatePackingTables` | `PackingSessions`, `PackingItems`, `PackingLabels` | ✅ |
+| B.3 | `006_CreateInventoryAdjustments` | `InventoryAdjustments` | ✅ |
 
 ---
 
-### ETAP C — Repozytoria i Warstwa Dostępu do Danych
+### ETAP C — Repozytoria i Warstwa Dostępu do Danych ✅
 **Priorytet:** 🟡 WYSOKI  
 **Zależności:** ETAP B (tabele muszą istnieć)
 
-| # | Repozytorium | Kluczowe metody |
-|---|-------------|-----------------|
-| C.1 | `StockItemRepository` | `GetBelowMinimumAsync()`, `GetByIngredientIdAsync()` |
-| C.2 | `ProductionPlanRepository` | `GetByDateAsync()`, `GetWithItemsAsync()` |
-| C.3 | `PackingSessionRepository` | `GetActiveByDateAsync()`, `GetWithItemsAsync()` |
-| C.4 | `TemperatureLogRepository` | `GetByDateRangeAsync()`, `GetByLocationAsync()` |
-| C.5 | Rejestracja DI — aktualizacja `DependencyInjection.cs` |
+| # | Repozytorium | Kluczowe metody | Status |
+|---|-------------|-----------------|--------|
+| C.1 | `StockItemRepository` | `GetBelowMinimumAsync()`, `GetByIngredientIdAsync()` | ✅ |
+| C.2 | `ProductionPlanRepository` | `GetByDateAsync()`, `GetWithItemsAsync()` | ✅ |
+| C.3 | `PackingSessionRepository` | `GetActiveByDateAsync()`, `GetWithItemsAsync()` | ✅ |
+| C.4 | `TemperatureLogRepository` | `GetByDateRangeAsync()`, `GetByLocationAsync()` | ✅ |
+| C.5 | Rejestracja DI — aktualizacja `DependencyInjection.cs` | Pełna rejestracja wszystkich repo | ✅ |
 
 ---
 
-### ETAP D — Serwisy Domenowe (logika biznesowa w Domain)
+### ETAP D — Serwisy Domenowe ✅
 **Priorytet:** 🟡 WYSOKI  
 **Zależności:** ETAP C (repozytoria muszą istnieć)
 
-| # | Serwis | Odpowiedzialność |
-|---|--------|-----------------|
-| D.1 | `FefoService` | Algorytm FEFO — wybór partii do zdjęcia wg daty ważności |
-| D.2 | `FoodCostCalculator` | Obliczanie zapotrzebowania materiałowego (receptury × zamówienia) |
-| D.3 | `SmartInventoryAnalyzer` | Analiza dat ważności vs. lead-time, generowanie alertów |
-| D.4 | `ProductionPlanGenerator` | Generowanie planu produkcji z zamówień i receptur |
+| # | Serwis | Odpowiedzialność | Status |
+|---|--------|-----------------|--------|
+| D.1 | `FefoService` | Algorytm FEFO — wybór partii do zdjęcia wg daty ważności | ✅ |
+| D.2 | `FoodCostCalculator` | Obliczanie zapotrzebowania materiałowego (receptury × zamówienia) | ✅ |
+| D.3 | `SmartInventoryAnalyzer` | Analiza dat ważności vs. lead-time, generowanie alertów | ✅ |
+| D.4 | `ProductionPlanGenerator` | Generowanie planu produkcji z zamówień i receptur | ✅ |
 
 ---
 
@@ -221,8 +218,8 @@ Interfejsy w `Domain/Interfaces/External/`:
 | I.2 | Unit: Serwisy aplikacyjne | `ProductionService`, `WarehouseService`, `PackingService` |
 | I.3 | Unit: Walidatory | Wszystkie FluentValidation validators |
 | I.4 | Unit: AutoMapper | Testy mapowań (brak null, poprawne pola) |
-| I.5 | Integration: Repozytoria | SQLite in-memory, FEFO query, Soft Delete |
-| I.6 | Seedery testowe | `StockItemSeeder`, `BatchSeeder` (Bogus) |
+| I.5 | Integration: Repozytoria | SQL Server, FEFO query, Soft Delete | ✅ |
+| I.6 | Seedery testowe | `WarehouseDataSeeder` (Bogus) | ✅ |
 
 ---
 
@@ -254,11 +251,11 @@ Interfejsy w `Domain/Interfaces/External/`:
 
 | Kryterium | Opcja A: FEFO w serwisie | Opcja B: FEFO w SQL (repozytorium) ✅ |
 |-----------|-------------------------|--------------------------------------|
-| Wydajność | Niska — załadowanie wszystkich partii do pamięci | Wysoka — SQLite robi ORDER BY/LIMIT |
+| Wydajność | Niska — załadowanie wszystkich partii do pamięci | Wysoka — SQL Server robi ORDER BY/LIMIT |
 | Atomowość | Ryzyko race condition | Lepsza — transakcja DB |
-| Testowalność | Łatwiejsza | Wymaga SQLite in-memory |
+| Testowalność | Łatwiejsza | Wymaga bazy SQL (Integration Test) |
 
-**Wybór:** Opcja B — kluczowe zapytania FEFO (`ORDER BY ExpiryDate ASC, ReceivedDate ASC WHERE IsDepleted = false`) wykonywane w repozytorium (`BatchRepository.GetAvailableFefoAsync()`). Logika decyzji (ile zdjąć) w serwisie domenowym.
+**Wybór:** Opcja B — kluczowe zapytania FEFO (`ORDER BY ExpiryDate ASC, ReceivedDate ASC WHERE IsDepleted = false`) wykonywane w repozytorium (`BatchRepository.GetAvailableFefoAsync()`). Logika decyzji (ile zdjąć) w serwisie domenowym. Sprawdzone w testach integracyjnych na SQL Server.
 
 ### Alternatywa 4: Encje kompletacji jako osobna grupa vs. osadzenie w produkcji
 
@@ -300,8 +297,8 @@ ETAP A (Domain: Encje, Enumy, Interfejsy, Mocki)
 
 ## 6. Kryteria Ukończenia Modułu
 
-- [ ] Wszystkie encje zdefiniowane i zmigowane
-- [ ] Repozytoria z testami integracyjnymi (SQLite in-memory)
+- [x] Wszystkie encje zdefiniowane i zmigowane
+- [x] Repozytoria z testami integracyjnymi (SQL Server)
 - [ ] Serwisy domenowe z testami jednostkowymi (≥ 80% coverage)
 - [ ] Serwisy aplikacyjne z testami jednostkowymi (Moq)
 - [ ] AutoMapper profiles z testami konfiguracji

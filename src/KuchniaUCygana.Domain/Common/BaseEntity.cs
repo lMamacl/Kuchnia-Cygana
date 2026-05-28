@@ -14,6 +14,7 @@ public abstract class BaseEntity<TId> : IEquatable<BaseEntity<TId>>
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? UpdatedAt { get; set; }
 
+    // Domain events are runtime-only and are not persisted.
     private readonly List<IDomainEvent> _domainEvents = new();
     
     [NotMapped]

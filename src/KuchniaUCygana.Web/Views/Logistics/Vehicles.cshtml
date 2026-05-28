@@ -1,5 +1,157 @@
+@model IEnumerable<VehicleDto>
 @{
     Layout = "_LayoutStaff";
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row row-deck row-cards mb-4">
+    <!-- Statystyka 1: Flota ogółem -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader">Flota ogółem</div>
+                </div>
+                <div class="h1 mb-3">@Model.Count()</div>
+                <div class="d-flex mb-2">
+                    <div class="text-secondary">Wszystkie zarejestrowane pojazdy</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Statystyka 2: W użyciu (Aktywne) -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader text-success">Aktywne</div>
+                </div>
+                <div class="h1 mb-3 text-success">@Model.Count(v => v.Status == "Active")</div>
+                <div class="d-flex mb-2">
+                    <div class="text-secondary">Pojazdy gotowe do drogi</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Statystyka 3: W serwisie -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader text-warning">W serwisie</div>
+                </div>
+                <div class="h1 mb-3 text-warning">@Model.Count(v => v.Status == "Maintenance")</div>
+                <div class="d-flex mb-2">
+                    <div class="text-secondary">Wymagające przeglądu/naprawy</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Statystyka 4: Łączna ładowność -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="subheader">Dostępna ładowność</div>
+                </div>
+                <div class="h1 mb-3 text-indigo">@(Model.Where(v => v.Status == "Active").Sum(v => v.MaxLoadKg)) kg</div>
+                <div class="d-flex mb-2">
+                    <div class="text-secondary">Suma ładowności aktywnych pojazdów</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-premium">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h3 class="card-title">Wykaz pojazdów</h3>
+        <div class="card-actions">
+            <a asp-action="CreateVehicle" class="btn btn-primary d-none d-sm-inline-block">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M12 5l0 14" />
+                    <path d="M5 12l14 0" />
+                </svg>
+                Dodaj nowy pojazd
+            </a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter table-premium card-table table-striped">
+            <thead>
+                <tr>
+                    <th>Rejestracja</th>
+                    <th>Model / Typ</th>
+                    <th>Maks. Ładowność</th>
+                    <th>Status</th>
+                    <th class="w-1">Akcje</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr>
+                        <td colspan="5" class="text-center text-secondary py-4">
+                            Brak pojazdów w bazie danych. Dodaj swój pierwszy pojazd.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var vehicle in Model)
+                    {
+                        <tr>
+                            <td>
+                                <span class="badge bg-blue text-blue-fg p-2 font-monospace" style="font-size: 0.9rem; letter-spacing: 0.5px;">
+                                    @vehicle.RegistrationNumber
+                                </span>
+                            </td>
+                            <td class="td-truncate fw-bold">
+                                @vehicle.Model
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@vehicle.MaxLoadKg.ToString("N0") kg</div>
+                            </td>
+                            <td>
+                                @if (vehicle.Status == "Active")
+                                {
+                                    <span class="badge bg-success-lt text-success d-inline-flex align-items-center gap-2 py-1 px-2.5">
+                                        <span class="status-dot-pulse bg-success"></span>
+                                        Aktywny
+                                    </span>
+                                }
+                                else if (vehicle.Status == "Maintenance")
+                                {
+                                    <span class="badge bg-warning-lt text-warning d-inline-flex align-items-center gap-2 py-1 px-2.5">
+                                        <span class="status-dot-pulse bg-warning"></span>
+                                        W serwisie
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-lt text-secondary d-inline-flex align-items-center gap-2 py-1 px-2.5">
+                                        <span class="status-dot bg-secondary"></span>
+                                        Wycofany
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                <div class="btn-list flex-nowrap">
+                                    <a asp-action="EditVehicle" asp-route-id="@vehicle.Id" class="btn btn-sm btn-outline-primary">
+                                        Edytuj
+                                    </a>
+                                    <form asp-action="DeleteVehicle" asp-route-id="@vehicle.Id" method="post" onsubmit="return confirm('Czy na pewno chcesz usunąć pojazd @vehicle.RegistrationNumber?');" style="display:inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            Usuń
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

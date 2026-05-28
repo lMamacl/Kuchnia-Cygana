@@ -1,0 +1,70 @@
+﻿@model KuchniaUCygana.Application.DTOs.Orders.CreateAddressRequest
+@{
+    ViewData["Title"] = "Nowy adres";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <h2 class="mb-4">Dodaj adres dostawy</h2>
+
+        <form asp-action="Create" method="post">
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+
+            <div class="mb-3">
+                <label asp-for="Label" class="form-label">Nazwa adresu (np. Dom, Praca)</label>
+                <input asp-for="Label" class="form-control" placeholder="Dom" />
+                <span asp-validation-for="Label" class="text-danger small"></span>
+            </div>
+
+            <div class="row">
+                <div class="col-md-8 mb-3">
+                    <label asp-for="Street" class="form-label">Ulica</label>
+                    <input asp-for="Street" class="form-control" placeholder="ul. Przykładowa" />
+                    <span asp-validation-for="Street" class="text-danger small"></span>
+                </div>
+                <div class="col-md-2 mb-3">
+                    <label asp-for="BuildingNumber" class="form-label">Nr budynku</label>
+                    <input asp-for="BuildingNumber" class="form-control" placeholder="12" />
+                    <span asp-validation-for="BuildingNumber" class="text-danger small"></span>
+                </div>
+                <div class="col-md-2 mb-3">
+                    <label asp-for="ApartmentNumber" class="form-label">Nr lokalu</label>
+                    <input asp-for="ApartmentNumber" class="form-control" placeholder="5" />
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label asp-for="PostalCode" class="form-label">Kod pocztowy</label>
+                    <input asp-for="PostalCode" class="form-control" placeholder="00-000" />
+                    <span asp-validation-for="PostalCode" class="text-danger small"></span>
+                </div>
+                <div class="col-md-8 mb-3">
+                    <label asp-for="City" class="form-label">Miasto</label>
+                    <input asp-for="City" class="form-control" placeholder="Warszawa" />
+                    <span asp-validation-for="City" class="text-danger small"></span>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="DeliveryNotes" class="form-label">Uwagi dla kuriera (opcjonalnie)</label>
+                <textarea asp-for="DeliveryNotes" class="form-control" rows="2"
+                          placeholder="Domofon 12, 3. pietro..."></textarea>
+            </div>
+
+            <div class="mb-4 form-check">
+                <input asp-for="IsDefault" class="form-check-input" type="checkbox" />
+                <label asp-for="IsDefault" class="form-check-label">Ustaw jako domyslny adres dostawy</label>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Zapisz adres</button>
+                <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
