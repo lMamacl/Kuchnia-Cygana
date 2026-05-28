@@ -37,6 +37,16 @@
                         <span asp-validation-for="MaxLoadKg" class="text-danger small mt-1 d-block"></span>
                     </div>
 
+                    <div class="mb-3">
+                        <label asp-for="Status" class="form-label required">Status pojazdu</label>
+                        <select asp-for="Status" class="form-select" required>
+                            <option value="1">Aktywny</option>
+                            <option value="2">W serwisie</option>
+                            <option value="3">Wycofany</option>
+                        </select>
+                        <span asp-validation-for="Status" class="text-danger small mt-1 d-block"></span>
+                    </div>
+
                     <div class="form-footer d-flex align-items-center justify-content-between">
                         <a asp-action="Vehicles" class="btn btn-link text-secondary">
                             Anuluj i wróć
