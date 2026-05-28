@@ -1,4 +1,4 @@
-using KuchniaUCygana.Application.DTOs.Production;
+using KuchniaUCygana.Application.DTOs.Packing;
 
 namespace KuchniaUCygana.Application.Interfaces;
 

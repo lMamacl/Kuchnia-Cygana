@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using KuchniaUCygana.Application.DTOs.Production;
+using KuchniaUCygana.Application.DTOs.Packing;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;

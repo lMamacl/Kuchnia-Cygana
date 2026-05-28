@@ -1,5 +1,6 @@
 using AutoMapper;
 using KuchniaUCygana.Application.DTOs.Production;
+using KuchniaUCygana.Application.DTOs.Packing;
 using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Services;

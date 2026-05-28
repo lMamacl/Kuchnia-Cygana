@@ -1,4 +1,4 @@
-namespace KuchniaUCygana.Application.DTOs.Production;
+namespace KuchniaUCygana.Application.DTOs.Packing;
 
 public sealed class PackingBoardDto
 {

@@ -1,4 +1,4 @@
-namespace KuchniaUCygana.Application.DTOs.Production;
+namespace KuchniaUCygana.Application.DTOs.Packing;
 
 /// <summary>
 /// DTO etykiety (produktowej lub wysyłkowej) — odpowiada PackingLabel.
@@ -30,4 +30,9 @@ public sealed class PackingLabelDto
     public string? DeliveryWindow { get; set; }
 
     public string? Ingredients { get; set; }
+
+    // Rozszerzenia dla reprintu
+    public string? MealsList { get; set; }
+
+    public string? ReprintReason { get; set; }
 }

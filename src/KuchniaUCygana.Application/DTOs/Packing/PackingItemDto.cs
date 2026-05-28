@@ -1,4 +1,4 @@
-namespace KuchniaUCygana.Application.DTOs.Production;
+namespace KuchniaUCygana.Application.DTOs.Packing;
 
 /// <summary>
 /// DTO pozycji pakowania — odpowiada PackingItem.

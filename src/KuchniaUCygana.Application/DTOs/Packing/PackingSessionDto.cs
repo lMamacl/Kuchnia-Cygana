@@ -1,4 +1,4 @@
-namespace KuchniaUCygana.Application.DTOs.Production;
+namespace KuchniaUCygana.Application.DTOs.Packing;
 
 /// <summary>
 /// DTO sesji pakowania z listą pozycji — odpowiada PackingSession + Items.

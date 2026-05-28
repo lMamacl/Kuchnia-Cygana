@@ -1,4 +1,4 @@
-namespace KuchniaUCygana.Application.DTOs.Production;
+namespace KuchniaUCygana.Application.DTOs.Packing;
 
 public sealed class PackingManifestDto
 {
@@ -31,4 +31,9 @@ public sealed class PackingManifestDto
     public string? VerifiedBy { get; set; }
 
     public string PayloadJson { get; set; } = string.Empty;
+
+    // Pola dla kierowcy z migracji
+    public int? VerifiedByUserId { get; set; }
+
+    public int? DriverUserId { get; set; }
 }
