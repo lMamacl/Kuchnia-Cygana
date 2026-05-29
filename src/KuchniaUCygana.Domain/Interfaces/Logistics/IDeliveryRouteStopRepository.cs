@@ -9,6 +9,7 @@ namespace KuchniaUCygana.Domain.Interfaces.Logistics;
 
 public interface IDeliveryRouteStopRepository : IRepository<DeliveryRouteStop>
 {
-    //Task<IEnumerable<DeliveryRouteStop>> GetStopsForRouteAsync(int routeId);
+    Task<IEnumerable<DeliveryRouteStop>> GetStopsForRouteAsync(int routeId);
+
     //Task<IEnumerable<DeliveryRouteStop>> GetStopsForDateAsync(DateTime date);
 }

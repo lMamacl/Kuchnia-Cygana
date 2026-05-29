@@ -21,6 +21,7 @@ using KuchniaUCygana.Infrastructure.FileStorage;
 using KuchniaUCygana.Infrastructure.Mocks;
 using KuchniaUCygana.Infrastructure.Pdf;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Infrastructure.Persistence.Providers;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
@@ -207,6 +208,11 @@ public static class DependencyInjection
             client.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
             client.DefaultRequestHeaders.Add("User-Agent", "KuchniaUCygana/1.0");
         });
+        services.AddScoped<IDeliveryRouteRepository, DeliveryRouteRepository>();
+        services.AddScoped<IDeliveryRouteStopRepository, DeliveryRouteStopRepository>();
+        services.AddScoped<IDriverRepository, DriverRepository>();
+        services.AddScoped<IVehicleRepository, VehicleRepository>();
+        services.AddScoped<IThermalBagRepository, ThermalBagRepository>();
 
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IOrderItemRepository, OrderItemRepository>();
