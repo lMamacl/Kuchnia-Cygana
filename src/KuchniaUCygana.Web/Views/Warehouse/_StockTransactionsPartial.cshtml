@@ -1,0 +1,73 @@
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryDto>
+
+<div class="table-responsive">
+    <table class="table table-vcenter card-table table-premium">
+        <thead>
+            <tr>
+                <th>ID Transakcji</th>
+                <th>Partia</th>
+                <th>Rodzaj Operacji</th>
+                <th class="text-end">Ilość</th>
+                <th>Wykonano</th>
+                <th>Powód / Dokument</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (!Model.Any())
+            {
+                <tr>
+                    <td colspan="6" class="text-center text-secondary py-4">
+                        Brak transakcji w historii dla tego składnika.
+                    </td>
+                </tr>
+            }
+            else
+            {
+                foreach (var tx in Model)
+                {
+                    // Typy transakcji: Receipt, Waste, ProductionIssue, ManualIssue, ExpiryDateChanged, Adjustment
+                    var txTypeBadgeColor = tx.TransactionType switch
+                    {
+                        "Receipt" => "success",
+                        "Waste" => "danger",
+                        "ProductionIssue" => "warning",
+                        "ManualIssue" => "orange",
+                        "ExpiryDateChanged" => "azure",
+                        "Adjustment" => "purple",
+                        _ => "secondary"
+                    };
+
+                    var txTypeName = tx.TransactionType switch
+                    {
+                        "Receipt" => "Przyjęcie dostawy",
+                        "Waste" => "Odpad",
+                        "ProductionIssue" => "Wydanie na produkcję",
+                        "ManualIssue" => "Wydanie ręczne",
+                        "ExpiryDateChanged" => "Zmiana ważności",
+                        "Adjustment" => "Korekta",
+                        _ => tx.TransactionType
+                    };
+
+                    var isPositive = tx.Quantity > 0;
+                    var qtyColor = tx.Quantity == 0 ? "text-muted" : (isPositive ? "text-green font-weight-bold fw-bold" : "text-danger font-weight-bold fw-bold");
+                    var qtyPrefix = tx.Quantity == 0 ? "" : (isPositive ? "+" : "");
+
+                    <tr>
+                        <td class="text-secondary small">#@tx.Id</td>
+                        <td class="text-dark fw-bold">Partia #@tx.BatchId (@tx.BatchNumber)</td>
+                        <td>
+                            <span class="badge bg-@txTypeBadgeColor-lt text-@txTypeBadgeColor">@txTypeName</span>
+                        </td>
+                        <td class="text-end @qtyColor">
+                            @qtyPrefix@tx.Quantity.ToString("F2")
+                        </td>
+                        <td class="text-secondary small">@tx.PerformedAt.ToString("dd.MM.yyyy HH:mm")</td>
+                        <td class="text-dark">
+                            @tx.Reason
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>

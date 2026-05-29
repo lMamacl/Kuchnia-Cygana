@@ -49,7 +49,10 @@
 
                     <div class="mb-3">
                         <label class="form-label required">Składnik magazynowy</label>
-                        <select asp-for="StockItemId" class="form-select" aria-label="Wybierz składnik">
+                        <select asp-for="StockItemId" class="form-select" aria-label="Wybierz składnik"
+                                hx-get="/warehouse/batches-for-item"
+                                hx-target="#BatchIdSelect"
+                                hx-trigger="change">
                             <option value="">-- Wybierz z listy --</option>
                             @foreach (var item in stockItems)
                             {
@@ -79,10 +82,12 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Numer konkretnej partii (opcjonalnie)</label>
-                        <input type="number" asp-for="BatchId" class="form-control" placeholder="Pozostaw puste w celu automatycznego rozliczenia FEFO" />
+                        <label class="form-label">Partia magazynowa (opcjonalnie)</label>
+                        <select asp-for="BatchId" id="BatchIdSelect" class="form-select">
+                            <option value="">-- Wybierz najpierw składnik --</option>
+                        </select>
                         <span asp-validation-for="BatchId" class="text-danger small"></span>
-                        <small class="form-hint">Jeśli pole pozostanie puste, system pobierze ilość z najwcześniej wygasającej partii.</small>
+                        <small class="form-hint">Jeśli nie wybierzesz konkretnej partii, system automatycznie rozliczy odpis wg zasady FEFO.</small>
                     </div>
 
                     <div class="card-footer bg-transparent p-0 pt-3 d-flex justify-content-between">

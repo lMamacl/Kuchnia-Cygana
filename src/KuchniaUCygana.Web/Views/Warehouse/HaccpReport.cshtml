@@ -85,11 +85,10 @@
                 <input type="date" name="to" class="form-control" value="@dateTo.ToString("yyyy-MM-dd")" />
             </div>
             <div class="col-md-4 d-flex gap-2">
-                <button type="submit" class="btn btn-primary flex-fill">Generuj Raport</button>
-                <button type="button" class="btn btn-outline-secondary" onclick="window.print();">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
-                    Drukuj
-                </button>
+                <button type="submit" class="btn btn-primary flex-fill">Filtruj</button>
+                <a href="/warehouse/haccp-report/csv?from=@dateFrom.ToString("yyyy-MM-dd")&to=@dateTo.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">CSV</a>
+                <a href="/warehouse/haccp-report/pdf?from=@dateFrom.ToString("yyyy-MM-dd")&to=@dateTo.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">PDF</a>
+                <button type="button" class="btn btn-outline-secondary" onclick="window.print();">Drukuj</button>
             </div>
         </form>
     </div>
@@ -179,6 +178,22 @@
     </div>
 </div>
 
+<!-- Wykres temperatur d-print-none -->
+<div class="row g-3 mb-4 d-print-none">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header bg-transparent py-3">
+                <h3 class="card-title text-azure">Analiza Zgodności HACCP (Wykresy Urządzeń)</h3>
+            </div>
+            <div class="card-body">
+                <div style="height: 300px;">
+                    <canvas id="haccpChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card card-premium">
     <div class="card-body p-5">
         <!-- Nagłówek raportu do wydruku -->
@@ -260,3 +275,72 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const rawData = @Html.Raw(Json.Serialize(Model.Readings.OrderBy(r => r.RecordedAt)));
+            
+            // Group readings by device
+            const deviceGroups = {};
+            rawData.forEach(item => {
+                const deviceName = item.deviceNameOrLocation;
+                if (!deviceGroups[deviceName]) {
+                    deviceGroups[deviceName] = {
+                        label: deviceName,
+                        data: [],
+                        borderColor: getRandomColor(deviceName),
+                        tension: 0.2,
+                        fill: false
+                    };
+                }
+                deviceGroups[deviceName].data.push({
+                    x: new Date(item.recordedAt).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+                    y: item.recordedTemperatureCelsius
+                });
+            });
+
+            const datasets = Object.values(deviceGroups);
+            const uniqueLabels = [...new Set(rawData.map(d => new Date(d.recordedAt).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })))];
+
+            datasets.forEach(dataset => {
+                dataset.data = uniqueLabels.map(label => {
+                    const match = dataset.data.find(d => d.x === label);
+                    return match ? match.y : null;
+                });
+            });
+
+            function getRandomColor(str) {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+                return "#" + "00000".substring(0, 6 - c.length) + c;
+            }
+
+            const ctx = document.getElementById('haccpChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: uniqueLabels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '°C';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+}

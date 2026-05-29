@@ -1,0 +1,87 @@
+@model KuchniaUCygana.Application.DTOs.Warehouse.ManualIssueRequest
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Wydanie Ręczne";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = "Zarejestruj ręczne wydanie składnika z magazynu. System automatycznie odpisze ilość z partii zgodnie z zasadą FEFO.";
+
+    var stockItems = ViewBag.StockItems as IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
+                     ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-xl-6">
+        <div class="card card-premium">
+            <div class="card-status-top bg-warning"></div>
+            <div class="card-header bg-transparent py-3">
+                <h3 class="card-title d-flex align-items-center gap-2 text-warning">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-warning" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                    Wydanie ręczne składnika
+                </h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="Issue" method="post" autocomplete="off">
+                    @Html.AntiForgeryToken()
+                    
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            <div class="d-flex">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
+                                </div>
+                                <div>
+                                    <h4 class="alert-title">Wykryto błędy</h4>
+                                    <div asp-validation-summary="All" class="text-secondary small"></div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label required">Składnik do wydania</label>
+                        <select asp-for="StockItemId" class="form-select text-dark font-weight-medium" aria-label="Wybierz składnik">
+                            <option value="">-- Wybierz z listy --</option>
+                            @foreach (var item in stockItems.Where(i => i.CurrentStock > 0))
+                            {
+                                <option value="@item.Id">@item.Name (Dostępne: @item.CurrentStock.ToString("F2") @item.UnitSymbol)</option>
+                            }
+                        </select>
+                        <span asp-validation-for="StockItemId" class="text-danger small"></span>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required">Ilość do wydania</label>
+                            <input type="number" step="0.01" asp-for="Quantity" class="form-control" placeholder="0.00" />
+                            <span asp-validation-for="Quantity" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required">Wydano dla (Osoba / Dział)</label>
+                            <input type="text" asp-for="IssuedTo" class="form-control" placeholder="np. Jan Kowalski / Kuchnia Ciepła" />
+                            <span asp-validation-for="IssuedTo" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label required">Powód / Uzasadnienie wydania</label>
+                        <textarea asp-for="Reason" class="form-control" rows="3" placeholder="Opisz szczegółowo cel wydania towaru z magazynu..."></textarea>
+                        <span asp-validation-for="Reason" class="text-danger small"></span>
+                    </div>
+
+                    <div class="alert alert-info py-2" role="alert">
+                        <div class="d-flex align-items-center gap-2 text-info small">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon text-info" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 9h.01" /><path d="M11 12h1v4h1" /></svg>
+                            <span>Wydanie ręczne automatycznie obniża stany najstarszych partii składnika wg zasady FEFO.</span>
+                        </div>
+                    </div>
+
+                    <div class="card-footer bg-transparent p-0 pt-3 d-flex justify-content-between">
+                        <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
+                        <button type="submit" class="btn btn-warning text-dark font-weight-bold fw-bold">Zatwierdź Wydanie</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

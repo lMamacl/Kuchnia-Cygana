@@ -86,9 +86,14 @@
                         <span asp-validation-for="Remarks" class="text-danger small"></span>
                     </div>
 
-                    <button type="submit" class="btn btn-primary w-100">
-                        Zapisz odczyt w dzienniku HACCP
-                    </button>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <button type="submit" name="actionType" value="addAnother" class="btn btn-outline-primary w-100">Zapisz i dodaj kolejny</button>
+                        </div>
+                        <div class="col-md-6">
+                            <button type="submit" name="actionType" value="save" class="btn btn-primary w-100">Zapisz i zamknij</button>
+                        </div>
+                    </div>
                 </form>
             </div>
         </div>
@@ -144,3 +149,93 @@
         </div>
     </div>
 </div>
+
+<div class="row g-4 mt-3">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex justify-content-between align-items-center bg-transparent py-3">
+                <h3 class="card-title">Wykres Temperatur (Ostatnie 7 dni)</h3>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="ChartDeviceSelect" class="form-select form-select-sm w-auto" onchange="loadTemperatureChart()">
+                        <option value="">Wszystkie urządzenia</option>
+                        @foreach (var dev in devices)
+                        {
+                            <option value="@dev.Split(" (")[0]">@dev.Split(" (")[0]</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                <div style="height: 300px;">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let tempChart = null;
+
+        async function loadTemperatureChart() {
+            const device = document.getElementById("ChartDeviceSelect").value;
+            const response = await fetch(`/warehouse/temperature-chart-data?device=${encodeURIComponent(device)}&days=7`);
+            const data = await response.json();
+
+            const labels = data.map(d => new Date(d.recordedAt).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }));
+            const temps = data.map(d => d.temperature);
+            const alertColors = data.map(d => d.isAlert ? '#ef4444' : '#3b82f6');
+
+            const ctx = document.getElementById('tempChart').getContext('2d');
+
+            if (tempChart) {
+                tempChart.destroy();
+            }
+
+            tempChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Temperatura (°C)',
+                        data: temps,
+                        borderColor: '#206bc4',
+                        backgroundColor: 'rgba(32, 107, 196, 0.1)',
+                        pointBackgroundColor: alertColors,
+                        pointBorderColor: alertColors,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        tension: 0.2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '°C';
+                                }
+                            },
+                            suggestedMin: -25,
+                            suggestedMax: 10
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadTemperatureChart();
+        });
+    </script>
+}

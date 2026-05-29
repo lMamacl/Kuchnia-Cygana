@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Infrastructure.Pdf;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,13 +19,16 @@ public sealed class WarehouseController : Controller
 {
     private readonly IWarehouseService warehouseService;
     private readonly ITemperatureService temperatureService;
+    private readonly IPdfGenerator pdfGenerator;
 
     public WarehouseController(
         IWarehouseService warehouseService,
-        ITemperatureService temperatureService)
+        ITemperatureService temperatureService,
+        IPdfGenerator pdfGenerator)
     {
         this.warehouseService = warehouseService;
         this.temperatureService = temperatureService;
+        this.pdfGenerator = pdfGenerator;
     }
 
     // ── Stany magazynowe ─────────────────────────────────────
@@ -46,6 +50,17 @@ public sealed class WarehouseController : Controller
         };
 
         return View(viewModel);
+    }
+
+    /// <summary>
+    /// Pobiera listę składników z filtrowaniem i paginacją (HTMX).
+    /// GET /warehouse/stock-table
+    /// </summary>
+    [HttpGet("stock-table")]
+    public async Task<IActionResult> StockTable(StockTableFilterDto filter)
+    {
+        var items = await warehouseService.GetStockTableAsync(filter);
+        return PartialView("_StockTablePartial", items);
     }
 
     /// <summary>
@@ -78,7 +93,7 @@ public sealed class WarehouseController : Controller
     /// </summary>
     [HttpPost("receive")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Receive(ReceiveDeliveryRequest request)
+    public async Task<IActionResult> Receive(ReceiveDeliveryRequest request, string actionType)
     {
         if (!ModelState.IsValid)
         {
@@ -88,7 +103,54 @@ public sealed class WarehouseController : Controller
 
         var batch = await warehouseService.ReceiveDeliveryAsync(request);
         TempData["Success"] = $"Dostawa przyjęta. Partia #{batch.Id} ({batch.CurrentQuantity}) zarejestrowana.";
+
+        if (actionType == "addAnother")
+        {
+            return RedirectToAction(nameof(Receive));
+        }
+
         return RedirectToAction(nameof(Index));
+    }
+
+    // ── Wydanie ręczne ───────────────────────────────────────
+
+    /// <summary>
+    /// Formularz ręcznego wydania składnika.
+    /// GET /warehouse/issue
+    /// </summary>
+    [HttpGet("issue")]
+    public async Task<IActionResult> Issue()
+    {
+        ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
+        return View(new ManualIssueRequest());
+    }
+
+    /// <summary>
+    /// Przetwarza ręczne wydanie składnika.
+    /// POST /warehouse/issue
+    /// </summary>
+    [HttpPost("issue")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Issue(ManualIssueRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
+            return View(request);
+        }
+
+        try
+        {
+            await warehouseService.IssueManualAsync(request);
+            TempData["Success"] = "Wydano składnik z magazynu (zdjęto wg FEFO).";
+            return RedirectToAction(nameof(Index));
+        }
+        catch (Exception ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
+            return View(request);
+        }
     }
 
     // ── Rejestracja odpadu ───────────────────────────────────
@@ -177,7 +239,7 @@ public sealed class WarehouseController : Controller
     /// </summary>
     [HttpPost("temperatures")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> LogTemperature(LogTemperatureRequest request)
+    public async Task<IActionResult> LogTemperature(LogTemperatureRequest request, string actionType)
     {
         if (!ModelState.IsValid)
         {
@@ -189,6 +251,12 @@ public sealed class WarehouseController : Controller
 
         var log = await temperatureService.LogTemperatureAsync(request);
         TempData["Success"] = $"Temperatura {log.RecordedTemperatureCelsius}°C zapisana ({log.DeviceNameOrLocation}).";
+
+        if (actionType == "save")
+        {
+            return RedirectToAction(nameof(Index));
+        }
+
         return RedirectToAction(nameof(Temperatures));
     }
 
@@ -208,5 +276,185 @@ public sealed class WarehouseController : Controller
         ViewBag.DateFrom = dateFrom;
         ViewBag.DateTo = dateTo;
         return View(report);
+    }
+
+    // ── Szczegóły partii i zmiana daty ważności ─────────────────
+
+    /// <summary>
+    /// Szczegóły składnika, aktywne partie i historia zmian dat ważności.
+    /// GET /warehouse/batch-details/{stockItemId}
+    /// </summary>
+    [HttpGet("batch-details/{stockItemId}")]
+    public async Task<IActionResult> BatchDetails(int stockItemId)
+    {
+        var details = await warehouseService.GetStockItemDetailsWithBatchesAsync(stockItemId);
+        var viewModel = new BatchDetailsViewModel { Details = details };
+        return View(viewModel);
+    }
+
+    /// <summary>
+    /// Pobiera historię transakcji dla składnika (HTMX lazy load).
+    /// GET /warehouse/stock-item-transactions/{stockItemId}
+    /// </summary>
+    [HttpGet("stock-item-transactions/{stockItemId}")]
+    public async Task<IActionResult> StockItemTransactions(int stockItemId)
+    {
+        var filter = new TransactionHistoryFilterDto { StockItemId = stockItemId };
+        var transactions = await warehouseService.GetTransactionHistoryAsync(filter);
+        return PartialView("_StockTransactionsPartial", transactions);
+    }
+
+    /// <summary>
+    /// Pobiera modal edycji ważności partii (HTMX).
+    /// GET /warehouse/edit-batch-expiry/{batchId}
+    /// </summary>
+    [HttpGet("edit-batch-expiry/{batchId}")]
+    public async Task<IActionResult> EditBatchExpiry(int batchId)
+    {
+        var batchDetails = await warehouseService.GetBatchDetailsAsync(batchId);
+        var request = new EditBatchExpiryRequest
+        {
+            BatchId = batchId,
+            NewExpiryDate = batchDetails.ExpiryDate ?? DateTimeOffset.UtcNow,
+            Reason = string.Empty
+        };
+
+        return PartialView("_EditBatchExpiryModal", request);
+    }
+
+    /// <summary>
+    /// Zapisuje nową datę ważności partii.
+    /// POST /warehouse/edit-batch-expiry/{batchId}
+    /// </summary>
+    [HttpPost("edit-batch-expiry/{batchId}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EditBatchExpiry(int batchId, EditBatchExpiryRequest request)
+    {
+        if (request.BatchId == 0)
+        {
+            request.BatchId = batchId;
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return PartialView("_EditBatchExpiryModal", request);
+        }
+
+        try
+         {
+             var batchDetails = await warehouseService.GetBatchDetailsAsync(request.BatchId);
+             await warehouseService.EditBatchExpiryAsync(request);
+             TempData["Success"] = $"Zmieniono datę ważności partii #{request.BatchId}.";
+             
+             if (Request.Headers.ContainsKey("HX-Request"))
+             {
+                 Response.Headers.Add("HX-Redirect", Url.Action("BatchDetails", new { stockItemId = batchDetails.StockItemId }));
+                 return Ok();
+             }
+
+             return RedirectToAction(nameof(BatchDetails), new { stockItemId = batchDetails.StockItemId });
+         }
+         catch (Exception ex)
+         {
+             ModelState.AddModelError(string.Empty, ex.Message);
+             return PartialView("_EditBatchExpiryModal", request);
+         }
+    }
+
+    /// <summary>
+    /// Generuje raport partii magazynowych wg zasady FEFO.
+    /// GET /warehouse/fefo-report
+    /// </summary>
+    [HttpGet("fefo-report")]
+    public async Task<IActionResult> FefoReport()
+    {
+        var report = await warehouseService.GetFefoReportAsync();
+        return View(report);
+    }
+
+    /// <summary>
+    /// Pobiera historię transakcji z filtrowaniem (HTMX friendly).
+    /// GET /warehouse/transaction-history
+    /// </summary>
+    [HttpGet("transaction-history")]
+    public async Task<IActionResult> TransactionHistory(TransactionHistoryFilterDto filter)
+    {
+        var transactions = await warehouseService.GetTransactionHistoryAsync(filter);
+        
+        if (Request.Headers.ContainsKey("HX-Request"))
+        {
+            return PartialView("_StockTransactionsPartial", transactions);
+        }
+
+        ViewBag.StockItems = await warehouseService.GetStockOverviewAsync();
+        ViewBag.Filter = filter;
+        return View(transactions);
+    }
+
+    /// <summary>
+    /// Pobiera listę aktywnych partii dla składnika w postaci opcji dropdown (HTMX).
+    /// GET /warehouse/batches-for-item?stockItemId=X
+    /// </summary>
+    [HttpGet("batches-for-item")]
+    public async Task<IActionResult> BatchesForItem(int stockItemId)
+    {
+        var details = await warehouseService.GetStockItemDetailsWithBatchesAsync(stockItemId);
+        return PartialView("_BatchesDropdownPartial", details.Batches);
+    }
+
+    /// <summary>
+    /// Pobiera dane temperatur do wykresu Chart.js (JSON).
+    /// GET /warehouse/temperature-chart-data
+    /// </summary>
+    [HttpGet("temperature-chart-data")]
+    public async Task<IActionResult> GetTemperatureChartData(string device, int days = 7)
+    {
+        var data = await temperatureService.GetChartDataAsync(device, days);
+        return Json(data);
+    }
+
+    /// <summary>
+    /// Eksportuje logi HACCP do pliku CSV.
+    /// GET /warehouse/haccp-report/csv
+    /// </summary>
+    [HttpGet("haccp-report/csv")]
+    [Authorize(Roles = "WarehouseManager,Admin")]
+    public async Task<IActionResult> ExportHaccpCsv(DateOnly from, DateOnly to)
+    {
+        var fromOffset = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var toOffset = new DateTimeOffset(to.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
+        var csv = await temperatureService.ExportHaccpCsvAsync(fromOffset, toOffset);
+        var fileName = $"HACCP_Raport_{from:yyyyMMdd}_{to:yyyyMMdd}.csv";
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
+    }
+
+    /// <summary>
+    /// Eksportuje logi HACCP do pliku PDF.
+    /// GET /warehouse/haccp-report/pdf
+    /// </summary>
+    [HttpGet("haccp-report/pdf")]
+    [Authorize(Roles = "WarehouseManager,Admin")]
+    public async Task<IActionResult> ExportHaccpPdf(DateOnly from, DateOnly to)
+    {
+        var report = await temperatureService.GetHaccpReportAsync(from, to);
+        var title = $"Raport HACCP ({from:dd.MM.yyyy} - {to:dd.MM.yyyy})";
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Okres raportu: {from:dd.MM.yyyy} - {to:dd.MM.yyyy}");
+        sb.AppendLine($"Liczba pomiarów: {report.TotalReadings}");
+        sb.AppendLine($"Pomiary poza zakresem [-25, +8]°C: {report.OutOfRangeReadings}");
+        sb.AppendLine();
+        sb.AppendLine("Lista pomiarów:");
+        sb.AppendLine("--------------------------------------------------------------------------------");
+        
+        foreach (var l in report.Readings)
+        {
+            var isAlert = l.IsOutOfRange ? "ALERT! " : "";
+            sb.AppendLine($"[{l.RecordedAt:dd.MM.yyyy HH:mm:ss}] {l.DeviceNameOrLocation}: {l.RecordedTemperatureCelsius}°C ({isAlert}{l.Remarks})");
+        }
+        
+        var pdfBytes = pdfGenerator.Generate(title, sb.ToString());
+        var fileName = $"HACCP_Raport_{from:yyyyMMdd}_{to:yyyyMMdd}.pdf";
+        return File(pdfBytes, "application/pdf", fileName);
     }
 }

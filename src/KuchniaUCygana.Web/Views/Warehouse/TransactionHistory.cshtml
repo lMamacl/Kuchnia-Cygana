@@ -1,0 +1,91 @@
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryDto>
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Historia Transakcji";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = "Dziennik zdarzeń i operacji magazynowych — przyjęcia, odpisy, korekty oraz wydania.";
+
+    var stockItems = ViewBag.StockItems as IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
+                     ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
+    var currentFilter = ViewBag.Filter as KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryFilterDto 
+                        ?? new KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryFilterDto();
+}
+
+<div class="container-xl">
+    <!-- Tytuł i Breadcrumb -->
+    <div class="page-header d-print-none mb-3">
+        <div class="row align-items-center">
+            <div class="col">
+                <div class="mb-1">
+                    <ol class="breadcrumb" aria-label="breadcrumbs">
+                        <li class="breadcrumb-item"><a asp-action="Index">Pulpit Magazynu</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Historia transakcji</li>
+                    </ol>
+                </div>
+                <h2 class="page-title text-dark">
+                    Historia Operacji Magazynowych
+                </h2>
+            </div>
+            <div class="col-auto ms-auto">
+                <div class="btn-list">
+                    <a asp-action="Index" class="btn btn-outline-secondary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 14l-4 -4l4 -4" /><path d="M5 10h11a4 4 0 1 1 0 8h-1" /></svg>
+                        Pulpit
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtry wyszukiwania -->
+    <div class="card card-premium mb-4">
+        <div class="card-body">
+            <form id="tx-filter-form" 
+                  hx-get="/warehouse/transaction-history" 
+                  hx-target="#transactions-table-container" 
+                  hx-trigger="change">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label text-secondary fw-bold">Składnik magazynowy</label>
+                        <select name="StockItemId" class="form-select">
+                            <option value="">-- Wszystkie składniki --</option>
+                            @foreach (var item in stockItems)
+                            {
+                                <option value="@item.Id" selected="@(currentFilter.StockItemId == item.Id ? "selected" : null)">@item.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-secondary fw-bold">Rodzaj operacji</label>
+                        <select name="TransactionType" class="form-select">
+                            <option value="">-- Wszystkie typy --</option>
+                            <option value="1" selected="@(currentFilter.TransactionType == 1 ? "selected" : null)">Przyjęcie dostawy</option>
+                            <option value="2" selected="@(currentFilter.TransactionType == 2 ? "selected" : null)">Odpad / Strata</option>
+                            <option value="3" selected="@(currentFilter.TransactionType == 3 ? "selected" : null)">Wydanie na produkcję</option>
+                            <option value="5" selected="@(currentFilter.TransactionType == 5 ? "selected" : null)">Wydanie ręczne</option>
+                            <option value="6" selected="@(currentFilter.TransactionType == 6 ? "selected" : null)">Zmiana daty ważności</option>
+                            <option value="4" selected="@(currentFilter.TransactionType == 4 ? "selected" : null)">Korekta inwentaryzacyjna</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-secondary fw-bold">Data od</label>
+                        <input type="date" id="FromDate" name="FromDate" class="form-control" 
+                               value="@(currentFilter.FromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-secondary fw-bold">Data do</label>
+                        <input type="date" id="ToDate" name="ToDate" class="form-control" 
+                               value="@(currentFilter.ToDate?.ToString("yyyy-MM-dd") ?? "")" />
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabela wyników -->
+    <div class="card card-premium">
+        <div id="transactions-table-container">
+            @await Html.PartialAsync("_StockTransactionsPartial", Model)
+        </div>
+    </div>
+</div>

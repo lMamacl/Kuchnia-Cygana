@@ -20,7 +20,14 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z" /><path d="M13 13h4" /><path d="M13 9h4" /><path d="M9 9h.01" /><path d="M9 13h.01" /><path d="M3 5h2v14h-2z" /></svg>
                         Arkusz Inwentaryzacyjny
                     </h3>
-                    <div class="btn-list">
+                    <div class="d-flex align-items-center gap-3">
+                        <select id="CategoryFilter" class="form-select form-select-sm w-auto" onchange="filterInventory()">
+                            <option value="">Filtruj wg kategorii</option>
+                            <option value="Mięso/Ryby">Mięso/Ryby</option>
+                            <option value="Nabiał">Nabiał</option>
+                            <option value="Warzywa i owoce">Warzywa i owoce</option>
+                            <option value="Suche">Suche</option>
+                        </select>
                         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="fillSystemValues()">Kopiuj stany systemowe</button>
                     </div>
                 </div>
@@ -34,6 +41,7 @@
                                 <th>Kategoria</th>
                                 <th class="text-end">Stan w systemie</th>
                                 <th class="w-25 text-center">Fizyczny stan rzeczywisty</th>
+                                <th class="text-end">Różnica</th>
                                 <th>Powód korekty (w razie różnic)</th>
                             </tr>
                         </thead>
@@ -41,7 +49,7 @@
                             @for (int i = 0; i < stockItemsList.Count; i++)
                             {
                                 var item = stockItemsList[i];
-                                <tr>
+                                <tr data-category="@item.Category">
                                     <td class="text-secondary font-weight-medium">#@item.Id</td>
                                     <td>
                                         <div class="font-weight-bold text-dark">@item.Name</div>
@@ -55,9 +63,12 @@
                                     <td>
                                         <input type="hidden" name="adjustments[@i].StockItemId" value="@item.Id" />
                                         <div class="input-group">
-                                            <input type="number" step="0.01" name="adjustments[@i].ActualQuantity" id="actual-@i" class="form-control text-end fw-bold" placeholder="0.00" required data-system-qty="@item.CurrentStock.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)" />
+                                            <input type="number" step="0.01" name="adjustments[@i].ActualQuantity" id="actual-@i" class="form-control text-end fw-bold" placeholder="0.00" required data-system-qty="@item.CurrentStock.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)" oninput="calculateDiff(@i)" />
                                             <span class="input-group-text bg-transparent text-secondary">@item.UnitSymbol</span>
                                         </div>
+                                    </td>
+                                    <td class="text-end fw-bold text-dark">
+                                        <span id="diff-@i">0.00</span>
                                     </td>
                                     <td>
                                         <input type="text" name="adjustments[@i].Reason" class="form-control form-control-sm" placeholder="np. Inwentaryzacja okresowa" value="Spis z natury" />
@@ -82,11 +93,63 @@
 
 @section Scripts {
     <script>
+        function calculateDiff(index) {
+            const input = document.getElementById('actual-' + index);
+            const diffSpan = document.getElementById('diff-' + index);
+            if (!input || !diffSpan) return;
+
+            const systemVal = parseFloat(input.getAttribute('data-system-qty')) || 0;
+            const actualVal = parseFloat(input.value);
+
+            if (isNaN(actualVal)) {
+                diffSpan.innerText = "0.00";
+                diffSpan.className = "";
+                return;
+            }
+
+            const diff = actualVal - systemVal;
+            if (diff > 0.001) {
+                diffSpan.innerText = "+" + diff.toFixed(2);
+                diffSpan.className = "text-success";
+            } else if (diff < -0.001) {
+                diffSpan.innerText = diff.toFixed(2);
+                diffSpan.className = "text-danger";
+            } else {
+                diffSpan.innerText = "0.00";
+                diffSpan.className = "";
+            }
+        }
+
         function fillSystemValues() {
             const inputs = document.querySelectorAll('input[id^="actual-"]');
             inputs.forEach(input => {
                 input.value = input.getAttribute('data-system-qty');
+                // Trigger input event to update differences
+                input.dispatchEvent(new Event('input', { bubbles: true }));
             });
         }
+
+        function filterInventory() {
+            const category = document.getElementById("CategoryFilter").value;
+            const rows = document.querySelectorAll("tbody tr[data-category]");
+            rows.forEach(row => {
+                const rowCat = row.getAttribute("data-category");
+                if (!category || rowCat === category) {
+                    row.style.display = "";
+                } else {
+                    row.style.display = "none";
+                }
+            });
+        }
+
+        // Initialize differences on load if inputs are already filled
+        window.addEventListener('DOMContentLoaded', () => {
+            const inputs = document.querySelectorAll('input[id^="actual-"]');
+            inputs.forEach((input, index) => {
+                if (input.value) {
+                    calculateDiff(index);
+                }
+            });
+        });
     </script>
 }

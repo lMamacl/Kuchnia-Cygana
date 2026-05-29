@@ -72,6 +72,9 @@ public static class StaffNavigationCatalog
             [
                 new("Stany i alerty", "Warehouse", "Index", "warehouse", "Pulpit magazynu z alertami.", "magazyn stany alerty"),
                 new("Przyjecia dostaw", "Warehouse", "Receive", "truck", "Szkielet przyjmowania dostaw.", "dostawy przyjecia magazyn"),
+                new("Wydanie ręczne", "Warehouse", "Issue", "plus", "Ręczne wydanie składnika.", "wydanie ręczne magazyn rozchód"),
+                new("Raport FEFO", "Warehouse", "FefoReport", "calendar", "Kontrola ważności partii.", "fefo ważność przeterminowanie"),
+                new("Historia transakcji", "Warehouse", "TransactionHistory", "history", "Historia operacji magazynowych.", "transakcje historia dziennik"),
                 new("Odpady", "Warehouse", "Waste", "trash", "Rejestr odpadow i strat.", "odpady straty magazyn"),
                 new("Inwentaryzacja", "Warehouse", "Inventory", "checklist", "Ekran inwentaryzacji.", "inwentaryzacja remanent"),
                 new("Temperatury HACCP", "Warehouse", "Temperatures", "temperature", "Monitoring temperatur HACCP.", "temperatury haccp"),

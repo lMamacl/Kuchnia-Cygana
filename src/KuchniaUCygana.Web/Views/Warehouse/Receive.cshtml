@@ -84,7 +84,10 @@
 
                     <div class="card-footer bg-transparent p-0 pt-3 d-flex justify-content-between">
                         <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
-                        <button type="submit" class="btn btn-success">Zapisz Przyjęcie</button>
+                        <div class="btn-list">
+                            <button type="submit" name="actionType" value="addAnother" class="btn btn-outline-success">Przyjmij i dodaj kolejną</button>
+                            <button type="submit" name="actionType" value="save" class="btn btn-success">Zapisz Przyjęcie</button>
+                        </div>
                     </div>
                 </form>
             </div>
