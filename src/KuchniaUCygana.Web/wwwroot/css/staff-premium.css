@@ -178,3 +178,110 @@
     background: color-mix(in srgb, var(--tblr-success) 8%, var(--tblr-bg-surface));
 }
 
+/* Usuń podwójne ikony kalendarza z pól typu date (pochodzące z Tabler/Bootstrap) */
+input[type="date"] {
+    background-image: none !important;
+    padding-left: 0.75rem !important;
+}
+
+/* ── Reguły Drukowania (A4 Portrait, Excel-like Grid, Compact) ─────────────────── */
+@media print {
+    /* Ukrycie elementów nawigacyjnych i zbędnych dla Sanepidu */
+    aside.navbar, 
+    .staff-topbar, 
+    .page-header, 
+    .d-print-none, 
+    .btn, 
+    .breadcrumb, 
+    form, 
+    .card-premium.d-print-none,
+    .alert {
+        display: none !important;
+    }
+    
+    /* Reset marginesów kontenera */
+    body, .page, .page-wrapper, .page-body, .container-xl {
+        background: #fff !important;
+        color: #000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+    }
+
+    /* Płaska i czytelna karta raportu bez cieni/obramowań na ekranie */
+    .card {
+        border: none !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+    }
+    
+    .card-body {
+        padding: 0 !important;
+    }
+
+    /* Kompaktowa tabela w stylu Excela */
+    table, .table {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-collapse: collapse !important;
+        margin-bottom: 1.5rem !important;
+        table-layout: auto !important;
+    }
+
+    thead {
+        display: table-header-group !important;
+    }
+    
+    tbody {
+        display: table-row-group !important;
+    }
+    
+    tr {
+        display: table-row !important;
+        page-break-inside: avoid !important;
+    }
+    
+    th, td {
+        display: table-cell !important;
+        padding: 4px 6px !important;
+        font-size: 8pt !important;
+        border: 1px solid #1a1a1a !important;
+        color: #000 !important;
+        background: transparent !important;
+    }
+    
+    th {
+        font-weight: bold !important;
+        background-color: #f2f2f2 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Dopasowanie statusów w druku */
+    .table-danger {
+        background-color: #f8d7da !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .table-warning {
+        background-color: #fff3cd !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .badge {
+        border: 1px solid #1a1a1a !important;
+        background: transparent !important;
+        color: #000 !important;
+    }
+
+    /* Wymuszenie nowej strony dla wykresu */
+    .page-break-before {
+        page-break-before: always !important;
+        margin-top: 2cm !important;
+    }
+}
+

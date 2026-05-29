@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces;
@@ -455,6 +456,77 @@ public sealed class WarehouseController : Controller
         
         var pdfBytes = pdfGenerator.Generate(title, sb.ToString());
         var fileName = $"HACCP_Raport_{from:yyyyMMdd}_{to:yyyyMMdd}.pdf";
+        return File(pdfBytes, "application/pdf", fileName);
+    }
+
+    /// <summary>
+    /// Wyszukuje dynamicznie składniki po nazwie do autouzupełniania (HTMX).
+    /// GET /warehouse/stock-lookup?q=...
+    /// </summary>
+    [HttpGet("stock-lookup")]
+    public async Task<IActionResult> StockLookup(string q)
+    {
+        var items = await warehouseService.GetStockOverviewAsync();
+        if (!string.IsNullOrEmpty(q))
+        {
+            items = items.Where(i => i.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+        return PartialView("_StockLookupPartial", items);
+    }
+
+    /// <summary>
+    /// Eksportuje raport FEFO do pliku CSV.
+    /// GET /warehouse/fefo-report/csv
+    /// </summary>
+    [HttpGet("fefo-report/csv")]
+    public async Task<IActionResult> ExportFefoCsv()
+    {
+        var report = await warehouseService.GetFefoReportAsync();
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Skladnik;Partia;Data waznosci;Ilosc;Dni do waznosci;Status");
+        
+        foreach (var item in report)
+        {
+            var expiryStr = item.ExpiryDate?.ToString("yyyy-MM-dd") ?? "Brak";
+            var daysStr = item.DaysToExpiry?.ToString() ?? "N/A";
+            sb.AppendLine($"{item.StockItemName};{item.BatchNumber};{expiryStr};{item.Quantity:F2};{daysStr};{item.Status}");
+        }
+        
+        var fileName = $"FEFO_Raport_{DateTime.Today:yyyyMMdd}.csv";
+        return File(System.Text.Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", fileName);
+    }
+
+    /// <summary>
+    /// Eksportuje raport FEFO do pliku PDF.
+    /// GET /warehouse/fefo-report/pdf
+    /// </summary>
+    [HttpGet("fefo-report/pdf")]
+    public async Task<IActionResult> ExportFefoPdf()
+    {
+        var report = await warehouseService.GetFefoReportAsync();
+        var title = $"Raport FEFO - Ważność Partii ({DateTime.Today:dd.MM.yyyy})";
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Wygenerowano: {DateTime.Now:dd.MM.yyyy HH:mm}");
+        sb.AppendLine($"Liczba pozycji: {report.Count()}");
+        sb.AppendLine();
+        
+        // Print clean monospace table header
+        sb.AppendLine(string.Format("{0,-35} | {1,-15} | {2,-12} | {3,-10} | {4,-15} | {5,-10}", 
+            "Skladnik", "Numer Partii", "Waznosc", "Ilosc", "Dni do wazn.", "Status"));
+        sb.AppendLine(new string('-', 108));
+        
+        foreach (var item in report)
+        {
+            var name = item.StockItemName.Length > 35 ? item.StockItemName.Substring(0, 35) : item.StockItemName;
+            var expiryStr = item.ExpiryDate?.ToString("dd.MM.yyyy") ?? "Brak";
+            var daysStr = item.DaysToExpiry?.ToString() ?? "N/A";
+            sb.AppendLine(string.Format("{0,-35} | {1,-15} | {2,-12} | {3,-10:F2} | {4,-15} | {5,-10}",
+                name, item.BatchNumber, expiryStr, item.Quantity, daysStr, item.Status));
+        }
+        
+        var pdfBytes = pdfGenerator.Generate(title, sb.ToString());
+        var fileName = $"FEFO_Raport_{DateTime.Today:yyyyMMdd}.pdf";
         return File(pdfBytes, "application/pdf", fileName);
     }
 }

@@ -38,15 +38,26 @@
                         </div>
                     }
 
-                    <div class="mb-3">
-                        <label class="form-label required">Składnik magazynowy</label>
-                        <select asp-for="StockItemId" class="form-select" aria-label="Wybierz składnik">
-                            <option value="">-- Wybierz z listy --</option>
-                            @foreach (var item in stockItems)
-                            {
-                                <option value="@item.Id">@item.Name (@item.UnitSymbol)</option>
-                            }
-                        </select>
+                    <div class="mb-3 position-relative">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label required mb-0">Składnik magazynowy</label>
+                            <a href="http://localhost:8080/ingredients/create" class="btn btn-sm btn-outline-primary py-0 px-2 small">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-inline me-1" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                Dodaj nowy produkt
+                            </a>
+                        </div>
+                        <input type="hidden" asp-for="StockItemId" id="StockItemId" />
+                        <input type="text" 
+                               id="StockItemSearch" 
+                               class="form-control" 
+                               placeholder="Zacznij wpisywać nazwę składnika..." 
+                               autocomplete="off"
+                               hx-get="/warehouse/stock-lookup"
+                               hx-trigger="keyup changed delay:200ms"
+                               hx-target="#search-results"
+                               name="q"
+                               value="@(stockItems.FirstOrDefault(i => i.Id == Model.StockItemId)?.Name ?? "")" />
+                        <div id="search-results" class="position-absolute w-100" style="z-index: 1050;"></div>
                         <span asp-validation-for="StockItemId" class="text-danger small"></span>
                     </div>
 
@@ -74,6 +85,11 @@
                             </div>
                             <span asp-validation-for="ExpiryDate" class="text-danger small"></span>
                         </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Numer faktury / dostawy (opcjonalnie)</label>
+                            <input type="text" asp-for="InvoiceNumber" class="form-control" placeholder="np. FV/123/2026" />
+                            <span asp-validation-for="InvoiceNumber" class="text-danger small"></span>
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -94,3 +110,25 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        function selectStockItem(id, name) {
+            document.getElementById('StockItemId').value = id;
+            document.getElementById('StockItemSearch').value = name;
+            document.getElementById('search-results').innerHTML = '';
+        }
+
+        document.getElementById('StockItemSearch').addEventListener('input', function() {
+            if (!this.value.trim()) {
+                document.getElementById('StockItemId').value = '';
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            if (e.target.id !== 'StockItemSearch') {
+                document.getElementById('search-results').innerHTML = '';
+            }
+        });
+    </script>
+}

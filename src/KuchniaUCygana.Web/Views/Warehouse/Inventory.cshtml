@@ -10,24 +10,37 @@
 
 <div class="row justify-content-center">
     <div class="col-12 col-xl-10">
-        <form asp-action="Inventory" method="post" autocomplete="off">
+        <form asp-action="Inventory" method="post" autocomplete="off" id="inventoryForm">
             @Html.AntiForgeryToken()
 
             <div class="card card-premium">
                 <div class="card-status-top bg-azure"></div>
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                    <h3 class="card-title d-flex align-items-center gap-2">
+                    <h3 class="card-title d-flex align-items-center gap-2 mb-0">
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z" /><path d="M13 13h4" /><path d="M13 9h4" /><path d="M9 9h.01" /><path d="M9 13h.01" /><path d="M3 5h2v14h-2z" /></svg>
                         Arkusz Inwentaryzacyjny
                     </h3>
-                    <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex flex-wrap align-items-center gap-3">
+                        <div class="input-group input-group-flat" style="width: 220px;">
+                            <input type="text" id="SearchInput" class="form-control form-control-sm" placeholder="Szukaj składnika..." onkeyup="filterInventory()" />
+                            <span class="input-group-text bg-transparent py-0 px-2">
+                                <a href="javascript:void(0)" class="link-secondary" title="Wyczyść" onclick="resetSearch()">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                                </a>
+                            </span>
+                        </div>
                         <select id="CategoryFilter" class="form-select form-select-sm w-auto" onchange="filterInventory()">
-                            <option value="">Filtruj wg kategorii</option>
+                            <option value="">Wszystkie kategorie</option>
                             <option value="Mięso/Ryby">Mięso/Ryby</option>
                             <option value="Nabiał">Nabiał</option>
                             <option value="Warzywa i owoce">Warzywa i owoce</option>
                             <option value="Suche">Suche</option>
+                            <option value="Opakowania">Opakowania</option>
                         </select>
+                        <label class="form-check form-switch m-0">
+                            <input type="checkbox" id="ShowChangedOnly" class="form-check-input" onchange="filterInventory()">
+                            <span class="form-check-label text-azure fw-bold">Tylko zmienione</span>
+                        </label>
                         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="fillSystemValues()">Kopiuj stany systemowe</button>
                     </div>
                 </div>
@@ -49,10 +62,10 @@
                             @for (int i = 0; i < stockItemsList.Count; i++)
                             {
                                 var item = stockItemsList[i];
-                                <tr data-category="@item.Category">
+                                <tr data-category="@item.Category" data-row-index="@i">
                                     <td class="text-secondary font-weight-medium">#@item.Id</td>
                                     <td>
-                                        <div class="font-weight-bold text-dark">@item.Name</div>
+                                        <div class="font-weight-bold text-dark stock-item-name">@item.Name</div>
                                     </td>
                                     <td>
                                         <span class="badge bg-secondary-lt">@item.Category</span>
@@ -81,13 +94,51 @@
 
                 <div class="card-footer bg-transparent d-flex justify-content-between">
                     <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
-                    <button type="submit" class="btn btn-primary">
+                    <button type="button" class="btn btn-primary" onclick="showSummary()">
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                         Zatwierdź Inwentaryzację
                     </button>
                 </div>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal Podsumowania Inwentaryzacji -->
+<div class="modal modal-blur fade" id="summaryModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header">
+                <h5 class="modal-title text-azure fw-bold d-flex align-items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z" /><path d="M13 13h4" /><path d="M13 9h4" /></svg>
+                    Podsumowanie Różnic Inwentaryzacyjnych
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-secondary">Sprawdź poniższe podsumowanie zmian przed ich ostatecznym zapisaniem w bazie danych. Wyświetlamy wyłącznie pozycje, dla których wprowadzono zmiany ilościowe:</p>
+                <div class="table-responsive">
+                    <table class="table table-vcenter table-premium">
+                        <thead>
+                            <tr>
+                                <th>Składnik</th>
+                                <th class="text-end">Stan systemowy</th>
+                                <th class="text-end">Stan fizyczny</th>
+                                <th class="text-end">Różnica</th>
+                                <th>Powód korekty</th>
+                            </tr>
+                        </thead>
+                        <tbody id="summaryTableBody">
+                            <!-- Wypełniane przez JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-transparent">
+                <button type="button" class="btn btn-link link-secondary" data-bs-dismiss="modal">Powrót do edycji</button>
+                <button type="button" class="btn btn-primary" id="confirmSubmitBtn">Potwierdź i zapisz zmiany</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -110,10 +161,10 @@
             const diff = actualVal - systemVal;
             if (diff > 0.001) {
                 diffSpan.innerText = "+" + diff.toFixed(2);
-                diffSpan.className = "text-success";
+                diffSpan.className = "text-success font-weight-bold fw-bold";
             } else if (diff < -0.001) {
                 diffSpan.innerText = diff.toFixed(2);
-                diffSpan.className = "text-danger";
+                diffSpan.className = "text-danger font-weight-bold fw-bold";
             } else {
                 diffSpan.innerText = "0.00";
                 diffSpan.className = "";
@@ -123,24 +174,98 @@
         function fillSystemValues() {
             const inputs = document.querySelectorAll('input[id^="actual-"]');
             inputs.forEach(input => {
-                input.value = input.getAttribute('data-system-qty');
-                // Trigger input event to update differences
-                input.dispatchEvent(new Event('input', { bubbles: true }));
+                if (!input.value.trim() || parseFloat(input.value) === 0) {
+                    input.value = input.getAttribute('data-system-qty');
+                    // Trigger input event to update differences
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                }
             });
         }
 
+        function resetSearch() {
+            const searchInput = document.getElementById("SearchInput");
+            if (searchInput) {
+                searchInput.value = "";
+                filterInventory();
+            }
+        }
+
         function filterInventory() {
+            const query = document.getElementById("SearchInput").value.toLowerCase();
             const category = document.getElementById("CategoryFilter").value;
+            const showChangedOnly = document.getElementById("ShowChangedOnly").checked;
+
             const rows = document.querySelectorAll("tbody tr[data-category]");
             rows.forEach(row => {
+                const index = row.getAttribute('data-row-index');
+                const name = row.querySelector('.stock-item-name').innerText.toLowerCase();
                 const rowCat = row.getAttribute("data-category");
-                if (!category || rowCat === category) {
+
+                const input = document.getElementById('actual-' + index);
+                const systemVal = parseFloat(input.getAttribute('data-system-qty')) || 0;
+                const actualVal = parseFloat(input.value);
+                const hasDiff = !isNaN(actualVal) && Math.abs(actualVal - systemVal) > 0.001;
+
+                const matchesSearch = !query || name.includes(query);
+                const matchesCategory = !category || rowCat === category;
+                const matchesChanged = !showChangedOnly || hasDiff;
+
+                if (matchesSearch && matchesCategory && matchesChanged) {
                     row.style.display = "";
                 } else {
                     row.style.display = "none";
                 }
             });
         }
+
+        function showSummary() {
+            const tbody = document.getElementById('summaryTableBody');
+            tbody.innerHTML = '';
+            
+            let hasChanges = false;
+            const rows = document.querySelectorAll('tbody tr[data-category]');
+            
+            rows.forEach((row) => {
+                const index = row.getAttribute('data-row-index');
+                const name = row.querySelector('.stock-item-name').innerText;
+                const input = document.getElementById('actual-' + index);
+                const reasonInput = row.querySelector('input[name$=".Reason"]');
+                const unit = input.nextElementSibling.innerText;
+                
+                const systemVal = parseFloat(input.getAttribute('data-system-qty')) || 0;
+                const actualVal = parseFloat(input.value);
+                
+                if (!isNaN(actualVal) && Math.abs(actualVal - systemVal) > 0.001) {
+                    hasChanges = true;
+                    const diff = actualVal - systemVal;
+                    const diffText = diff > 0 ? "+" + diff.toFixed(2) : diff.toFixed(2);
+                    const diffClass = diff > 0 ? "text-success" : "text-danger";
+                    
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="fw-bold text-dark">${name}</td>
+                        <td class="text-end">${systemVal.toFixed(2)} ${unit}</td>
+                        <td class="text-end">${actualVal.toFixed(2)} ${unit}</td>
+                        <td class="text-end fw-bold ${diffClass}">${diffText} ${unit}</td>
+                        <td class="text-secondary small">${reasonInput.value || 'Spis z natury'}</td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+            });
+            
+            if (!hasChanges) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="5" class="text-center py-3 text-secondary">Brak zmian w inwentaryzacji (wszystkie stany są zgodne).</td>`;
+                tbody.appendChild(tr);
+            }
+            
+            const modal = new bootstrap.Modal(document.getElementById('summaryModal'));
+            modal.show();
+        }
+
+        document.getElementById('confirmSubmitBtn').addEventListener('click', function() {
+            document.getElementById('inventoryForm').submit();
+        });
 
         // Initialize differences on load if inputs are already filled
         window.addEventListener('DOMContentLoaded', () => {
@@ -149,6 +274,16 @@
                 if (input.value) {
                     calculateDiff(index);
                 }
+            });
+
+            // Obsługa zapisu po wciśnięciu Enter w polach ilości lub uwag
+            document.querySelectorAll('input[id^="actual-"], input[name$=".Reason"]').forEach(input => {
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault(); // Zapobiega standardowemu zachowaniu
+                        document.getElementById('inventoryForm').submit(); // Bezpośredni zapis i odświeżenie
+                    }
+                });
             });
         });
     </script>

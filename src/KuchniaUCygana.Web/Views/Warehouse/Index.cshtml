@@ -71,28 +71,43 @@
         </div>
     </div>
 
-    <!-- Panel Smart Alertów -->
-    <div class="col-12">
-        <div class="card card-premium">
-            <div class="card-status-top bg-danger"></div>
-            <div class="card-header bg-transparent py-3">
-                <h3 class="card-title text-danger d-flex align-items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-danger" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2z" /></svg>
-                    Inteligentne Alerty Magazynowe (Smart Analyzer)
-                </h3>
-            </div>
-            <div class="card-body py-2" id="alerts-container">
-                @await Html.PartialAsync("_AlertsPartial", Model.Alerts)
-            </div>
-        </div>
-    </div>
-
     <!-- Tabela Stanów i Wyszukiwarka -->
     <div class="col-12">
         <div class="card card-premium">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3 py-3">
                 <h3 class="card-title">Aktualne Stany Magazynowe</h3>
                 <div class="btn-list">
+                    <!-- Dropdown alertów jako nakładka -->
+                    <div class="dropdown">
+                        <button class="btn btn-danger dropdown-toggle" type="button" id="alertsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-inline me-1" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2z" /></svg>
+                            Alerty (@alerts.Count)
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end p-2 shadow-lg" aria-labelledby="alertsDropdown" style="width: 400px; max-height: 400px; overflow-y: auto; z-index: 1060;">
+                            <h6 class="dropdown-header text-danger font-weight-bold fw-bold mb-2">Inteligentne Alerty</h6>
+                            @if (!alerts.Any())
+                            {
+                                <div class="text-muted p-3 text-center">Wszystkie zapasy w normie. Brak alertów.</div>
+                            }
+                            else
+                            {
+                                foreach (var alert in alerts)
+                                {
+                                    var isDanger = alert.AlertType == "LOW_STOCK" || (alert.DaysUntilExpiry.HasValue && alert.DaysUntilExpiry <= 3);
+                                    <button type="button" class="dropdown-item d-flex align-items-start gap-2 p-2 rounded mb-1 text-wrap border-0"
+                                            onclick="applyAlertFilter('@Html.Raw(System.Text.Encodings.Web.JavaScriptEncoder.Default.Encode(alert.StockItemName))')"
+                                            style="cursor: pointer; background: transparent; text-align: left; width: 100%;">
+                                        <span class="status-dot-pulse @(isDanger ? "bg-danger" : "bg-warning") mt-1 me-2" style="flex-shrink: 0;"></span>
+                                        <div style="flex-grow: 1;">
+                                            <div class="fw-bold text-dark">@alert.StockItemName</div>
+                                            <div class="text-secondary small" style="white-space: normal;">@alert.Message</div>
+                                        </div>
+                                    </button>
+                                }
+                            }
+                        </div>
+                    </div>
+
                     <a asp-action="Issue" class="btn btn-primary">
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
                         Wydanie ręczne
@@ -123,6 +138,7 @@
                                 <option value="Nabiał">Nabiał</option>
                                 <option value="Warzywa i owoce">Warzywa i owoce</option>
                                 <option value="Suche">Suche</option>
+                                <option value="Opakowania">Opakowania</option>
                             </select>
                         </div>
                         <div class="col-md-5 d-flex gap-4">
@@ -145,3 +161,20 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        function applyAlertFilter(stockItemName) {
+            var searchInput = document.getElementById('SearchInput');
+            searchInput.value = stockItemName;
+            
+            // Trigger HTMX search
+            var event = new Event('keyup', { bubbles: true });
+            searchInput.dispatchEvent(event);
+            
+            var form = document.getElementById('filter-form');
+            var changeEvent = new Event('change', { bubbles: true });
+            form.dispatchEvent(changeEvent);
+        }
+    </script>
+}

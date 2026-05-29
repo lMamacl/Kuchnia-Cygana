@@ -1,0 +1,24 @@
+@using System.Text.Encodings.Web
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
+
+<div class="list-group list-group-flush border shadow-sm rounded" style="max-height: 250px; overflow-y: auto; position: absolute; z-index: 1050; width: 100%; background: var(--tblr-card-bg, #fff);">
+    @if (!Model.Any())
+    {
+        <div class="list-group-item text-secondary py-3 text-center">Brak dopasowań</div>
+    }
+    else
+    {
+        foreach (var item in Model)
+        {
+            <button type="button" 
+                    class="list-group-item list-group-item-action py-2 d-flex justify-content-between align-items-center"
+                    onclick="selectStockItem(@item.Id, '@Html.Raw(JavaScriptEncoder.Default.Encode(item.Name))', '@item.CurrentStock.ToString("F2")', '@item.UnitSymbol')">
+                <div class="text-start">
+                    <span class="fw-bold text-dark d-block">@item.Name</span>
+                    <span class="text-secondary small">Dostępne: @item.CurrentStock.ToString("F2") @item.UnitSymbol</span>
+                </div>
+                <span class="badge bg-blue-lt">@item.UnitSymbol</span>
+            </button>
+        }
+    }
+</div>

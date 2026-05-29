@@ -94,105 +94,7 @@
     </div>
 </div>
 
-<!-- Podsumowanie statystyczne -->
-<div class="row g-3 mb-4 d-print-none">
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-sm">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-auto">
-                        <span class="bg-primary text-white avatar">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 13.5a2.5 2.5 0 1 0 4 0v-8.5a2 2 0 0 0 -4 0v8.5z" /><path d="M10 9l4 0" /><path d="M6.5 17h11" /></span>
-                    </div>
-                    <div class="col">
-                        <div class="font-weight-medium fw-bold">
-                            @Model.TotalReadings
-                        </div>
-                        <div class="text-secondary small">
-                            Wszystkie odczyty
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-sm">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-auto">
-                        <span class="bg-danger text-white avatar">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></span>
-                    </div>
-                    <div class="col">
-                        <div class="font-weight-medium fw-bold text-danger">
-                            @Model.OutOfRangeReadings
-                        </div>
-                        <div class="text-secondary small">
-                            Przekroczenia HACCP
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-sm">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-auto">
-                        <span class="bg-success text-white avatar">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></span>
-                    </div>
-                    <div class="col">
-                        <div class="font-weight-medium fw-bold text-success">
-                            @(Model.TotalReadings - Model.OutOfRangeReadings)
-                        </div>
-                        <div class="text-secondary small">
-                            Odczyty w normie
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card card-sm">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-auto">
-                        <span class="bg-info text-white avatar">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12h1M20 12h1M5.6 5.6l.7 .7M17.7 5.6l-.7 .7M9 16a5 5 0 1 1 6 0a3.5 3.5 0 0 0 -1 3a2 2 0 0 1 -4 0a3.5 3.5 0 0 0 -1 -3" /><path d="M9.7 17l4.6 0" /></span>
-                    </div>
-                    <div class="col">
-                        <div class="font-weight-medium fw-bold">
-                            @reportRows.Count
-                        </div>
-                        <div class="text-secondary small">
-                            Monitorowane urządzenia
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- Wykres temperatur d-print-none -->
-<div class="row g-3 mb-4 d-print-none">
-    <div class="col-12">
-        <div class="card card-premium">
-            <div class="card-header bg-transparent py-3">
-                <h3 class="card-title text-azure">Analiza Zgodności HACCP (Wykresy Urządzeń)</h3>
-            </div>
-            <div class="card-body">
-                <div style="height: 300px;">
-                    <canvas id="haccpChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <div class="card card-premium">
     <div class="card-body p-5">
@@ -201,7 +103,7 @@
             <div class="col">
                 <h1 class="h2 mb-1 text-dark">RAPORT KONTROLI TEMPERATUR (HACCP)</h1>
                 <div class="text-secondary small">
-                    Okres sprawozdawczy: <strong>@dateFrom.ToString("dd.MM.yyyy")</strong> do <strong>@dateTo.ToString("dd.MM.yyyy")</strong>
+                    Okres sprawozdawczy: <strong id="date-from-text" class="text-azure cursor-pointer" style="cursor: pointer;" title="Podwójne kliknięcie otwiera kalendarz">@dateFrom.ToString("dd.MM.yyyy")</strong> do <strong id="date-to-text" class="text-azure cursor-pointer" style="cursor: pointer;" title="Podwójne kliknięcie otwiera kalendarz">@dateTo.ToString("dd.MM.yyyy")</strong>
                 </div>
             </div>
             <div class="col-auto text-end">
@@ -272,6 +174,23 @@
                 <div class="border-bottom border-secondary pb-4" style="border-bottom-style: dotted !important;"></div>
                 <div class="text-secondary small mt-2">Zatwierdził (Kierownik Magazynu)</div>
             </div>
+        <!-- Sekcja Wykresu (Ekran i Druk na nowej stronie) -->
+        <div class="page-break-before mt-5">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="card-title text-azure mb-0">Analiza Zgodności HACCP (Wykres Temperatur)</h3>
+                <div class="d-print-none">
+                    <select id="ChartDeviceSelect" class="form-select form-select-sm w-auto" onchange="updateHaccpChart()">
+                        <option value="">Wszystkie urządzenia</option>
+                        @foreach (var row in reportRows)
+                        {
+                            <option value="@row.Device">@row.Device</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div style="height: 320px; position: relative;">
+                <canvas id="haccpChart"></canvas>
+            </div>
         </div>
     </div>
 </div>
@@ -279,68 +198,201 @@
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        window.addEventListener('DOMContentLoaded', () => {
-            const rawData = @Html.Raw(Json.Serialize(Model.Readings.OrderBy(r => r.RecordedAt)));
+        let haccpChart = null;
+        const rawData = @Html.Raw(Json.Serialize(Model.Readings.OrderBy(r => r.RecordedAt)));
+
+        function getDeviceLimits(deviceName) {
+            const name = deviceName.toLowerCase();
+            let minLimit = -25.0;
+            let maxLimit = 8.0;
+            
+            if (name.includes("zamrażarka") || name.includes("freezer")) {
+                minLimit = -22.0;
+                maxLimit = -18.0;
+            } else if (name.includes("mięso")) {
+                minLimit = 0.0;
+                maxLimit = 4.0;
+            } else if (name.includes("nabiał")) {
+                minLimit = 2.0;
+                maxLimit = 6.0;
+            } else if (name.includes("warzywa")) {
+                minLimit = 4.0;
+                maxLimit = 8.0;
+            } else if (name.includes("chłodnia")) {
+                minLimit = 2.0;
+                maxLimit = 8.0;
+            } else if (name.includes("witryna")) {
+                minLimit = 2.0;
+                maxLimit = 8.0;
+            } else if (name.includes("suchy")) {
+                minLimit = 15.0;
+                maxLimit = 25.0;
+            }
+            return { min: minLimit, max: maxLimit };
+        }
+
+        function updateHaccpChart() {
+            const selectedDevice = document.getElementById("ChartDeviceSelect").value;
             
             // Group readings by device
             const deviceGroups = {};
             rawData.forEach(item => {
                 const deviceName = item.deviceNameOrLocation;
+                
+                // Filter by selected device if specified
+                if (selectedDevice && deviceName !== selectedDevice) {
+                    return;
+                }
+                
                 if (!deviceGroups[deviceName]) {
                     deviceGroups[deviceName] = {
                         label: deviceName,
                         data: [],
                         borderColor: getRandomColor(deviceName),
+                        backgroundColor: getRandomColor(deviceName) + '11',
                         tension: 0.2,
-                        fill: false
+                        fill: false,
+                        spanGaps: false
                     };
                 }
                 deviceGroups[deviceName].data.push({
-                    x: new Date(item.recordedAt).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+                    x: new Date(item.recordedAt).getTime(),
                     y: item.recordedTemperatureCelsius
                 });
             });
 
-            const datasets = Object.values(deviceGroups);
-            const uniqueLabels = [...new Set(rawData.map(d => new Date(d.recordedAt).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })))];
+            let datasets = Object.values(deviceGroups);
 
-            datasets.forEach(dataset => {
-                dataset.data = uniqueLabels.map(label => {
-                    const match = dataset.data.find(d => d.x === label);
-                    return match ? match.y : null;
-                });
-            });
-
-            function getRandomColor(str) {
-                let hash = 0;
-                for (let i = 0; i < str.length; i++) {
-                    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            // If a specific device is selected, add its red limit lines
+            if (selectedDevice && datasets.length > 0) {
+                const limits = getDeviceLimits(selectedDevice);
+                const timestamps = rawData.filter(r => r.deviceNameOrLocation === selectedDevice).map(r => new Date(r.recordedAt).getTime());
+                if (timestamps.length > 0) {
+                    const minX = Math.min(...timestamps);
+                    const maxX = Math.max(...timestamps);
+                    
+                    // Min limit line dataset
+                    datasets.push({
+                        label: `Limit min (${limits.min}°C)`,
+                        data: [{ x: minX, y: limits.min }, { x: maxX, y: limits.min }],
+                        borderColor: '#ef4444',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        showLine: true
+                    });
+                    
+                    // Max limit line dataset
+                    datasets.push({
+                        label: `Limit max (${limits.max}°C)`,
+                        data: [{ x: minX, y: limits.max }, { x: maxX, y: limits.max }],
+                        borderColor: '#ef4444',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        showLine: true
+                    });
                 }
-                const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-                return "#" + "00000".substring(0, 6 - c.length) + c;
             }
 
             const ctx = document.getElementById('haccpChart').getContext('2d');
-            new Chart(ctx, {
+            
+            if (haccpChart) {
+                haccpChart.destroy();
+            }
+
+            haccpChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: uniqueLabels,
                     datasets: datasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
+                        x: {
+                            type: 'linear',
+                            ticks: {
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    return date.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' }) + ' ' + 
+                                           date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Czas pomiaru'
+                            }
+                        },
                         y: {
                             ticks: {
                                 callback: function(value) {
                                     return value + '°C';
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Temperatura'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    if (label.includes('Limit')) {
+                                        return label;
+                                    }
+                                    const val = context.parsed.y;
+                                    const device = context.dataset.label;
+                                    const limits = getDeviceLimits(device);
+                                    return `${device}: ${val}°C (Norma: ${limits.min}°C do ${limits.max}°C)`;
                                 }
                             }
                         }
                     }
                 }
             });
+        }
+
+        function getRandomColor(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+            return "#" + "00000".substring(0, 6 - c.length) + c;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            // Double click date triggers
+            document.getElementById('date-from-text').addEventListener('dblclick', function() {
+                const input = document.querySelector('input[name="from"]');
+                if (input) {
+                    input.focus();
+                    try {
+                        input.showPicker();
+                    } catch(e) {
+                        input.click();
+                    }
+                }
+            });
+            document.getElementById('date-to-text').addEventListener('dblclick', function() {
+                const input = document.querySelector('input[name="to"]');
+                if (input) {
+                    input.focus();
+                    try {
+                        input.showPicker();
+                    } catch(e) {
+                        input.click();
+                    }
+                }
+            });
+
+            updateHaccpChart();
         });
     </script>
 }

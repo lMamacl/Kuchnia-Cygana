@@ -45,15 +45,27 @@
                   hx-target="#transactions-table-container" 
                   hx-trigger="change">
                 <div class="row g-3">
-                    <div class="col-md-3">
+                    <div class="col-md-3 position-relative">
                         <label class="form-label text-secondary fw-bold">Składnik magazynowy</label>
-                        <select name="StockItemId" class="form-select">
-                            <option value="">-- Wszystkie składniki --</option>
-                            @foreach (var item in stockItems)
-                            {
-                                <option value="@item.Id" selected="@(currentFilter.StockItemId == item.Id ? "selected" : null)">@item.Name</option>
-                            }
-                        </select>
+                        <input type="hidden" name="StockItemId" id="StockItemId" value="@(currentFilter.StockItemId)" />
+                        <div class="input-group input-group-flat">
+                            <input type="text" 
+                                   id="StockItemSearch" 
+                                   class="form-control" 
+                                   placeholder="Wyszukaj składnik..." 
+                                   autocomplete="off"
+                                   hx-get="/warehouse/stock-lookup"
+                                   hx-trigger="keyup changed delay:200ms"
+                                   hx-target="#search-results"
+                                   name="q"
+                                   value="@(stockItems.FirstOrDefault(i => i.Id == currentFilter.StockItemId)?.Name ?? "")" />
+                            <span class="input-group-text bg-transparent py-0 px-2">
+                                <a href="javascript:void(0)" class="link-secondary" title="Wyczyść" onclick="clearStockItemFilter()">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                                </a>
+                            </span>
+                        </div>
+                        <div id="search-results" class="position-absolute w-100" style="z-index: 1050;"></div>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label text-secondary fw-bold">Rodzaj operacji</label>
@@ -89,3 +101,37 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        function selectStockItem(id, name, stock, unit) {
+            document.getElementById('StockItemId').value = id;
+            document.getElementById('StockItemSearch').value = name;
+            document.getElementById('search-results').innerHTML = '';
+            
+            // Wyzwalamy zdarzenie zmiany, aby HTMX odświeżył tabelę
+            document.getElementById('StockItemId').dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        function clearStockItemFilter() {
+            document.getElementById('StockItemId').value = '';
+            document.getElementById('StockItemSearch').value = '';
+            document.getElementById('search-results').innerHTML = '';
+            
+            document.getElementById('StockItemId').dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        document.getElementById('StockItemSearch').addEventListener('input', function() {
+            if (!this.value.trim()) {
+                document.getElementById('StockItemId').value = '';
+                document.getElementById('StockItemId').dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            if (e.target.id !== 'StockItemSearch') {
+                document.getElementById('search-results').innerHTML = '';
+            }
+        });
+    </script>
+}
