@@ -1,5 +1,232 @@
+@model RoutesViewModel
 @{
     Layout = "_LayoutStaff";
+    var selectedDate = Model.SelectedDate.ToString("yyyy-MM-dd");
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+@if (Model.GenerationResult is { } generation)
+{
+    <div class="alert @(generation.Succeeded ? "alert-success" : "alert-warning") alert-dismissible" role="alert">
+        <div class="d-flex">
+            <div class="me-2">@Html.Raw(StaffIconCatalog.Get(generation.Succeeded ? "clipboard-check" : "alert"))</div>
+            <div>
+                <h4 class="alert-title mb-1">
+                    @(generation.Succeeded ? "Trasy wygenerowane" : "Generowanie wymaga uwagi")
+                </h4>
+                @if (generation.Issues.Count == 0)
+                {
+                    <div>Zaplanowano @generation.PlannedStopsCount przystankow w @generation.GeneratedRoutesCount trasach.</div>
+                }
+                else
+                {
+                    @foreach (var issue in generation.Issues)
+                    {
+                        <div>@issue.Message</div>
+                    }
+                }
+            </div>
+        </div>
+        <a class="btn-close" data-bs-dismiss="alert" aria-label="close"></a>
+    </div>
+}
+
+<div class="row row-deck row-cards mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Trasy</div>
+                <div class="h1 mb-3">@Model.Routes.Count</div>
+                <div class="text-secondary">Zaplanowane na @Model.SelectedDate.ToString("dd.MM.yyyy")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-indigo">Przystanki</div>
+                <div class="h1 mb-3 text-indigo">@Model.TotalStops</div>
+                <div class="text-secondary">Dostawy przypisane do tras</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-success">Auta</div>
+                <div class="h1 mb-3 text-success">@Model.AssignedVehiclesCount</div>
+                <div class="text-secondary">Trasy z przypisanym pojazdem</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Dystans</div>
+                <div class="h1 mb-3">@Model.TotalDistanceKm.ToString("N1") km</div>
+                <div class="text-secondary">Szacunek po kolejnosci przystankow</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-premium mb-4">
+    <div class="card-header">
+        <h3 class="card-title">Planowanie dnia</h3>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <form asp-action="Routes" method="get">
+                    <label class="form-label">Dzien dostaw</label>
+                    <div class="input-group">
+                        <input type="date" name="date" value="@selectedDate" class="form-control" />
+                        <button type="submit" class="btn btn-outline-primary">
+                            @Html.Raw(StaffIconCatalog.Get("search"))
+                            Pokaz
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="col-md-8">
+                <form asp-action="GenerateDailyRoutes" method="post" class="row g-2 align-items-end">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="routeDate" value="@selectedDate" />
+                    <div class="col-sm-4">
+                        <label class="form-label">Waga dostawy</label>
+                        <div class="input-group">
+                            <input type="number" name="defaultDeliveryLoadKg" value="1" min="0.1" step="0.1" class="form-control" />
+                            <span class="input-group-text">kg</span>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label">Limit stopow</label>
+                        <input type="number" name="maxStopsPerRoute" min="1" class="form-control" placeholder="Bez limitu" />
+                    </div>
+                    <div class="col-sm-4">
+                        <button type="submit" class="btn btn-primary w-100">
+                            @Html.Raw(StaffIconCatalog.Get("wand"))
+                            Generuj trasy
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.GenerationResult?.MissingGeocoding.Count > 0)
+{
+    <div class="card card-premium mb-4">
+        <div class="card-header">
+            <h3 class="card-title text-warning">Adresy bez geokodowania</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-vcenter table-premium card-table">
+                <thead>
+                    <tr>
+                        <th>DeliveryCalendarId</th>
+                        <th>Zamowienie</th>
+                        <th>Adres</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var delivery in Model.GenerationResult.MissingGeocoding)
+                    {
+                        <tr>
+                            <td class="font-monospace">@delivery.DeliveryCalendarId</td>
+                            <td>@delivery.OrderNumber</td>
+                            <td>@delivery.FullAddress</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<div class="card card-premium">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h3 class="card-title">Trasy z dnia @Model.SelectedDate.ToString("dd.MM.yyyy")</h3>
+        <div class="card-actions">
+            <a asp-action="CreateRoute" class="btn btn-outline-primary">
+                @Html.Raw(StaffIconCatalog.Get("plus"))
+                Kreator
+            </a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter table-premium card-table table-striped">
+            <thead>
+                <tr>
+                    <th>Nazwa</th>
+                    <th>Status</th>
+                    <th>Pojazd</th>
+                    <th>Przystanki</th>
+                    <th>Dystans</th>
+                    <th class="w-1">Akcje</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Routes.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="text-center text-secondary py-4">
+                            Brak tras dla wybranego dnia. Uzyj przycisku generowania po zakonczeniu geokodowania adresow.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var route in Model.Routes)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-bold">@route.Name</div>
+                                <div class="text-secondary small">ID @route.Id</div>
+                            </td>
+                            <td>@RouteStatusBadge(route.Status)</td>
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(route.VehicleRegistration))
+                                {
+                                    <span class="text-secondary">Nie przypisano</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-blue text-blue-fg font-monospace">@route.VehicleRegistration</span>
+                                }
+                            </td>
+                            <td>@route.Stops.Count</td>
+                            <td>@route.TotalDistanceKm.ToString("N1") km</td>
+                            <td>
+                                <div class="btn-list flex-nowrap">
+                                    <a asp-action="RouteDetails" asp-route-id="@route.Id" class="btn btn-sm btn-outline-primary">
+                                        Szczegoly
+                                    </a>
+                                    <a asp-action="RouteMap" asp-route-id="@route.Id" class="btn btn-sm btn-outline-secondary">
+                                        Mapa
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@functions {
+    private static Microsoft.AspNetCore.Html.IHtmlContent RouteStatusBadge(string status)
+    {
+        var (css, label) = status switch
+        {
+            "Assigned" => ("bg-blue-lt text-blue", "Przypisana"),
+            "InProgress" => ("bg-warning-lt text-warning", "W trasie"),
+            "Completed" => ("bg-success-lt text-success", "Zakonczona"),
+            "Failed" => ("bg-danger-lt text-danger", "Problem"),
+            _ => ("bg-secondary-lt text-secondary", "Utworzona"),
+        };
+
+        return new Microsoft.AspNetCore.Html.HtmlString($"<span class=\"badge {css}\">{label}</span>");
+    }
+}

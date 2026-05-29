@@ -1,10 +1,11 @@
-using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
-using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Application.DTOs.Logistics;
+using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
+using KuchniaUCygana.Web.Models.Logistics;
+using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
@@ -12,6 +13,7 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class LogisticsController : Controller
 {
     private readonly IVehicleService _vehicleService;
+    private readonly IDeliveryRouteService _deliveryRouteService;
     private readonly IGeocodeService _geocodeService;
     private readonly IDeliveryRouteService _deliveryRouteService;
 
@@ -21,6 +23,7 @@ public sealed class LogisticsController : Controller
         IDeliveryRouteService deliveryRouteService)
     {
         _vehicleService = vehicleService;
+        _deliveryRouteService = deliveryRouteService;
         _geocodeService = geocodeService;
         _deliveryRouteService = deliveryRouteService;
     }
@@ -62,13 +65,20 @@ public sealed class LogisticsController : Controller
     {
         ViewData["Title"] = "Nowa trasa";
         ViewData["Section"] = "Logistyka";
-        ViewData["Description"] = "Szkielet kreatora trasy.";
-        return View();
+        ViewData["Description"] = "Generowanie tras na podstawie dostaw z kalendarza.";
+        return View(new GenerateDailyRoutesRequest
+        {
+            RouteDate = DateTimeOffset.Now.Date,
+            DefaultDeliveryLoadKg = 1m,
+        });
     }
 
     [HttpGet("routes/{id:int?}")]
     public async Task<IActionResult> RouteDetails(int? id)
     {
+        var route = await _deliveryRouteService.GetRouteDetailsAsync(id);
+        if (route == null) return NotFound();
+
         ViewData["Title"] = "Edycja trasy";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = id.HasValue ? $"Placeholder trasy #{id}." : "Placeholder edycji trasy.";
