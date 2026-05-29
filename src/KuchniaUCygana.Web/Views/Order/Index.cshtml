@@ -1,81 +1,148 @@
-﻿@model IEnumerable<KuchniaUCygana.Application.DTOs.Orders.OrderSummaryDto>
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Orders.OrderSummaryDto>
 @using KuchniaUCygana.Domain.Enums
 @{
     ViewData["Title"] = "Moje zamówienia";
+    var culture = new System.Globalization.CultureInfo("pl-PL");
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0">Moje zamówienia</h2>
+<style>
+    .orders-shell {
+        color: #17211b;
+    }
+
+    .orders-hero,
+    .orders-card,
+    .orders-empty {
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 24px;
+        background: #fff;
+        box-shadow: 0 16px 45px rgba(23, 33, 27, .08);
+    }
+
+    .orders-hero {
+        background: linear-gradient(135deg, #edf8ef, #fff8ea);
+    }
+
+    .orders-card {
+        overflow: hidden;
+    }
+
+    .orders-card thead th {
+        color: #68756d;
+        font-size: .76rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+
+    .order-number {
+        font-weight: 800;
+        color: #17211b;
+    }
+</style>
+
+<div class="orders-shell">
+    <div class="orders-hero p-4 p-md-5 mb-4">
+        <div class="text-success small fw-bold text-uppercase mb-2">Historia</div>
+        <h1 class="fw-bold mb-2">Moje zamówienia</h1>
+        <p class="text-muted mb-0">Wracaj do płatności, sprawdzaj terminy i zarządzaj dostawami.</p>
+    </div>
+
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success border-0 shadow-sm">@success</div>
+    }
+    @if (TempData["Error"] is string error)
+    {
+        <div class="alert alert-warning border-0 shadow-sm">@error</div>
+    }
+    @if (TempData["ErrorMessage"] is string errorMessage)
+    {
+        <div class="alert alert-warning border-0 shadow-sm">@errorMessage</div>
+    }
+
+    @if (!Model.Any())
+    {
+        <div class="orders-empty p-5 text-center">
+            <div class="text-success small fw-bold text-uppercase mb-2">Brak zamówień</div>
+            <h2 class="h4 fw-bold">Nie masz jeszcze żadnych zamówień</h2>
+            <p class="text-muted mb-4">Dodaj dietę do koszyka i przejdź przez checkout.</p>
+            <a asp-controller="Home" asp-action="Index" class="btn btn-success px-4">Przejdź do katalogu</a>
+        </div>
+    }
+    else
+    {
+        <div class="orders-card">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Numer zamówienia</th>
+                            <th>Data złożenia</th>
+                            <th>Okres dostawy</th>
+                            <th>Status</th>
+                            <th class="text-end">Kwota</th>
+                            <th class="text-end pe-4">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var order in Model)
+                        {
+                            var (badgeClass, statusText) = order.Status switch
+                            {
+                                OrderStatus.Draft => ("bg-secondary", "Koszyk"),
+                                OrderStatus.PendingPayment => ("bg-warning text-dark", "Oczekuje na płatność"),
+                                OrderStatus.Paid => ("bg-success", "Opłacone"),
+                                OrderStatus.InProduction => ("bg-info text-dark", "W produkcji"),
+                                OrderStatus.Cancelled => ("bg-danger", "Anulowane"),
+                                _ => ("bg-secondary", "Nieznany")
+                            };
+
+                            <tr>
+                                <td class="ps-4">
+                                    <span class="order-number">@order.OrderNumber</span>
+                                </td>
+                                <td class="text-nowrap">
+                                    @order.CreatedAt.ToString("dd.MM.yyyy")
+                                </td>
+                                <td class="text-nowrap">
+                                    @if (order.StartDate.HasValue && order.EndDate.HasValue)
+                                    {
+                                        @($"{order.StartDate.Value:dd.MM.yyyy} - {order.EndDate.Value:dd.MM.yyyy}")
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">Brak terminu</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge @badgeClass rounded-pill">@statusText</span>
+                                </td>
+                                <td class="text-end text-nowrap fw-semibold">
+                                    @order.FinalPrice.ToString("C", culture)
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="d-flex justify-content-end gap-2">
+                                        @if (order.Status == OrderStatus.PendingPayment)
+                                        {
+                                            <a asp-controller="Checkout"
+                                               asp-action="Payment"
+                                               asp-route-orderId="@order.Id"
+                                               class="btn btn-sm btn-success">
+                                                Opłać
+                                            </a>
+                                        }
+
+                                        <a asp-action="Details" asp-route-orderId="@order.Id"
+                                           class="btn btn-sm btn-outline-primary">
+                                            Szczegóły
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
 </div>
-
-@if (!Model.Any())
-{
-    <div class="alert alert-info">
-        Nie masz jeszcze żadnych zamówień.
-        <a asp-controller="Cart" asp-action="Index" class="alert-link">
-            Przejdź do katalogu diet
-        </a>.
-    </div>
-}
-else
-{
-    <div class="table-responsive">
-        <table class="table table-hover align-middle">
-            <thead class="table-light">
-                <tr>
-                    <th>Numer zamówienia</th>
-                    <th>Data złożenia</th>
-                    <th>Okres dostawy</th>
-                    <th>Status</th>
-                    <th class="text-end">Kwota</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var order in Model)
-                {
-                    var (badgeClass, statusText) = order.Status switch
-                    {
-                        OrderStatus.Draft => ("bg-secondary", "Koszyk"),
-                        OrderStatus.PendingPayment => ("bg-warning text-dark", "Oczekuje na płatność"),
-                        OrderStatus.Paid => ("bg-success", "Opłacone"),
-                        OrderStatus.InProduction => ("bg-info text-dark", "W produkcji"),
-                        OrderStatus.Cancelled => ("bg-danger", "Anulowane"),
-                        _ => ("bg-secondary", "Nieznany")
-                    };
-
-                    <tr>
-                        <td>
-                            <strong>@order.OrderNumber</strong>
-                        </td>
-                        <td class="text-nowrap">
-                            @order.CreatedAt.ToString("dd.MM.yyyy")
-                        </td>
-                        <td class="text-nowrap">
-                            @if (order.StartDate.HasValue && order.EndDate.HasValue)
-                            {
-                                @($"{order.StartDate.Value:dd.MM.yyyy} – {order.EndDate.Value:dd.MM.yyyy}")
-                            }
-                            else
-                            {
-                                <span class="text-muted">—</span>
-                            }
-                        </td>
-                        <td>
-                            <span class="badge @badgeClass">@statusText</span>
-                        </td>
-                        <td class="text-end text-nowrap">
-                            @order.FinalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
-                        </td>
-                        <td class="text-end">
-                            <a asp-action="Details" asp-route-orderId="@order.Id"
-                               class="btn btn-sm btn-outline-primary">
-                                Szczegóły
-                            </a>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-}

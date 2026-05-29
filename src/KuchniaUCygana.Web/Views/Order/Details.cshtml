@@ -35,11 +35,23 @@
 
     @if (Model.Status == OrderStatus.PendingPayment || Model.Status == OrderStatus.Draft)
     {
-        <form asp-action="Cancel" asp-route-orderId="@Model.Id" method="post"
-              x-data="{}"
-              x-on:submit.prevent="confirm('Czy na pewno chcesz anulować to zamówienie?') && $el.submit()">
-            <button type="submit" class="btn btn-outline-danger btn-sm">Anuluj zamówienie</button>
-        </form>
+        <div class="d-flex flex-wrap justify-content-end gap-2">
+            @if (Model.Status == OrderStatus.PendingPayment)
+            {
+                <a asp-controller="Checkout"
+                   asp-action="Payment"
+                   asp-route-orderId="@Model.Id"
+                   class="btn btn-success btn-sm">
+                    Przejdź do płatności
+                </a>
+            }
+
+            <form asp-action="Cancel" asp-route-orderId="@Model.Id" method="post"
+                  x-data="{}"
+                  x-on:submit.prevent="confirm('Czy na pewno chcesz anulować to zamówienie?') && $el.submit()">
+                <button type="submit" class="btn btn-outline-danger btn-sm">Anuluj zamówienie</button>
+            </form>
+        </div>
     }
 </div>
 

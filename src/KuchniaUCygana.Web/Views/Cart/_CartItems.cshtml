@@ -1,69 +1,76 @@
-﻿@model KuchniaUCygana.Application.DTOs.Orders.CartDto
+@model KuchniaUCygana.Application.DTOs.Orders.CartDto
 
 @if (!Model.Items.Any())
 {
-    <div class="alert alert-info">
-        Koszyk jest pusty.
-        <a href="/" class="alert-link">Przejdz do katalogu diet</a>.
+    <div class="cart-empty p-5 text-center">
+        <div class="text-success small fw-bold text-uppercase mb-2">Koszyk jest pusty</div>
+        <h2 class="h4 fw-bold">Dodaj dietę z widoku głównego</h2>
+        <p class="text-muted mb-4">Na razie katalog jest mockiem, ale cały proces zamówienia działa.</p>
+        <a asp-controller="Home" asp-action="Index" class="btn btn-success px-4">Przejdź do katalogu</a>
     </div>
 }
 else
 {
-    <div class="table-responsive mb-3">
-        <table class="table table-hover align-middle">
-            <thead class="table-light">
-                <tr>
-                    <th>Dieta</th>
-                    <th>Wariant</th>
-                    <th class="text-center">kcal</th>
-                    <th class="text-center">Dni</th>
-                    <th class="text-end">Cena/dzien</th>
-                    <th class="text-end">Razem</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var item in Model.Items)
-                {
+    <div class="cart-card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle cart-table mb-0">
+                <thead class="table-light">
                     <tr>
-                        <td><strong>@item.DietName</strong></td>
-                        <td>@item.VariantName</td>
-                        <td class="text-center">@item.CaloriesPerDay</td>
-                        <td class="text-center">@item.TotalDays</td>
-                        <td class="text-end">@item.PricePerDay.ToString("C", new System.Globalization.CultureInfo("pl-PL"))</td>
-                        <td class="text-end fw-semibold">@item.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))</td>
-                        <td class="text-end">
-                            <button class="btn btn-sm btn-outline-danger"
-                                    hx-post="/Cart/Remove/@item.DietVariantId"
-                                    hx-target="#cart-contents"
-                                    hx-swap="innerHTML">
-                                Usun
-                            </button>
-                        </td>
+                        <th>Dieta</th>
+                        <th>Wariant</th>
+                        <th class="text-center">kcal</th>
+                        <th class="text-center">Dni</th>
+                        <th class="text-end">Cena / dzień</th>
+                        <th class="text-end">Razem</th>
+                        <th></th>
                     </tr>
-                }
-            </tbody>
-            <tfoot class="table-light">
-                <tr>
-                    <td colspan="5" class="text-end fw-bold">Suma:</td>
-                    <td class="text-end fw-bold fs-5">
-                        @Model.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
-                    </td>
-                    <td></td>
-                </tr>
-            </tfoot>
-        </table>
-    </div>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.Items)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-bold">@item.DietName</div>
+                                <span class="badge text-bg-success bg-opacity-75 rounded-pill">Plan</span>
+                            </td>
+                            <td>@item.VariantName</td>
+                            <td class="text-center">@item.CaloriesPerDay</td>
+                            <td class="text-center fw-semibold">@item.TotalDays</td>
+                            <td class="text-end">@item.PricePerDay.ToString("C", new System.Globalization.CultureInfo("pl-PL"))</td>
+                            <td class="text-end fw-bold">@item.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-danger"
+                                        hx-post="@Url.Action("Remove", "Cart", new { dietVariantId = item.DietVariantId })"
+                                        hx-target="#cart-contents"
+                                        hx-swap="innerHTML">
+                                    Usuń
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot class="cart-total">
+                    <tr>
+                        <td colspan="5" class="text-end fw-bold">Suma</td>
+                        <td class="text-end fw-bold fs-5">
+                            @Model.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
+                        </td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
 
-    <div class="d-flex justify-content-between">
-        <form asp-controller="Cart" asp-action="Clear" method="post">
-            <button type="submit" class="btn btn-outline-secondary">Wyczysc koszyk</button>
-        </form>
+        <div class="d-flex flex-wrap justify-content-between gap-2 p-3 p-md-4 border-top">
+            <form asp-controller="Cart" asp-action="Clear" method="post">
+                <button type="submit" class="btn btn-outline-secondary">Wyczyść koszyk</button>
+            </form>
 
-        <form asp-controller="Cart" asp-action="Checkout" method="post">
-            <button type="submit" class="btn btn-primary btn-lg">
-                Przejdz do realizacji zamowienia →
-            </button>
-        </form>
+            <form asp-controller="Cart" asp-action="Checkout" method="post">
+                <button type="submit" class="btn btn-success btn-lg px-4">
+                    Przejdź do realizacji zamówienia
+                </button>
+            </form>
+        </div>
     </div>
 }

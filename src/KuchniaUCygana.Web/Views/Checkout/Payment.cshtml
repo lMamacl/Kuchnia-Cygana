@@ -1,42 +1,120 @@
-﻿@model KuchniaUCygana.Web.Models.PaymentViewModel
+@model KuchniaUCygana.Web.Models.PaymentViewModel
 @{
     ViewData["Title"] = "Sfinalizuj płatność";
+    var culture = new System.Globalization.CultureInfo("pl-PL");
 }
 
-<div class="container my-5">
+<style>
+    .payment-shell {
+        color: #17211b;
+    }
+
+    .payment-card {
+        overflow: hidden;
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 28px;
+        background: #fff;
+        box-shadow: 0 24px 70px rgba(23, 33, 27, .12);
+    }
+
+    .payment-side {
+        min-height: 100%;
+        background:
+            linear-gradient(145deg, rgba(31, 122, 77, .94), rgba(23, 33, 27, .94)),
+            url('@Url.Content("~/img/chicken_teriyaki.png")') center/cover;
+        color: #fff;
+    }
+
+    .payment-kicker {
+        color: rgba(255, 255, 255, .72);
+        font-size: .75rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+
+    .payment-total-box {
+        border: 1px solid rgba(255, 255, 255, .18);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, .12);
+    }
+
+    .btn-pay {
+        border: 0;
+        border-radius: 16px;
+        background: #1f7a4d;
+        color: #fff;
+        box-shadow: 0 14px 26px rgba(31, 122, 77, .22);
+    }
+
+    .btn-pay:hover {
+        background: #17623d;
+        color: #fff;
+    }
+
+    #payment-element {
+        padding: 1rem;
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 18px;
+        background: #fbfdfb;
+    }
+</style>
+
+<div class="payment-shell py-4">
     <div class="row justify-content-center">
-        <div class="col-lg-6 col-md-8">
-            <div class="card shadow border-0 rounded-3">
-                <div class="card-header bg-dark text-white text-center py-3">
-                    <h4 class="mb-0 fw-bold">🍽️ Kuchnia u Cygana – Płatność</h4>
-                </div>
-                <div class="card-body p-4">
-                    <div class="text-center mb-4">
-                        <span class="text-muted small">Numer zamówienia:</span>
-                        <h5 class="fw-bold text-secondary">@Model.OrderNumber</h5>
-                        <hr />
-                        <span class="text-muted small">Do zapłaty:</span>
-                        <h2 class="text-success fw-extrabold">@Model.FinalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))</h2>
+        <div class="col-xl-10">
+            <div class="payment-card">
+                <div class="row g-0">
+                    <div class="col-lg-5 d-none d-lg-block">
+                        <div class="payment-side p-5 d-flex flex-column justify-content-between">
+                            <div>
+                                <div class="payment-kicker mb-3">Bezpieczna płatność</div>
+                                <h1 class="display-6 fw-bold mb-3">Ostatni krok przed realizacją.</h1>
+                                <p class="opacity-75 mb-0">Po potwierdzeniu płatności zamówienie przejdzie do statusu opłaconego.</p>
+                            </div>
+                            <div class="payment-total-box p-4">
+                                <div class="small opacity-75 mb-1">Numer zamówienia</div>
+                                <div class="h5 fw-bold mb-3">@Model.OrderNumber</div>
+                                <div class="small opacity-75 mb-1">Do zapłaty</div>
+                                <div class="display-6 fw-bold">@Model.FinalPrice.ToString("C", culture)</div>
+                            </div>
+                        </div>
                     </div>
 
-                    @if (TempData["ErrorMessage"] != null)
-                    {
-                        <div class="alert alert-danger text-center small mb-3" role="alert">
-                            ⚠️ @TempData["ErrorMessage"]
+                    <div class="col-lg-7">
+                        <div class="p-4 p-md-5">
+                            <div class="mb-4">
+                                <div class="text-success small fw-bold text-uppercase mb-2">Stripe</div>
+                                <h2 class="fw-bold mb-1">Sfinalizuj płatność</h2>
+                                <p class="text-muted mb-0">Wybierz metodę płatności i potwierdź transakcję.</p>
+                            </div>
+
+                            <div class="d-lg-none alert alert-light border mb-4">
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Do zapłaty</span>
+                                    <strong>@Model.FinalPrice.ToString("C", culture)</strong>
+                                </div>
+                            </div>
+
+                            @if (TempData["ErrorMessage"] != null)
+                            {
+                                <div class="alert alert-danger small mb-3" role="alert">
+                                    @TempData["ErrorMessage"]
+                                </div>
+                            }
+
+                            <form id="payment-form">
+                                <div id="payment-element" class="mb-4"></div>
+
+                                <button id="submit" class="btn btn-pay btn-lg w-100 fw-bold py-3">
+                                    <span id="button-text">Zapłać bezpiecznie przez Stripe</span>
+                                    <span id="spinner" class="spinner-border spinner-border-sm text-light ms-2 d-none" role="status"></span>
+                                </button>
+
+                                <div id="payment-message" class="alert alert-warning mt-3 d-none text-center small" role="alert"></div>
+                            </form>
                         </div>
-                    }
-
-                    <form id="payment-form">
-                        <div id="payment-element" class="mb-4">
-                        </div>
-
-                        <button id="submit" class="btn btn-primary btn-lg w-100 fw-bold py-3 shadow-sm transition">
-                            <span id="button-text">Zapłać bezpiecznie przez Stripe</span>
-                            <div id="spinner" class="spinner-border spinner-border-sm text-light ms-2 d-none" role="status"></div>
-                        </button>
-
-                        <div id="payment-message" class="alert alert-warning mt-3 d-none text-center small" role="alert"></div>
-                    </form>
+                    </div>
                 </div>
             </div>
         </div>
@@ -49,7 +127,13 @@
         const stripe = Stripe("@Model.StripePublishableKey");
         const clientSecret = "@Model.StripeClientSecret";
 
-        const appearance = { theme: 'stripe', variables: { colorPrimary: '#0d6efd' } };
+        const appearance = {
+            theme: "stripe",
+            variables: {
+                colorPrimary: "#1f7a4d",
+                borderRadius: "14px"
+            }
+        };
         const elements = stripe.elements({ appearance, clientSecret });
 
         const paymentElementOptions = { layout: "accordion" };

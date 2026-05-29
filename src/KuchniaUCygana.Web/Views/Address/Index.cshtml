@@ -1,82 +1,137 @@
-﻿@model IEnumerable<KuchniaUCygana.Application.DTOs.Orders.AddressDto>
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Orders.AddressDto>
 @{
     ViewData["Title"] = "Moje adresy";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0">Moje adresy</h2>
-    <a asp-action="Create" class="btn btn-primary">+ Dodaj adres</a>
-</div>
+<style>
+    .customer-page {
+        color: #17211b;
+    }
 
-@if (!Model.Any())
-{
-    <div class="alert alert-info">
-        Nie masz jeszcze żadnych adresów dostawy.
-        <a asp-action="Create" class="alert-link">Dodaj pierwszy adres</a>.
+    .customer-hero {
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 24px;
+        background: linear-gradient(135deg, #edf8ef, #fff8ea);
+        box-shadow: 0 16px 45px rgba(23, 33, 27, .08);
+    }
+
+    .address-card {
+        height: 100%;
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 22px;
+        background: #fff;
+        box-shadow: 0 12px 34px rgba(23, 33, 27, .08);
+    }
+
+    .address-card-default {
+        border-color: rgba(31, 122, 77, .38);
+        box-shadow: 0 16px 42px rgba(31, 122, 77, .13);
+    }
+
+    .address-pin {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        background: #edf8ef;
+        color: #1f7a4d;
+        font-weight: 900;
+    }
+
+    .empty-state {
+        border: 1px dashed rgba(31, 122, 77, .28);
+        border-radius: 22px;
+        background: #fff;
+    }
+</style>
+
+<div class="customer-page">
+    <div class="customer-hero p-4 p-md-5 mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <div class="text-success small fw-bold text-uppercase mb-2">Dostawy</div>
+                <h1 class="fw-bold mb-2">Moje adresy</h1>
+                <p class="text-muted mb-0">Zapisz miejsca, do których mają trafiać pudełka z dietą.</p>
+            </div>
+            <a asp-action="Create" class="btn btn-success btn-lg px-4">Dodaj adres</a>
+        </div>
     </div>
-}
-else
-{
-    <div class="row g-3">
-        @foreach (var address in Model)
-        {
-            <div class="col-md-6 col-lg-4">
-                <div class="card h-100 @(address.IsDefault ? "border-primary border-2" : "")">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h5 class="card-title mb-0">
-                                <span class="me-1">📍</span> @address.Label
-                            </h5>
-                            @if (address.IsDefault)
+
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success border-0 shadow-sm">@success</div>
+    }
+
+    @if (!Model.Any())
+    {
+        <div class="empty-state p-5 text-center">
+            <div class="address-pin mx-auto mb-3">AD</div>
+            <h2 class="h4 fw-bold">Nie masz jeszcze adresów dostawy</h2>
+            <p class="text-muted mb-4">Dodaj pierwszy adres, żeby checkout mógł przejść od razu do terminu dostawy.</p>
+            <a asp-action="Create" class="btn btn-success px-4">Dodaj pierwszy adres</a>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var address in Model)
+            {
+                <div class="col-md-6 col-lg-4">
+                    <div class="address-card @(address.IsDefault ? "address-card-default" : "")">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                                <div class="d-flex align-items-center gap-3">
+                                    <span class="address-pin">A</span>
+                                    <div>
+                                        <h2 class="h5 fw-bold mb-0">@address.Label</h2>
+                                        <span class="text-muted small">@address.City</span>
+                                    </div>
+                                </div>
+                                @if (address.IsDefault)
+                                {
+                                    <span class="badge text-bg-success rounded-pill">Domyślny</span>
+                                }
+                            </div>
+
+                            <p class="mb-1 fw-semibold">
+                                @address.Street @address.BuildingNumber
+                                @if (!string.IsNullOrEmpty(address.ApartmentNumber))
+                                {
+                                    @("/" + address.ApartmentNumber)
+                                }
+                            </p>
+                            <p class="text-muted mb-0">@address.PostalCode @address.City</p>
+
+                            @if (!string.IsNullOrEmpty(address.DeliveryNotes))
                             {
-                                <span class="badge bg-primary">Domyślny</span>
+                                <div class="alert alert-light border mt-3 mb-0 small">
+                                    @address.DeliveryNotes
+                                </div>
                             }
                         </div>
 
-                        <p class="card-text mb-1">
-                            @address.Street @address.BuildingNumber
-                            @if (!string.IsNullOrEmpty(address.ApartmentNumber))
-                            {
-                                @("/" + address.ApartmentNumber)
-                            }
-                        </p>
-                        <p class="card-text text-muted mb-0">
-                            @address.PostalCode @address.City
-                        </p>
+                        <div class="card-footer bg-transparent border-0 px-4 pb-4 pt-0">
+                            <div class="d-flex flex-wrap gap-2">
+                                <a asp-action="Edit" asp-route-id="@address.Id" class="btn btn-sm btn-outline-secondary">Edytuj</a>
 
-                        @if (!string.IsNullOrEmpty(address.DeliveryNotes))
-                        {
-                            <p class="card-text small text-secondary mt-2 mb-0">
-                                <em>ℹ️ @address.DeliveryNotes</em>
-                            </p>
-                        }
-                    </div>
+                                @if (!address.IsDefault)
+                                {
+                                    <form asp-action="SetDefault" asp-route-id="@address.Id" method="post">
+                                        <button type="submit" class="btn btn-sm btn-outline-success">Ustaw domyślny</button>
+                                    </form>
 
-                    <div class="card-footer bg-transparent d-flex flex-wrap gap-2">
-                        <a asp-action="Edit" asp-route-id="@address.Id"
-                           class="btn btn-sm btn-outline-secondary">
-                            Edytuj
-                        </a>
-
-                        @if (!address.IsDefault)
-                        {
-                            <form asp-action="SetDefault" asp-route-id="@address.Id" method="post">
-                                <button type="submit" class="btn btn-sm btn-outline-primary">
-                                    Ustaw domyślny
-                                </button>
-                            </form>
-
-                            <form asp-action="Delete" asp-route-id="@address.Id" method="post"
-                                  x-data="{}"
-                                  x-on:submit.prevent="confirm('Czy na pewno chcesz usunąć adres @address.Label?') && $el.submit()">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">
-                                    Usuń
-                                </button>
-                            </form>
-                        }
+                                    <form asp-action="Delete" asp-route-id="@address.Id" method="post"
+                                          x-data="{}"
+                                          x-on:submit.prevent="confirm('Czy na pewno chcesz usunąć adres @address.Label?') && $el.submit()">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Usuń</button>
+                                    </form>
+                                }
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        }
-    </div>
-}
+            }
+        </div>
+    }
+</div>

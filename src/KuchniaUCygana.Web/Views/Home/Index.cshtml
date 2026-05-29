@@ -1,92 +1,289 @@
-﻿@{
+@{
     ViewData["Title"] = "Kuchnia u Cygana";
     var isLoggedIn = User.Identity?.IsAuthenticated == true;
     var userName = User.Identity?.Name;
 }
 
-<div class="text-center py-5">
-    <h1 class="display-5 fw-bold">🍽️ Kuchnia u Cygana</h1>
-    <p class="lead text-muted">Platforma zamówień diet cateringowych</p>
-</div>
+<style>
+    .customer-home {
+        --kc-ink: #17211b;
+        --kc-muted: #68756d;
+        --kc-green: #1f7a4d;
+        --kc-lime: #d9f99d;
+        --kc-mint: #edf8ef;
+        --kc-cream: #fff8ea;
+        --kc-line: rgba(23, 33, 27, .1);
+        color: var(--kc-ink);
+    }
 
-@if (isLoggedIn)
-{
-    <div class="alert alert-success d-flex align-items-center gap-2">
-        <span>✅ Zalogowano jako <strong>@userName</strong></span>
-        <form asp-controller="Account" asp-action="Logout" method="post" class="ms-auto mb-0">
-            <button type="submit" class="btn btn-sm btn-outline-danger">Wyloguj</button>
-        </form>
-    </div>
+    .home-hero {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--kc-line);
+        border-radius: 28px;
+        background:
+            linear-gradient(135deg, rgba(31, 122, 77, .94), rgba(23, 33, 27, .92)),
+            url('@Url.Content("~/img/chicken_teriyaki.png")') center/cover;
+        box-shadow: 0 22px 70px rgba(23, 33, 27, .16);
+    }
 
-    <div class="row g-3 mt-2">
-        <div class="col-md-4">
-            <a asp-controller="Order" asp-action="Index" class="card text-decoration-none h-100 border-primary">
-                <div class="card-body text-center py-4">
-                    <div class="fs-1 mb-2">📋</div>
-                    <h5 class="card-title">Moje zamówienia</h5>
-                    <p class="card-text text-muted small">Historia i status zamówień</p>
-                </div>
-            </a>
-        </div>
-        <div class="col-md-4">
-            <a asp-controller="Address" asp-action="Index" class="card text-decoration-none h-100">
-                <div class="card-body text-center py-4">
-                    <div class="fs-1 mb-2">📍</div>
-                    <h5 class="card-title">Moje adresy</h5>
-                    <p class="card-text text-muted small">Zarządzaj adresami dostawy</p>
-                </div>
-            </a>
-        </div>
-        <div class="col-md-4">
-            <a asp-controller="Cart" asp-action="Index" class="card text-decoration-none h-100">
-                <div class="card-body text-center py-4">
-                    <div class="fs-1 mb-2">🛒</div>
-                    <h5 class="card-title">Koszyk</h5>
-                    <p class="card-text text-muted small">Złóż nowe zamówienie</p>
-                </div>
-            </a>
-        </div>
-    </div>
+    .hero-copy {
+        min-height: 430px;
+        padding: clamp(2rem, 5vw, 4.5rem);
+    }
 
-    <hr class="my-4" />
+    .hero-kicker,
+    .section-kicker {
+        color: rgba(255, 255, 255, .74);
+        font-size: .75rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
 
-    <h6 class="text-muted mb-3">🧪 Testowe dodanie diety do koszyka (tymczasowe — M2 jeszcze nie gotowy)</h6>
-    <form asp-controller="Cart" asp-action="Add" method="post" class="row g-2 align-items-end">
-        <div class="col-auto">
-            <input type="hidden" name="DietId" value="1" />
-            <input type="hidden" name="DietVariantId" value="1" />
-            <input type="hidden" name="DietName" value="Dieta Standard" />
-            <input type="hidden" name="VariantName" value="1800 kcal" />
-            <input type="hidden" name="CaloriesPerDay" value="1800" />
-            <input type="hidden" name="PricePerDay" value="59.99" />
-            <label class="form-label">Liczba dni</label>
-            <input type="number" name="TotalDays" class="form-control" value="5" min="1" max="30" style="width:100px" />
-        </div>
-        <div class="col-auto">
-            <button type="submit" class="btn btn-outline-primary">+ Dodaj do koszyka</button>
-        </div>
-        <div class="col-auto text-muted small">
-            Dieta Standard · 1800 kcal · 59,99 zł/dzień
-        </div>
-    </form>
-}
-else
-{
-    <div class="row justify-content-center mt-3">
-        <div class="col-md-5">
-            <div class="card shadow-sm">
-                <div class="card-body text-center py-4">
-                    <p class="text-muted mb-4">Zaloguj się lub utwórz konto, aby złożyć zamówienie.</p>
-                    <div class="d-grid gap-2 d-sm-flex justify-content-center">
-                        <a asp-controller="Account" asp-action="Login" class="btn btn-primary px-4">
-                            Zaloguj się
-                        </a>
-                        <a asp-controller="Account" asp-action="Register" class="btn btn-outline-secondary px-4">
-                            Zarejestruj się
-                        </a>
+    .hero-title {
+        max-width: 760px;
+        font-size: clamp(2.4rem, 6vw, 5rem);
+        line-height: .98;
+        letter-spacing: 0;
+    }
+
+    .hero-text {
+        max-width: 620px;
+        color: rgba(255, 255, 255, .78);
+        font-size: 1.08rem;
+    }
+
+    .hero-panel {
+        border: 1px solid rgba(255, 255, 255, .2);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, .92);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, .18);
+    }
+
+    .food-shot {
+        width: 100%;
+        height: 190px;
+        object-fit: cover;
+        border-radius: 18px;
+    }
+
+    .quick-card,
+    .diet-card {
+        height: 100%;
+        border: 1px solid var(--kc-line);
+        border-radius: 22px;
+        background: #fff;
+        box-shadow: 0 12px 34px rgba(23, 33, 27, .08);
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+    .quick-card:hover,
+    .diet-card:hover {
+        transform: translateY(-3px);
+        border-color: rgba(31, 122, 77, .28);
+        box-shadow: 0 18px 45px rgba(23, 33, 27, .12);
+    }
+
+    .quick-icon {
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        background: var(--kc-mint);
+        color: var(--kc-green);
+        font-weight: 900;
+    }
+
+    .mock-order {
+        border: 1px solid rgba(31, 122, 77, .16);
+        border-radius: 24px;
+        background: linear-gradient(180deg, #fff, var(--kc-cream));
+        box-shadow: 0 18px 50px rgba(23, 33, 27, .1);
+    }
+
+    .mock-img {
+        width: 100%;
+        height: 100%;
+        min-height: 260px;
+        object-fit: cover;
+        border-radius: 22px;
+    }
+
+    .pill-soft {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        border: 1px solid rgba(31, 122, 77, .18);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--kc-green);
+        font-size: .82rem;
+        font-weight: 700;
+        padding: .42rem .72rem;
+    }
+
+    .btn-customer {
+        border: 0;
+        background: var(--kc-green);
+        color: #fff;
+        box-shadow: 0 12px 24px rgba(31, 122, 77, .22);
+    }
+
+    .btn-customer:hover {
+        background: #17623d;
+        color: #fff;
+    }
+
+    .home-stat {
+        border-top: 1px solid rgba(255, 255, 255, .18);
+        color: rgba(255, 255, 255, .8);
+    }
+</style>
+
+<div class="customer-home">
+    <section class="home-hero mb-4">
+        <div class="row g-0 align-items-stretch">
+            <div class="col-lg-7">
+                <div class="hero-copy d-flex flex-column justify-content-center">
+                    <div class="hero-kicker mb-3">Catering gotowy do zamowienia</div>
+                    <h1 class="hero-title text-white fw-black mb-4">Diety pudełkowe bez kuchennej gimnastyki.</h1>
+                    <p class="hero-text mb-4">
+                        Składasz zamówienie, wybierasz adres i termin, a my dowozimy jedzenie gotowe do dnia.
+                        Moduł katalogu diet będzie podpięty później, więc teraz działa testowe dodanie diety.
+                    </p>
+                    <div class="d-flex flex-wrap gap-2">
+                        @if (isLoggedIn)
+                        {
+                            <a asp-controller="Cart" asp-action="Index" class="btn btn-light btn-lg px-4 fw-bold">Przejdź do koszyka</a>
+                            <a asp-controller="Order" asp-action="Index" class="btn btn-outline-light btn-lg px-4">Moje zamówienia</a>
+                        }
+                        else
+                        {
+                            <a asp-controller="Account" asp-action="Register" class="btn btn-light btn-lg px-4 fw-bold">Załóż konto</a>
+                            <a asp-controller="Account" asp-action="Login" class="btn btn-outline-light btn-lg px-4">Zaloguj się</a>
+                        }
+                    </div>
+                    <div class="home-stat d-flex flex-wrap gap-4 mt-5 pt-4">
+                        <span><strong class="text-white">5-30</strong> dni planu</span>
+                        <span><strong class="text-white">1800</strong> kcal w mocku</span>
+                        <span><strong class="text-white">Stripe</strong> online</span>
                     </div>
                 </div>
             </div>
+            <div class="col-lg-5 p-3 p-lg-4 d-flex align-items-center">
+                <div class="hero-panel p-3 w-100">
+                    <img src="~/img/chicken_teriyaki.png" class="food-shot mb-3" alt="Dieta Standard" />
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div>
+                            <div class="section-kicker text-success mb-1">Dostępny mock</div>
+                            <h2 class="h4 fw-bold mb-1">Dieta Standard</h2>
+                            <p class="text-muted small mb-0">1800 kcal, 59,99 zł za dzień, gotowa do testowego koszyka.</p>
+                        </div>
+                        <span class="badge text-bg-success rounded-pill">B2C</span>
+                    </div>
+                    @if (isLoggedIn)
+                    {
+                        <form asp-controller="Cart" asp-action="Add" method="post" class="mt-4">
+                            <input type="hidden" name="DietId" value="1" />
+                            <input type="hidden" name="DietVariantId" value="1" />
+                            <input type="hidden" name="DietName" value="Dieta Standard" />
+                            <input type="hidden" name="VariantName" value="1800 kcal" />
+                            <input type="hidden" name="CaloriesPerDay" value="1800" />
+                            <input type="hidden" name="PricePerDay" value="59.99" />
+                            <label class="form-label fw-semibold">Liczba dni</label>
+                            <div class="input-group input-group-lg">
+                                <input type="number" name="TotalDays" class="form-control" value="5" min="1" max="30" />
+                                <button type="submit" class="btn btn-customer px-4">Dodaj</button>
+                            </div>
+                        </form>
+                    }
+                </div>
+            </div>
         </div>
-    </div>
-}
+    </section>
+
+    @if (isLoggedIn)
+    {
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <div class="section-kicker text-success mb-1">Panel klienta</div>
+                <h2 class="h3 fw-bold mb-0">Witaj, @(string.IsNullOrWhiteSpace(userName) ? "kliencie" : userName)</h2>
+            </div>
+            <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                <button type="submit" class="btn btn-outline-danger">Wyloguj</button>
+            </form>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <a asp-controller="Order" asp-action="Index" class="quick-card d-block text-decoration-none p-4">
+                    <span class="quick-icon mb-3">01</span>
+                    <h3 class="h5 text-dark fw-bold">Moje zamówienia</h3>
+                    <p class="text-muted small mb-0">Status płatności, kalendarz dostaw i historia zamówień.</p>
+                </a>
+            </div>
+            <div class="col-md-4">
+                <a asp-controller="Address" asp-action="Index" class="quick-card d-block text-decoration-none p-4">
+                    <span class="quick-icon mb-3">02</span>
+                    <h3 class="h5 text-dark fw-bold">Adresy dostawy</h3>
+                    <p class="text-muted small mb-0">Dom, praca albo inny punkt, do którego dowieziemy dietę.</p>
+                </a>
+            </div>
+            <div class="col-md-4">
+                <a asp-controller="Cart" asp-action="Index" class="quick-card d-block text-decoration-none p-4">
+                    <span class="quick-icon mb-3">03</span>
+                    <h3 class="h5 text-dark fw-bold">Koszyk</h3>
+                    <p class="text-muted small mb-0">Podejrzyj pozycje i przejdź przez checkout z płatnością.</p>
+                </a>
+            </div>
+        </div>
+    }
+
+    <section class="mock-order p-3 p-lg-4">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-5">
+                <img src="~/img/baked_salmon.png" class="mock-img" alt="Zestaw diety cateringowej" />
+            </div>
+            <div class="col-lg-7">
+                <div class="section-kicker text-success mb-2">Tymczasowy katalog</div>
+                <h2 class="fw-bold mb-3">Testowe dodanie diety zostaje na miejscu.</h2>
+                <p class="text-muted mb-4">
+                    To obecny punkt startowy procesu zamówienia do czasu integracji z modułem katalogu diet.
+                    Po dodaniu pozycji możesz przejść przez adres, podsumowanie i płatność.
+                </p>
+                <div class="d-flex flex-wrap gap-2 mb-4">
+                    <span class="pill-soft">Dieta Standard</span>
+                    <span class="pill-soft">1800 kcal</span>
+                    <span class="pill-soft">59,99 zł / dzień</span>
+                </div>
+                @if (isLoggedIn)
+                {
+                    <form asp-controller="Cart" asp-action="Add" method="post" class="row g-3 align-items-end">
+                        <input type="hidden" name="DietId" value="1" />
+                        <input type="hidden" name="DietVariantId" value="1" />
+                        <input type="hidden" name="DietName" value="Dieta Standard" />
+                        <input type="hidden" name="VariantName" value="1800 kcal" />
+                        <input type="hidden" name="CaloriesPerDay" value="1800" />
+                        <input type="hidden" name="PricePerDay" value="59.99" />
+                        <div class="col-sm-4">
+                            <label class="form-label fw-semibold">Liczba dni</label>
+                            <input type="number" name="TotalDays" class="form-control form-control-lg" value="5" min="1" max="30" />
+                        </div>
+                        <div class="col-sm-auto">
+                            <button type="submit" class="btn btn-customer btn-lg px-4">Dodaj do koszyka</button>
+                        </div>
+                    </form>
+                }
+                else
+                {
+                    <div class="d-flex flex-wrap gap-2">
+                        <a asp-controller="Account" asp-action="Login" class="btn btn-customer btn-lg px-4">Zaloguj się, aby zamówić</a>
+                        <a asp-controller="Account" asp-action="Register" class="btn btn-outline-secondary btn-lg px-4">Utwórz konto</a>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+</div>
