@@ -99,17 +99,49 @@ public sealed class WarehouseService : IWarehouseService
     /// <inheritdoc/>
     public async Task RegisterWasteAsync(RegisterWasteRequest request)
     {
-        var result = await _fefoService.DeductByFefoAsync(
-            request.StockItemId,
-            request.Quantity,
-            $"Odpad: {request.Reason}",
-            "WASTE");
-
-        if (!result.IsFullyDeducted)
+        if (request.BatchId.HasValue && request.BatchId.Value > 0)
         {
-            _logger.LogWarning(
-                "Odpad: nie udało się zdjąć pełnej ilości. Brakowało: {Shortage}",
-                result.Shortage);
+            var batch = await _batchRepository.GetByIdAsync(request.BatchId.Value)
+                ?? throw new InvalidOperationException($"Partia o ID {request.BatchId.Value} nie istnieje.");
+            
+            if (batch.StockItemId != request.StockItemId)
+            {
+                throw new InvalidOperationException("Wskazana partia nie należy do wybranego składnika.");
+            }
+
+            var toDeduct = Math.Min(request.Quantity, batch.CurrentQuantity);
+            batch.CurrentQuantity -= toDeduct;
+            if (batch.CurrentQuantity <= 0)
+            {
+                batch.CurrentQuantity = 0;
+                batch.IsDepleted = true;
+            }
+            await _batchRepository.UpdateAsync(batch);
+
+            var transaction = new InventoryTransaction
+            {
+                BatchId = batch.Id,
+                StockItemId = request.StockItemId,
+                TransactionType = InventoryTransactionType.Waste,
+                QuantityChanged = -toDeduct,
+                Reason = $"Odpad (wskazana partia): {request.Reason}"
+            };
+            await _transactionRepository.InsertAsync(transaction);
+        }
+        else
+        {
+            var result = await _fefoService.DeductByFefoAsync(
+                request.StockItemId,
+                request.Quantity,
+                $"Odpad: {request.Reason}",
+                "WASTE");
+
+            if (!result.IsFullyDeducted)
+            {
+                _logger.LogWarning(
+                    "Odpad: nie udało się zdjąć pełnej ilości. Brakowało: {Shortage}",
+                    result.Shortage);
+            }
         }
 
         _logger.LogInformation(
@@ -563,4 +595,94 @@ public sealed class WarehouseService : IWarehouseService
         }
         return dtoList;
     }
+
+    /// <inheritdoc/>
+    public async Task<StockItemDetailsDto> GetStockItemDetailsWithBatchesAsync(int stockItemId)
+    {
+        var stockItem = await _stockItemRepository.GetByIdAsync(stockItemId)
+            ?? throw new InvalidOperationException($"Składnik magazynowy o ID {stockItemId} nie istnieje.");
+
+        var activeBatches = (await _batchRepository.GetActiveBatchesByStockItemAsync(stockItemId)).ToList();
+        var currentStock = activeBatches.Sum(b => b.CurrentQuantity);
+        DateTimeOffset? earliestExpiryDate = activeBatches.Any() ? activeBatches.Min(b => b.ExpiryDate) : null;
+
+        var units = (await _unitOfMeasureRepository.GetAllAsync()).ToDictionary(u => u.Id);
+        units.TryGetValue(stockItem.DefaultUnitOfMeasureId, out var uom);
+        var unitSymbol = uom?.Symbol ?? string.Empty;
+
+        string category = DetermineCategory(stockItem.Name);
+
+        string status = "OK";
+        string statusColor = "success";
+
+        if (currentStock <= 0)
+        {
+            status = "Brak zapasów";
+            statusColor = "danger";
+        }
+        else if (earliestExpiryDate.HasValue && earliestExpiryDate.Value <= DateTimeOffset.UtcNow.AddDays(3))
+        {
+            status = "Pilna ważność";
+            statusColor = "danger";
+        }
+        else if (currentStock < stockItem.MinimumLevel)
+        {
+            status = "Niski stan";
+            statusColor = "danger";
+        }
+        else if (currentStock == stockItem.MinimumLevel)
+        {
+            status = "Wskazana dostawa";
+            statusColor = "warning";
+        }
+        else if (earliestExpiryDate.HasValue && earliestExpiryDate.Value <= DateTimeOffset.UtcNow.AddDays(7))
+        {
+            status = "Krótka ważność";
+            statusColor = "warning";
+        }
+
+        var stockItemDto = new StockItemDto
+        {
+            Id = stockItem.Id,
+            Name = stockItem.Name,
+            BaseIngredientId = stockItem.BaseIngredientId,
+            DefaultUnitOfMeasureId = stockItem.DefaultUnitOfMeasureId,
+            MinimumLevel = stockItem.MinimumLevel,
+            LeadTimeDays = stockItem.LeadTimeDays,
+            CurrentStock = currentStock,
+            Category = category,
+            UnitSymbol = unitSymbol,
+            Status = status,
+            StatusColor = statusColor,
+            EarliestExpiryDate = earliestExpiryDate
+        };
+
+        var batchDtos = _mapper.Map<List<BatchDto>>(activeBatches);
+
+        var logs = await _batchExpiryChangeLogRepository.GetByStockItemIdAsync(stockItemId);
+        var logDtos = new List<BatchExpiryChangeLogDto>();
+
+        var allBatchesForLookup = (await _batchRepository.GetAllAsync())
+            .Where(b => b.StockItemId == stockItemId)
+            .ToDictionary(b => b.Id);
+
+        foreach (var log in logs)
+        {
+            var dto = _mapper.Map<BatchExpiryChangeLogDto>(log);
+            if (allBatchesForLookup.TryGetValue(log.BatchId, out var b))
+            {
+                dto.BatchNumber = b.SupplierBatchNumber ?? string.Empty;
+            }
+            dto.ChangedByUserName = log.ChangedByUserId.HasValue ? $"Użytkownik #{log.ChangedByUserId}" : "System";
+            logDtos.Add(dto);
+        }
+
+        return new StockItemDetailsDto
+        {
+            StockItem = stockItemDto,
+            Batches = batchDtos,
+            ExpiryChangeLogs = logDtos
+        };
+    }
 }
+

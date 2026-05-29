@@ -46,4 +46,9 @@ public interface IWarehouseService
     /// Pobiera listę składników z magazynu z filtrowaniem i paginacją pod HTMX.
     /// </summary>
     Task<IEnumerable<StockItemDto>> GetStockTableAsync(StockTableFilterDto filter);
+
+    /// <summary>
+    /// Pobiera szczegóły składnika, listę jego partii oraz logi zmian dat ważności.
+    /// </summary>
+    Task<StockItemDetailsDto> GetStockItemDetailsWithBatchesAsync(int stockItemId);
 }
