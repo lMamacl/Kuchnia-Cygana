@@ -24,4 +24,9 @@ public sealed class RegisterWasteRequest
     /// Opcjonalny ID konkretnej partii (jeśli pusty — FEFO).
     /// </summary>
     public int? BatchId { get; set; }
+
+    /// <summary>
+    /// Dodatkowe uwagi (wymagane, jeśli powód to "Inny").
+    /// </summary>
+    public string Notes { get; set; } = string.Empty;
 }

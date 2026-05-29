@@ -21,5 +21,9 @@ public sealed class ReceiveDeliveryValidator : AbstractValidator<ReceiveDelivery
             .GreaterThan(DateTimeOffset.UtcNow)
             .When(x => x.ExpiryDate.HasValue)
             .WithMessage("Data ważności musi być w przyszłości.");
+
+        RuleFor(x => x.InvoiceNumber)
+            .MaximumLength(50)
+            .WithMessage("Numer faktury/dostawy może mieć maksymalnie 50 znaków.");
     }
 }

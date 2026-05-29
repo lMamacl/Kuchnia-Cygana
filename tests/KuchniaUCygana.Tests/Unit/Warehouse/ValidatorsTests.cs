@@ -14,12 +14,113 @@ public class ValidatorsTests
     private readonly ManualIssueValidator _manualIssueValidator;
     private readonly EditBatchExpiryValidator _editBatchExpiryValidator;
     private readonly BulkPrintValidator _bulkPrintValidator;
+    private readonly RegisterWasteValidator _registerWasteValidator;
+    private readonly ReceiveDeliveryValidator _receiveDeliveryValidator;
 
     public ValidatorsTests()
     {
         _manualIssueValidator = new ManualIssueValidator();
         _editBatchExpiryValidator = new EditBatchExpiryValidator();
         _bulkPrintValidator = new BulkPrintValidator();
+        _registerWasteValidator = new RegisterWasteValidator();
+        _receiveDeliveryValidator = new ReceiveDeliveryValidator();
+    }
+
+    [Fact]
+    public void RegisterWasteValidator_ShouldRequireNotes_WhenReasonIsInny()
+    {
+        // Arrange
+        var request = new RegisterWasteRequest
+        {
+            StockItemId = 1,
+            Quantity = 5m,
+            Reason = "Inny",
+            Notes = string.Empty // empty
+        };
+
+        // Act
+        var result = _registerWasteValidator.TestValidate(request);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.Notes)
+            .WithErrorMessage("Opis (uwagi) jest wymagany dla powodu 'Inny'.");
+    }
+
+    [Fact]
+    public void RegisterWasteValidator_ShouldBeValid_WhenReasonIsInnyAndNotesAreProvided()
+    {
+        // Arrange
+        var request = new RegisterWasteRequest
+        {
+            StockItemId = 1,
+            Quantity = 5m,
+            Reason = "Inny",
+            Notes = "Zalanie wodą podczas sprzątania"
+        };
+
+        // Act
+        var result = _registerWasteValidator.TestValidate(request);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void RegisterWasteValidator_ShouldBeValid_WhenReasonIsNotInnyAndNotesAreEmpty()
+    {
+        // Arrange
+        var request = new RegisterWasteRequest
+        {
+            StockItemId = 1,
+            Quantity = 5m,
+            Reason = "Przeterminowanie",
+            Notes = string.Empty
+        };
+
+        // Act
+        var result = _registerWasteValidator.TestValidate(request);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void ReceiveDeliveryValidator_ShouldHaveError_WhenInvoiceNumberIsTooLong()
+    {
+        // Arrange
+        var request = new ReceiveDeliveryRequest
+        {
+            StockItemId = 1,
+            SupplierBatchNumber = "BAT-123",
+            Quantity = 100m,
+            InvoiceNumber = new string('A', 51) // 51 chars, exceeds 50 limit
+        };
+
+        // Act
+        var result = _receiveDeliveryValidator.TestValidate(request);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.InvoiceNumber)
+            .WithErrorMessage("Numer faktury/dostawy może mieć maksymalnie 50 znaków.");
+    }
+
+    [Fact]
+    public void ReceiveDeliveryValidator_ShouldBeValid_WhenInvoiceNumberIsValid()
+    {
+        // Arrange
+        var request = new ReceiveDeliveryRequest
+        {
+            StockItemId = 1,
+            SupplierBatchNumber = "BAT-123",
+            Quantity = 100m,
+            InvoiceNumber = "FV/98765/2026"
+        };
+
+        // Act
+        var result = _receiveDeliveryValidator.TestValidate(request);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
     }
 
     [Fact]

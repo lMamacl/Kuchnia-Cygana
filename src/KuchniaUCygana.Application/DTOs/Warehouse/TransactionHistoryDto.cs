@@ -23,4 +23,8 @@ public sealed class TransactionHistoryDto
     public string PerformedBy { get; set; } = string.Empty;
 
     public string Reason { get; set; } = string.Empty;
+
+    public string TransactionNumber { get; set; } = string.Empty;
+
+    public string ReferenceDocument { get; set; } = string.Empty;
 }

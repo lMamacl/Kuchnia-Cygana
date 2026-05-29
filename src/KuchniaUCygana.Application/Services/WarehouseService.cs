@@ -79,10 +79,11 @@ public sealed class WarehouseService : IWarehouseService
         var transaction = new InventoryTransaction
         {
             BatchId = batchId,
+            StockItemId = request.StockItemId,
             TransactionType = InventoryTransactionType.Receipt,
             QuantityChanged = request.Quantity,
-            Reason = $"Przyjęcie dostawy: {request.SupplierBatchNumber}",
-            ReferenceDocument = request.Notes,
+            Reason = $"Przyjęcie dostawy: {request.SupplierBatchNumber}. Uwagi: {request.Notes}",
+            ReferenceDocument = request.InvoiceNumber,
         };
 
         await _transactionRepository.InsertAsync(transaction);
@@ -99,6 +100,10 @@ public sealed class WarehouseService : IWarehouseService
     /// <inheritdoc/>
     public async Task RegisterWasteAsync(RegisterWasteRequest request)
     {
+        string wasteReason = request.Reason == "Inny"
+            ? $"Odpad: Inny - {request.Notes}"
+            : $"Odpad: {request.Reason}";
+
         if (request.BatchId.HasValue && request.BatchId.Value > 0)
         {
             var batch = await _batchRepository.GetByIdAsync(request.BatchId.Value)
@@ -124,7 +129,8 @@ public sealed class WarehouseService : IWarehouseService
                 StockItemId = request.StockItemId,
                 TransactionType = InventoryTransactionType.Waste,
                 QuantityChanged = -toDeduct,
-                Reason = $"Odpad (wskazana partia): {request.Reason}"
+                Reason = $"Odpad (wskazana partia): {wasteReason}",
+                ReferenceDocument = request.Reason == "Inny" ? request.Notes : string.Empty
             };
             await _transactionRepository.InsertAsync(transaction);
         }
@@ -133,8 +139,8 @@ public sealed class WarehouseService : IWarehouseService
             var result = await _fefoService.DeductByFefoAsync(
                 request.StockItemId,
                 request.Quantity,
-                $"Odpad: {request.Reason}",
-                "WASTE");
+                wasteReason,
+                request.Reason == "Inny" ? request.Notes : "WASTE");
 
             if (!result.IsFullyDeducted)
             {
@@ -148,7 +154,7 @@ public sealed class WarehouseService : IWarehouseService
             "Zarejestrowano odpad: składnik {StockItemId}, ilość: {Qty}, powód: {Reason}",
             request.StockItemId,
             request.Quantity,
-            request.Reason);
+            wasteReason);
     }
 
     /// <inheritdoc/>
@@ -275,6 +281,9 @@ public sealed class WarehouseService : IWarehouseService
         if (string.IsNullOrEmpty(name)) return "Suche";
 
         var lower = name.ToLowerInvariant();
+        if (lower.Contains("pudełko") || lower.Contains("torba") || lower.Contains("opakow"))
+            return "Opakowania";
+
         if (lower.Contains("kurczak") || lower.Contains("łosoś") || lower.Contains("mięso") || lower.Contains("ryb") || lower.Contains("indyka"))
             return "Mięso/Ryby";
 
@@ -290,14 +299,17 @@ public sealed class WarehouseService : IWarehouseService
     /// <inheritdoc/>
     public async Task IssueManualAsync(ManualIssueRequest request)
     {
-        var available = await _fefoService.GetAvailableQuantityAsync(request.StockItemId);
+        var activeBatches = (await _batchRepository.GetActiveBatchesByStockItemAsync(request.StockItemId))
+            .Where(b => !b.ExpiryDate.HasValue || b.ExpiryDate.Value >= DateTimeOffset.UtcNow)
+            .ToList();
+
+        var available = activeBatches.Sum(b => b.CurrentQuantity);
         if (available < request.Quantity)
         {
-            throw new InvalidOperationException($"Niewystarczająca ilość składnika w magazynie. Dostępne: {available}, wymagane: {request.Quantity}");
+            throw new InvalidOperationException($"Niewystarczająca ilość składnika o ważnej dacie w magazynie. Dostępne: {available}, wymagane: {request.Quantity}");
         }
 
         var remaining = request.Quantity;
-        var activeBatches = (await _batchRepository.GetActiveBatchesByStockItemAsync(request.StockItemId)).ToList();
         foreach (var batch in activeBatches)
         {
             if (remaining <= 0) break;
@@ -511,7 +523,9 @@ public sealed class WarehouseService : IWarehouseService
                 Quantity = t.QuantityChanged,
                 PerformedAt = t.CreatedAt,
                 PerformedBy = "System",
-                Reason = t.Reason ?? string.Empty
+                Reason = t.Reason ?? string.Empty,
+                TransactionNumber = $"TXN-{t.CreatedAt:yyyyMMdd}-{t.Id:D4}",
+                ReferenceDocument = t.ReferenceDocument ?? string.Empty
             });
         }
         return list;
