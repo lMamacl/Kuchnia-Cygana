@@ -8,7 +8,9 @@
     "Profile": "MinimalRealistic"
   },
   "Stripe": {
-    "SecretKey": ""
+    "SecretKey": "sk_test_51...",
+    "PublishableKey": "pk_test_51...",
+    "WebhookSecret": "whsec_..."
   },
   "OpenAI": {
     "ApiKey": ""

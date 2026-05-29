@@ -95,6 +95,8 @@ W pliku `.env` uzupelnij nastepujace pola:
 ```
 # Opcjonalnie — klucze API (możesz pominąć jeśli nie testujesz integracji)
 dotnet user-secrets set "Stripe:SecretKey" "sk_test_..." --project src/KuchniaUCygana.Web
+dotnet user-secrets set "Stripe:PublishableKey" "pk_test_..." --project src/KuchniaUCygana.Web
+dotnet user-secrets set "Stripe:WebhookSecret" "whsec_..." --project src/KuchniaUCygana.Web
 dotnet user-secrets set "OpenAI:ApiKey" "sk-..." --project src/KuchniaUCygana.Web
 
 > **Alternatywa:** Skopiuj `appsettings.Development.json.example` lub utwórz plik `src/KuchniaUCygana.Web/appsettings.Development.json` z wartościami. Plik ten jest w `.gitignore` i nie zostanie scommitowany.

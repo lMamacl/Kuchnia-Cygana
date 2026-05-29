@@ -41,8 +41,9 @@ services:
       - DatabaseSeeding__Enabled=false
       - DatabaseSeeding__Mode=Both
       - DatabaseSeeding__Profile=MinimalRealistic
-      - Stripe__SecretKey=${STRIPE_SECRET}
-      - Stripe__PublishableKey=${STRIPE_PUBLISHABLE}
+      - Stripe__SecretKey=sk_test_51...
+      - Stripe__PublishableKey=pk_test_51...
+      - Stripe__WebhookSecret=whsec_...
       - OpenAI__ApiKey=${OPENAI_KEY}
     volumes:
       - uploads_data:/app/wwwroot/uploads

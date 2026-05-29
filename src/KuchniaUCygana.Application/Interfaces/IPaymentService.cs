@@ -2,5 +2,6 @@
 
 public interface IPaymentService
 {
-    Task<string> CreatePaymentIntentAsync(decimal amount, string currency);
+    Task<(string PaymentIntentId, string ClientSecret)> CreatePaymentIntentAsync(decimal amount, string currency = "pln");
+    Task<bool> VerifyPaymentIntentAsync(string paymentIntentId);
 }

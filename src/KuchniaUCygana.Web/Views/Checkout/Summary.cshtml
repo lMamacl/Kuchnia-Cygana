@@ -5,6 +5,11 @@
 
 <h2 class="mb-4">Podsumowanie zamowienia</h2>
 
+@if (TempData["ErrorMessage"] is string errorMessage)
+{
+    <div class="alert alert-danger" role="alert">@errorMessage</div>
+}
+
 <div class="row g-4">
     <div class="col-lg-8">
 
@@ -84,7 +89,7 @@
                     <strong class="fs-5">@Model.FinalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))</strong>
                 </div>
 
-                <form asp-action="ConfirmOrder" method="post">
+                <form asp-action="Payment" method="post">
                     <input type="hidden" name="orderId" value="@Model.OrderId" />
                     <button type="submit" class="btn btn-success btn-lg w-100">
                         Przejdz do platnosci →
