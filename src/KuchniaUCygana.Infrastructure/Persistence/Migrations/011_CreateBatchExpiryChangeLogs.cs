@@ -15,7 +15,9 @@ public sealed class CreateBatchExpiryChangeLogs : Migration
             .WithColumn("NewExpiryDate").AsDateTime().NotNullable()
             .WithColumn("Reason").AsString(500).NotNullable()
             .WithColumn("ChangedByUserId").AsInt32().Nullable()
-            .WithColumn("ChangedAt").AsDateTime().NotNullable();
+            .WithColumn("ChangedAt").AsDateTime().NotNullable()
+            .WithColumn("CreatedAt").AsDateTime().NotNullable().WithDefault(SystemMethods.CurrentUTCDateTime)
+            .WithColumn("UpdatedAt").AsDateTime().Nullable();
 
         Create.Index("IX_BatchExpiryChangeLogs_BatchId")
             .OnTable("BatchExpiryChangeLogs")

@@ -15,7 +15,9 @@ public sealed class CreatePackingStatusLogs : Migration
             .WithColumn("NewStatus").AsInt32().NotNullable()
             .WithColumn("ChangedByUserId").AsInt32().Nullable()
             .WithColumn("ChangedAt").AsDateTime().NotNullable()
-            .WithColumn("Notes").AsString(500).Nullable();
+            .WithColumn("Notes").AsString(500).Nullable()
+            .WithColumn("CreatedAt").AsDateTime().NotNullable().WithDefault(SystemMethods.CurrentUTCDateTime)
+            .WithColumn("UpdatedAt").AsDateTime().Nullable();
 
         Create.Index("IX_PackingStatusLogs_PackingSessionId")
             .OnTable("PackingStatusLogs")

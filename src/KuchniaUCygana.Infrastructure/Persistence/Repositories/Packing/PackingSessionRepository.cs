@@ -88,11 +88,12 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
         using var db = Factory.CreateConnection();
         var sessions = (await db.QueryAsync<PackingSession>(
             """
-            SELECT *
-            FROM PackingSessions
-            WHERE PackingDate = @date
-              AND IsDeleted = 0
-            ORDER BY COALESCE(RouteId, 2147483647), COALESCE(StopNumber, 2147483647), Id;
+            SELECT ps.*
+            FROM PackingSessions ps
+            LEFT JOIN DeliveryRouteStops drs ON ps.DeliveryCalendarId = drs.DeliveryCalendarId AND drs.IsDeleted = 0
+            WHERE ps.PackingDate = @date
+              AND ps.IsDeleted = 0
+            ORDER BY COALESCE(drs.RouteId, 2147483647), COALESCE(drs.SequenceNumber, 2147483647), ps.Id;
             """,
             new { date = date.ToDateTime(TimeOnly.MinValue) })).ToList();
 
