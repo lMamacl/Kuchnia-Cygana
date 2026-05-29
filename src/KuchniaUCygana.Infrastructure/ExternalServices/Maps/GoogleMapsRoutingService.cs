@@ -1,6 +1,4 @@
 using KuchniaUCygana.Domain.Interfaces.Logistics;
-using KuchniaUCygana.Domain.Entities.Logistics;
-using KuchniaUCygana.Domain.Entities.Orders;
 
 namespace KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 
@@ -15,6 +13,7 @@ public class GoogleMapsRoutingService : IRouteOptimizer
         IReadOnlyList<RouteOptimizationPoint> stops,
         RouteOptimizationPoint? origin = null)
     {
+        // Placeholder pod przyszla integracje z Google Directions API / OSRM.
         return Task.FromResult<IReadOnlyList<int>>(stops.Select(s => s.Id).ToList());
     }
 }
