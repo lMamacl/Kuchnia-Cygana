@@ -22,7 +22,7 @@ public sealed class VehicleRepository : BaseRepository<Vehicle>, IVehicleReposit
     {
         using var db = _connectionFactory.CreateConnection();
         var vehicle = await db.QuerySingleOrDefaultAsync<Vehicle>(
-            "SELECT * FROM Vehicles WHERE RegistrationNumber = @registrationNumber;",
+            "SELECT * FROM [Vehicles] WHERE [RegistrationNumber] = @registrationNumber AND [IsDeleted] = 0;",
             new { registrationNumber });
         return vehicle;
     }

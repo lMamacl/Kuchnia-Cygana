@@ -15,7 +15,7 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
 {
         using var db = Factory.CreateConnection();
         const string sql = @"
-        SELECT * FROM Address
+        SELECT * FROM [Addresses]
         WHERE UserId = @UserId AND IsDeleted = 0
         ORDER BY IsDefault DESC, Label";
 
@@ -26,7 +26,7 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
     {
         using var db = Factory.CreateConnection();
         var sql = @"
-            SELECT * FROM [Address] 
+            SELECT * FROM [Addresses] 
             WHERE [UserId] = @UserId 
             AND [IsDefault] = 1 
             AND [IsDeleted] = 0";
@@ -43,7 +43,7 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
         {
             // 1. Resetuj wszystkie obecne domyślne adresy użytkownika
             var resetSql = @"
-                UPDATE [Address] 
+                UPDATE [Addresses] 
                 SET [IsDefault] = 0, [UpdatedAt] = @UpdatedAt 
                 WHERE [UserId] = @UserId AND [IsDefault] = 1 AND [IsDeleted] = 0";
             
@@ -51,7 +51,7 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
             
             // 2. Ustaw nowy adres jako domyślny
             var setDefaultSql = @"
-                UPDATE [Address] 
+                UPDATE [Addresses] 
                 SET [IsDefault] = 1, [UpdatedAt] = @UpdatedAt 
                 WHERE [Id] = @AddressId AND [UserId] = @UserId AND [IsDeleted] = 0";
             
@@ -76,6 +76,6 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
     {
         using var db = Factory.CreateConnection();
         return await db.QueryAsync<Address>(
-            "SELECT * FROM [Address] WHERE ([Latitude] IS NULL OR [Longitude] IS NULL) AND [IsDeleted] = 0");
+            "SELECT * FROM [Addresses] WHERE ([Latitude] IS NULL OR [Longitude] IS NULL) AND [IsDeleted] = 0");
     }
 }
