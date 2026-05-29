@@ -1,10 +1,11 @@
-using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
-using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Application.DTOs.Logistics;
+using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
+using KuchniaUCygana.Web.Models.Logistics;
+using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
@@ -12,11 +13,16 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class LogisticsController : Controller
 {
     private readonly IVehicleService _vehicleService;
+    private readonly IDeliveryRouteService _deliveryRouteService;
     private readonly IGeocodeService _geocodeService;
 
-    public LogisticsController(IVehicleService vehicleService, IGeocodeService geocodeService)
+    public LogisticsController(
+        IVehicleService vehicleService,
+        IDeliveryRouteService deliveryRouteService,
+        IGeocodeService geocodeService)
     {
         _vehicleService = vehicleService;
+        _deliveryRouteService = deliveryRouteService;
         _geocodeService = geocodeService;
     }
 
@@ -30,12 +36,50 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet("routes")]
-    public IActionResult Routes()
+    public async Task<IActionResult> Routes(DateTimeOffset? date)
     {
+        var selectedDate = (date ?? DateTimeOffset.Now).Date;
+        var routes = await _deliveryRouteService.GetRoutesForDateAsync(selectedDate);
+
         ViewData["Title"] = "Trasy";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = "Lista tras z filtrem dnia.";
-        return View();
+        return View(new RoutesViewModel
+        {
+            SelectedDate = selectedDate,
+            Routes = routes,
+        });
+    }
+
+    [HttpPost("routes/generate")]
+    public async Task<IActionResult> GenerateDailyRoutes(DateTimeOffset routeDate, decimal defaultDeliveryLoadKg = 1m, int? maxStopsPerRoute = null)
+    {
+        var selectedDate = routeDate.Date;
+        var result = await _deliveryRouteService.GenerateDailyRoutesAsync(new GenerateDailyRoutesRequest
+        {
+            RouteDate = selectedDate,
+            DefaultDeliveryLoadKg = defaultDeliveryLoadKg,
+            MaxStopsPerRoute = maxStopsPerRoute,
+        });
+
+        var routes = result.Routes.Count > 0
+            ? result.Routes
+            : (await _deliveryRouteService.GetRoutesForDateAsync(selectedDate)).ToList();
+
+        if (result.Succeeded)
+        {
+            TempData["Success"] = $"Wygenerowano {result.GeneratedRoutesCount} tras dla {selectedDate:yyyy-MM-dd}.";
+        }
+
+        ViewData["Title"] = "Trasy";
+        ViewData["Section"] = "Logistyka";
+        ViewData["Description"] = "Lista tras z filtrem dnia.";
+        return View("Routes", new RoutesViewModel
+        {
+            SelectedDate = selectedDate,
+            Routes = routes,
+            GenerationResult = result,
+        });
     }
 
     [HttpGet("routes/create")]
@@ -43,17 +87,24 @@ public sealed class LogisticsController : Controller
     {
         ViewData["Title"] = "Nowa trasa";
         ViewData["Section"] = "Logistyka";
-        ViewData["Description"] = "Szkielet kreatora trasy.";
-        return View();
+        ViewData["Description"] = "Generowanie tras na podstawie dostaw z kalendarza.";
+        return View(new GenerateDailyRoutesRequest
+        {
+            RouteDate = DateTimeOffset.Now.Date,
+            DefaultDeliveryLoadKg = 1m,
+        });
     }
 
-    [HttpGet("routes/{id:int?}")]
-    public IActionResult RouteDetails(int? id)
+    [HttpGet("routes/{id:int}")]
+    public async Task<IActionResult> RouteDetails(int id)
     {
+        var route = await _deliveryRouteService.GetRouteDetailsAsync(id);
+        if (route == null) return NotFound();
+
         ViewData["Title"] = "Edycja trasy";
         ViewData["Section"] = "Logistyka";
-        ViewData["Description"] = id.HasValue ? $"Placeholder trasy #{id}." : "Placeholder edycji trasy.";
-        return View();
+        ViewData["Description"] = $"Szczegoly trasy {route.Name}.";
+        return View(route);
     }
 
     [HttpGet("routes/{id:int}/map")]
