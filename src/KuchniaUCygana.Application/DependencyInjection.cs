@@ -18,6 +18,8 @@ public static class DependencyInjection
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<Services.Logistics.GeocodingOrchestrator>();
         services.AddScoped<IVehicleService, VehicleService>();
+        services.AddScoped<IDeliveryRouteService, RoutingService>();
+        services.AddScoped<KuchniaUCygana.Domain.Interfaces.Logistics.IRouteOptimizer, NearestNeighborRouteOptimizer>();
         return services;
     }
 }

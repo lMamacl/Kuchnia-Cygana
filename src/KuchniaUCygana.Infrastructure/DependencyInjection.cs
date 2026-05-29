@@ -7,6 +7,7 @@ using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 using KuchniaUCygana.Infrastructure.ExternalServices.Stripe;
 using KuchniaUCygana.Infrastructure.FileStorage;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Infrastructure.Persistence.Providers;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
 using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
@@ -54,6 +55,7 @@ public static class DependencyInjection
         });
         services.AddScoped<IDeliveryRouteRepository, DeliveryRouteRepository>();
         services.AddScoped<IDeliveryRouteStopRepository, DeliveryRouteStopRepository>();
+        services.AddScoped<ILogisticsDeliveryDataProvider, LogisticsDeliveryDataProvider>();
         services.AddScoped<IDriverRepository, DriverRepository>();
         services.AddScoped<IVehicleRepository, VehicleRepository>();
         services.AddScoped<IThermalBagRepository, ThermalBagRepository>();

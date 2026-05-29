@@ -50,6 +50,13 @@ public class VehicleService : IVehicleService
 
     public async Task<VehicleDto?> UpdateAsync(int id, UpdateVehicleRequest request)
     {
+        var existingByRegistration = await _vehicleRepo.GetByRegistrationNumberAsync(request.RegistrationNumber);
+
+        if (existingByRegistration != null && existingByRegistration.Id != id)
+        {
+            throw new InvalidOperationException($"Vehicle with registration number '{request.RegistrationNumber}' already exists.");
+        }
+
         var existing = await _vehicleRepo.GetByIdAsync(id);
         if (existing == null) return null;
         _mapper.Map(request, existing);
