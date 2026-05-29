@@ -177,6 +177,11 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             new() { Name = "Ryż jaśminowy",                  DefaultUnitOfMeasureId = KgId(),  MinimumLevel = 20.0m,  LeadTimeDays = 7, CreatedBy = auditUser, CreatedAt = now },
             new() { Name = "Pomidory krojone (puszka)",     DefaultUnitOfMeasureId = SztId(), MinimumLevel = 15.0m,  LeadTimeDays = 14, CreatedBy = auditUser, CreatedAt = now },
             new() { Name = "Makaron penne",                  DefaultUnitOfMeasureId = KgId(),  MinimumLevel = 10.0m,  LeadTimeDays = 14, CreatedBy = auditUser, CreatedAt = now },
+
+            // ── Opakowania ───────────────────────────────────
+            new() { Name = "Pudełko cateringowe 500ml",    DefaultUnitOfMeasureId = SztId(), MinimumLevel = 100.0m, LeadTimeDays = 2, CreatedBy = auditUser, CreatedAt = now },
+            new() { Name = "Pudełko cateringowe 250ml",    DefaultUnitOfMeasureId = SztId(), MinimumLevel = 100.0m, LeadTimeDays = 2, CreatedBy = auditUser, CreatedAt = now },
+            new() { Name = "Torba papierowa u Cygana",     DefaultUnitOfMeasureId = SztId(), MinimumLevel = 50.0m,  LeadTimeDays = 2, CreatedBy = auditUser, CreatedAt = now },
         };
 
         await db.ExecuteAsync(new CommandDefinition(
