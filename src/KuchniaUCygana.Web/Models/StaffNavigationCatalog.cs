@@ -78,6 +78,7 @@ public static class StaffNavigationCatalog
                 new("Odpady", "Warehouse", "Waste", "trash", "Rejestr odpadów i strat.", "odpady straty magazyn"),
                 new("Inwentaryzacja", "Warehouse", "Inventory", "checklist", "Ekran inwentaryzacji.", "inwentaryzacja remanent"),
                 new("Dziennik i Raport HACCP", "Warehouse", "HaccpReport", "report", "Dziennik pomiarów oraz raport kontrolny HACCP.", "raport haccp"),
+                new("Lokalizacje HACCP", "Warehouse", "HaccpLocations", "map", "Lokalizacje, limity temperatur i kategorie magazynowe.", "haccp lokalizacje limity temperatur"),
             ]),
         new(
             "ingredients",

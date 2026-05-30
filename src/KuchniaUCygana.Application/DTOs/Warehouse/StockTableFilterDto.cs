@@ -4,6 +4,8 @@ public sealed class StockTableFilterDto
 {
     public string? Search { get; set; }
 
+    public int? CategoryId { get; set; }
+
     public string? Category { get; set; }
 
     public bool ShowExpiredOnly { get; set; }

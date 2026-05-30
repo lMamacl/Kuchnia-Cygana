@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
@@ -8,9 +5,6 @@ using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
-/// <summary>
-/// Repozytorium StockItem z metodami Smart Inventory.
-/// </summary>
 public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
@@ -21,7 +15,6 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
         _connectionFactory = connectionFactory;
     }
 
-    /// <inheritdoc />
     public async Task<IEnumerable<StockItem>> GetBelowMinimumAsync()
     {
         using var db = _connectionFactory.CreateConnection();
@@ -43,7 +36,6 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
             """);
     }
 
-    /// <inheritdoc />
     public async Task<StockItem?> GetByIngredientIdAsync(int baseIngredientId)
     {
         using var db = _connectionFactory.CreateConnection();
@@ -58,7 +50,6 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
             new { baseIngredientId });
     }
 
-    /// <inheritdoc />
     public async Task<StockItem?> GetWithBatchesAsync(int stockItemId)
     {
         using var db = _connectionFactory.CreateConnection();
@@ -71,11 +62,8 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
               AND [IsDeleted] = 0;
             """,
             new { stockItemId });
-        // Uwaga: partie pobierane są osobno przez IBatchRepository.GetActiveBatchesByStockItemAsync
-        // aby uniknąć złożonego multi-mapping z Dapper dla rzadko potrzebnych danych.
     }
 
-    /// <inheritdoc />
     public async Task<(IEnumerable<StockItem> Items, int TotalCount)> GetPagedAsync(StockItemFilter filter)
     {
         using var db = _connectionFactory.CreateConnection();
@@ -122,16 +110,17 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
         var search = string.IsNullOrWhiteSpace(query.Search)
             ? null
             : $"%{query.Search.Trim()}%";
-        var category = string.IsNullOrWhiteSpace(query.Category)
+        var legacyCategory = string.IsNullOrWhiteSpace(query.LegacyCategory)
             ? null
-            : query.Category.Trim();
+            : query.LegacyCategory.Trim();
         var now = DateTimeOffset.UtcNow;
         var soonCutoff = now.AddDays(7);
 
         var parameters = new
         {
             search,
-            category,
+            categoryId = query.CategoryId,
+            legacyCategory,
             showExpiredOnly = query.ShowExpiredOnly,
             showLowStockOnly = query.ShowLowStockOnly,
             showExpiringSoonOnly = query.ShowExpiringSoonOnly,
@@ -168,6 +157,7 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
                 [MinimumLevel],
                 [LeadTimeDays],
                 [CurrentStock],
+                [CategoryId],
                 [Category],
                 [UnitSymbol],
                 [EarliestExpiryDate]
@@ -209,6 +199,7 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
                 [MinimumLevel],
                 [LeadTimeDays],
                 [CurrentStock],
+                [CategoryId],
                 [Category],
                 [UnitSymbol],
                 [EarliestExpiryDate]
@@ -250,12 +241,15 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
                 si.[Id] AS [StockItemId],
                 si.[Name] AS [StockItemName],
                 CAST(NULL AS nvarchar(50)) AS [SupplierBatchNumber],
+                si.[WarehouseCategoryId] AS [CategoryId],
+                wc.[Name] AS [Category],
                 CASE WHEN COALESCE(t.[CurrentQuantity], 0) <= 0 THEN N'NoStock' ELSE N'BelowMinimum' END AS [AlertCode],
                 COALESCE(t.[CurrentQuantity], 0) AS [CurrentQuantity],
                 si.[MinimumLevel],
-                CAST(NULL AS datetime) AS [EarliestExpiry],
+                CAST(NULL AS datetimeoffset) AS [EarliestExpiry],
                 CAST(NULL AS int) AS [DaysUntilExpiry]
             FROM [StockItems] si
+            INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
             LEFT JOIN StockTotals t ON t.[StockItemId] = si.[Id]
             WHERE si.[IsDeleted] = 0
               AND si.[MinimumLevel] > 0
@@ -267,6 +261,8 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
                 si.[Id] AS [StockItemId],
                 si.[Name] AS [StockItemName],
                 b.[SupplierBatchNumber],
+                si.[WarehouseCategoryId] AS [CategoryId],
+                wc.[Name] AS [Category],
                 CASE
                     WHEN b.[ExpiryDate] <= @nowUtc THEN N'Expired'
                     WHEN DATEDIFF(day, @nowUtc, b.[ExpiryDate]) <= 3 THEN N'ExpiringWithin3Days'
@@ -278,6 +274,7 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
                 DATEDIFF(day, @nowUtc, b.[ExpiryDate]) AS [DaysUntilExpiry]
             FROM ActiveBatches b
             INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId] AND si.[IsDeleted] = 0
+            INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
             WHERE b.[ExpiryDate] IS NOT NULL
               AND b.[ExpiryDate] <= @cutoffUtc
             ORDER BY [AlertCode], [DaysUntilExpiry], [StockItemName];
@@ -295,10 +292,12 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
                 si.[MinimumLevel],
                 si.[LeadTimeDays],
                 COALESCE(totals.[CurrentStock], 0) AS [CurrentStock],
-                category.[Category],
+                si.[WarehouseCategoryId] AS [CategoryId],
+                wc.[Name] AS [Category],
                 uom.[Symbol] AS [UnitSymbol],
                 totals.[EarliestExpiryDate]
             FROM [StockItems] si
+            INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
             INNER JOIN [UnitsOfMeasure] uom ON uom.[Id] = si.[DefaultUnitOfMeasureId]
             OUTER APPLY (
                 SELECT
@@ -309,31 +308,6 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
                   AND b.[IsDeleted] = 0
                   AND b.[IsDepleted] = 0
             ) totals
-            CROSS APPLY (
-                SELECT CASE
-                    WHEN LOWER(si.[Name]) LIKE N'%pudełko%'
-                      OR LOWER(si.[Name]) LIKE N'%torba%'
-                      OR LOWER(si.[Name]) LIKE N'%opakow%' THEN N'Opakowania'
-                    WHEN LOWER(si.[Name]) LIKE N'%kurczak%'
-                      OR LOWER(si.[Name]) LIKE N'%łosoś%'
-                      OR LOWER(si.[Name]) LIKE N'%mięso%'
-                      OR LOWER(si.[Name]) LIKE N'%ryb%'
-                      OR LOWER(si.[Name]) LIKE N'%indyka%' THEN N'Mięso/Ryby'
-                    WHEN LOWER(si.[Name]) LIKE N'%śmietanka%'
-                      OR LOWER(si.[Name]) LIKE N'%masło%'
-                      OR LOWER(si.[Name]) LIKE N'%ser %'
-                      OR LOWER(si.[Name]) LIKE N'%gouda%'
-                      OR LOWER(si.[Name]) LIKE N'%jogurt%'
-                      OR LOWER(si.[Name]) LIKE N'%mleko%' THEN N'Nabiał'
-                    WHEN LOWER(si.[Name]) LIKE N'%brokuł%'
-                      OR LOWER(si.[Name]) LIKE N'%dynia%'
-                      OR LOWER(si.[Name]) LIKE N'%batat%'
-                      OR LOWER(si.[Name]) LIKE N'%jagod%'
-                      OR LOWER(si.[Name]) LIKE N'%ziemniak%'
-                      OR (LOWER(si.[Name]) LIKE N'%pomidor%' AND LOWER(si.[Name]) NOT LIKE N'%puszka%') THEN N'Warzywa i owoce'
-                    ELSE N'Suche'
-                END AS [Category]
-            ) category
             WHERE si.[IsDeleted] = 0
               AND (@search IS NULL OR si.[Name] LIKE @search OR EXISTS (
                     SELECT 1
@@ -347,7 +321,8 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
         """;
 
     private const string StockRowsWhereSql = """
-        WHERE (@category IS NULL OR [Category] = @category)
+        WHERE (@categoryId IS NULL OR [CategoryId] = @categoryId)
+          AND (@legacyCategory IS NULL OR @categoryId IS NOT NULL OR [Category] = @legacyCategory)
           AND (@showLowStockOnly = 0 OR [CurrentStock] < [MinimumLevel])
           AND (
                 (@showExpiredOnly = 0 AND @showExpiringSoonOnly = 0)
@@ -371,6 +346,7 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
             [MinimumLevel],
             [LeadTimeDays],
             [CurrentStock],
+            [CategoryId],
             [Category],
             [UnitSymbol],
             [EarliestExpiryDate]

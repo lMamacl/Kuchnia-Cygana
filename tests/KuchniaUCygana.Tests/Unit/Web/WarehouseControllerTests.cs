@@ -212,6 +212,8 @@ public sealed class WarehouseControllerTests
         var controller = new WarehouseController(
             warehouseService?.Object ?? Mock.Of<IWarehouseService>(),
             temperatureService?.Object ?? Mock.Of<ITemperatureService>(),
+            Mock.Of<IWarehouseCategoryService>(),
+            Mock.Of<IHaccpLocationService>(),
             Mock.Of<IPdfGenerator>());
 
         controller.ControllerContext = new ControllerContext

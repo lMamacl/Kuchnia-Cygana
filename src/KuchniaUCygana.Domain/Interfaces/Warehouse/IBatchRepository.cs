@@ -57,7 +57,8 @@ public sealed class FefoReportRow
 
 public sealed record BatchInventoryQuery(
     string? Search,
-    string? Category,
+    int? CategoryId,
+    string? LegacyCategory,
     int Page,
     int PageSize);
 
@@ -70,6 +71,8 @@ public sealed class BatchInventoryRow
     public string StockItemName { get; set; } = string.Empty;
 
     public string BatchNumber { get; set; } = string.Empty;
+
+    public int? CategoryId { get; set; }
 
     public string Category { get; set; } = string.Empty;
 

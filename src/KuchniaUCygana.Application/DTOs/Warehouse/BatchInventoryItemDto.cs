@@ -12,7 +12,15 @@ public sealed class BatchInventoryItemDto
 
     public string BatchNumber { get; set; } = string.Empty;
 
+    public int? CategoryId { get; set; }
+
     public string Category { get; set; } = string.Empty;
+
+    public string CategoryName
+    {
+        get => Category;
+        set => Category = value;
+    }
 
     public decimal CurrentQuantity { get; set; }
 

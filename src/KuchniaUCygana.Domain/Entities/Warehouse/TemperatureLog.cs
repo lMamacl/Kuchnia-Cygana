@@ -9,8 +9,10 @@ namespace KuchniaUCygana.Domain.Entities.Warehouse;
 public class TemperatureLog : AuditableEntity<long>
 {
     [Required]
-    [StringLength(50)]
+    [StringLength(120)]
     public string DeviceNameOrLocation { get; set; } = string.Empty;
+
+    public int? HaccpLocationId { get; set; }
 
     public decimal RecordedTemperatureCelsius { get; set; }
 

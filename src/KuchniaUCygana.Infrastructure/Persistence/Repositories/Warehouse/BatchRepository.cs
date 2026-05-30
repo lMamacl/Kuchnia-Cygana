@@ -1,7 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
@@ -16,7 +12,6 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
     {
     }
 
-    /// <inheritdoc />
     public async Task<IEnumerable<Batch>> GetActiveBatchesByStockItemAsync(int stockItemId)
     {
         using var db = Factory.CreateConnection();
@@ -30,7 +25,8 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
               AND [IsDeleted] = 0
             ORDER BY
               CASE WHEN [ExpiryDate] IS NULL THEN 1 ELSE 0 END,
-              [ExpiryDate];
+              [ExpiryDate],
+              [Id];
             """,
             new { stockItemId });
     }
@@ -54,7 +50,6 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
             new { stockItemId });
     }
 
-    /// <inheritdoc />
     public async Task<IEnumerable<Batch>> GetExpiringBeforeAsync(DateTimeOffset date)
     {
         using var db = Factory.CreateConnection();
@@ -105,14 +100,15 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
         var search = string.IsNullOrWhiteSpace(query.Search)
             ? null
             : $"%{query.Search.Trim()}%";
-        var category = string.IsNullOrWhiteSpace(query.Category)
+        var legacyCategory = string.IsNullOrWhiteSpace(query.LegacyCategory)
             ? null
-            : query.Category.Trim();
+            : query.LegacyCategory.Trim();
 
         var parameters = new
         {
             search,
-            category,
+            categoryId = query.CategoryId,
+            legacyCategory,
             offset,
             pageSize,
         };
@@ -214,39 +210,16 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
                 b.[StockItemId],
                 si.[Name] AS [StockItemName],
                 COALESCE(b.[SupplierBatchNumber], '') AS [BatchNumber],
-                category.[Category],
+                si.[WarehouseCategoryId] AS [CategoryId],
+                wc.[Name] AS [Category],
                 b.[CurrentQuantity],
                 uom.[Symbol] AS [UnitSymbol],
                 b.[ExpiryDate],
                 b.[ReceivedDate]
             FROM [Batches] b
             INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId]
+            INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
             INNER JOIN [UnitsOfMeasure] uom ON uom.[Id] = si.[DefaultUnitOfMeasureId]
-            CROSS APPLY (
-                SELECT CASE
-                    WHEN LOWER(si.[Name]) LIKE N'%pudełko%'
-                      OR LOWER(si.[Name]) LIKE N'%torba%'
-                      OR LOWER(si.[Name]) LIKE N'%opakow%' THEN N'Opakowania'
-                    WHEN LOWER(si.[Name]) LIKE N'%kurczak%'
-                      OR LOWER(si.[Name]) LIKE N'%łosoś%'
-                      OR LOWER(si.[Name]) LIKE N'%mięso%'
-                      OR LOWER(si.[Name]) LIKE N'%ryb%'
-                      OR LOWER(si.[Name]) LIKE N'%indyka%' THEN N'Mięso/Ryby'
-                    WHEN LOWER(si.[Name]) LIKE N'%śmietanka%'
-                      OR LOWER(si.[Name]) LIKE N'%masło%'
-                      OR LOWER(si.[Name]) LIKE N'%ser %'
-                      OR LOWER(si.[Name]) LIKE N'%gouda%'
-                      OR LOWER(si.[Name]) LIKE N'%jogurt%'
-                      OR LOWER(si.[Name]) LIKE N'%mleko%' THEN N'Nabiał'
-                    WHEN LOWER(si.[Name]) LIKE N'%brokuł%'
-                      OR LOWER(si.[Name]) LIKE N'%dynia%'
-                      OR LOWER(si.[Name]) LIKE N'%batat%'
-                      OR LOWER(si.[Name]) LIKE N'%jagod%'
-                      OR LOWER(si.[Name]) LIKE N'%ziemniak%'
-                      OR (LOWER(si.[Name]) LIKE N'%pomidor%' AND LOWER(si.[Name]) NOT LIKE N'%puszka%') THEN N'Warzywa i owoce'
-                    ELSE N'Suche'
-                END AS [Category]
-            ) category
             WHERE b.[IsDeleted] = 0
               AND b.[IsDepleted] = 0
               AND b.[CurrentQuantity] > 0
@@ -256,7 +229,8 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
         """;
 
     private const string BatchInventoryRowsWhereSql = """
-        WHERE (@category IS NULL OR [Category] = @category)
+        WHERE (@categoryId IS NULL OR [CategoryId] = @categoryId)
+          AND (@legacyCategory IS NULL OR @categoryId IS NOT NULL OR [Category] = @legacyCategory)
         """;
 
     private const string BatchInventoryRowsCountSql = $"""

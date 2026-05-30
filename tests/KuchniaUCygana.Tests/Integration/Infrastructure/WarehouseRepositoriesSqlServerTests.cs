@@ -142,7 +142,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         }
 
         var repository = new StockItemRepository(connectionFactory);
-        var query = new StockItemTableQuery(unique, Category: null, ShowExpiredOnly: false, ShowLowStockOnly: false, ShowExpiringSoonOnly: false, Page: 2, PageSize: 2);
+        var query = new StockItemTableQuery(unique, CategoryId: null, LegacyCategory: null, ShowExpiredOnly: false, ShowLowStockOnly: false, ShowExpiringSoonOnly: false, Page: 2, PageSize: 2);
 
         var (items, totalCount) = await repository.GetStockTablePageAsync(query);
 
@@ -167,7 +167,8 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var repository = new StockItemRepository(connectionFactory);
         var query = new StockItemTableQuery(
             unique,
-            Category: null,
+            CategoryId: null,
+            LegacyCategory: null,
             ShowExpiredOnly: false,
             ShowLowStockOnly: false,
             ShowExpiringSoonOnly: true,
@@ -180,6 +181,37 @@ public sealed class WarehouseRepositoriesSqlServerTests
         totalCount.Should().Be(1);
         page.Should().ContainSingle()
             .Which.Name.Should().Contain("Soon");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task StockItemRepository_GetStockTablePageAsync_ShouldFilterByWarehouseCategoryId()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var unique = $"Cat-{Guid.NewGuid():N}"[..14];
+        var meatCategoryItemId = await CreateStockItemAsync(connectionFactory, $"{unique}-Alpha", warehouseCategoryId: 1);
+        var dryCategoryItemId = await CreateStockItemAsync(connectionFactory, $"{unique}-Beta", warehouseCategoryId: 4);
+
+        await InsertBatchAsync(connectionFactory, meatCategoryItemId, "CAT-MEAT", DateTimeOffset.UtcNow.AddDays(10), false, false);
+        await InsertBatchAsync(connectionFactory, dryCategoryItemId, "CAT-DRY", DateTimeOffset.UtcNow.AddDays(10), false, false);
+
+        var repository = new StockItemRepository(connectionFactory);
+        var query = new StockItemTableQuery(
+            unique,
+            CategoryId: 1,
+            LegacyCategory: null,
+            ShowExpiredOnly: false,
+            ShowLowStockOnly: false,
+            ShowExpiringSoonOnly: false,
+            Page: 1,
+            PageSize: 10);
+
+        var (items, totalCount) = await repository.GetStockTablePageAsync(query);
+        var page = items.ToList();
+
+        totalCount.Should().Be(1);
+        page.Should().ContainSingle()
+            .Which.CategoryId.Should().Be(1);
     }
 
     [Fact]
@@ -220,7 +252,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         await InsertBatchAsync(connectionFactory, matchingBatchId, "INV-HIDDEN", DateTimeOffset.UtcNow.AddDays(7), false, false, currentQuantity: 8m);
 
         var repository = new BatchRepository(connectionFactory);
-        var query = new BatchInventoryQuery(unique, Category: null, Page: 1, PageSize: 1);
+        var query = new BatchInventoryQuery(unique, CategoryId: null, LegacyCategory: null, Page: 1, PageSize: 1);
 
         var (items, totalCount) = await repository.GetBatchInventoryPageAsync(query);
 
@@ -601,7 +633,10 @@ public sealed class WarehouseRepositoriesSqlServerTests
             NullLogger<LoadingService>.Instance);
     }
 
-    private static async Task<int> CreateStockItemAsync(IDbConnectionFactory connectionFactory, string nameSuffix)
+    private static async Task<int> CreateStockItemAsync(
+        IDbConnectionFactory connectionFactory,
+        string nameSuffix,
+        int warehouseCategoryId = 4)
     {
         using var db = connectionFactory.CreateConnection();
 
@@ -627,6 +662,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
             DefaultUnitOfMeasureId = unitId,
             MinimumLevel = 5.25m,
             LeadTimeDays = 2,
+            WarehouseCategoryId = warehouseCategoryId,
             CreatedBy = "IntegrationTest",
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -635,10 +671,10 @@ public sealed class WarehouseRepositoriesSqlServerTests
             """
             INSERT INTO [StockItems]
                 ([Name], [BaseIngredientId], [DefaultUnitOfMeasureId], [MinimumLevel], [LeadTimeDays],
-                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+                 [WarehouseCategoryId], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
             VALUES
                 (@Name, @BaseIngredientId, @DefaultUnitOfMeasureId, @MinimumLevel, @LeadTimeDays,
-                 @CreatedBy, @UpdatedBy, @IsDeleted, @DeletedAt, @DeletedBy, @CreatedAt, @UpdatedAt);
+                 @WarehouseCategoryId, @CreatedBy, @UpdatedBy, @IsDeleted, @DeletedAt, @DeletedBy, @CreatedAt, @UpdatedAt);
             SELECT CAST(SCOPE_IDENTITY() AS int);
             """,
             stockItem);

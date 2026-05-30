@@ -23,6 +23,13 @@
     // Helper do pobierania limitów
     (decimal Min, decimal Max) GetDeviceLimits(string deviceName)
     {
+        var configuredLocation = Model.Locations.FirstOrDefault(l =>
+            string.Equals(l.Name, deviceName, StringComparison.OrdinalIgnoreCase));
+        if (configuredLocation is not null)
+        {
+            return (configuredLocation.MinTemperatureCelsius, configuredLocation.MaxTemperatureCelsius);
+        }
+
         var name = deviceName.ToLower();
         decimal minLimit = -25.0m;
         decimal maxLimit = 8.0m;
@@ -256,18 +263,18 @@
 
                             <div class="mb-3">
                                 <label class="form-label required">Urządzenie / Lokalizacja</label>
-                                <select name="DeviceNameOrLocation" class="form-select" required aria-label="Wybierz urządzenie">
+                                <select name="HaccpLocationId" class="form-select" required aria-label="Wybierz urządzenie">
                                     <option value="">-- Wybierz lokalizację --</option>
-                                    @foreach (var dev in devices)
+                                    @foreach (var location in Model.Locations)
                                     {
-                                        var value = dev.Split(" (")[0];
-                                        if (logReq.DeviceNameOrLocation == value)
+                                        var value = location.Id.ToString();
+                                        if (logReq.HaccpLocationId == location.Id || string.Equals(logReq.DeviceNameOrLocation, location.Name, StringComparison.OrdinalIgnoreCase))
                                         {
-                                            <option value="@value" selected="selected">@dev</option>
+                                            <option value="@value" selected="selected">@location.Label</option>
                                         }
                                         else
                                         {
-                                            <option value="@value">@dev</option>
+                                            <option value="@value">@location.Label</option>
                                         }
                                     }
                                 </select>
@@ -473,6 +480,14 @@
         const rawData = @Html.Raw(Json.Serialize(Model.Readings.OrderBy(r => r.RecordedAt)));
 
         function getDeviceLimits(deviceName) {
+            const configured = rawData.find(item => item.deviceNameOrLocation === deviceName);
+            if (configured) {
+                return {
+                    min: configured.minTemperatureCelsius,
+                    max: configured.maxTemperatureCelsius
+                };
+            }
+
             const name = deviceName.toLowerCase();
             let minLimit = -25.0;
             let maxLimit = 8.0;

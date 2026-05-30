@@ -21,6 +21,7 @@ public sealed class WarehouseService : IWarehouseService
 {
     private readonly IBatchRepository _batchRepository;
     private readonly IStockItemRepository _stockItemRepository;
+    private readonly IWarehouseCategoryRepository _warehouseCategoryRepository;
     private readonly IInventoryTransactionRepository _transactionRepository;
     private readonly IWarehouseCommandRepository _warehouseCommandRepository;
     private readonly IRepository<UnitOfMeasure> _unitOfMeasureRepository;
@@ -34,6 +35,7 @@ public sealed class WarehouseService : IWarehouseService
     public WarehouseService(
         IBatchRepository batchRepository,
         IStockItemRepository stockItemRepository,
+        IWarehouseCategoryRepository warehouseCategoryRepository,
         IInventoryTransactionRepository transactionRepository,
         IWarehouseCommandRepository warehouseCommandRepository,
         IRepository<UnitOfMeasure> unitOfMeasureRepository,
@@ -46,6 +48,7 @@ public sealed class WarehouseService : IWarehouseService
     {
         _batchRepository = batchRepository;
         _stockItemRepository = stockItemRepository;
+        _warehouseCategoryRepository = warehouseCategoryRepository;
         _transactionRepository = transactionRepository;
         _warehouseCommandRepository = warehouseCommandRepository;
         _unitOfMeasureRepository = unitOfMeasureRepository;
@@ -180,77 +183,23 @@ public sealed class WarehouseService : IWarehouseService
     /// <inheritdoc/>
     public async Task<IEnumerable<StockItemDto>> GetStockOverviewAsync()
     {
-        var items = await _stockItemRepository.GetAllAsync();
-        var units = (await _unitOfMeasureRepository.GetAllAsync()).ToDictionary(u => u.Id);
-
-        var dtoList = new List<StockItemDto>();
-
-        foreach (var item in items)
+        var filter = new StockTableFilterDto
         {
-            var activeBatches = (await _batchRepository.GetActiveBatchesByStockItemAsync(item.Id)).ToList();
-            var currentStock = activeBatches.Sum(b => b.CurrentQuantity);
+            Page = 1,
+            PageSize = 200,
+        };
+        var result = new List<StockItemDto>();
+        PagedResultDto<StockItemDto> page;
 
-            DateTimeOffset? earliestExpiryDate = activeBatches.Any()
-                ? activeBatches.Min(b => b.ExpiryDate)
-                : null;
-
-            units.TryGetValue(item.DefaultUnitOfMeasureId, out var uom);
-            var unitSymbol = uom?.Symbol ?? string.Empty;
-
-            string category = DetermineCategory(item.Name);
-
-            string status = "OK";
-            string statusColor = "success";
-
-            if (currentStock <= 0)
-            {
-                status = "Brak zapasów";
-                statusColor = "danger";
-            }
-            else if (earliestExpiryDate.HasValue && earliestExpiryDate.Value <= DateTimeOffset.UtcNow)
-            {
-                status = "Przeterminowane";
-                statusColor = "danger";
-            }
-            else if (earliestExpiryDate.HasValue && earliestExpiryDate.Value <= DateTimeOffset.UtcNow.AddDays(3))
-            {
-                status = "Pilna ważność";
-                statusColor = "danger";
-            }
-            else if (currentStock < item.MinimumLevel)
-            {
-                status = "Niski stan";
-                statusColor = "danger";
-            }
-            else if (currentStock == item.MinimumLevel)
-            {
-                status = "Wskazana dostawa";
-                statusColor = "warning";
-            }
-            else if (earliestExpiryDate.HasValue && earliestExpiryDate.Value <= DateTimeOffset.UtcNow.AddDays(7))
-            {
-                status = "Krótka ważność";
-                statusColor = "warning";
-            }
-
-            dtoList.Add(new StockItemDto
-            {
-                Id = item.Id,
-                Name = item.Name,
-                BaseIngredientId = item.BaseIngredientId,
-                DefaultUnitOfMeasureId = item.DefaultUnitOfMeasureId,
-                MinimumLevel = item.MinimumLevel,
-                LeadTimeDays = item.LeadTimeDays,
-                CurrentStock = currentStock,
-                Category = category,
-                UnitSymbol = unitSymbol,
-                Status = status,
-                StatusColor = statusColor,
-                EarliestExpiryDate = earliestExpiryDate
-            });
+        do
+        {
+            page = await GetStockTablePageAsync(filter);
+            result.AddRange(page.Items);
+            filter.Page++;
         }
+        while (filter.Page <= page.TotalPages);
 
-        return dtoList;
+        return result;
     }
 
     public async Task<IReadOnlyList<StockItemDto>> SearchStockLookupAsync(StockLookupFilterDto filter)
@@ -273,26 +222,6 @@ public sealed class WarehouseService : IWarehouseService
     {
         var row = await _stockItemRepository.GetStockLookupByIdAsync(stockItemId);
         return row is null ? null : MapStockRow(row);
-    }
-
-    private static string DetermineCategory(string name)
-    {
-        if (string.IsNullOrEmpty(name)) return "Suche";
-
-        var lower = name.ToLowerInvariant();
-        if (lower.Contains("pudełko") || lower.Contains("torba") || lower.Contains("opakow"))
-            return "Opakowania";
-
-        if (lower.Contains("kurczak") || lower.Contains("łosoś") || lower.Contains("mięso") || lower.Contains("ryb") || lower.Contains("indyka"))
-            return "Mięso/Ryby";
-
-        if (lower.Contains("śmietanka") || lower.Contains("masło") || lower.Contains("ser ") || lower.Contains("gouda") || lower.Contains("jogurt") || lower.Contains("mleko"))
-            return "Nabiał";
-
-        if (lower.Contains("brokuł") || lower.Contains("dynia") || lower.Contains("batat") || lower.Contains("jagod") || lower.Contains("ziemniak") || (lower.Contains("pomidor") && !lower.Contains("puszka")))
-            return "Warzywa i owoce";
-
-        return "Suche";
     }
 
     /// <inheritdoc/>
@@ -454,8 +383,10 @@ public sealed class WarehouseService : IWarehouseService
     {
         var page = Math.Max(filter.Page, 1);
         var pageSize = Math.Clamp(filter.PageSize <= 0 ? 15 : filter.PageSize, 1, 200);
+        var categoryId = await ResolveCategoryIdAsync(filter);
         var query = new StockItemTableQuery(
             filter.Search,
+            categoryId,
             filter.Category,
             filter.ShowExpiredOnly,
             filter.ShowLowStockOnly,
@@ -468,6 +399,7 @@ public sealed class WarehouseService : IWarehouseService
 
         filter.Page = page;
         filter.PageSize = pageSize;
+        filter.CategoryId = categoryId;
         filter.TotalCount = totalCount;
 
         return new PagedResultDto<StockItemDto>
@@ -484,12 +416,14 @@ public sealed class WarehouseService : IWarehouseService
     {
         var page = Math.Max(filter.Page, 1);
         var pageSize = Math.Clamp(filter.PageSize <= 0 ? 50 : filter.PageSize, 1, 200);
-        var query = new BatchInventoryQuery(filter.Search, filter.Category, page, pageSize);
+        var categoryId = await ResolveCategoryIdAsync(filter);
+        var query = new BatchInventoryQuery(filter.Search, categoryId, filter.Category, page, pageSize);
 
         var (rows, totalCount) = await _batchRepository.GetBatchInventoryPageAsync(query);
 
         filter.Page = page;
         filter.PageSize = pageSize;
+        filter.CategoryId = categoryId;
         filter.TotalCount = totalCount;
 
         return new PagedResultDto<BatchInventoryItemDto>
@@ -499,6 +433,17 @@ public sealed class WarehouseService : IWarehouseService
             PageSize = pageSize,
             TotalCount = totalCount,
         };
+    }
+
+    private async Task<int?> ResolveCategoryIdAsync(StockTableFilterDto filter)
+    {
+        var categoryId = await _warehouseCategoryRepository.ResolveActiveCategoryIdAsync(
+            filter.CategoryId,
+            filter.Category);
+
+        return filter.CategoryId.HasValue && !categoryId.HasValue
+            ? -1
+            : categoryId;
     }
 
     private static StockItemDto MapStockRow(StockItemStockRow row)
@@ -514,6 +459,7 @@ public sealed class WarehouseService : IWarehouseService
             MinimumLevel = row.MinimumLevel,
             LeadTimeDays = row.LeadTimeDays,
             CurrentStock = row.CurrentStock,
+            CategoryId = row.CategoryId,
             Category = row.Category,
             UnitSymbol = row.UnitSymbol,
             Status = status,
@@ -606,6 +552,7 @@ public sealed class WarehouseService : IWarehouseService
             StockItemId = row.StockItemId,
             StockItemName = row.StockItemName,
             BatchNumber = row.BatchNumber,
+            CategoryId = row.CategoryId,
             Category = row.Category,
             CurrentQuantity = row.CurrentQuantity,
             UnitSymbol = row.UnitSymbol,
@@ -617,69 +564,9 @@ public sealed class WarehouseService : IWarehouseService
     /// <inheritdoc/>
     public async Task<StockItemDetailsDto> GetStockItemDetailsWithBatchesAsync(int stockItemId)
     {
-        var stockItem = await _stockItemRepository.GetByIdAsync(stockItemId)
+        var stockItemDto = await GetStockLookupByIdAsync(stockItemId)
             ?? throw new InvalidOperationException($"Składnik magazynowy o ID {stockItemId} nie istnieje.");
-
         var activeBatches = (await _batchRepository.GetActiveBatchesByStockItemAsync(stockItemId)).ToList();
-        var currentStock = activeBatches.Sum(b => b.CurrentQuantity);
-        DateTimeOffset? earliestExpiryDate = activeBatches.Any() ? activeBatches.Min(b => b.ExpiryDate) : null;
-
-        var units = (await _unitOfMeasureRepository.GetAllAsync()).ToDictionary(u => u.Id);
-        units.TryGetValue(stockItem.DefaultUnitOfMeasureId, out var uom);
-        var unitSymbol = uom?.Symbol ?? string.Empty;
-
-        string category = DetermineCategory(stockItem.Name);
-
-        string status = "OK";
-        string statusColor = "success";
-
-        if (currentStock <= 0)
-        {
-            status = "Brak zapasów";
-            statusColor = "danger";
-        }
-        else if (earliestExpiryDate.HasValue && earliestExpiryDate.Value <= DateTimeOffset.UtcNow)
-        {
-            status = "Przeterminowane";
-            statusColor = "danger";
-        }
-        else if (earliestExpiryDate.HasValue && earliestExpiryDate.Value <= DateTimeOffset.UtcNow.AddDays(3))
-        {
-            status = "Pilna ważność";
-            statusColor = "danger";
-        }
-        else if (currentStock < stockItem.MinimumLevel)
-        {
-            status = "Niski stan";
-            statusColor = "danger";
-        }
-        else if (currentStock == stockItem.MinimumLevel)
-        {
-            status = "Wskazana dostawa";
-            statusColor = "warning";
-        }
-        else if (earliestExpiryDate.HasValue && earliestExpiryDate.Value <= DateTimeOffset.UtcNow.AddDays(7))
-        {
-            status = "Krótka ważność";
-            statusColor = "warning";
-        }
-
-        var stockItemDto = new StockItemDto
-        {
-            Id = stockItem.Id,
-            Name = stockItem.Name,
-            BaseIngredientId = stockItem.BaseIngredientId,
-            DefaultUnitOfMeasureId = stockItem.DefaultUnitOfMeasureId,
-            MinimumLevel = stockItem.MinimumLevel,
-            LeadTimeDays = stockItem.LeadTimeDays,
-            CurrentStock = currentStock,
-            Category = category,
-            UnitSymbol = unitSymbol,
-            Status = status,
-            StatusColor = statusColor,
-            EarliestExpiryDate = earliestExpiryDate
-        };
-
         var batchDtos = _mapper.Map<List<BatchDto>>(activeBatches);
 
         var logs = await _batchExpiryChangeLogRepository.GetByStockItemIdAsync(stockItemId);

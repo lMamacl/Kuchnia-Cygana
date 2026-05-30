@@ -49,7 +49,8 @@ public record StockItemFilter(
 
 public sealed record StockItemTableQuery(
     string? Search,
-    string? Category,
+    int? CategoryId,
+    string? LegacyCategory,
     bool ShowExpiredOnly,
     bool ShowLowStockOnly,
     bool ShowExpiringSoonOnly,
@@ -72,6 +73,8 @@ public sealed class StockItemStockRow
 
     public decimal CurrentStock { get; set; }
 
+    public int? CategoryId { get; set; }
+
     public string Category { get; set; } = string.Empty;
 
     public string UnitSymbol { get; set; } = string.Empty;
@@ -86,6 +89,10 @@ public sealed class SmartInventoryAlertRow
     public string StockItemName { get; set; } = string.Empty;
 
     public string? SupplierBatchNumber { get; set; }
+
+    public int? CategoryId { get; set; }
+
+    public string Category { get; set; } = string.Empty;
 
     public string AlertCode { get; set; } = string.Empty;
 

@@ -1,4 +1,5 @@
 @using System.Security.Claims
+@inject KuchniaUCygana.Application.Interfaces.INotificationService NotificationService
 @{
     var isAuthenticated = User.Identity?.IsAuthenticated == true;
     var userName = isAuthenticated
@@ -29,6 +30,10 @@
         }))
         .ToArray();
     var searchJson = System.Text.Json.JsonSerializer.Serialize(searchItems);
+    var notificationSummary = isAuthenticated
+        ? await NotificationService.GetCurrentUserSummaryAsync(5)
+        : new KuchniaUCygana.Application.DTOs.Notifications.NotificationSummaryDto();
+    var returnUrl = Context.Request.Path + Context.Request.QueryString;
 }
 
 <header class="navbar navbar-expand-md d-print-none staff-topbar">
@@ -49,12 +54,58 @@
             <div class="nav-item dropdown">
                 <button class="nav-link px-2 staff-icon-button position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Powiadomienia" aria-label="Powiadomienia">
                     @Html.Raw(StaffIconCatalog.Get("bell"))
-                    <span class="badge bg-red staff-notification-dot" aria-hidden="true"></span>
+                    @if (notificationSummary.UnreadCount > 0)
+                    {
+                        <span class="badge bg-red staff-notification-dot" aria-hidden="true"></span>
+                    }
                 </button>
                 <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow staff-dropdown">
                     <div class="dropdown-header">Powiadomienia</div>
-                    <div class="dropdown-item-text text-secondary">Brak nowych alarmow w trybie preview.</div>
+                    @if (!notificationSummary.Items.Any())
+                    {
+                        <div class="dropdown-item-text text-secondary">Brak nowych powiadomień.</div>
+                    }
+                    else
+                    {
+                        @foreach (var notification in notificationSummary.Items)
+                        {
+                            <div class="dropdown-item-text">
+                                <div class="d-flex align-items-start gap-2">
+                                    <span class="badge bg-@(notification.Severity == "Danger" ? "red" : notification.Severity == "Warning" ? "yellow" : "azure")-lt mt-1">
+                                        @(notification.IsRead ? "OK" : "Nowe")
+                                    </span>
+                                    <div>
+                                        @if (!string.IsNullOrWhiteSpace(notification.LinkUrl))
+                                        {
+                                            <a class="text-reset fw-semibold" href="@notification.LinkUrl">@notification.Title</a>
+                                        }
+                                        else
+                                        {
+                                            <span class="fw-semibold">@notification.Title</span>
+                                        }
+                                        <div class="text-secondary small">@notification.Message</div>
+                                        @if (!notification.IsRead)
+                                        {
+                                            <form asp-controller="Notifications" asp-action="MarkAsRead" asp-route-userNotificationId="@notification.UserNotificationId" method="post" class="mt-1">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                                <button type="submit" class="btn btn-link btn-sm p-0">Oznacz jako przeczytane</button>
+                                            </form>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
                     <div class="dropdown-divider"></div>
+                    @if (notificationSummary.UnreadCount > 0)
+                    {
+                        <form asp-controller="Notifications" asp-action="MarkAllAsRead" method="post" class="px-3 py-1">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                            <button type="submit" class="btn btn-link btn-sm p-0">Oznacz wszystkie jako przeczytane</button>
+                        </form>
+                    }
                     <a class="dropdown-item" asp-controller="Warehouse" asp-action="HaccpReport">Temperatury HACCP</a>
                     <a class="dropdown-item" asp-controller="Production" asp-action="CookingCards">Karty gotowania</a>
                 </div>

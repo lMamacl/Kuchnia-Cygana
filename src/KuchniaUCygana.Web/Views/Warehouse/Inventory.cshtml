@@ -7,6 +7,8 @@
 
     var filter = ViewBag.Filter as KuchniaUCygana.Application.DTOs.Warehouse.StockTableFilterDto
                  ?? new KuchniaUCygana.Application.DTOs.Warehouse.StockTableFilterDto { PageSize = 50 };
+    var warehouseCategories = ViewBag.WarehouseCategories as IReadOnlyList<KuchniaUCygana.Application.DTOs.Warehouse.WarehouseCategoryDto>
+                              ?? Array.Empty<KuchniaUCygana.Application.DTOs.Warehouse.WarehouseCategoryDto>();
 }
 
 <div class="row justify-content-center">
@@ -40,18 +42,17 @@
                             </span>
                         </div>
                         <select id="CategoryFilter"
-                                name="Category"
+                                name="CategoryId"
                                 class="form-select form-select-sm w-auto"
                                 hx-get="/warehouse/inventory-table"
                                 hx-trigger="change"
                                 hx-target="#inventory-table-container"
                                 hx-include="#SearchInput">
                             <option value="">Wszystkie kategorie</option>
-                            <option value="Mięso/Ryby" selected="@(filter.Category == "Mięso/Ryby" ? "selected" : null)">Mięso/Ryby</option>
-                            <option value="Nabiał" selected="@(filter.Category == "Nabiał" ? "selected" : null)">Nabiał</option>
-                            <option value="Warzywa i owoce" selected="@(filter.Category == "Warzywa i owoce" ? "selected" : null)">Warzywa i owoce</option>
-                            <option value="Suche" selected="@(filter.Category == "Suche" ? "selected" : null)">Suche</option>
-                            <option value="Opakowania" selected="@(filter.Category == "Opakowania" ? "selected" : null)">Opakowania</option>
+                            @foreach (var category in warehouseCategories)
+                            {
+                                <option value="@category.Id" selected="@(filter.CategoryId == category.Id ? "selected" : null)">@category.Name</option>
+                            }
                         </select>
                         <label class="form-check form-switch m-0">
                             <input type="checkbox" id="ShowChangedOnly" class="form-check-input" onchange="filterInventory()">

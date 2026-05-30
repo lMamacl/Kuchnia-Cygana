@@ -6,6 +6,8 @@
     ViewData["Description"] = "Inteligentne zarządzanie zapasami, kontrola FEFO oraz alerty o przeterminowaniu składników.";
 
     var alerts = Model.Alerts.ToList();
+    var warehouseCategories = ViewBag.WarehouseCategories as IReadOnlyList<KuchniaUCygana.Application.DTOs.Warehouse.WarehouseCategoryDto>
+                              ?? Array.Empty<KuchniaUCygana.Application.DTOs.Warehouse.WarehouseCategoryDto>();
 }
 
 <div class="row row-cards">
@@ -132,13 +134,12 @@
                             </div>
                         </div>
                         <div class="col-md-3">
-                            <select name="Category" class="form-select">
+                            <select name="CategoryId" class="form-select">
                                 <option value="">Wszystkie kategorie</option>
-                                <option value="Mięso/Ryby">Mięso / Ryby</option>
-                                <option value="Nabiał">Nabiał</option>
-                                <option value="Warzywa i owoce">Warzywa i owoce</option>
-                                <option value="Suche">Suche</option>
-                                <option value="Opakowania">Opakowania</option>
+                                @foreach (var category in warehouseCategories)
+                                {
+                                    <option value="@category.Id">@category.Name</option>
+                                }
                             </select>
                         </div>
                         <div class="col-md-5 d-flex flex-wrap gap-4">

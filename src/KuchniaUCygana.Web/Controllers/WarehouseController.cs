@@ -20,15 +20,21 @@ public sealed class WarehouseController : Controller
 {
     private readonly IWarehouseService warehouseService;
     private readonly ITemperatureService temperatureService;
+    private readonly IWarehouseCategoryService warehouseCategoryService;
+    private readonly IHaccpLocationService haccpLocationService;
     private readonly IPdfGenerator pdfGenerator;
 
     public WarehouseController(
         IWarehouseService warehouseService,
         ITemperatureService temperatureService,
+        IWarehouseCategoryService warehouseCategoryService,
+        IHaccpLocationService haccpLocationService,
         IPdfGenerator pdfGenerator)
     {
         this.warehouseService = warehouseService;
         this.temperatureService = temperatureService;
+        this.warehouseCategoryService = warehouseCategoryService;
+        this.haccpLocationService = haccpLocationService;
         this.pdfGenerator = pdfGenerator;
     }
 
@@ -45,6 +51,7 @@ public sealed class WarehouseController : Controller
 
         var filter = new StockTableFilterDto { Page = 1, PageSize = 15 };
         var stockPage = await warehouseService.GetStockTablePageAsync(filter);
+        await PopulateWarehouseCategoriesAsync();
 
         ApplyStockTablePagingViewData(stockPage);
 
@@ -211,6 +218,7 @@ public sealed class WarehouseController : Controller
     {
         EnsureInventoryDefaults(filter);
         var stockItems = await warehouseService.GetBatchInventoryPageAsync(filter);
+        await PopulateWarehouseCategoriesAsync();
         ViewBag.Filter = filter;
         return View(stockItems);
     }
@@ -444,6 +452,33 @@ public sealed class WarehouseController : Controller
         return View(report);
     }
 
+    [HttpGet("haccp-locations")]
+    [Authorize(Roles = "WarehouseManager,Admin")]
+    public async Task<IActionResult> HaccpLocations()
+    {
+        ViewBag.Categories = await warehouseCategoryService.GetActiveAsync();
+        var locations = await haccpLocationService.GetAllAsync();
+        return View(locations);
+    }
+
+    [HttpPost("haccp-locations")]
+    [Authorize(Roles = "WarehouseManager,Admin")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveHaccpLocation(SaveHaccpLocationRequest request)
+    {
+        try
+        {
+            await haccpLocationService.SaveAsync(request);
+            TempData["Success"] = "Lokalizacja HACCP została zapisana.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(HaccpLocations));
+    }
+
     /// <summary>
     /// Pobiera historię transakcji z filtrowaniem (HTMX friendly).
     /// GET /warehouse/transaction-history
@@ -634,6 +669,11 @@ public sealed class WarehouseController : Controller
         {
             filter.PageSize = 50;
         }
+    }
+
+    private async Task PopulateWarehouseCategoriesAsync()
+    {
+        ViewBag.WarehouseCategories = await warehouseCategoryService.GetActiveAsync();
     }
 
     private async Task PopulateSelectedStockItemAsync(int stockItemId)

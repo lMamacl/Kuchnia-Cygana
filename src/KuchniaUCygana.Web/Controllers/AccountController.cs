@@ -4,16 +4,19 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Hosting;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Web.Controllers;
 
 public sealed class AccountController : Controller
 {
     private readonly IWebHostEnvironment env;
+    private readonly IUserRepository userRepository;
 
-    public AccountController(IWebHostEnvironment env)
+    public AccountController(IWebHostEnvironment env, IUserRepository userRepository)
     {
         this.env = env;
+        this.userRepository = userRepository;
     }
     [HttpGet]
     public IActionResult Index()
@@ -73,6 +76,14 @@ public sealed class AccountController : Controller
             new Claim(ClaimTypes.Name, $"dev-{role.ToLower()}@kuchniaucygana.pl"),
             new Claim(ClaimTypes.Role, role)
         };
+
+        var devUser = await userRepository.GetFirstByRoleAsync(role);
+        if (devUser is not null)
+        {
+            claims.Add(new Claim(ClaimTypes.NameIdentifier, devUser.Id.ToString()));
+            claims.RemoveAll(claim => claim.Type == ClaimTypes.Name);
+            claims.Add(new Claim(ClaimTypes.Name, devUser.Email));
+        }
 
         // Manager automatycznie dostaje też claim bazowego pracownika
         if (role.EndsWith("Manager", StringComparison.Ordinal))

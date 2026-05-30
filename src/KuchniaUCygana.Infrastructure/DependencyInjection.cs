@@ -23,7 +23,6 @@ using KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
-using KuchniaUCygana.Domain.Interfaces.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Domain.Interfaces.Services.Menu;
@@ -33,7 +32,6 @@ using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Auth;
 using KuchniaUCygana.Infrastructure.BackgroundJobs;
 using KuchniaUCygana.Application.Services.Logistics;
-using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using MenuAppInterfaces = KuchniaUCygana.Application.Interfaces.Menu;
@@ -53,17 +51,22 @@ public static class DependencyInjection
         services.AddSingleton<IDbConnectionFactory>(_ => new SqlServerConnectionFactory(connectionString));
         services.AddScoped(typeof(IRepository<>), typeof(BaseRepository<>));
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
+        services.AddScoped<IUserRepository, UserRepository>();
 
         // Module 3 repositories.
         services.AddScoped<IBatchRepository, BatchRepository>();
         services.AddScoped<IWarehouseCommandRepository, WarehouseCommandRepository>();
         services.AddScoped<IInventoryTransactionRepository, InventoryTransactionRepository>();
         services.AddScoped<IStockItemRepository, StockItemRepository>();
+        services.AddScoped<IWarehouseCategoryRepository, WarehouseCategoryRepository>();
+        services.AddScoped<IHaccpLocationRepository, HaccpLocationRepository>();
+        services.AddScoped<IHaccpTemperatureAlertRepository, HaccpTemperatureAlertRepository>();
         services.AddScoped<IProductionPlanRepository, ProductionPlanRepository>();
         services.AddScoped<IPackingSessionRepository, PackingSessionRepository>();
         services.AddScoped<ITemperatureLogRepository, TemperatureLogRepository>();
         services.AddScoped<IBatchExpiryChangeLogRepository, BatchExpiryChangeLogRepository>();
         services.AddScoped<IPackingStatusLogRepository, PackingStatusLogRepository>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
 
         // Module 2 (Menu) repositories.
         services.AddScoped<IAllergenRepository, AllergenRepository>();
@@ -112,6 +115,9 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IProductionService, Application.Services.ProductionService>();
         services.AddScoped<IWarehouseService, Application.Services.WarehouseService>();
+        services.AddScoped<IWarehouseCategoryService, Application.Services.WarehouseCategoryService>();
+        services.AddScoped<IHaccpLocationService, Application.Services.HaccpLocationService>();
+        services.AddScoped<INotificationService, Application.Services.NotificationService>();
         services.AddScoped<IPackingService, Application.Services.PackingService>();
         services.AddScoped<ILoadingService, Application.Services.LoadingService>();
         services.AddScoped<ITemperatureService, Application.Services.TemperatureService>();

@@ -195,6 +195,21 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             """,
             items,
             cancellationToken: cancellationToken));
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE [StockItems]
+            SET [WarehouseCategoryId] = CASE
+                WHEN LOWER([Name]) LIKE N'%pude%' OR LOWER([Name]) LIKE N'%torba%' OR LOWER([Name]) LIKE N'%opakow%' THEN 5
+                WHEN LOWER([Name]) LIKE N'%kurczak%' OR LOWER([Name]) LIKE N'%oso%' OR LOWER([Name]) LIKE N'%mięs%' OR LOWER([Name]) LIKE N'%mies%' OR LOWER([Name]) LIKE N'%ryb%' OR LOWER([Name]) LIKE N'%indyka%' THEN 1
+                WHEN LOWER([Name]) LIKE N'%mietanka%' OR LOWER([Name]) LIKE N'%śmietanka%' OR LOWER([Name]) LIKE N'%mas%' OR LOWER([Name]) LIKE N'%ser %' OR LOWER([Name]) LIKE N'%gouda%' OR LOWER([Name]) LIKE N'%jogurt%' OR LOWER([Name]) LIKE N'%mleko%' THEN 2
+                WHEN LOWER([Name]) LIKE N'%broku%' OR LOWER([Name]) LIKE N'%dynia%' OR LOWER([Name]) LIKE N'%batat%' OR LOWER([Name]) LIKE N'%jagod%' OR LOWER([Name]) LIKE N'%ziemniak%' OR (LOWER([Name]) LIKE N'%pomidor%' AND LOWER([Name]) NOT LIKE N'%puszka%') THEN 3
+                ELSE 4
+            END
+            WHERE [WarehouseCategoryId] = 4;
+            """,
+            cancellationToken: cancellationToken));
+
         this.logger.LogInformation("Seeded {Count} stock items.", items.Length);
     }
 
@@ -344,6 +359,23 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             """,
             logs,
             cancellationToken: cancellationToken));
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE [TemperatureLogs]
+            SET [HaccpLocationId] = CASE
+                WHEN LOWER([DeviceNameOrLocation]) LIKE N'%nabia%' THEN 1
+                WHEN LOWER([DeviceNameOrLocation]) LIKE N'%chłodnia%' OR LOWER([DeviceNameOrLocation]) LIKE N'%chlodnia%' THEN 2
+                WHEN LOWER([DeviceNameOrLocation]) LIKE N'%zamra%' OR LOWER([DeviceNameOrLocation]) LIKE N'%freezer%' THEN 3
+                WHEN LOWER([DeviceNameOrLocation]) LIKE N'%warzyw%' THEN 4
+                WHEN LOWER([DeviceNameOrLocation]) LIKE N'%witryna%' THEN 5
+                WHEN LOWER([DeviceNameOrLocation]) LIKE N'%suchy%' THEN 6
+                ELSE NULL
+            END
+            WHERE [HaccpLocationId] IS NULL;
+            """,
+            cancellationToken: cancellationToken));
+
         this.logger.LogInformation("Seeded {Count} temperature logs (7 days, {DeviceCount} devices).", logs.Count, devices.Length);
     }
 

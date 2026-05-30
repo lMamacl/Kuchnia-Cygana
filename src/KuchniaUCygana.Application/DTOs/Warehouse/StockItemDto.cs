@@ -22,7 +22,15 @@ public sealed class StockItemDto
     /// </summary>
     public decimal CurrentStock { get; set; }
 
+    public int? CategoryId { get; set; }
+
     public string Category { get; set; } = string.Empty;
+
+    public string CategoryName
+    {
+        get => Category;
+        set => Category = value;
+    }
 
     public string UnitSymbol { get; set; } = string.Empty;
 

@@ -16,4 +16,9 @@ public interface ITemperatureLogRepository : IRepository<TemperatureLog, long>
     /// Logi temperatur z konkretnej lokalizacji (np. "Chłodnia A").
     /// </summary>
     Task<IEnumerable<TemperatureLog>> GetByLocationAsync(string location);
+
+    Task<IEnumerable<TemperatureLog>> GetByLocationIdDateRangeAsync(
+        int haccpLocationId,
+        DateTimeOffset from,
+        DateTimeOffset to);
 }

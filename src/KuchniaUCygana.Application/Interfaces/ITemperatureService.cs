@@ -17,6 +17,8 @@ public interface ITemperatureService
     /// </summary>
     Task<HaccpReportDto> GetHaccpReportAsync(DateOnly from, DateOnly to);
 
+    Task<IReadOnlyList<HaccpLocationDto>> GetActiveLocationsAsync();
+
     /// <summary>
     /// Pobiera dane do wykresu temperatur z danej lokalizacji.
     /// </summary>

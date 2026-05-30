@@ -42,4 +42,23 @@ public sealed class TemperatureLogRepository : BaseRepository<TemperatureLog, lo
             """,
             new { location });
     }
+
+    public async Task<IEnumerable<TemperatureLog>> GetByLocationIdDateRangeAsync(
+        int haccpLocationId,
+        DateTimeOffset from,
+        DateTimeOffset to)
+    {
+        using var db = Factory.CreateConnection();
+        return await db.QueryAsync<TemperatureLog>(
+            """
+            SELECT *
+            FROM [TemperatureLogs]
+            WHERE [HaccpLocationId] = @haccpLocationId
+              AND [RecordedAt] >= @from
+              AND [RecordedAt] <= @to
+              AND [IsDeleted] = 0
+            ORDER BY [RecordedAt], [Id];
+            """,
+            new { haccpLocationId, from, to });
+    }
 }
