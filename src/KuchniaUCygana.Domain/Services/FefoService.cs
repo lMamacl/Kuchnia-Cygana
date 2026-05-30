@@ -105,6 +105,7 @@ public sealed class FefoService
             var transaction = new InventoryTransaction
             {
                 BatchId = batch.Id,
+                StockItemId = stockItemId,
                 TransactionType = InventoryTransactionType.ProductionIssue,
                 QuantityChanged = -toDeduct, // Ujemna = wydanie
                 Reason = reason,

@@ -28,5 +28,5 @@ public sealed class RegisterWasteRequest
     /// <summary>
     /// Dodatkowe uwagi (wymagane, jeśli powód to "Inny").
     /// </summary>
-    public string Notes { get; set; } = string.Empty;
+    public string? Notes { get; set; }
 }

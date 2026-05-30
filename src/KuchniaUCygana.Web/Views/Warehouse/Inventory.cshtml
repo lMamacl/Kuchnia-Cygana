@@ -1,16 +1,17 @@
-@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
+@model KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<KuchniaUCygana.Application.DTOs.Warehouse.BatchInventoryItemDto>
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Inwentaryzacja Magazynu";
     ViewData["Section"] = "Magazyn";
-    ViewData["Description"] = "Formularz rozliczenia inwentaryzacyjnego. Wprowadź rzeczywiste stany fizyczne składników.";
+    ViewData["Description"] = "Formularz rozliczenia inwentaryzacyjnego. Wprowadź rzeczywiste stany fizyczne partii.";
 
-    var stockItemsList = Model?.ToList() ?? new List<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
+    var filter = ViewBag.Filter as KuchniaUCygana.Application.DTOs.Warehouse.StockTableFilterDto
+                 ?? new KuchniaUCygana.Application.DTOs.Warehouse.StockTableFilterDto { PageSize = 50 };
 }
 
 <div class="row justify-content-center">
     <div class="col-12 col-xl-10">
-        <form asp-action="Inventory" method="post" autocomplete="off" id="inventoryForm">
+        <form asp-action="Inventory" method="post" autocomplete="off" id="inventoryForm" onsubmit="prepareInventorySubmit()">
             @Html.AntiForgeryToken()
 
             <div class="card card-premium">
@@ -22,20 +23,35 @@
                     </h3>
                     <div class="d-flex flex-wrap align-items-center gap-3">
                         <div class="input-group input-group-flat" style="width: 220px;">
-                            <input type="text" id="SearchInput" class="form-control form-control-sm" placeholder="Szukaj składnika..." onkeyup="filterInventory()" />
+                            <input type="text"
+                                   id="SearchInput"
+                                   name="Search"
+                                   class="form-control form-control-sm"
+                                   placeholder="Szukaj składnika lub partii..."
+                                   value="@filter.Search"
+                                   hx-get="/warehouse/inventory-table"
+                                   hx-trigger="keyup changed delay:300ms"
+                                   hx-target="#inventory-table-container"
+                                   hx-include="#CategoryFilter" />
                             <span class="input-group-text bg-transparent py-0 px-2">
                                 <a href="javascript:void(0)" class="link-secondary" title="Wyczyść" onclick="resetSearch()">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
                                 </a>
                             </span>
                         </div>
-                        <select id="CategoryFilter" class="form-select form-select-sm w-auto" onchange="filterInventory()">
+                        <select id="CategoryFilter"
+                                name="Category"
+                                class="form-select form-select-sm w-auto"
+                                hx-get="/warehouse/inventory-table"
+                                hx-trigger="change"
+                                hx-target="#inventory-table-container"
+                                hx-include="#SearchInput">
                             <option value="">Wszystkie kategorie</option>
-                            <option value="Mięso/Ryby">Mięso/Ryby</option>
-                            <option value="Nabiał">Nabiał</option>
-                            <option value="Warzywa i owoce">Warzywa i owoce</option>
-                            <option value="Suche">Suche</option>
-                            <option value="Opakowania">Opakowania</option>
+                            <option value="Mięso/Ryby" selected="@(filter.Category == "Mięso/Ryby" ? "selected" : null)">Mięso/Ryby</option>
+                            <option value="Nabiał" selected="@(filter.Category == "Nabiał" ? "selected" : null)">Nabiał</option>
+                            <option value="Warzywa i owoce" selected="@(filter.Category == "Warzywa i owoce" ? "selected" : null)">Warzywa i owoce</option>
+                            <option value="Suche" selected="@(filter.Category == "Suche" ? "selected" : null)">Suche</option>
+                            <option value="Opakowania" selected="@(filter.Category == "Opakowania" ? "selected" : null)">Opakowania</option>
                         </select>
                         <label class="form-check form-switch m-0">
                             <input type="checkbox" id="ShowChangedOnly" class="form-check-input" onchange="filterInventory()">
@@ -44,52 +60,9 @@
                         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="fillSystemValues()">Kopiuj stany systemowe</button>
                     </div>
                 </div>
-                
-                <div class="table-responsive">
-                    <table class="table table-vcenter card-table table-premium">
-                        <thead>
-                            <tr>
-                                <th class="w-1">ID</th>
-                                <th>Składnik</th>
-                                <th>Kategoria</th>
-                                <th class="text-end">Stan w systemie</th>
-                                <th class="w-25 text-center">Fizyczny stan rzeczywisty</th>
-                                <th class="text-end">Różnica</th>
-                                <th>Powód korekty (w razie różnic)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @for (int i = 0; i < stockItemsList.Count; i++)
-                            {
-                                var item = stockItemsList[i];
-                                <tr data-category="@item.Category" data-row-index="@i">
-                                    <td class="text-secondary font-weight-medium">#@item.Id</td>
-                                    <td>
-                                        <div class="font-weight-bold text-dark stock-item-name">@item.Name</div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-secondary-lt">@item.Category</span>
-                                    </td>
-                                    <td class="text-end font-weight-bold fw-bold text-dark">
-                                        @item.CurrentStock.ToString("F2") @item.UnitSymbol
-                                    </td>
-                                    <td>
-                                        <input type="hidden" name="adjustments[@i].StockItemId" value="@item.Id" />
-                                        <div class="input-group">
-                                            <input type="number" step="0.01" name="adjustments[@i].ActualQuantity" id="actual-@i" class="form-control text-end fw-bold" placeholder="0.00" required data-system-qty="@item.CurrentStock.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)" oninput="calculateDiff(@i)" />
-                                            <span class="input-group-text bg-transparent text-secondary">@item.UnitSymbol</span>
-                                        </div>
-                                    </td>
-                                    <td class="text-end fw-bold text-dark">
-                                        <span id="diff-@i">0.00</span>
-                                    </td>
-                                    <td>
-                                        <input type="text" name="adjustments[@i].Reason" class="form-control form-control-sm" placeholder="np. Inwentaryzacja okresowa" value="Spis z natury" />
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
+
+                <div id="inventory-table-container">
+                    @await Html.PartialAsync("_InventoryTablePartial", Model)
                 </div>
 
                 <div class="card-footer bg-transparent d-flex justify-content-between">
@@ -121,9 +94,9 @@
                     <table class="table table-vcenter table-premium">
                         <thead>
                             <tr>
-                                <th>Składnik</th>
-                                <th class="text-end">Stan systemowy</th>
-                                <th class="text-end">Stan fizyczny</th>
+                                <th>Składnik / partia</th>
+                                <th class="text-end">Stan partii w systemie</th>
+                                <th class="text-end">Stan fizyczny partii</th>
                                 <th class="text-end">Różnica</th>
                                 <th>Powód korekty</th>
                             </tr>
@@ -169,14 +142,15 @@
                 diffSpan.innerText = "0.00";
                 diffSpan.className = "";
             }
+
+            filterInventory();
         }
 
         function fillSystemValues() {
-            const inputs = document.querySelectorAll('input[id^="actual-"]');
+            const inputs = document.querySelectorAll('#inventory-table-container input[id^="actual-"]');
             inputs.forEach(input => {
                 if (!input.value.trim() || parseFloat(input.value) === 0) {
                     input.value = input.getAttribute('data-system-qty');
-                    // Trigger input event to update differences
                     input.dispatchEvent(new Event('input', { bubbles: true }));
                 }
             });
@@ -186,105 +160,130 @@
             const searchInput = document.getElementById("SearchInput");
             if (searchInput) {
                 searchInput.value = "";
-                filterInventory();
+                if (window.htmx) {
+                    htmx.trigger(searchInput, "keyup");
+                }
             }
         }
 
         function filterInventory() {
-            const query = document.getElementById("SearchInput").value.toLowerCase();
-            const category = document.getElementById("CategoryFilter").value;
             const showChangedOnly = document.getElementById("ShowChangedOnly").checked;
+            const rows = document.querySelectorAll("#inventory-table-container tbody tr[data-category]");
 
-            const rows = document.querySelectorAll("tbody tr[data-category]");
             rows.forEach(row => {
                 const index = row.getAttribute('data-row-index');
-                const name = row.querySelector('.stock-item-name').innerText.toLowerCase();
-                const rowCat = row.getAttribute("data-category");
-
                 const input = document.getElementById('actual-' + index);
                 const systemVal = parseFloat(input.getAttribute('data-system-qty')) || 0;
                 const actualVal = parseFloat(input.value);
                 const hasDiff = !isNaN(actualVal) && Math.abs(actualVal - systemVal) > 0.001;
 
-                const matchesSearch = !query || name.includes(query);
-                const matchesCategory = !category || rowCat === category;
-                const matchesChanged = !showChangedOnly || hasDiff;
+                row.style.display = !showChangedOnly || hasDiff ? "" : "none";
+            });
+        }
 
-                if (matchesSearch && matchesCategory && matchesChanged) {
-                    row.style.display = "";
-                } else {
-                    row.style.display = "none";
-                }
+        function prepareInventorySubmit() {
+            const rows = document.querySelectorAll('#inventory-table-container tbody tr[data-category]');
+
+            rows.forEach(row => {
+                const index = row.getAttribute('data-row-index');
+                const input = document.getElementById('actual-' + index);
+                const systemVal = parseFloat(input.getAttribute('data-system-qty')) || 0;
+                const actualVal = parseFloat(input.value);
+                const hasDiff = !isNaN(actualVal) && Math.abs(actualVal - systemVal) > 0.001;
+
+                row.querySelectorAll('.inventory-field').forEach(control => {
+                    control.disabled = !hasDiff;
+                });
             });
         }
 
         function showSummary() {
             const tbody = document.getElementById('summaryTableBody');
-            tbody.innerHTML = '';
-            
+            tbody.replaceChildren();
+
             let hasChanges = false;
-            const rows = document.querySelectorAll('tbody tr[data-category]');
-            
+            const rows = document.querySelectorAll('#inventory-table-container tbody tr[data-category]');
+
             rows.forEach((row) => {
                 const index = row.getAttribute('data-row-index');
-                const name = row.querySelector('.stock-item-name').innerText;
+                const name = row.querySelector('.stock-item-name').textContent;
+                const batch = row.querySelector('.stock-item-batch').textContent;
                 const input = document.getElementById('actual-' + index);
                 const reasonInput = row.querySelector('input[name$=".Reason"]');
-                const unit = input.nextElementSibling.innerText;
-                
+                const unit = input.closest('.input-group').querySelector('.input-group-text').textContent.trim();
+
                 const systemVal = parseFloat(input.getAttribute('data-system-qty')) || 0;
                 const actualVal = parseFloat(input.value);
-                
+
                 if (!isNaN(actualVal) && Math.abs(actualVal - systemVal) > 0.001) {
                     hasChanges = true;
                     const diff = actualVal - systemVal;
                     const diffText = diff > 0 ? "+" + diff.toFixed(2) : diff.toFixed(2);
                     const diffClass = diff > 0 ? "text-success" : "text-danger";
-                    
+
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td class="fw-bold text-dark">${name}</td>
-                        <td class="text-end">${systemVal.toFixed(2)} ${unit}</td>
-                        <td class="text-end">${actualVal.toFixed(2)} ${unit}</td>
-                        <td class="text-end fw-bold ${diffClass}">${diffText} ${unit}</td>
-                        <td class="text-secondary small">${reasonInput.value || 'Spis z natury'}</td>
-                    `;
+                    appendSummaryCell(tr, name + ' / ' + batch, 'fw-bold text-dark');
+                    appendSummaryCell(tr, systemVal.toFixed(2) + ' ' + unit, 'text-end');
+                    appendSummaryCell(tr, actualVal.toFixed(2) + ' ' + unit, 'text-end');
+                    appendSummaryCell(tr, diffText + ' ' + unit, 'text-end fw-bold ' + diffClass);
+                    appendSummaryCell(tr, reasonInput.value || 'Spis z natury', 'text-secondary small');
                     tbody.appendChild(tr);
                 }
             });
-            
+
             if (!hasChanges) {
                 const tr = document.createElement('tr');
-                tr.innerHTML = `<td colspan="5" class="text-center py-3 text-secondary">Brak zmian w inwentaryzacji (wszystkie stany są zgodne).</td>`;
+                const td = document.createElement('td');
+                td.colSpan = 5;
+                td.className = 'text-center py-3 text-secondary';
+                td.textContent = 'Brak zmian w inwentaryzacji (wszystkie stany partii są zgodne).';
+                tr.appendChild(td);
                 tbody.appendChild(tr);
             }
-            
+
             const modal = new bootstrap.Modal(document.getElementById('summaryModal'));
             modal.show();
         }
 
-        document.getElementById('confirmSubmitBtn').addEventListener('click', function() {
-            document.getElementById('inventoryForm').submit();
-        });
+        function appendSummaryCell(row, text, className) {
+            const td = document.createElement('td');
+            td.className = className;
+            td.textContent = text;
+            row.appendChild(td);
+        }
 
-        // Initialize differences on load if inputs are already filled
-        window.addEventListener('DOMContentLoaded', () => {
-            const inputs = document.querySelectorAll('input[id^="actual-"]');
-            inputs.forEach((input, index) => {
+        function initializeInventoryInputs() {
+            const inputs = document.querySelectorAll('#inventory-table-container input[id^="actual-"]');
+            inputs.forEach((input) => {
                 if (input.value) {
+                    const index = input.id.replace('actual-', '');
                     calculateDiff(index);
                 }
             });
 
-            // Obsługa zapisu po wciśnięciu Enter w polach ilości lub uwag
-            document.querySelectorAll('input[id^="actual-"], input[name$=".Reason"]').forEach(input => {
+            document.querySelectorAll('#inventory-table-container input[id^="actual-"], #inventory-table-container input[name$=".Reason"]').forEach(input => {
                 input.addEventListener('keydown', function(e) {
                     if (e.key === 'Enter') {
-                        e.preventDefault(); // Zapobiega standardowemu zachowaniu
-                        document.getElementById('inventoryForm').submit(); // Bezpośredni zapis i odświeżenie
+                        e.preventDefault();
+                        prepareInventorySubmit();
+                        document.getElementById('inventoryForm').submit();
                     }
                 });
             });
+
+            filterInventory();
+        }
+
+        document.getElementById('confirmSubmitBtn').addEventListener('click', function() {
+            prepareInventorySubmit();
+            document.getElementById('inventoryForm').submit();
+        });
+
+        window.addEventListener('DOMContentLoaded', initializeInventoryInputs);
+        document.body.addEventListener('htmx:afterSwap', function(event) {
+            if (event.detail.target && event.detail.target.id === 'inventory-table-container') {
+                initializeInventoryInputs();
+            }
         });
     </script>
 }

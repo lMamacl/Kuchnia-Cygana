@@ -5,8 +5,10 @@
     ViewData["Section"] = "Magazyn";
     ViewData["Description"] = "Zgłoś straty ilościowe lub jakościowe składnika w celu zdjęcia ich ze stanu według zasady FEFO.";
 
-    var stockItems = ViewBag.StockItems as IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
-                     ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
+    var selectedStockItem = ViewBag.SelectedStockItem as KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto;
+    var selectedBatches = ViewBag.SelectedBatches as IReadOnlyList<KuchniaUCygana.Application.DTOs.Warehouse.BatchDto>
+                          ?? Array.Empty<KuchniaUCygana.Application.DTOs.Warehouse.BatchDto>();
+    var selectedBatchId = ViewBag.SelectedBatchId is int batchId ? batchId : (int?)null;
 
     var reasons = new[]
     {
@@ -14,7 +16,8 @@
         "Uszkodzenie opakowania",
         "Wada jakościowa / organoleptyczna",
         "Zanieczyszczenie",
-        "Błąd kulinarny"
+        "Błąd kulinarny",
+        "Inny"
     };
 }
 
@@ -42,6 +45,7 @@
                                 <div>
                                     <h4 class="alert-title">Wykryto błędy formularza</h4>
                                     <div class="text-secondary">Proszę poprawić poniższe pola, aby zgłosić stratę.</div>
+                                    <div asp-validation-summary="All" class="text-secondary small mt-2"></div>
                                 </div>
                             </div>
                         </div>
@@ -62,10 +66,11 @@
                                placeholder="Zacznij wpisywać nazwę składnika..." 
                                autocomplete="off"
                                hx-get="/warehouse/stock-lookup"
+                               hx-vals='{"onlyAvailable": true}'
                                hx-trigger="keyup changed delay:200ms"
                                hx-target="#search-results"
                                name="q"
-                               value="@(stockItems.FirstOrDefault(i => i.Id == Model.StockItemId)?.Name ?? "")" />
+                               value="@(selectedStockItem?.Name ?? "")" />
                         <div id="search-results" class="position-absolute w-100" style="z-index: 1050;"></div>
                         <span asp-validation-for="StockItemId" class="text-danger small"></span>
                     </div>
@@ -98,7 +103,20 @@
                     <div class="mb-3">
                         <label class="form-label">Partia magazynowa (opcjonalnie)</label>
                         <select asp-for="BatchId" id="BatchIdSelect" class="form-select">
-                            <option value="">-- Wybierz najpierw składnik --</option>
+                            @if (selectedBatches.Any())
+                            {
+                                <option value="">-- Automatycznie wg FEFO --</option>
+                                @foreach (var batch in selectedBatches)
+                                {
+                                    <option value="@batch.Id" selected="@(selectedBatchId == batch.Id ? "selected" : null)">
+                                        #@batch.Id - @batch.SupplierBatchNumber (@batch.CurrentQuantity.ToString("F2") kg, ważność: @(batch.ExpiryDate?.ToString("dd.MM.yyyy") ?? "bez terminu"))
+                                    </option>
+                                }
+                            }
+                            else
+                            {
+                                <option value="">-- Wybierz najpierw składnik --</option>
+                            }
                         </select>
                         <span asp-validation-for="BatchId" class="text-danger small"></span>
                         <small class="form-hint">Jeśli nie wybierzesz konkretnej partii, system automatycznie rozliczy odpis wg zasady FEFO.</small>

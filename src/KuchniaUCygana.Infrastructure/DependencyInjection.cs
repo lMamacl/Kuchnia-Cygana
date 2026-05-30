@@ -56,6 +56,7 @@ public static class DependencyInjection
 
         // Module 3 repositories.
         services.AddScoped<IBatchRepository, BatchRepository>();
+        services.AddScoped<IWarehouseCommandRepository, WarehouseCommandRepository>();
         services.AddScoped<IInventoryTransactionRepository, InventoryTransactionRepository>();
         services.AddScoped<IStockItemRepository, StockItemRepository>();
         services.AddScoped<IProductionPlanRepository, ProductionPlanRepository>();
