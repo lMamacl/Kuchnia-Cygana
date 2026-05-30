@@ -74,18 +74,57 @@
     </table>
 </div>
 <div class="card-footer bg-transparent d-flex align-items-center">
-    <p class="m-0 text-secondary">Pokazano <strong>@Model.Count()</strong> wyników</p>
-    <ul class="pagination m-0 ms-auto">
-        <li class="page-item disabled">
-            <a class="page-link" href="#" tabindex="-1" aria-disabled="true">
-                poprzednia
-            </a>
-        </li>
-        <li class="page-item active"><a class="page-link" href="#">1</a></li>
-        <li class="page-item disabled">
-            <a class="page-link" href="#">
-                następna
-            </a>
-        </li>
-    </ul>
+    @{
+        var currentPage = ViewData["CurrentPage"] as int? ?? 1;
+        var totalPages = ViewData["TotalPages"] as int? ?? 1;
+        var totalCount = ViewData["TotalCount"] as int? ?? Model.Count();
+        var pageSize = ViewData["PageSize"] as int? ?? 15;
+
+        var hasPrevious = currentPage > 1;
+        var hasNext = currentPage < totalPages;
+    }
+    <p class="m-0 text-secondary">Pokazano <strong>@Model.Count()</strong> z <strong>@totalCount</strong> wyników</p>
+    
+    @if (totalPages > 1)
+    {
+        <ul class="pagination m-0 ms-auto">
+            <li class="page-item @(hasPrevious ? "" : "disabled")">
+                <a class="page-link" 
+                   href="javascript:void(0)"
+                   @if (hasPrevious)
+                   {
+                       <text>hx-get="/warehouse/stock-table?Page=@(currentPage - 1)&PageSize=@pageSize" hx-target="#stock-table-container" hx-include="#filter-form"</text>
+                   }
+                   tabindex="-1" 
+                   aria-disabled="@(!hasPrevious)">
+                    poprzednia
+                </a>
+            </li>
+
+            @for (int p = 1; p <= totalPages; p++)
+            {
+                <li class="page-item @(p == currentPage ? "active" : "")">
+                    <a class="page-link" 
+                       href="javascript:void(0)"
+                       hx-get="/warehouse/stock-table?Page=@p&PageSize=@pageSize" 
+                       hx-target="#stock-table-container" 
+                       hx-include="#filter-form">
+                        @p
+                    </a>
+                </li>
+            }
+
+            <li class="page-item @(hasNext ? "" : "disabled")">
+                <a class="page-link" 
+                   href="javascript:void(0)"
+                   @if (hasNext)
+                   {
+                       <text>hx-get="/warehouse/stock-table?Page=@(currentPage + 1)&PageSize=@pageSize" hx-target="#stock-table-container" hx-include="#filter-form"</text>
+                   }
+                   aria-disabled="@(!hasNext)">
+                    następna
+                </a>
+            </li>
+        </ul>
+    }
 </div>

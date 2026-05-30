@@ -42,7 +42,14 @@ public sealed class WarehouseController : Controller
     public async Task<IActionResult> Index()
     {
         var alerts = await warehouseService.GetSmartAlertsAsync();
-        var stockItems = await warehouseService.GetStockOverviewAsync();
+        
+        var filter = new StockTableFilterDto { Page = 1, PageSize = 15 };
+        var stockItems = await warehouseService.GetStockTableAsync(filter);
+
+        ViewData["CurrentPage"] = filter.Page;
+        ViewData["PageSize"] = filter.PageSize;
+        ViewData["TotalCount"] = filter.TotalCount;
+        ViewData["TotalPages"] = (int)Math.Ceiling((double)filter.TotalCount / filter.PageSize);
 
         var viewModel = new WarehouseDashboardViewModel
         {
@@ -61,6 +68,12 @@ public sealed class WarehouseController : Controller
     public async Task<IActionResult> StockTable(StockTableFilterDto filter)
     {
         var items = await warehouseService.GetStockTableAsync(filter);
+
+        ViewData["CurrentPage"] = filter.Page;
+        ViewData["PageSize"] = filter.PageSize;
+        ViewData["TotalCount"] = filter.TotalCount;
+        ViewData["TotalPages"] = (int)Math.Ceiling((double)filter.TotalCount / filter.PageSize);
+
         return PartialView("_StockTablePartial", items);
     }
 

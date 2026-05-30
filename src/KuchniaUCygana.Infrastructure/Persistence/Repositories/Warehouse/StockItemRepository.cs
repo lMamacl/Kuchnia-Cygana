@@ -85,18 +85,20 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
         var offset = (filter.Page - 1) * filter.PageSize;
 
         const string countSql = """
-            SELECT COUNT(*)
-            FROM [StockItems]
-            WHERE [IsDeleted] = 0
-              AND (@search IS NULL OR [Name] LIKE @search);
+            SELECT COUNT(DISTINCT si.[Id])
+            FROM [StockItems] si
+            LEFT JOIN [Batches] b ON b.[StockItemId] = si.[Id] AND b.[IsDeleted] = 0 AND b.[IsDepleted] = 0
+            WHERE si.[IsDeleted] = 0
+              AND (@search IS NULL OR si.[Name] LIKE @search OR b.[SupplierBatchNumber] LIKE @search);
             """;
 
         const string itemsSql = """
-            SELECT *
-            FROM [StockItems]
-            WHERE [IsDeleted] = 0
-              AND (@search IS NULL OR [Name] LIKE @search)
-            ORDER BY [Name] ASC
+            SELECT DISTINCT si.*
+            FROM [StockItems] si
+            LEFT JOIN [Batches] b ON b.[StockItemId] = si.[Id] AND b.[IsDeleted] = 0 AND b.[IsDepleted] = 0
+            WHERE si.[IsDeleted] = 0
+              AND (@search IS NULL OR si.[Name] LIKE @search OR b.[SupplierBatchNumber] LIKE @search)
+            ORDER BY si.[Name] ASC
             OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
             """;
 

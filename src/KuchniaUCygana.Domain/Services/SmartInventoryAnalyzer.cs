@@ -16,6 +16,8 @@ public sealed class InventoryAlert
 
     public string StockItemName { get; set; } = string.Empty;
 
+    public string? SupplierBatchNumber { get; set; }
+
     public InventoryAlertType AlertType { get; set; }
 
     public string Message { get; set; } = string.Empty;
@@ -86,31 +88,41 @@ public sealed class SmartInventoryAnalyzer
             });
         }
 
+        // Pobieramy wszystkie składniki magazynowe, by znać ich nazwy
+        var stockItems = (await _stockItemRepository.GetAllAsync())
+            .ToDictionary(item => item.Id);
+
         // 2. Partie przeterminowane
         var expired = await _batchRepository.GetExpiringBeforeAsync(DateTimeOffset.UtcNow);
         foreach (var batch in expired)
         {
-            alerts.Add(CreateExpiryAlert(batch, InventoryAlertType.Expired, "PRZETERMINOWANA"));
+            stockItems.TryGetValue(batch.StockItemId, out var stockItem);
+            var itemName = stockItem?.Name ?? $"Składnik #{batch.StockItemId}";
+            alerts.Add(CreateExpiryAlert(batch, itemName, InventoryAlertType.Expired, "PRZETERMINOWANA"));
         }
 
         // 3. Partie przeterminowujące się w ciągu 3 dni
         var expiring3 = await _batchRepository.GetExpiringBeforeAsync(DateTimeOffset.UtcNow.AddDays(3));
         foreach (var batch in expiring3.Where(b => b.ExpiryDate > DateTimeOffset.UtcNow))
         {
-            alerts.Add(CreateExpiryAlert(batch, InventoryAlertType.ExpiringWithin3Days, "przeterminuje się w ciągu 3 dni"));
+            stockItems.TryGetValue(batch.StockItemId, out var stockItem);
+            var itemName = stockItem?.Name ?? $"Składnik #{batch.StockItemId}";
+            alerts.Add(CreateExpiryAlert(batch, itemName, InventoryAlertType.ExpiringWithin3Days, "przeterminuje się w ciągu 3 dni"));
         }
 
         // 4. Partie przeterminowujące się w ciągu 7 dni
         var expiring7 = await _batchRepository.GetExpiringBeforeAsync(DateTimeOffset.UtcNow.AddDays(7));
         foreach (var batch in expiring7.Where(b => b.ExpiryDate > DateTimeOffset.UtcNow.AddDays(3)))
         {
-            alerts.Add(CreateExpiryAlert(batch, InventoryAlertType.ExpiringWithin7Days, "przeterminuje się w ciągu 7 dni"));
+            stockItems.TryGetValue(batch.StockItemId, out var stockItem);
+            var itemName = stockItem?.Name ?? $"Składnik #{batch.StockItemId}";
+            alerts.Add(CreateExpiryAlert(batch, itemName, InventoryAlertType.ExpiringWithin7Days, "przeterminuje się w ciągu 7 dni"));
         }
 
         return alerts.OrderByDescending(a => a.AlertType).ToList();
     }
 
-    private static InventoryAlert CreateExpiryAlert(Batch batch, InventoryAlertType type, string desc)
+    private static InventoryAlert CreateExpiryAlert(Batch batch, string stockItemName, InventoryAlertType type, string desc)
     {
         var daysLeft = batch.ExpiryDate.HasValue
             ? (int)(batch.ExpiryDate.Value - DateTimeOffset.UtcNow).TotalDays
@@ -119,9 +131,10 @@ public sealed class SmartInventoryAnalyzer
         return new InventoryAlert
         {
             StockItemId = batch.StockItemId,
-            StockItemName = $"Partia {batch.SupplierBatchNumber}",
+            StockItemName = stockItemName,
+            SupplierBatchNumber = batch.SupplierBatchNumber,
             AlertType = type,
-            Message = $"Partia {batch.SupplierBatchNumber} ({batch.CurrentQuantity:F1} szt.) — {desc}",
+            Message = $"{stockItemName} (Partia {batch.SupplierBatchNumber}, {batch.CurrentQuantity:F1} szt.) — {desc}",
             CurrentQuantity = batch.CurrentQuantity,
             EarliestExpiry = batch.ExpiryDate,
             DaysUntilExpiry = daysLeft,

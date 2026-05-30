@@ -553,6 +553,10 @@ public sealed class WarehouseService : IWarehouseService
 
             string category = DetermineCategory(item.Name);
 
+            // Filtrowanie po kategorii
+            if (!string.IsNullOrWhiteSpace(filter.Category) && !category.Equals(filter.Category, StringComparison.OrdinalIgnoreCase))
+                continue;
+
             string status = "OK";
             string statusColor = "success";
 
@@ -607,7 +611,15 @@ public sealed class WarehouseService : IWarehouseService
                 EarliestExpiryDate = earliestExpiryDate
             });
         }
-        return dtoList;
+
+        filter.TotalCount = dtoList.Count;
+        var page = filter.Page < 1 ? 1 : filter.Page;
+        var pageSize = filter.PageSize < 1 ? 15 : filter.PageSize;
+
+        return dtoList
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
     }
 
     /// <inheritdoc/>
