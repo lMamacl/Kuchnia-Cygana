@@ -13,9 +13,15 @@ public interface IWarehouseService
 
     Task PerformInventoryAsync(IEnumerable<StockItemAdjustment> adjustments);
 
+    Task PerformBatchInventoryAsync(IEnumerable<BatchInventoryAdjustment> adjustments);
+
     Task<IEnumerable<InventoryAlertDto>> GetSmartAlertsAsync();
 
     Task<IEnumerable<StockItemDto>> GetStockOverviewAsync();
+
+    Task<IReadOnlyList<StockItemDto>> SearchStockLookupAsync(StockLookupFilterDto filter);
+
+    Task<StockItemDto?> GetStockLookupByIdAsync(int stockItemId);
 
     /// <summary>
     /// Pobiera ręcznie składnik z magazynu (odpis ilościowy).
@@ -37,18 +43,30 @@ public interface IWarehouseService
     /// </summary>
     Task<IEnumerable<FefoReportItemDto>> GetFefoReportAsync();
 
+    Task<IEnumerable<FefoReportItemDto>> GetFefoReportAsync(FefoReportFilterDto filter);
+
+    Task<PagedResultDto<FefoReportItemDto>> GetFefoReportPageAsync(FefoReportFilterDto filter);
+
     /// <summary>
     /// Pobiera historię transakcji z możliwością filtrowania.
     /// </summary>
     Task<IEnumerable<TransactionHistoryDto>> GetTransactionHistoryAsync(TransactionHistoryFilterDto filter);
+
+    Task<PagedResultDto<TransactionHistoryDto>> GetTransactionHistoryPageAsync(TransactionHistoryFilterDto filter);
 
     /// <summary>
     /// Pobiera listę składników z magazynu z filtrowaniem i paginacją pod HTMX.
     /// </summary>
     Task<IEnumerable<StockItemDto>> GetStockTableAsync(StockTableFilterDto filter);
 
+    Task<PagedResultDto<StockItemDto>> GetStockTablePageAsync(StockTableFilterDto filter);
+
+    Task<PagedResultDto<BatchInventoryItemDto>> GetBatchInventoryPageAsync(StockTableFilterDto filter);
+
     /// <summary>
     /// Pobiera szczegóły składnika, listę jego partii oraz logi zmian dat ważności.
     /// </summary>
     Task<StockItemDetailsDto> GetStockItemDetailsWithBatchesAsync(int stockItemId);
+
+    Task<IReadOnlyList<BatchDto>> GetActiveBatchesForStockItemAsync(int stockItemId);
 }

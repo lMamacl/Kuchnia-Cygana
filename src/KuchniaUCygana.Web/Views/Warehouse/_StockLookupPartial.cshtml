@@ -1,10 +1,13 @@
 @using System.Text.Encodings.Web
 @model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
+@{
+    var lookupMessage = ViewData["LookupMessage"] as string ?? "Brak dopasowań";
+}
 
 <div class="list-group list-group-flush border shadow-sm rounded" style="max-height: 250px; overflow-y: auto; position: absolute; z-index: 1050; width: 100%; background: var(--tblr-card-bg, #fff);">
     @if (!Model.Any())
     {
-        <div class="list-group-item text-secondary py-3 text-center">Brak dopasowań</div>
+        <div class="list-group-item text-secondary py-3 text-center">@lookupMessage</div>
     }
     else
     {

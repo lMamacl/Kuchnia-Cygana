@@ -1,4 +1,21 @@
-@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryDto>
+@model KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryDto>
+@{
+    var items = Model.Items ?? Array.Empty<KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryDto>();
+    var currentPage = Model.Page;
+    var pageSize = Model.PageSize;
+    var totalCount = Model.TotalCount;
+    var totalPages = Model.TotalPages;
+    var firstItem = totalCount == 0 ? 0 : ((currentPage - 1) * pageSize) + 1;
+    var lastItem = totalCount == 0 ? 0 : Math.Min(currentPage * pageSize, totalCount);
+    var startPage = Math.Max(1, currentPage - 2);
+    var endPage = Math.Min(totalPages, currentPage + 2);
+    var hasPrevious = currentPage > 1;
+    var hasNext = currentPage < totalPages;
+    var target = ViewBag.TransactionsTarget as string ?? "#transactions-table-container";
+    var pagingUrl = ViewBag.TransactionsPagingUrl as string ?? "/warehouse/transaction-history";
+    var separator = pagingUrl.Contains('?') ? "&" : "?";
+    var includeFilter = target == "#transactions-table-container";
+}
 
 <div class="table-responsive">
     <table class="table table-vcenter card-table table-premium">
@@ -14,7 +31,7 @@
             </tr>
         </thead>
         <tbody>
-            @if (!Model.Any())
+            @if (!items.Any())
             {
                 <tr>
                     <td colspan="7" class="text-center text-secondary py-4">
@@ -24,9 +41,8 @@
             }
             else
             {
-                foreach (var tx in Model)
+                foreach (var tx in items)
                 {
-                    // Typy transakcji: Receipt, Waste, ProductionIssue, ManualIssue, ExpiryDateChanged, Adjustment
                     var txTypeBadgeColor = tx.TransactionType switch
                     {
                         "Receipt" => "success",
@@ -37,7 +53,7 @@
                         "Adjustment" => "purple",
                         _ => "secondary"
                     };
- 
+
                     var txTypeName = tx.TransactionType switch
                     {
                         "Receipt" => "Przyjęcie dostawy",
@@ -48,11 +64,11 @@
                         "Adjustment" => "Korekta",
                         _ => tx.TransactionType
                     };
- 
+
                     var isPositive = tx.Quantity > 0;
                     var qtyColor = tx.Quantity == 0 ? "text-muted" : (isPositive ? "text-green font-weight-bold fw-bold" : "text-danger font-weight-bold fw-bold");
                     var qtyPrefix = tx.Quantity == 0 ? "" : (isPositive ? "+" : "");
- 
+
                     <tr>
                         <td class="text-secondary font-weight-bold fw-bold small">@tx.TransactionNumber</td>
                         <td class="text-dark font-weight-medium">
@@ -81,4 +97,97 @@
             }
         </tbody>
     </table>
+</div>
+<div class="card-footer bg-transparent d-flex align-items-center">
+    <p class="m-0 text-secondary">Pokazano <strong>@firstItem-@lastItem</strong> z łącznie <strong>@totalCount</strong> wyników</p>
+
+    @if (totalPages > 1)
+    {
+        <ul class="pagination m-0 ms-auto">
+            <li class="page-item @(hasPrevious ? "" : "disabled")">
+                <a class="page-link"
+                   href="javascript:void(0)"
+                   @if (hasPrevious)
+                   {
+                       <text>hx-get="@pagingUrl@separator@($"Page={currentPage - 1}&PageSize={pageSize}")" hx-target="@target"</text>
+                       if (includeFilter)
+                       {
+                           <text> hx-include="#tx-filter-form"</text>
+                       }
+                   }
+                   tabindex="-1"
+                   aria-disabled="@(!hasPrevious)">
+                    Poprzednia
+                </a>
+            </li>
+
+            @if (startPage > 1)
+            {
+                <li class="page-item">
+                    <a class="page-link"
+                       href="javascript:void(0)"
+                       hx-get="@pagingUrl@separator@($"Page=1&PageSize={pageSize}")"
+                       hx-target="@target"
+                       @if (includeFilter)
+                       {
+                           <text>hx-include="#tx-filter-form"</text>
+                       }>1</a>
+                </li>
+                @if (startPage > 2)
+                {
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                }
+            }
+
+            @for (int p = startPage; p <= endPage; p++)
+            {
+                <li class="page-item @(p == currentPage ? "active" : "")">
+                    <a class="page-link"
+                       href="javascript:void(0)"
+                       hx-get="@pagingUrl@separator@($"Page={p}&PageSize={pageSize}")"
+                       hx-target="@target"
+                       @if (includeFilter)
+                       {
+                           <text>hx-include="#tx-filter-form"</text>
+                       }>
+                        @p
+                    </a>
+                </li>
+            }
+
+            @if (endPage < totalPages)
+            {
+                @if (endPage < totalPages - 1)
+                {
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                }
+                <li class="page-item">
+                    <a class="page-link"
+                       href="javascript:void(0)"
+                       hx-get="@pagingUrl@separator@($"Page={totalPages}&PageSize={pageSize}")"
+                       hx-target="@target"
+                       @if (includeFilter)
+                       {
+                           <text>hx-include="#tx-filter-form"</text>
+                       }>@totalPages</a>
+                </li>
+            }
+
+            <li class="page-item @(hasNext ? "" : "disabled")">
+                <a class="page-link"
+                   href="javascript:void(0)"
+                   @if (hasNext)
+                   {
+                       <text>hx-get="@pagingUrl@separator@($"Page={currentPage + 1}&PageSize={pageSize}")" hx-target="@target"</text>
+                       if (includeFilter)
+                       {
+                           <text> hx-include="#tx-filter-form"</text>
+                       }
+                   }
+                   aria-disabled="@(!hasNext)">
+                    Następna
+                </a>
+            </li>
+        </ul>
+    }
 </div>

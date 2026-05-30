@@ -10,6 +10,8 @@ public sealed class StockTableFilterDto
 
     public bool ShowLowStockOnly { get; set; }
 
+    public bool ShowExpiringSoonOnly { get; set; }
+
     public int Page { get; set; } = 1;
 
     public int PageSize { get; set; } = 15;

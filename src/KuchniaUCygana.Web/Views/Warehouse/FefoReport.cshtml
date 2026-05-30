@@ -1,9 +1,12 @@
-@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.FefoReportItemDto>
+@model KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<KuchniaUCygana.Application.DTOs.Warehouse.FefoReportItemDto>
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Raport FEFO";
     ViewData["Section"] = "Magazyn";
     ViewData["Description"] = "Raport stanów magazynowych uporządkowany zgodnie z zasadą First Expired, First Out (FEFO).";
+
+    var filter = ViewBag.Filter as KuchniaUCygana.Application.DTOs.Warehouse.FefoReportFilterDto
+                 ?? new KuchniaUCygana.Application.DTOs.Warehouse.FefoReportFilterDto();
 }
 
 <div class="container-xl">
@@ -27,8 +30,8 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 14l-4 -4l4 -4" /><path d="M5 10h11a4 4 0 1 1 0 8h-1" /></svg>
                         Pulpit
                     </a>
-                    <a asp-action="ExportFefoCsv" class="btn btn-outline-secondary">CSV</a>
-                    <a asp-action="ExportFefoPdf" class="btn btn-outline-secondary">PDF</a>
+                    <a asp-action="ExportFefoCsv" asp-route-search="@filter.Search" asp-route-status="@filter.Status" class="btn btn-outline-secondary">CSV</a>
+                    <a asp-action="ExportFefoPdf" asp-route-search="@filter.Search" asp-route-status="@filter.Status" class="btn btn-outline-secondary">PDF</a>
                     <button onclick="window.print()" class="btn btn-primary">
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
                         Drukuj Raport (A4)
@@ -53,151 +56,37 @@
     <!-- Opcje Filtrowania d-print-none -->
     <div class="card card-premium d-print-none mb-4">
         <div class="card-body py-3">
-            <div class="row g-3 align-items-center">
-                <div class="col-md-5">
-                    <div class="input-icon">
-                        <span class="input-icon-addon">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
-                        </span>
-                        <input type="text" id="FefoSearch" class="form-control" placeholder="Filtruj składnik lub partię..." onkeyup="filterFefoTable()">
+            <form id="fefo-filter-form"
+                  hx-get="/warehouse/fefo-report"
+                  hx-target="#fefo-table-container"
+                  hx-trigger="keyup changed delay:300ms from:#FefoSearch, change from:#StatusFilter">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-5">
+                        <div class="input-icon">
+                            <span class="input-icon-addon">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
+                            </span>
+                            <input type="text" id="FefoSearch" name="Search" class="form-control" placeholder="Filtruj składnik lub partię..." value="@filter.Search">
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <select id="StatusFilter" name="Status" class="form-select">
+                            <option value="">Wszystkie statusy ważności</option>
+                            <option value="Expired" selected="@(filter.Status == "Expired" ? "selected" : null)">Przeterminowane</option>
+                            <option value="Critical" selected="@(filter.Status == "Critical" ? "selected" : null)">Pilna ważność (≤ 3 dni)</option>
+                            <option value="Warning" selected="@(filter.Status == "Warning" ? "selected" : null)">Krótka ważność (≤ 7 dni)</option>
+                            <option value="Safe" selected="@(filter.Status == "Safe" ? "selected" : null)">Bezpieczne (&gt; 7 dni)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 text-end text-secondary small">
+                        Razem pozycji: <strong id="fefo-count">@Model.TotalCount</strong>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <select id="StatusFilter" class="form-select" onchange="filterFefoTable()">
-                        <option value="">Wszystkie statusy ważności</option>
-                        <option value="Expired">Przeterminowane</option>
-                        <option value="Critical">Pilna ważność (≤ 3 dni)</option>
-                        <option value="Warning">Krótka ważność (≤ 7 dni)</option>
-                        <option value="Safe">Bezpieczne (> 7 dni)</option>
-                    </select>
-                </div>
-                <div class="col-md-3 text-end text-secondary small">
-                    Razem pozycji: <strong id="fefo-count">@Model.Count()</strong>
-                </div>
-            </div>
+            </form>
         </div>
     </div>
 
-    <!-- Tabela Raportu -->
-    <div class="card card-premium card-print-plain">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-vcenter table-bordered card-table table-premium" id="FefoTable">
-                    <thead>
-                        <tr>
-                            <th>Składnik</th>
-                            <th>Partia Magazynowa</th>
-                            <th class="text-end">Ilość</th>
-                            <th>Data Ważności</th>
-                            <th>Dni do końca</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (!Model.Any())
-                        {
-                            <tr>
-                                <td colspan="6" class="text-center text-secondary py-4">
-                                    Brak aktywnych partii w magazynie.
-                                </td>
-                            </tr>
-                        }
-                        else
-                        {
-                            foreach (var item in Model)
-                            {
-                                var statusColor = item.Status switch
-                                {
-                                    "Expired" => "danger",
-                                    "Critical" => "danger",
-                                    "Warning" => "warning",
-                                    "Safe" => "success",
-                                    _ => "secondary"
-                                };
-
-                                var statusName = item.Status switch
-                                {
-                                    "Expired" => "Przeterminowana",
-                                    "Critical" => "Pilna ważność",
-                                    "Warning" => "Krótka ważność",
-                                    "Safe" => "Bezpieczna",
-                                    _ => item.Status
-                                };
-
-                                var rowClass = item.Status switch
-                                {
-                                    "Expired" => "table-danger fw-bold",
-                                    "Critical" => "table-warning fw-bold",
-                                    _ => ""
-                                };
-
-                                <tr class="@rowClass" data-status="@item.Status">
-                                    <td class="fw-bold text-dark">
-                                        <a asp-action="BatchDetails" asp-route-stockItemId="@item.StockItemId" class="text-reset d-print-none">@item.StockItemName</a>
-                                        <span class="d-none d-print-inline">@item.StockItemName</span>
-                                    </td>
-                                    <td class="font-weight-medium">Partia #@item.BatchId (@(string.IsNullOrEmpty(item.BatchNumber) ? "BRAK" : item.BatchNumber))</td>
-                                    <td class="text-end fw-bold text-dark">@item.Quantity.ToString("F2")</td>
-                                    <td>@(item.ExpiryDate?.ToString("dd.MM.yyyy") ?? "Bezterminowo")</td>
-                                    <td>
-                                        @if (item.DaysToExpiry.HasValue)
-                                        {
-                                            if (item.DaysToExpiry.Value < 0)
-                                            {
-                                                <span class="text-danger fw-bold">Przeterminowana (@Math.Abs(item.DaysToExpiry.Value) dni)</span>
-                                            }
-                                            else
-                                            {
-                                                <span>@item.DaysToExpiry.Value dni</span>
-                                            }
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted">Brak</span>
-                                        }
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-@statusColor-lt text-@statusColor">@statusName</span>
-                                    </td>
-                                </tr>
-                            }
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
+    <div id="fefo-table-container">
+        @await Html.PartialAsync("_FefoReportTablePartial", Model)
     </div>
 </div>
-
-<script>
-    function filterFefoTable() {
-        var input = document.getElementById("FefoSearch");
-        var filter = input.value.toLowerCase();
-        var statusFilter = document.getElementById("StatusFilter").value;
-        var table = document.getElementById("FefoTable");
-        var tr = table.getElementsByTagName("tr");
-        var visibleCount = 0;
-
-        for (var i = 1; i < tr.length; i++) {
-            var showRow = true;
-            var textContent = tr[i].innerText.toLowerCase();
-            var status = tr[i].getAttribute("data-status");
-
-            if (filter && textContent.indexOf(filter) === -1) {
-                showRow = false;
-            }
-
-            if (statusFilter && status !== statusFilter) {
-                showRow = false;
-            }
-
-            if (showRow) {
-                tr[i].style.display = "";
-                visibleCount++;
-            } else {
-                tr[i].style.display = "none";
-            }
-        }
-        document.getElementById("fefo-count").innerText = visibleCount;
-    }
-</script>

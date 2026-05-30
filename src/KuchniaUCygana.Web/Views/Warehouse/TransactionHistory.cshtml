@@ -1,14 +1,13 @@
-@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryDto>
+@model KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryDto>
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Historia Transakcji";
     ViewData["Section"] = "Magazyn";
     ViewData["Description"] = "Dziennik zdarzeń i operacji magazynowych — przyjęcia, odpisy, korekty oraz wydania.";
 
-    var stockItems = ViewBag.StockItems as IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
-                     ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
     var currentFilter = ViewBag.Filter as KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryFilterDto 
                         ?? new KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryFilterDto();
+    var selectedStockItem = ViewBag.SelectedStockItem as KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto;
 }
 
 <div class="container-xl">
@@ -58,7 +57,7 @@
                                    hx-trigger="keyup changed delay:200ms"
                                    hx-target="#search-results"
                                    name="q"
-                                   value="@(stockItems.FirstOrDefault(i => i.Id == currentFilter.StockItemId)?.Name ?? "")" />
+                                   value="@(selectedStockItem?.Name ?? "")" />
                             <span class="input-group-text bg-transparent py-0 px-2">
                                 <a href="javascript:void(0)" class="link-secondary" title="Wyczyść" onclick="clearStockItemFilter()">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>

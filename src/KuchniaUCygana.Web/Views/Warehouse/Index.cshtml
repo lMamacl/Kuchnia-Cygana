@@ -35,7 +35,7 @@
                         </span>
                     </div>
                 </div>
-                <div class="h1 mb-2 mt-1">@Model.StockItems.Count()</div>
+                <div class="h1 mb-2 mt-1">@Model.StockTotalCount</div>
                 <div class="text-secondary small">Składników w bazie danych</div>
             </div>
         </div>
@@ -122,7 +122,6 @@
                       hx-get="/warehouse/stock-table" 
                       hx-target="#stock-table-container" 
                       hx-trigger="change, keyup changed delay:300ms from:#SearchInput">
-                    <input type="hidden" name="Page" id="PageInput" value="1" />
                     <div class="row g-3 align-items-center">
                         <div class="col-md-4">
                             <div class="input-icon">
@@ -142,7 +141,7 @@
                                 <option value="Opakowania">Opakowania</option>
                             </select>
                         </div>
-                        <div class="col-md-5 d-flex gap-4">
+                        <div class="col-md-5 d-flex flex-wrap gap-4">
                             <label class="form-check form-check-inline m-0">
                                 <input type="checkbox" name="ShowLowStockOnly" value="true" class="form-check-input">
                                 <span class="form-check-label text-danger fw-bold">Tylko niskie stany</span>
@@ -150,6 +149,10 @@
                             <label class="form-check form-check-inline m-0">
                                 <input type="checkbox" name="ShowExpiredOnly" value="true" class="form-check-input">
                                 <span class="form-check-label text-warning fw-bold">Tylko przeterminowane</span>
+                            </label>
+                            <label class="form-check form-check-inline m-0">
+                                <input type="checkbox" name="ShowExpiringSoonOnly" value="true" class="form-check-input">
+                                <span class="form-check-label text-warning fw-bold">Tylko zbliżająca się ważność</span>
                             </label>
                         </div>
                     </div>

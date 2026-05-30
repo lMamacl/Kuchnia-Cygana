@@ -5,8 +5,7 @@
     ViewData["Section"] = "Magazyn";
     ViewData["Description"] = "Zarejestruj ręczne wydanie składnika z magazynu. System automatycznie odpisze ilość z partii zgodnie z zasadą FEFO.";
 
-    var stockItems = ViewBag.StockItems as IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
-                     ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
+    var selectedStockItem = ViewBag.SelectedStockItem as KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto;
 }
 
 <div class="row justify-content-center">
@@ -53,15 +52,16 @@
                                placeholder="Zacznij wpisywać nazwę składnika..." 
                                autocomplete="off"
                                hx-get="/warehouse/stock-lookup"
+                               hx-vals='{"onlyAvailable": true}'
                                hx-trigger="keyup changed delay:200ms"
                                hx-target="#search-results"
                                name="q"
-                               value="@(stockItems.FirstOrDefault(i => i.Id == Model.StockItemId)?.Name ?? "")" />
+                               value="@(selectedStockItem?.Name ?? "")" />
                         <div id="search-results" class="position-absolute w-100" style="z-index: 1050;"></div>
                         <span asp-validation-for="StockItemId" class="text-danger small"></span>
                         
-                        <div id="SelectedStockHint" class="text-secondary small mt-1" style="display: none;">
-                            Dostępne w magazynie: <strong id="AvailableQtyText" class="text-blue">0.00</strong>
+                        <div id="SelectedStockHint" class="text-secondary small mt-1" style="display: @(selectedStockItem is null ? "none" : "block");">
+                            Dostępne w magazynie: <strong id="AvailableQtyText" class="text-blue">@(selectedStockItem is null ? "0.00" : $"{selectedStockItem.CurrentStock:F2} {selectedStockItem.UnitSymbol}")</strong>
                         </div>
                     </div>
 
