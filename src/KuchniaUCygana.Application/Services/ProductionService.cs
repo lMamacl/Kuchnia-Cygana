@@ -11,9 +11,6 @@ using Microsoft.Extensions.Logging;
 
 namespace KuchniaUCygana.Application.Services;
 
-/// <summary>
-/// Serwis aplikacyjny produkcji — obsługuje cały proces od planu po odpis surowców.
-/// </summary>
 public sealed class ProductionService : IProductionService
 {
     private readonly ProductionPlanGenerator _planGenerator;
@@ -42,10 +39,8 @@ public sealed class ProductionService : IProductionService
         _logger = logger;
     }
 
-    /// <inheritdoc/>
     public async Task<ProductionPlanDto> GenerateDailyPlanAsync(CreateProductionPlanRequest request)
     {
-        // Domena (ProductionPlanGenerator) dba o to, czy plan istnieje i zgłosi wyjątek w razie potrzeby.
         var result = await _planGenerator.GeneratePlanAsync(request.ProductionDate, "System");
 
         foreach (var item in result.Items)
@@ -55,18 +50,17 @@ public sealed class ProductionService : IProductionService
 
         var dto = _mapper.Map<ProductionPlanDto>(result.Plan);
         dto.Items = _mapper.Map<List<ProductionPlanItemDto>>(result.Items);
-        
+
         if (result.FoodCostReport != null)
         {
             dto.FoodCostReport = _mapper.Map<FoodCostReportDto>(result.FoodCostReport);
         }
 
-        _logger.LogInformation("Wygenerowano plan produkcji na dzień {Date}", request.ProductionDate);
+        _logger.LogInformation("Wygenerowano plan produkcji na dzien {Date}", request.ProductionDate);
 
         return dto;
     }
 
-    /// <inheritdoc/>
     public async Task<ProductionPlanDto?> GetDailyPlanByDateAsync(DateOnly date)
     {
         var plan = await _planRepository.GetByDateAsync(date);
@@ -80,7 +74,6 @@ public sealed class ProductionService : IProductionService
         return dto;
     }
 
-    /// <inheritdoc/>
     public async Task<ProductionPlanDto?> GetPlanByIdAsync(int planId)
     {
         var plan = await _planRepository.GetByIdAsync(planId);
@@ -94,24 +87,54 @@ public sealed class ProductionService : IProductionService
         return dto;
     }
 
-    /// <inheritdoc/>
     public async Task<CookingCardDto> GetCookingCardAsync(int planItemId)
     {
         var item = await _itemRepository.GetByIdAsync(planItemId)
             ?? throw new InvalidOperationException($"Pozycja planu {planItemId} nie istnieje.");
 
-        var recipe = await _dietProvider.GetRecipeForMealAsync(item.MealId);
+        var details = await _dietProvider.GetMealCookingDetailsAsync(item.MealId);
+        var recipe = (await _dietProvider.GetRecipeForMealAsync(item.MealId)).ToList();
 
         var card = new CookingCardDto
         {
             PlanItemId = item.Id,
-            MealName = item.MealName,
+            MealId = item.MealId,
+            MealName = details?.MealName ?? item.MealName,
+            CategoryName = details?.CategoryName,
+            Description = details?.Description,
+            PreparationInstructions = details?.PreparationInstructions,
+            MainImageUrl = details?.MainImageUrl,
+            PreparationTimeMinutes = details?.PreparationTimeMinutes ?? 0,
             DietVariantId = item.DietVariantId,
             PlannedQuantity = item.PlannedQuantity,
             ProductionGroup = item.ProductionGroup,
-            EstimatedReadyTime = item.EstimatedReadyTime.HasValue 
-                ? item.EstimatedReadyTime.Value.ToString("HH:mm") 
+            EstimatedReadyTime = item.EstimatedReadyTime.HasValue
+                ? item.EstimatedReadyTime.Value.ToString("HH:mm")
                 : null,
+            RawWeightGrams = details?.RawWeightGrams,
+            CookedWeightGrams = details?.CookedWeightGrams,
+            RequiresCoreTemperatureCheck = details?.RequiresCoreTemperatureCheck == true
+                || recipe.Any(r => r.RequiresCoreTemperatureCheck),
+            MinimumCoreTemperatureCelsius = details?.MinimumCoreTemperatureCelsius
+                ?? recipe.Where(r => r.MinimumCoreTemperatureCelsius.HasValue)
+                    .Select(r => r.MinimumCoreTemperatureCelsius)
+                    .DefaultIfEmpty()
+                    .Max(),
+            NutritionFacts = details?.NutritionFacts is null
+                ? null
+                : new CookingCardNutritionDto
+                {
+                    CaloriesPer100g = details.NutritionFacts.CaloriesPer100g,
+                    ProteinPer100g = details.NutritionFacts.ProteinPer100g,
+                    CarbohydratesPer100g = details.NutritionFacts.CarbohydratesPer100g,
+                    FatPer100g = details.NutritionFacts.FatPer100g,
+                    FiberPer100g = details.NutritionFacts.FiberPer100g,
+                },
+            Allergens = details?.Allergens ?? Array.Empty<string>(),
+            MissingWarehouseMappings = recipe
+                .Where(r => !r.StockItemId.HasValue)
+                .Select(r => $"{r.IngredientName} (ID {r.IngredientId})")
+                .ToList(),
         };
 
         foreach (var ingredient in recipe)
@@ -119,9 +142,14 @@ public sealed class ProductionService : IProductionService
             card.Ingredients.Add(new CookingCardIngredientDto
             {
                 IngredientId = ingredient.IngredientId,
+                StockItemId = ingredient.StockItemId,
                 IngredientName = ingredient.IngredientName,
+                WarehouseCategoryName = ingredient.WarehouseCategoryName,
                 WeightPerServing = ingredient.WeightInGrams,
                 TotalWeight = ingredient.WeightInGrams * item.PlannedQuantity,
+                YieldFactor = ingredient.YieldFactor,
+                RequiresCoreTemperatureCheck = ingredient.RequiresCoreTemperatureCheck,
+                MinimumCoreTemperatureCelsius = ingredient.MinimumCoreTemperatureCelsius,
                 IsOptional = ingredient.IsOptional,
             });
         }
@@ -129,13 +157,12 @@ public sealed class ProductionService : IProductionService
         return card;
     }
 
-    /// <inheritdoc/>
     public async Task ApproveCookingAsync(int planItemId, decimal actualQuantity)
     {
         var item = await _itemRepository.GetByIdAsync(planItemId)
             ?? throw new InvalidOperationException($"Pozycja planu {planItemId} nie istnieje.");
 
-        item.CookedQuantity = (int)actualQuantity; // zakłada całkowite wartości
+        item.CookedQuantity = (int)actualQuantity;
         item.Status = ProductionItemStatus.Cooked;
         item.ActualReadyTime = TimeOnly.FromDateTime(DateTime.Now);
 
@@ -144,56 +171,112 @@ public sealed class ProductionService : IProductionService
         if (item.CookedQuantity < item.PlannedQuantity * 0.9m)
         {
             _logger.LogWarning(
-                "ALERT PRODUKCYJNY: Ugotowano zbyt mało porcji. Danie {Meal}, Plan: {Plan}, Realizacja: {Actual}",
+                "ALERT PRODUKCYJNY: Ugotowano zbyt malo porcji. Danie {Meal}, Plan: {Plan}, Realizacja: {Actual}",
                 item.MealName,
                 item.PlannedQuantity,
                 item.CookedQuantity);
         }
 
         _logger.LogInformation(
-            "Zatwierdzono produkcję pozycji {PlanItemId}: wyprodukowano {ActualQuantity} porcji",
+            "Zatwierdzono produkcje pozycji {PlanItemId}: wyprodukowano {ActualQuantity} porcji",
             planItemId,
             actualQuantity);
     }
 
-    /// <inheritdoc/>
     public async Task ProduceSemiFinishedAsync(int planId)
     {
         var plan = await _planRepository.GetByIdAsync(planId)
             ?? throw new InvalidOperationException($"Plan produkcji {planId} nie istnieje.");
 
-        var planItems = await _planRepository.GetPlanItemsAsync(planId);
+        var planItems = (await _planRepository.GetPlanItemsAsync(planId)).ToList();
+        var pendingItems = planItems.Where(item => !item.FefoDeductedAt.HasValue).ToList();
 
-        // Pobieramy surowce za wszystkie pozycje w planie
-        foreach (var item in planItems)
+        if (pendingItems.Count == 0)
         {
-            var recipe = await _dietProvider.GetRecipeForMealAsync(item.MealId);
+            _logger.LogInformation("FEFO dla planu {PlanId} bylo juz wykonane - pominieto ponowne zdejmowanie.", planId);
+        }
+        else
+        {
+            var recipesByItem = new Dictionary<int, List<RecipeIngredientEntry>>();
+            var requiredByStockItem = new Dictionary<int, decimal>();
+            var missingMappings = new List<string>();
 
-            foreach (var ingredient in recipe)
+            foreach (var item in pendingItems)
             {
-                var totalQuantity = ingredient.WeightInGrams * item.PlannedQuantity;
-
-                var deductionResult = await _fefoService.DeductByFefoAsync(
-                    ingredient.IngredientId,
-                    totalQuantity,
-                    $"Produkcja półproduktów plan {planId}, posiłek {item.MealId}",
-                    $"PLAN-{planId}");
-
-                if (!deductionResult.IsFullyDeducted)
+                var recipe = (await _dietProvider.GetRecipeForMealAsync(item.MealId)).ToList();
+                if (recipe.Count == 0)
                 {
-                    _logger.LogWarning(
-                        "Brak w magazynie! Potrzebne: {Needed}, Zabrano: {Deducted}, Brak: {Shortage} dla składnika {IngredientId}",
-                        totalQuantity,
-                        deductionResult.TotalDeducted,
-                        deductionResult.Shortage,
-                        ingredient.IngredientId);
+                    throw new InvalidOperationException($"Brak receptury M2 dla posilku {item.MealName} (ID {item.MealId}).");
                 }
+
+                recipesByItem[item.Id] = recipe;
+
+                foreach (var ingredient in recipe)
+                {
+                    if (!ingredient.StockItemId.HasValue)
+                    {
+                        missingMappings.Add($"{ingredient.IngredientName} (IngredientId {ingredient.IngredientId})");
+                        continue;
+                    }
+
+                    var totalQuantity = ingredient.WeightInGrams * item.PlannedQuantity;
+                    requiredByStockItem[ingredient.StockItemId.Value] =
+                        requiredByStockItem.GetValueOrDefault(ingredient.StockItemId.Value) + totalQuantity;
+                }
+            }
+
+            if (missingMappings.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "Nie mozna wykonac FEFO. Brak mapowania skladnikow M2 do magazynu: " +
+                    string.Join(", ", missingMappings.Distinct()));
+            }
+
+            var shortages = new List<string>();
+            foreach (var (stockItemId, requiredQuantity) in requiredByStockItem)
+            {
+                var available = await _fefoService.GetAvailableQuantityAsync(stockItemId);
+                if (available < requiredQuantity)
+                {
+                    shortages.Add($"StockItemId {stockItemId}: potrzeba {requiredQuantity:0.##}, dostepne {available:0.##}");
+                }
+            }
+
+            if (shortages.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "Nie mozna wykonac FEFO. Braki magazynowe: " + string.Join("; ", shortages));
+            }
+
+            foreach (var item in pendingItems)
+            {
+                var referenceDocument = $"PLAN-{planId}-ITEM-{item.Id}";
+
+                foreach (var ingredient in recipesByItem[item.Id])
+                {
+                    var totalQuantity = ingredient.WeightInGrams * item.PlannedQuantity;
+
+                    await _fefoService.DeductByFefoAsync(
+                        ingredient.StockItemId!.Value,
+                        totalQuantity,
+                        $"Produkcja polproduktow plan {planId}, posilek {item.MealId}",
+                        referenceDocument);
+                }
+
+                item.FefoDeductedAt = DateTimeOffset.UtcNow;
+                item.FefoReferenceDocument = referenceDocument;
+                if (item.Status == ProductionItemStatus.Planned)
+                {
+                    item.Status = ProductionItemStatus.Cooking;
+                }
+
+                await _itemRepository.UpdateAsync(item);
             }
         }
 
         plan.Status = ProductionPlanStatus.InProgress;
         await _planRepository.UpdateAsync(plan);
 
-        _logger.LogInformation("Utworzono półprodukty dla planu {PlanId} i zaktualizowano magazyn", planId);
+        _logger.LogInformation("Utworzono polprodukty dla planu {PlanId} i zaktualizowano magazyn", planId);
     }
 }

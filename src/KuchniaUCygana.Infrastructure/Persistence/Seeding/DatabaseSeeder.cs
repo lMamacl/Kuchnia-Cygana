@@ -444,11 +444,11 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             SET IDENTITY_INSERT [Meals] ON;
             INSERT INTO [Meals] ([Id], [CategoryId], [Name], [Description], [Status], [PreparationTimeMinutes], [IsActive], [CreatedAt], [CreatedBy])
             VALUES
-                (1, 1, 'Jajecznica z szczypiorkiem na maśle', 'Klasyczna jajecznica z 3 jaj na prawdziwym maśle ze świeżym szczypiorkiem i pieczywem.', 'Active', 10, 1, @now, @auditUser),
-                (2, 2, 'Pudding chia z jagodami i śmietanką', 'Kremowy deser chia na bazie jogurtu i śmietanki ze słodkim musem z mrożonych jagód.', 'Active', 15, 1, @now, @auditUser),
-                (3, 3, 'Pikantna zupa pomidorowa z makaronem', 'Rozgrzewająca, aromatyczna zupa ze słodkich pomidorów krojonych z makaronem penne i nutą śmietanki.', 'Active', 25, 1, @now, @auditUser),
-                (4, 3, 'Pieczony filet z łososia z ryżem i brokułami', 'Delikatny łosoś pieczony w ziołach, podawany z sypkim ryżem jaśminowym i gotowanymi brokułami.', 'Active', 35, 1, @now, @auditUser),
-                (5, 5, 'Bowl z wołowiną, dynią i batatami', 'Pożywna kolacja z pieczonym mięsem wołowym, batatami i słodką dynią piżmową z przyprawami.', 'Active', 30, 1, @now, @auditUser);
+                (1, 1, 'Jajecznica z szczypiorkiem na maśle', 'Klasyczna jajecznica z 3 jaj na prawdziwym maśle ze świeżym szczypiorkiem i pieczywem.', 'Published', 10, 1, @now, @auditUser),
+                (2, 2, 'Pudding chia z jagodami i śmietanką', 'Kremowy deser chia na bazie jogurtu i śmietanki ze słodkim musem z mrożonych jagód.', 'Published', 15, 1, @now, @auditUser),
+                (3, 3, 'Pikantna zupa pomidorowa z makaronem', 'Rozgrzewająca, aromatyczna zupa ze słodkich pomidorów krojonych z makaronem penne i nutą śmietanki.', 'Published', 25, 1, @now, @auditUser),
+                (4, 3, 'Pieczony filet z łososia z ryżem i brokułami', 'Delikatny łosoś pieczony w ziołach, podawany z sypkim ryżem jaśminowym i gotowanymi brokułami.', 'Published', 35, 1, @now, @auditUser),
+                (5, 5, 'Bowl z wołowiną, dynią i batatami', 'Pożywna kolacja z pieczonym mięsem wołowym, batatami i słodką dynią piżmową z przyprawami.', 'Published', 30, 1, @now, @auditUser);
             SET IDENTITY_INSERT [Meals] OFF;
             """, new { now, auditUser });
 
@@ -488,6 +488,21 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 (4, 1, 1.25, 1), (4, 2, 1.25, 2), (4, 3, 1.25, 3), (4, 4, 1.25, 4), (4, 5, 1.25, 5),
                 (5, 1, 1.40, 1), (5, 2, 1.40, 2), (5, 3, 1.40, 3), (5, 4, 1.40, 4), (5, 5, 1.40, 5);
             """);
+
+        await db.ExecuteAsync(
+            """
+            UPDATE i
+            SET
+                i.StockItemId = si.Id,
+                i.WarehouseCategoryId = si.WarehouseCategoryId,
+                i.RequiresCoreTemperatureCheck = CASE WHEN si.WarehouseCategoryId = 1 THEN 1 ELSE 0 END,
+                i.MinimumCoreTemperatureCelsius = CASE WHEN si.WarehouseCategoryId = 1 THEN 75 ELSE NULL END
+            FROM [Ingredients] i
+            INNER JOIN [StockItems] si ON si.BaseIngredientId = i.Id
+            WHERE i.StockItemId IS NULL;
+            """);
+
+        await SeedDietMenuPlansAsync(db, now, auditUser, cancellationToken);
 
         // 8. Receptury (Recipes)
         await db.ExecuteAsync(
@@ -534,6 +549,58 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             """);
 
         this.logger.LogInformation("Seeded all Menu, Recipes, Allergens and Diets tables.");
+    }
+
+    private async Task SeedDietMenuPlansAsync(IDbConnection db, DateTimeOffset now, string auditUser, CancellationToken cancellationToken)
+    {
+        if (await CountRowsAsync(db, "DietMenuPlans", cancellationToken) > 0)
+        {
+            return;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        for (var offset = 0; offset < 7; offset++)
+        {
+            var planDate = today.AddDays(offset).ToDateTime(TimeOnly.MinValue);
+            var planId = await db.ExecuteScalarAsync<int>(
+                """
+                INSERT INTO [DietMenuPlans]
+                    ([PlanDate], [Status], [Notes], [PublishedAt], [PublishedBy], [CreatedAt], [CreatedBy], [IsDeleted])
+                VALUES
+                    (@planDate, 'Published', 'Demo plan M2 opublikowany z 7-dniowym wyprzedzeniem.', @now, @auditUser, @now, @auditUser, 0);
+                SELECT CAST(SCOPE_IDENTITY() as int);
+                """,
+                new { planDate, now, auditUser });
+
+            await db.ExecuteAsync(
+                """
+                INSERT INTO [DietMenuPlanItems]
+                    ([DietMenuPlanId], [DietVariantId], [MealId], [MealSlot], [ServingSizeMultiplier], [SortOrder], [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
+                SELECT
+                    @planId,
+                    dvm.[DietVariantId],
+                    dvm.[MealId],
+                    CASE dvm.[SortOrder]
+                        WHEN 1 THEN 'Breakfast'
+                        WHEN 2 THEN 'Snack1'
+                        WHEN 3 THEN 'Lunch'
+                        WHEN 4 THEN 'Snack2'
+                        WHEN 5 THEN 'Dinner'
+                        ELSE CONCAT('Meal', dvm.[SortOrder])
+                    END,
+                    dvm.[ServingSizeMultiplier],
+                    dvm.[SortOrder],
+                    1,
+                    @now,
+                    @auditUser,
+                    0
+                FROM [DietVariantMeals] dvm;
+                """,
+                new { planId, now, auditUser });
+        }
+
+        this.logger.LogInformation("Seeded published M2 diet menu plans for the next 7 days.");
     }
 
     private async Task SeedProductionPlansAsync(IDbConnection db, DateTimeOffset now, string auditUser, CancellationToken cancellationToken)

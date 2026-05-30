@@ -29,4 +29,8 @@ public sealed class ProductionPlanItemDto
     public string? EstimatedReadyTime { get; set; }
 
     public string? ActualReadyTime { get; set; }
+
+    public DateTimeOffset? FefoDeductedAt { get; set; }
+
+    public string? FefoReferenceDocument { get; set; }
 }

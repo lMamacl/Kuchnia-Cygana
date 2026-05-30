@@ -67,10 +67,21 @@ public sealed class ProductionPlanGenerator
             throw new InvalidOperationException($"Brak aktywnych zamówień na dzień {productionDate}.");
 
         // 3. Pobierz plan diet — posiłki przypisane do wariantów (M2)
-        var dietPlan = (await _dietDataProvider.Get7DayPlanAsync(productionDate)).ToList();
+        var dietPlan = (await _dietDataProvider.GetPlanForDateAsync(productionDate)).ToList();
+        if (dietPlan.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Brak opublikowanego planu diet z M2 na dzien {productionDate:yyyy-MM-dd}. " +
+                "M2 musi publikowac plan codziennie z co najmniej 7-dniowym wyprzedzeniem.");
+        }
 
         // 4. Oblicz ilości per posiłek — agregacja zamówień × diety
         var mealQuantities = CalculateMealQuantities(orders, dietPlan);
+        if (mealQuantities.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Opublikowany plan M2 na dzien {productionDate:yyyy-MM-dd} nie pasuje do aktywnych zamowien.");
+        }
 
         // 5. Utwórz plan
         var plan = new ProductionPlan
@@ -85,11 +96,12 @@ public sealed class ProductionPlanGenerator
 
         // 6. Utwórz pozycje planu z grupami produkcyjnymi i ETA
         var items = new List<ProductionPlanItem>();
-        var groupAssignment = 1;
-
-        foreach (var (key, quantity) in mealQuantities.OrderBy(kv => kv.Key.MealId))
+        foreach (var (key, quantity) in mealQuantities
+            .OrderBy(kv => GetPlanSortOrder(kv.Key.MealId, kv.Key.DietVariantId, dietPlan))
+            .ThenBy(kv => kv.Key.MealId))
         {
-            var dietEntry = dietPlan.FirstOrDefault(d => d.MealId == key.MealId);
+            var dietEntry = dietPlan.FirstOrDefault(d =>
+                d.MealId == key.MealId && d.DietVariantId == key.DietVariantId);
 
             items.Add(new ProductionPlanItem
             {
@@ -101,9 +113,9 @@ public sealed class ProductionPlanGenerator
                 CookedQuantity = 0,
                 Status = ProductionItemStatus.Planned,
                 // Model B-lite: grupa produkcyjna i ETA
-                ProductionGroup = AssignProductionGroup(key.MealId, dietPlan),
+                ProductionGroup = AssignProductionGroup(key.MealId, key.DietVariantId, dietPlan),
                 EstimatedReadyTime = EstimateReadyTime(
-                    AssignProductionGroup(key.MealId, dietPlan), quantity),
+                    AssignProductionGroup(key.MealId, key.DietVariantId, dietPlan), quantity),
             });
         }
 
@@ -153,10 +165,31 @@ public sealed class ProductionPlanGenerator
     /// Grupy: 1=zimne/śniadania (pierwsze), 2=zupy, 3=dania główne, 4=sałatki/desery.
     /// W przyszłości: inteligentne przypisanie na podstawie kategorii posiłku z M2.
     /// </summary>
-    private static int AssignProductionGroup(int mealId, List<DietPlanEntry> dietPlan)
+    private static int AssignProductionGroup(int mealId, int dietVariantId, List<DietPlanEntry> dietPlan)
     {
         // Prosty algorytm: podział wg SortOrder/pozycji w planie diet
-        var index = dietPlan.FindIndex(d => d.MealId == mealId);
+        var entry = dietPlan.FirstOrDefault(d => d.MealId == mealId && d.DietVariantId == dietVariantId)
+            ?? dietPlan.FirstOrDefault(d => d.MealId == mealId);
+        var slot = entry?.MealSlot ?? string.Empty;
+
+        if (slot.Contains("breakfast", StringComparison.OrdinalIgnoreCase)
+            || slot.Contains("snack", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+
+        if (slot.Contains("soup", StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+
+        if (slot.Contains("lunch", StringComparison.OrdinalIgnoreCase)
+            || slot.Contains("dinner", StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
+
+        var index = entry?.SortOrder - 1 ?? dietPlan.FindIndex(d => d.MealId == mealId);
 
         return index switch
         {
@@ -184,4 +217,9 @@ public sealed class ProductionPlanGenerator
             _ => new TimeOnly(9, 30),
         };
     }
+
+    private static int GetPlanSortOrder(int mealId, int dietVariantId, List<DietPlanEntry> dietPlan)
+        => dietPlan.FirstOrDefault(d => d.MealId == mealId && d.DietVariantId == dietVariantId)?.SortOrder
+            ?? dietPlan.FirstOrDefault(d => d.MealId == mealId)?.SortOrder
+            ?? int.MaxValue;
 }

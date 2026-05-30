@@ -1,8 +1,10 @@
 # PLAN SPRINTÓW — Moduł 3 (Produkcja + Magazyn + Kompletacja)
-**KuchniaUCygana · Wersja 2.1 — rewizja granic modułów z 28.05.2026**
+**KuchniaUCygana · Wersja 2.2 — rewizja M2/M3 z 30.05.2026**
 *Bazuje na: WIZJA_PRODUKCJA_v2.md (v3.0), WIZJA_MAGAZYN_v1.md (v1.1), WIZJA_KOMPLETACJA_v1.md (v1.1)*
 
 > **ZASADA KLUCZOWA (v2.1):** M3 = Produkcja + Magazyn + Kompletacja toreb. Załadunek aut (Loading) to **granica M3** — M3 zarządza manifestem i etykietami, ale widok kierowcy i Logistyka należą do **M4**. Encje Menu/Diety należą do **M2**. Użytkownicy/HR do **M5**.
+
+> **AKTUALIZACJA 30.05.2026:** M2 jest właścicielem datowanego planu diet/menu. M2 publikuje codzienny plan minimum 7 dni do przodu, a M3 nie edytuje tego planu — tylko go wczytuje, waliduje i używa do produkcji, zapotrzebowania magazynowego, gotowania, etykiet foliowych i pakowania.
 
 ---
 
@@ -148,6 +150,20 @@
 
 ---
 
+## 0.8 REWIZJA 30.05.2026 — CO JUŻ ZOSTAŁO OSIĄGNIĘTE
+
+| Obszar | Status | Decyzja / następny krok |
+|--------|--------|-------------------------|
+| Magazyn: `Issue`, `BatchDetails`, `FefoReport`, `TransactionHistory`, HTMX partiale, eksporty HACCP/FEFO | ✅ | Uznane za wykonany backbone magazynu; dalsze prace to polish, testy i wydajność dużych tabel |
+| `ILoadingService` + `LoadingService` | ✅ | Serwis jest wydzielony, ale routing i widoki wciąż są w `PackingController`/`Views/Packing` |
+| `LoadingController` + `Views/Loading` | ⚠️ | Nadal do wydzielenia w Sprincie 7, bez zmiany odpowiedzialności M4 za widok kierowcy |
+| Integracja M2 plan diet | ✅ backbone / ⚠️ UI | Dodano datowane `DietMenuPlans`/`DietMenuPlanItems`; M3 czyta plan z M2 per data, ale M2 potrzebuje pełnego edytora planu |
+| Receptury i karta gotowania | ⚠️ | Karta gotowania czyta live dane M2; brakuje kompletnego UI receptur, instrukcji krokowych i pełnych testów technologicznych |
+| FEFO produkcji | ✅ backbone | Pozycja planu ma `FefoDeductedAt` i `FefoReferenceDocument`; ponowny start planu nie zdejmuje magazynu drugi raz |
+| Zdjęcia posiłków | ⚠️ | Karta gotowania korzysta z `MealImages`, ale upload wymaga dalszego hardeningu nazw, MIME, rozmiaru i usuwania plików |
+
+---
+
 ## 1. STRATEGIA: DOSTOSOWANIE, NIE PRZEPISYWANIE
 
 > **Zasada:** Kod jest zaawansowany i działa. Plan skupia się na **uzupełnieniu brakujących elementów** i **refaktorze tam, gdzie to konieczne** — bez niepotrzebnego kasowania działających rzeczy.
@@ -157,7 +173,7 @@ Priorytety:
 2. **Application gaps** — brakujące DTOs, walidatory, metody serwisów
 3. **Widoki Magazynu** — 4 nowe widoki + modyfikacja istniejących (HTMX, filtrowanie, Chart.js)
 4. **Refaktor Packing/Loading** — wydzielenie LoadingController (M3 = manifest + załadunek, **nie** widok kierowcy)
-5. **Produkcja — uzupełnienia** — Issues, CookingLog, ChefNotes (niezależne od M2). Recipe szczegółowy — **dopiero gdy M2 dostarczy API**.
+5. **Produkcja — kuchnia operacyjna** — snapshot planu, sesje gotowania składowych, FEFO, korekty, etykiety i traceability. Szczegóły receptur-składowych dostarcza M2 przez wersjonowany kontrakt.
 6. **Testy** — pokrycie serwisów i walidatorów
 
 ---
@@ -352,38 +368,65 @@ Priorytety:
 
 ---
 
-## SPRINT 8 — PRODUKCJA: UZUPEŁNIENIA (częściowo zależny od M2)
-**Cel:** Uzupełnienie produkcji o wewnętrzne encje M3 + integracja z tym co dostarczy M2.
-**Czas:** 1–2 tygodnie
+## SPRINT 8 — BACKBONE M2 → M3: PLAN DIET, SKŁADOWE I KUCHNIA
+**Cel:** M2 publikuje datowany plan i wersjonowane przepisy-składowe, a M3 tworzy z opłaconych zamówień operacyjny snapshot produkcji, sesje gotowania, FEFO, etykiety i kompletację pojemników.
+**Czas:** 2–3 tygodnie
 
-> ⚠️ **DEPENDENCY M2:** Encje `MealComponent`, `RecipeIngredient` **należą do M2 (Menu)** — M3 ich nie tworzy. M3 jedynie integruje przez `IDietDataProvider` i może je odczytać jeśli M2 udostępni je w bazie. Istniejące `Menu/Recipe` w Domain M3 to **inna, uproszczona encja** — decyzja czy ją rozbudować czy tylko linkować do M2 jest zadaniem M2 + M3 razem.
->
-> ✅ **Niezależne od M2:** `ProductionIssue`, `CookingLog`, `ChefDailyNote`, `BoxLabel` — są **encjami M3** i można je budować bez M2.
+> ✅ **Decyzja:** M2 jest właścicielem planu, posiłków i receptur. M3 nie edytuje planu, tylko ma podgląd, walidację, snapshot, wykonanie kuchni, traceability, etykiety i pakowanie. Szczegółowy handoff M2: [`GABRIEL_M2_PLAN_DIET_RECEPTUR.md`](GABRIEL_M2_PLAN_DIET_RECEPTUR.md).
 
-### Sprint 8.1 — Widoki produkcji (niezależne od M2)
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 8.1.1 | `Production/Index.cshtml` — ulepszenie: baner cross-contamination (alergeny), alerty magazynowe (SmartInventoryAnalyzer) | MOD `Views/Production/Index.cshtml` | 🟡 |
-| 8.1.2 | `Production/CookingCard.cshtml` — pole temperatury rdzenia w formularzu zatwierdzenia (warunkowe: RequiresCoreTemperatureCheck) | MOD `Views/Production/CookingCard.cshtml` | 🟡 |
+### Sprint 8.1 — M2: plan, posiłki i wersjonowane składowe
+| # | Zadanie | Pliki/obszar | Priorytet | Status |
+|---|---------|--------------|-----------|--------|
+| 8.1.1 | `DietMenuPlans` / `DietMenuPlanItems`: datowany plan, `Draft/Published`, wariant, slot, posiłek, mnożnik, kolejność | M2 Domain + migracja 304 | 🔴 | ✅ backbone |
+| 8.1.2 | Edytor planu 7+ dni: układanie dnia, kopiowanie, publikacja, search server-side, filtry kategorii/alergenów | `DietEditor` + M2 views | 🔴 | ⏳ |
+| 8.1.3 | Model M2: `Meal` jako agregat wersjonowanych `RecipeComponent`; składowe mają własne instrukcje, yield, nutrition, alergeny i zasoby | M2 Domain/API | 🔴 | ⏳ |
+| 8.1.4 | Wersjonowanie: zmiany składu/yield/nutrition/opakowań tworzą wersję; tekst/zdjęcia/instrukcje mogą być nietechnologiczne po checkboxie | M2 Services | 🔴 | ⏳ |
+| 8.1.5 | Walidacja publikacji: blokuje brak alergenów, nutrition, opakowań, mapowania magazynu i wymaganych wersji składowych | M2 Services | 🔴 | ⏳ |
 
-### Sprint 8.2 — Wewnętrzne encje produkcji M3 (niezależne od M2)
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 8.2.1 | Migracja 015: Tabela `BoxLabels` (Id, PackingItemId, PrintedAt, PrintedByUserId, ReprintCount, ReprintReason, ExpiryDate, SimulatedWeightGrams, LabelDataJson) | NEW migracja | 🟡 |
-| 8.2.2 | Migracja 016: Tabela `ProductionIssues` (Id, ProductionBatchId, ReportedByUserId, ReportedAt, Description, Resolution, ResolvedByUserId, ResolvedAt, Status) | NEW migracja | 🟢 |
-| 8.2.3 | Migracja 017: Tabela `CookingLogs` (Id, ProductionBatchId, CookedByUserId, CookedAt, CoreTempCelsius, Notes) | NEW migracja | 🟢 |
-| 8.2.4 | Migracja 018: Tabela `ChefDailyNotes` (Id, Date, AuthorUserId, Content, CreatedAt) | NEW migracja | 🟢 |
-| 8.2.5 | Encje Domain: `BoxLabel`, `ProductionIssue`, `CookingLog`, `ChefDailyNote` + enumy | NEW `Domain/Entities/Production/` | 🟡 |
-| 8.2.6 | Widok `Production/Issues.cshtml` — lista zgłoszeń, formularz, rozwiązywanie | NEW `Views/Production/Issues.cshtml` | 🟢 |
-| 8.2.7 | Rozszerzenie `IProductionService` o `ReportIssueAsync`, `ResolveIssueAsync`, `GetIssuesAsync` | MOD interfejs + serwis | 🟢 |
+### Sprint 8.2 — Kontrakt M2 → M3
+| # | Zadanie | Pliki/obszar | Priorytet | Status |
+|---|---------|--------------|-----------|--------|
+| 8.2.1 | Rozszerzyć dane `IDietDataProvider`: plan zwraca wersje składowych, packaging requirements, shelf-life, checkbox najwcześniejszego surowca i nutrition `100 g + porcja` | `IDietDataProvider`, `DietDataAdapter` | 🔴 | ⏳ |
+| 8.2.2 | Kategoria magazynowa bez `StockItemId` oznacza równoważne zamienniki FEFO; realny stock item idzie do traceability, nie na etykietę klienta | Provider + M3 FEFO | 🔴 | ⏳ |
+| 8.2.3 | Torby są poza M2; M2 przekazuje tylko pudełka/pojemniki posiłków i składowych | Provider + Packing | 🟡 | ⏳ |
+| 8.2.4 | Plan M2 można edytować do północy D-3 Europe/Warsaw; po blokadzie tylko override manager/admin z powodem i alertem przed startem produkcji | M2/M3 Alerts | 🔴 | ⏳ |
 
-### Sprint 8.3 — Integracja z M2 (ZALEŻNA od gotowości M2) ⏳
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 8.3.1 | Widok `Production/RecipeDetails.cshtml` — szczegóły receptury z M2 przez `IDietDataProvider` | NEW widok | 🟢 |
-| 8.3.2 | Uzupełnienie kart gotowania o składniki z M2 (kiedy M2 udostępni endpoint) | MOD `IProductionService` + `ProductionService` | 🟢 |
+### Sprint 8.3 — M3: snapshot, produkcja i zapotrzebowanie
+| # | Zadanie | Pliki/obszar | Priorytet | Status |
+|---|---------|--------------|-----------|--------|
+| 8.3.1 | Produkcja powstaje tylko z opłaconych zamówień; pozycje planu M2 bez zamówień są tylko w podglądzie | `ProductionPlanGenerator` | 🔴 | ⏳ |
+| 8.3.2 | M3 zapisuje snapshot planu i referencje do wersji składowych; zmiana zamówienia po snapshocie wymaga korekty managera | Production services | 🔴 | ⏳ |
+| 8.3.3 | Widok “Plan z M2” na 7+ dni: status publikacji, alerty zmian, braki receptur, braki mapowania, braki stanów i potwierdzenie odbioru alertu | Production UI | 🟡 | ⏳ |
+| 8.3.4 | `WarehouseDemandService`: agreguje składniki, przyprawy i opakowania z opłaconych zamówień, FEFO preview, braki, partie ryzyka, eksport/druk | Warehouse/M3 | 🔴 | ⏳ |
 
-> 📌 **Status: WSTRZYMANE** — czekamy na API M2. Mockowy `IDietDataProvider` pozostaje aktywny do czasu integracji.
+### Sprint 8.4 — M3: sesje gotowania składowych
+| # | Zadanie | Pliki/obszar | Priorytet | Status |
+|---|---------|--------------|-----------|--------|
+| 8.4.1 | Sesja gotowania = `RecipeComponentVersion + ProductionDate`; wspólne składowe są agregowane dla wielu posiłków | Production domain/service | 🔴 | ⏳ |
+| 8.4.2 | Składowa może zasilać zatwierdzone okno 3 dni przez rezerwacje dzienne; niewykorzystany wynik wraca jako półprodukt | Production domain/service | 🔴 | ⏳ |
+| 8.4.3 | FEFO składników i przypraw schodzi raz przy starcie sesji składowej; FEFO po kategorii jest dozwolone dla kategorii równoważnych | Production/Warehouse | 🔴 | ⏳ |
+| 8.4.4 | Karta gotowania pokazuje ilości jednostkowe i grupowe, sekcje składowych, osobne statusy, miękką blokadę współpracy i test temperatury na sesji składowej | Cooking UI | 🔴 | ⏳ |
+| 8.4.5 | Niedobory i zmiany zużycia wymagają akceptacji KitchenManager/Admin; korekta liczby pudełek/etykiet wymaga drugiego potwierdzenia z wizualizacją | Production UI/service | 🔴 | ⏳ |
+
+### Sprint 8.5 — M3: pojemniki, etykiety i pakowanie
+| # | Zadanie | Pliki/obszar | Priorytet | Status |
+|---|---------|--------------|-----------|--------|
+| 8.5.1 | Pudełka/pojemniki schodzą z magazynu po akceptacji gotowania według realnej liczby zaakceptowanych pojemników | Production/Packing/Warehouse | 🔴 | ⏳ |
+| 8.5.2 | Każdy fizyczny pojemnik ma własny QR wskazujący instancję pojemnika/pudełka; posiłek wielopojemnikowy jest wymaganym bundle | Packing domain/service | 🔴 | ⏳ |
+| 8.5.3 | Etykietę wolno drukować dopiero po akceptacji odchylenia i przeliczeniu pojemników; redruk wymaga powodu i osobnego logu | PackingLabel service | 🔴 | ⏳ |
+| 8.5.4 | Etykieta pokazuje skład z M2, nutrition `100 g + porcja`, alergeny, datę ważności, QR i identyfikację partii; realny stock item FEFO zostaje wewnętrznie | Label/PDF/UI | 🔴 | ⏳ |
+| 8.5.5 | Data ważności domyślnie z shelf-life M2; checkbox posiłku przełącza na najwcześniejszy surowiec użyty w produkcji | Label/Packing | 🟡 | ⏳ |
+
+### Sprint 8.6 — Testy i akceptacja Sprintu 8
+| # | Scenariusz testowy | Priorytet |
+|---|-------------------|-----------|
+| 8.6.1 | Opublikowany plan M2 + opłacone zamówienia generują snapshot produkcji, a brak zamówień nie tworzy pozycji produkcyjnej | 🔴 |
+| 8.6.2 | Wersja składowej użyta w snapshotcie jest stabilna mimo późniejszej zmiany M2 | 🔴 |
+| 8.6.3 | FEFO po `StockItemId` i po równoważnej kategorii działa idempotentnie na starcie sesji składowej | 🔴 |
+| 8.6.4 | Niedobór składowej wymaga decyzji managera i drugiego potwierdzenia zmian pojemników/etykiet | 🔴 |
+| 8.6.5 | Posiłek wielopojemnikowy wymaga zeskanowania wszystkich QR przed trafieniem do torby | 🔴 |
+| 8.6.6 | Etykieta blokuje druk przed akceptacją gotowania, zawiera nutrition `100 g + porcja`, a redruk wymaga powodu | 🔴 |
+| 8.6.7 | Alert zmiany planu/receptury wymaga potwierdzenia odbioru przez kuchnię/magazyn | 🟡 |
 
 ---
 
@@ -428,12 +471,12 @@ Sprint 6 ──── Widoki Magazyn (4 nowe + mody) ──────── 2 
          │
 Sprint 7 ──── Refaktor Packing/Loading + widoki ───── 2 tyg
          │
-Sprint 8 ──── Produkcja uzupełnienia (opcjonalny) ── 1–2 tyg
+Sprint 8 ──── Backbone M2→M3: plan, składowe, kuchnia ── 2–3 tyg
          │
 Sprint 9 ──── Testy + polish ──────────────────────── 1 tyg
          │
          ▼
-      MODUŁ 3 KOMPLETNY (~9.5–10.5 tygodni)
+      MODUŁ 3 KOMPLETNY (~10.5–11.5 tygodni)
 ```
 
 ---
@@ -447,7 +490,7 @@ graph TD
     S5 --> S7["Sprint 7: Refaktor Packing/Loading"]
     S6 --> S9["Sprint 9: Testy + Polish"]
     S7 --> S9
-    S5 --> S8["Sprint 8: Produkcja uzup. (opcja)"]
+    S5 --> S8["Sprint 8: Backbone M2→M3"]
     S8 --> S9
     
     style S4 fill:#ff6b6b,color:#fff
@@ -462,7 +505,7 @@ graph TD
 - Sprint 5 **wymaga** Sprint 4 (encje + migracje)
 - Sprint 6 i 7 **wymagają** Sprint 5 (serwisy + DTOs)
 - Sprint 6 i 7 mogą iść **równolegle** (niezależne moduły)
-- Sprint 8 **zależy od gotowości M2** (encje Menu) — może być odroczony
+- Sprint 8 **zależy od gotowości wersjonowanych składowych M2**, ale M3 może równolegle budować snapshot, podgląd planu, zapotrzebowanie, etykiety i testy na mocku kontraktu
 - Sprint 9 może się zacząć **równolegle** z końcem Sprint 6/7
 
 ---
@@ -473,7 +516,7 @@ graph TD
 |--------|--------|--------|-----------|
 | Refaktor PackingController/PackingService (S5.4 + S7.1) — regresje routingu | 🔴 Wys. | 🔴 | Osobny PR. Docker test. Zachować stare URL jako redirecty tymczasowo |
 | God Service PackingService (41KB) — trudny do podzielenia | 🟡 Śr. | 🟡 | Wyciągnąć metody loading 1:1, nie refaktorować logiki wewnętrznej |
-| M2 (Menu) nie dostarcza API dla receptur → S8.3 zablokowany | 🟡 Śr. | 🟢 | S8.3 jest opcjonalny. `IDietDataProvider` Mock pozostaje aktywny |
+| M2 nie dostarcza wersjonowanych składowych i packaging requirements → pełna kuchnia S8 zablokowana | 🟡 Śr. | 🟡 | M3 buduje kontrakt, snapshot, mock provider i walidacje wcześniej; pełne gotowanie składowych włącza po M2 |
 | M4 (Logistyka) nie dostarcza `IDeliveryManifestProvider` → Mock pozostaje | 🟡 Śr. | 🟢 | `MockDeliveryManifestProvider` istnieje. M3 nie blokuje się na M4 |
 | Niejasna granica M3/M4 w kwestii załadunku | 🟡 Śr. | 🟡 | M3 = manifest + załadunek aut. M4 = widok kierowcy + logistyka dostawy. Udokumentowane w sekcji 0.7 + `intermodule_integration_qna.md` |
 | Numeracja migracji (wizja: 307+, kod: 010+) | 🟢 Nis. | 🟢 | Używamy kolejnych numerów (010+). Wizja ma inne numery — ignorujemy |
@@ -487,14 +530,14 @@ graph TD
 
 | Metryka | Przed planem | Po planie (cel) | Uwaga |
 |---------|-------------|-----------------|-------|
-| Widoki Produkcji | 8 | 9–10 (+Issues, +ChefNotes) | Recipe szczegółowy → zależy od M2 (S8.3) |
+| Widoki Produkcji | 8 | 10–12 (+Plan z M2, +Sesje gotowania, +Korekty/alerty) | Szczegóły składowych zależą od wersjonowanego kontraktu M2 |
 | Widoki Magazynu | 7 (1 pusty partial) | 11 (+BatchDetails, +Issue, +FefoReport, +TransactionHistory) | — |
 | Widoki Packing | 6 | 7 (+BulkLabels) | — |
 | Widoki Loading | 0 (w Packing) | 3 (Index, Route, ManifestPreview) | — |
 | Widoki DriverMobile | 5 placeholderów | 🚫 **POZA M3** | Implementacja → M4 |
 | Widoki Logistics | placeholder | 🚫 **POZA M3** | Implementacja → M4 |
 | Kontrolery M3 | 3 (Production, Warehouse, Packing) | 4 (+LoadingController) | DriverMobileController → M4 |
-| Migracje M3 | 009 | 014–018 | Migracje M1(100+), M2(301+), M5(500+) → nie nasze |
+| Migracje M3 | 009 | 019+ | M3 ma FEFO tracking; M2 ma plan diet w 304 |
 | Testy jednostkowe M3 | 1 (BatchRepo) | ~10+ | — |
 | Application Services | 4 (Production, Warehouse, Packing, Temperature) | 5 (+LoadingService) | — |
 | PackingService.cs | 41.6 KB (God Service) | ~25 KB + LoadingService ~15 KB | — |

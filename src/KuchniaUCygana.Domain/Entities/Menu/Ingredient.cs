@@ -15,5 +15,15 @@ public sealed class Ingredient : AuditableEntity
 
     public string? Notes { get; set; }
 
+    public int? StockItemId { get; set; }
+
+    public int? WarehouseCategoryId { get; set; }
+
+    public decimal YieldFactor { get; set; } = 1.0m;
+
+    public bool RequiresCoreTemperatureCheck { get; set; }
+
+    public decimal? MinimumCoreTemperatureCelsius { get; set; }
+
     public bool IsActive { get; set; } = true;
 }

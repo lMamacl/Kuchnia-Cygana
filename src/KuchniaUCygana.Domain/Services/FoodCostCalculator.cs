@@ -12,6 +12,8 @@ public sealed class FoodCostEntry
 {
     public int IngredientId { get; set; }
 
+    public int? StockItemId { get; set; }
+
     public string IngredientName { get; set; } = string.Empty;
 
     public decimal TotalWeightGrams { get; set; }
@@ -69,15 +71,24 @@ public sealed class FoodCostCalculator
             {
                 var totalGrams = ingredient.WeightInGrams * quantity;
 
-                if (aggregated.TryGetValue(ingredient.IngredientId, out var existing))
+                if (!ingredient.StockItemId.HasValue)
+                {
+                    throw new InvalidOperationException(
+                        $"Skladnik '{ingredient.IngredientName}' (ID {ingredient.IngredientId}) nie jest polaczony z magazynem.");
+                }
+
+                var stockItemId = ingredient.StockItemId.Value;
+
+                if (aggregated.TryGetValue(stockItemId, out var existing))
                 {
                     existing.TotalWeightGrams += totalGrams;
                 }
                 else
                 {
-                    aggregated[ingredient.IngredientId] = new FoodCostEntry
+                    aggregated[stockItemId] = new FoodCostEntry
                     {
                         IngredientId = ingredient.IngredientId,
+                        StockItemId = stockItemId,
                         IngredientName = ingredient.IngredientName,
                         TotalWeightGrams = totalGrams,
                     };
@@ -97,11 +108,11 @@ public sealed class FoodCostCalculator
     /// Wzbogaca raport o dane magazynowe (dostępność).
     /// Wywoływane przez WarehouseService po wyliczeniu food cost.
     /// </summary>
-    public void EnrichWithStockData(FoodCostReport report, Dictionary<int, decimal> stockByIngredientId)
+    public void EnrichWithStockData(FoodCostReport report, Dictionary<int, decimal> stockByStockItemId)
     {
         foreach (var entry in report.Entries)
         {
-            if (stockByIngredientId.TryGetValue(entry.IngredientId, out var available))
+            if (entry.StockItemId.HasValue && stockByStockItemId.TryGetValue(entry.StockItemId.Value, out var available))
             {
                 entry.AvailableInStock = available;
                 entry.Shortage = entry.TotalWeightGrams - available > 0

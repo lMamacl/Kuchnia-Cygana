@@ -19,6 +19,8 @@ public sealed class FoodCostEntryDto
 {
     public int IngredientId { get; set; }
 
+    public int? StockItemId { get; set; }
+
     public string IngredientName { get; set; } = string.Empty;
 
     public decimal TotalWeightGrams { get; set; }

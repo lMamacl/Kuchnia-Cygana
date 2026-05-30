@@ -493,7 +493,7 @@ public sealed class PackingService : IPackingService
         var order = await orderProvider.GetOrderByIdAsync(orderId)
             ?? throw new InvalidOperationException($"Zamowienie {orderId} nie istnieje.");
 
-        var dietPlan = (await dietProvider.Get7DayPlanAsync(session.PackingDate))
+        var dietPlan = (await dietProvider.GetPlanForDateAsync(session.PackingDate))
             .Where(p => p.DietVariantId == order.DietVariantId)
             .Take(5)
             .ToList();

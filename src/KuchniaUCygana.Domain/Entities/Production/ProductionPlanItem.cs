@@ -63,4 +63,9 @@ public class ProductionPlanItem : AuditableEntity<int>
     /// Rzeczywisty czas gotowości — ustawiany po zatwierdzeniu ugotowania.
     /// </summary>
     public TimeOnly? ActualReadyTime { get; set; }
+
+    public DateTimeOffset? FefoDeductedAt { get; set; }
+
+    [StringLength(50)]
+    public string? FefoReferenceDocument { get; set; }
 }

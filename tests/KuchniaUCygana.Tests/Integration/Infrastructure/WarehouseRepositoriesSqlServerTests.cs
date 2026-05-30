@@ -1258,16 +1258,26 @@ public sealed class WarehouseRepositoriesSqlServerTests
             {
                 new DietPlanEntry
                 {
+                    PlanDate = startDate,
+                    PlanStatus = "Published",
                     MealId = 801,
                     MealName = "Test breakfast",
                     DietVariantId = 501,
+                    MealSlot = "Breakfast",
+                    SortOrder = 1,
+                    ServingMultiplier = 1.0m,
                     ServingWeightGrams = 300m,
                 },
                 new DietPlanEntry
                 {
+                    PlanDate = startDate,
+                    PlanStatus = "Published",
                     MealId = 802,
                     MealName = "Test dinner",
                     DietVariantId = 501,
+                    MealSlot = "Dinner",
+                    SortOrder = 2,
+                    ServingMultiplier = 1.0m,
                     ServingWeightGrams = 450m,
                 },
             };
@@ -1275,9 +1285,23 @@ public sealed class WarehouseRepositoriesSqlServerTests
             return Task.FromResult(entries);
         }
 
+        public Task<IEnumerable<DietPlanEntry>> GetPlanForDateAsync(DateOnly date)
+        {
+            return Get7DayPlanAsync(date);
+        }
+
         public Task<IEnumerable<RecipeIngredientEntry>> GetRecipeForMealAsync(int mealId)
         {
             return Task.FromResult(Enumerable.Empty<RecipeIngredientEntry>());
+        }
+
+        public Task<MealCookingDetailsEntry?> GetMealCookingDetailsAsync(int mealId)
+        {
+            return Task.FromResult<MealCookingDetailsEntry?>(new MealCookingDetailsEntry
+            {
+                MealId = mealId,
+                MealName = $"Meal {mealId}",
+            });
         }
     }
 }

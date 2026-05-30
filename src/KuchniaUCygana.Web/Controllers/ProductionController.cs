@@ -176,8 +176,16 @@ public sealed class ProductionController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ProduceSemiFinished(int planId)
     {
-        await productionService.ProduceSemiFinishedAsync(planId);
+        try
+        {
+            await productionService.ProduceSemiFinishedAsync(planId);
         TempData["Success"] = "Składniki zdjęte z magazynu wg FEFO. Plan uruchomiony.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
         return RedirectToAction(nameof(Plan), new { planId });
     }
 
