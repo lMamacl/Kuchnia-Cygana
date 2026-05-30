@@ -13,9 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Views\Allergens\" />
     <Folder Include="Views\Categories\" />
-    <Folder Include="Views\Meals\" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,0 +1,56 @@
+﻿@model IEnumerable<KuchniaUCygana.Domain.Entities.Menu.Allergen>
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Słownik Alergenów";
+    ViewData["Section"] = "Katalog Menu";
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h3 class="card-title">Zarejestrowane alergeny</h3>
+                <div class="btn-list">
+                    <a asp-action="Create" class="btn btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                        Nowy Alergen
+                    </a>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th class="w-1">Kod</th>
+                            <th>Nazwa alergenu</th>
+                            <th class="w-1 text-end">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Any())
+                        {
+                            <tr><td colspan="3" class="text-secondary text-center py-4">Brak zdefiniowanych alergenów.</td></tr>
+                        }
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <td><span class="badge bg-danger-lt text-danger font-weight-bold">@item.Code</span></td>
+                                <td class="font-weight-bold text-dark">@item.Name</td>
+                                <td>
+                                    <div class="btn-list flex-nowrap justify-content-end">
+                                        <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Edytuj</a>
+                                        <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm('Usunąć alergen?');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Usuń</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
