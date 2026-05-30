@@ -51,6 +51,33 @@ public sealed class DietEditorController : Controller
         });
     }
 
+    [HttpGet("meals")]
+    public IActionResult Meals()
+    {
+        return RedirectToAction("Index", "Meals");
+    }
+
+    [HttpGet("recipes")]
+    public IActionResult Recipes()
+    {
+        ViewData["Title"] = "Przepisy";
+        ViewData["Section"] = "Diety";
+        ViewData["Description"] = "Widok przepisow jest jeszcze szkieletem; szczegoly receptur sa dostepne w posilkach.";
+        return View();
+    }
+
+    [HttpGet("recipe")]
+    [HttpGet("recipe/{mealId:int}")]
+    public IActionResult Recipe(int? mealId)
+    {
+        ViewData["Title"] = "Edycja przepisu";
+        ViewData["Section"] = "Diety";
+        ViewData["Description"] = mealId.HasValue
+            ? $"Szkielet edycji przepisu dla posilku #{mealId.Value}."
+            : "Wybierz posilek, aby przejsc do receptury.";
+        return View();
+    }
+
     [HttpGet("{id:int}")]
     public async Task<IActionResult> Details(int id)
     {
