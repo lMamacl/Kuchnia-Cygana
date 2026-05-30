@@ -73,6 +73,7 @@ public static class DependencyInjection
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<IDietRepository, DietRepository>();
         services.AddScoped<IDietVariantRepository, DietVariantRepository>();
+        services.AddScoped<IDietVariantMealRepository, DietVariantMealRepository>();
         services.AddScoped<IIngredientRepository, IngredientRepository>();
         services.AddScoped<IMealAllergenRepository, MealAllergenRepository>();
         services.AddScoped<IMealImageRepository, MealImageRepository>();

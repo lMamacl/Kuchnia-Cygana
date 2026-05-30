@@ -20,7 +20,7 @@ public sealed class DietRepository : BaseRepository<Diet>, IDietRepository
         foreach (var diet in diets)
         {
             var variantSql = "SELECT * FROM [DietVariants] WHERE [DietId] = @DietId AND [IsDeleted] = 0;";
-            var variants = await db.QueryAsync<DietVariant>(variantSql, new { diet.Id });
+            var variants = await db.QueryAsync<DietVariant>(variantSql, new { DietId = diet.Id });
             // variants nie są używane dalej – jeśli trzeba, przypisać do diet.Variants (ale Diet nie ma takiej właściwości)
         }
         return diets;

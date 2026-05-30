@@ -1,5 +1,17 @@
+@model KuchniaUCygana.Application.DTOs.Menu.IngredientDto?
 @{
     Layout = "_LayoutStaff";
+    ViewData["Title"] = "Wartości odżywcze";
+    ViewData["Section"] = "Katalog Menu";
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="card card-premium">
+    <div class="card-body">
+        <h3 class="card-title">Wartości odżywcze</h3>
+        <p class="text-secondary mb-0">
+            @(Model is null
+                ? "Wybierz składnik z katalogu, aby uzupełnić wartości odżywcze."
+                : $"Składnik: {Model.Name}. Szczegółowe wartości odżywcze będą powiązane z NutritionFacts.")
+        </p>
+    </div>
+</div>

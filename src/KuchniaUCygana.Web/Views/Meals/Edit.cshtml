@@ -1,0 +1,85 @@
+@model KuchniaUCygana.Application.DTOs.Menu.MealDto
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Edycja Posiłku";
+    ViewData["Section"] = "Katalog Menu";
+    ViewData["Description"] = "Aktualizacja podstawowych parametrów potrawy oraz jej statusu cyklu życia.";
+    var categories = ViewBag.Categories as IEnumerable<KuchniaUCygana.Domain.Entities.Menu.Category>
+                     ?? Enumerable.Empty<KuchniaUCygana.Domain.Entities.Menu.Category>();
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-xl-6">
+        <div class="card card-premium">
+            <div class="card-status-top bg-warning"></div>
+            <div class="card-header bg-transparent py-3">
+                <h3 class="card-title">Modyfikuj potrawę #@Model.Id</h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="Edit" method="post" autocomplete="off">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="Id" />
+
+                    <div class="mb-3">
+                        <label class="form-label required" asp-for="Name">Nazwa potrawy</label>
+                        <input type="text" asp-for="Name" class="form-control" />
+                        <span asp-validation-for="Name" class="text-danger small"></span>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required" asp-for="CategoryId">Kategoria</label>
+                            <select asp-for="CategoryId" class="form-select">
+                                <option value="">-- Wybierz --</option>
+                                @foreach (var cat in categories)
+                                {
+                                    <option value="@cat.Id" selected="@(cat.Id == Model.CategoryId ? "selected" : null)">@cat.Name</option>
+                                }
+                            </select>
+                            <span asp-validation-for="CategoryId" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" asp-for="PreparationTimeMinutes">Czas przygotowania (min)</label>
+                            <input type="number" asp-for="PreparationTimeMinutes" class="form-control" />
+                            <span asp-validation-for="PreparationTimeMinutes" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" asp-for="Status">Status potrawy</label>
+                            <select asp-for="Status" class="form-select">
+                                <option value="Draft">Szkic (Draft)</option>
+                                <option value="Ready">Gotowy do publ. (Ready)</option>
+                                <option value="Published">Opublikowany (Published)</option>
+                                <option value="Archived">Zarchiwizowany (Archived)</option>
+                            </select>
+                            <span asp-validation-for="Status" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6 mb-3 d-flex align-items-end">
+                            <label class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" asp-for="IsActive">
+                                <span class="form-check-label">Widoczny/Aktywny w systemie</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" asp-for="Description">Opis roboczy</label>
+                        <textarea asp-for="Description" class="form-control" rows="3"></textarea>
+                        <span asp-validation-for="Description" class="text-danger small"></span>
+                    </div>
+
+                    <div class="card-footer bg-transparent p-0 pt-3 d-flex justify-content-between">
+                        <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
+                        <button type="submit" class="btn btn-warning">Zapisz produkt</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}

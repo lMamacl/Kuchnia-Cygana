@@ -1,26 +1,33 @@
-﻿using System.Security.Claims;
 using AutoMapper;
 using KuchniaUCygana.Application.DTOs.Orders;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
+using KuchniaUCygana.Domain.Interfaces.Orders;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Stripe;
+using System.Security.Claims;
 
 namespace KuchniaUCygana.Web.Controllers;
 
 [Authorize]
 public sealed class CheckoutController : Controller
 {
+    private const string CartSessionKey = "cart";
+
     private readonly IOrderService orderService;
     private readonly ICheckoutService checkoutService;
     private readonly IAddressService addressService;
     private readonly IDiscountService discountService;
     private readonly ICartService cartService;
     private readonly IDeliveryWindowRepository deliveryWindowRepository;
+    private readonly IPaymentRepository paymentRepository;
+    private readonly IOrderRepository orderRepository;
+    private readonly IConfiguration configuration;
     private readonly IMapper mapper;
-
-    private const string CartSessionKey = "cart";
+    private readonly ILogger<CheckoutController> logger;
 
     public CheckoutController(
         IOrderService orderService,
@@ -29,7 +36,11 @@ public sealed class CheckoutController : Controller
         IDiscountService discountService,
         ICartService cartService,
         IDeliveryWindowRepository deliveryWindowRepository,
-        IMapper mapper)
+        IPaymentRepository paymentRepository,
+        IOrderRepository orderRepository,
+        IConfiguration configuration,
+        IMapper mapper,
+        ILogger<CheckoutController> logger)
     {
         this.orderService = orderService;
         this.checkoutService = checkoutService;
@@ -37,7 +48,11 @@ public sealed class CheckoutController : Controller
         this.discountService = discountService;
         this.cartService = cartService;
         this.deliveryWindowRepository = deliveryWindowRepository;
+        this.paymentRepository = paymentRepository;
+        this.orderRepository = orderRepository;
+        this.configuration = configuration;
         this.mapper = mapper;
+        this.logger = logger;
     }
 
     [HttpGet]
@@ -151,35 +166,182 @@ public sealed class CheckoutController : Controller
         return PartialView("_DiscountPartial", vm);
     }
 
-    [HttpPost]
-    public IActionResult ConfirmOrder(int orderId)
+    [HttpGet]
+    public async Task<IActionResult> ProcessPaymentResult(
+        string? payment_intent,
+        string? payment_intent_client_secret,
+        string? redirect_status)
     {
-        // integracja Stripe - TODO
-        return RedirectToAction("Payment", new { orderId });
+        // Stripe redirectuje na return_url metoda GET i dopina payment_intent w query stringu.
+        if (string.IsNullOrWhiteSpace(payment_intent))
+        {
+            TempData["ErrorMessage"] = "Stripe nie zwrocil identyfikatora platnosci.";
+            return RedirectToAction("Index", "Order");
+        }
+
+        var payment = await paymentRepository.GetByStripeIntentIdAsync(payment_intent);
+        if (payment is null)
+        {
+            TempData["ErrorMessage"] = "Nie znaleziono platnosci w systemie.";
+            return RedirectToAction("Index", "Order");
+        }
+
+        var order = await orderRepository.GetByIdAsync(payment.OrderId);
+        if (order is null || order.CustomerId != GetCurrentUserId())
+        {
+            return NotFound();
+        }
+
+        var isSuccess = await checkoutService.ConfirmPaymentAsync(payment_intent);
+        if (isSuccess)
+        {
+            return RedirectToAction("Success", new { orderId = payment.OrderId });
+        }
+
+        var failureMessage = string.Equals(redirect_status, "failed", StringComparison.OrdinalIgnoreCase)
+            ? "Platnosc zostala odrzucona przez operatora."
+            : "Platnosc nie zostala sfinalizowana.";
+
+        var canRetry = await checkoutService.HandlePaymentFailureAsync(payment_intent, failureMessage);
+        if (canRetry)
+        {
+            TempData["ErrorMessage"] = "Platnosc sie nie powiodla lub zostala przerwana. Sprobuj ponownie.";
+            return RedirectToAction("Payment", new { orderId = payment.OrderId });
+        }
+
+        TempData["ErrorMessage"] = "Zamowienie zostalo automatycznie anulowane po 3 nieudanych probach platnosci.";
+        return RedirectToAction("Details", "Order", new { orderId = payment.OrderId });
     }
 
-    [HttpGet]
-    public IActionResult Payment(int orderId)
+    [AcceptVerbs("GET", "POST")]
+    public async Task<IActionResult> Payment(int orderId)
     {
-        // integracja Stripe - TODO
-        ViewBag.OrderId = orderId;
-        return View();
+        return await BuildPaymentViewAsync(orderId);
     }
 
     [AllowAnonymous]
     [HttpPost]
     [IgnoreAntiforgeryToken]
-    public IActionResult StripeWebhook()
+    public async Task<IActionResult> StripeWebhook()
     {
-        // integracja Stripe - TODO
-        return Ok();
+        var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync();
+        var stripeSignature = Request.Headers["Stripe-Signature"].FirstOrDefault();
+        var webhookSecret = GetStripeWebhookSecret();
+
+        if (string.IsNullOrWhiteSpace(webhookSecret) || string.IsNullOrWhiteSpace(stripeSignature))
+        {
+            return BadRequest("Brak konfiguracji Stripe WebhookSecret albo naglowka Stripe-Signature.");
+        }
+
+        try
+        {
+            // Bezpieczna weryfikacja podpisu pochodzacego ze Stripe
+            var stripeEvent = EventUtility.ConstructEvent(json, stripeSignature, webhookSecret);
+
+            if (stripeEvent.Type == "payment_intent.succeeded")
+            {
+                var paymentIntent = stripeEvent.Data.Object as PaymentIntent;
+                if (paymentIntent is not null)
+                {
+                    await checkoutService.ConfirmPaymentAsync(paymentIntent.Id);
+                }
+            }
+            else if (stripeEvent.Type == "payment_intent.payment_failed")
+            {
+                var paymentIntent = stripeEvent.Data.Object as PaymentIntent;
+                if (paymentIntent is not null)
+                {
+                    var errorMsg = paymentIntent.LastPaymentError?.Message ?? "Blad platnosci zarejestrowany przez webhook.";
+                    await checkoutService.HandlePaymentFailureAsync(paymentIntent.Id, errorMsg);
+                }
+            }
+
+            return Ok();
+        }
+        catch (StripeException ex)
+        {
+            logger.LogWarning(ex, "Stripe webhook signature verification failed.");
+            return BadRequest($"Blad webhooka: {ex.Message}");
+        }
     }
 
     [HttpGet]
-    public IActionResult Success(int orderId, string orderNumber)
+    public async Task<IActionResult> Success(int orderId)
     {
-        ViewBag.OrderNumber = orderNumber;
-        return View();
+        var order = await orderRepository.GetByIdAsync(orderId);
+        if (order is null || order.CustomerId != GetCurrentUserId())
+        {
+            return NotFound();
+        }
+
+        // Po udanym procesie czyscimy koszyk z sesji klienta B2C
+        HttpContext.Session.Remove(CartSessionKey);
+
+        return View(order);
+    }
+
+    private async Task<IActionResult> BuildPaymentViewAsync(int orderId)
+    {
+        var userId = GetCurrentUserId();
+        var order = await orderRepository.GetByIdAsync(orderId);
+        if (order is null || order.CustomerId != userId)
+        {
+            return NotFound("Zamowienie nie istnieje.");
+        }
+
+        if (order.Status == OrderStatus.Paid)
+        {
+            return RedirectToAction("Success", new { orderId });
+        }
+
+        if (order.Status == OrderStatus.Cancelled)
+        {
+            TempData["Error"] = "Nie mozna oplacic anulowanego zamowienia.";
+            return RedirectToAction("Details", "Order", new { orderId });
+        }
+
+        try
+        {
+            var publishableKey = GetStripePublishableKey();
+            if (string.IsNullOrWhiteSpace(publishableKey))
+            {
+                throw new InvalidOperationException("Brakuje konfiguracji Stripe:PublishableKey.");
+            }
+
+            // Zapis w DB jako Pending, status zamowienia = PendingPayment
+            var clientSecret = await checkoutService.InitiatePaymentAsync(orderId, userId);
+
+            var vm = new PaymentViewModel
+            {
+                OrderId = orderId,
+                OrderNumber = order.OrderNumber,
+                FinalPrice = order.FinalPrice,
+                StripeClientSecret = clientSecret,
+                StripePublishableKey = publishableKey,
+            };
+
+            return View("Payment", vm);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to initialize payment for order {OrderId}.", orderId);
+            TempData["ErrorMessage"] = $"Nie udalo sie zainicjowac platnosci: {ex.Message}";
+            return RedirectToAction("Summary", new { orderId });
+        }
+    }
+
+    private string GetStripePublishableKey()
+    {
+        return configuration["Stripe:PublishableKey"]
+            ?? Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE")
+            ?? string.Empty;
+    }
+
+    private string GetStripeWebhookSecret()
+    {
+        return configuration["Stripe:WebhookSecret"]
+            ?? Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET")
+            ?? string.Empty;
     }
 
     private int GetCurrentUserId()

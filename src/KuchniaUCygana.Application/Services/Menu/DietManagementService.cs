@@ -10,15 +10,18 @@ public sealed class DietManagementService : IDietManagementService
 {
     private readonly IDietRepository dietRepository;
     private readonly IDietVariantRepository dietVariantRepository;
+    private readonly IDietVariantMealRepository dietVariantMealRepository;
     private readonly IMapper mapper;
 
     public DietManagementService(
         IDietRepository dietRepository,
         IDietVariantRepository dietVariantRepository,
+        IDietVariantMealRepository dietVariantMealRepository,
         IMapper mapper)
     {
         this.dietRepository = dietRepository;
         this.dietVariantRepository = dietVariantRepository;
+        this.dietVariantMealRepository = dietVariantMealRepository;
         this.mapper = mapper;
     }
 
@@ -49,7 +52,7 @@ public sealed class DietManagementService : IDietManagementService
     public async Task<DietDto> CreateDietAsync(CreateDietRequest request)
     {
         var diet = new Diet { Name = request.Name, Description = request.Description };
-        await this.dietRepository.InsertAsync(diet);
+        diet.Id = await this.dietRepository.InsertAsync(diet);
         foreach (var v in request.Variants)
         {
             var variant = new DietVariant
@@ -60,7 +63,7 @@ public sealed class DietManagementService : IDietManagementService
                 PriceMultiplier = v.PriceMultiplier,
                 IsDefault = v.IsDefault
             };
-            await this.dietVariantRepository.InsertAsync(variant);
+            variant.Id = await this.dietVariantRepository.InsertAsync(variant);
         }
         return await this.GetDietAsync(diet.Id) ?? throw new InvalidOperationException();
     }
@@ -77,13 +80,32 @@ public sealed class DietManagementService : IDietManagementService
     {
         var variant = this.mapper.Map<DietVariant>(request);
         variant.DietId = dietId;
-        await this.dietVariantRepository.InsertAsync(variant);
+        variant.Id = await this.dietVariantRepository.InsertAsync(variant);
     }
 
     public async Task AssignMealToVariantAsync(int variantId, int mealId, decimal multiplier, int sortOrder)
     {
-        // Implementacja wymaga repozytorium DietVariantMeal, które nie ma interfejsu, więc użyjemy IDbConnectionFactory.
-        // Dla uproszczenia pomijam – do pełnej implementacji w Etapie G/H.
-        await Task.CompletedTask;
+        if (variantId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(variantId), "Wariant diety jest wymagany.");
+        }
+
+        if (mealId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(mealId), "Posiłek jest wymagany.");
+        }
+
+        if (multiplier <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(multiplier), "Mnożnik porcji musi być większy od zera.");
+        }
+
+        await this.dietVariantMealRepository.UpsertAsync(new DietVariantMeal
+        {
+            DietVariantId = variantId,
+            MealId = mealId,
+            ServingSizeMultiplier = multiplier,
+            SortOrder = sortOrder,
+        });
     }
 }

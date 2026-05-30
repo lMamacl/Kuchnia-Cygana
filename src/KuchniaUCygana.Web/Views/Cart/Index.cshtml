@@ -1,15 +1,63 @@
-﻿@model KuchniaUCygana.Application.DTOs.Orders.CartDto
+@model KuchniaUCygana.Application.DTOs.Orders.CartDto
 @{
     ViewData["Title"] = "Koszyk";
 }
 
-<h2 class="mb-4">Koszyk</h2>
+<style>
+    .cart-shell {
+        color: #17211b;
+    }
 
-@if (TempData["Error"] is string err)
-{
-    <div class="alert alert-warning">@err</div>
-}
+    .cart-hero {
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 24px;
+        background:
+            linear-gradient(135deg, rgba(237, 248, 239, .94), rgba(255, 248, 234, .96)),
+            url('@Url.Content("~/img/baked_salmon.png")') right center/contain no-repeat;
+        box-shadow: 0 16px 45px rgba(23, 33, 27, .08);
+    }
 
-<div id="cart-contents">
-    <partial name="_CartItems" model="Model" />
+    .cart-card {
+        overflow: hidden;
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 24px;
+        background: #fff;
+        box-shadow: 0 18px 50px rgba(23, 33, 27, .09);
+    }
+
+    .cart-table thead th {
+        color: #68756d;
+        font-size: .78rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+
+    .cart-total {
+        background: #f7fbf7;
+    }
+
+    .cart-empty {
+        border: 1px dashed rgba(31, 122, 77, .3);
+        border-radius: 24px;
+        background: #fff;
+    }
+</style>
+
+<div class="cart-shell">
+    <div class="cart-hero p-4 p-md-5 mb-4">
+        <div class="col-lg-7">
+            <div class="text-success small fw-bold text-uppercase mb-2">Twoje zamówienie</div>
+            <h1 class="fw-bold mb-2">Koszyk</h1>
+            <p class="text-muted mb-0">Sprawdź pozycje przed wyborem adresu, terminu i płatności.</p>
+        </div>
+    </div>
+
+    @if (TempData["Error"] is string err)
+    {
+        <div class="alert alert-warning border-0 shadow-sm">@err</div>
+    }
+
+    <div id="cart-contents">
+        <partial name="_CartItems" model="Model" />
+    </div>
 </div>

@@ -1,7 +1,7 @@
-@model KuchniaUCygana.Application.DTOs.Menu.IngredientDto
+@model KuchniaUCygana.Domain.Entities.Menu.Category
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Edycja składnika";
+    ViewData["Title"] = "Edycja kategorii";
     ViewData["Section"] = "Katalog Menu";
 }
 
@@ -13,7 +13,7 @@
                 <form asp-action="Edit" asp-route-id="@Model.Id" method="post">
                     @Html.AntiForgeryToken()
                     <input type="hidden" asp-for="Id" />
-                    <partial name="_IngredientForm" model="Model" />
+                    <partial name="_CategoryForm" model="Model" />
                     <div class="d-flex justify-content-between">
                         <a asp-action="Index" class="btn btn-outline-secondary">Powrót</a>
                         <button type="submit" class="btn btn-warning">Zapisz</button>
