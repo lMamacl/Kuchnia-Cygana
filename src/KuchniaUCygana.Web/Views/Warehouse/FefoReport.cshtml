@@ -56,6 +56,9 @@
     <!-- Opcje Filtrowania d-print-none -->
     <div class="card card-premium d-print-none mb-4">
         <div class="card-body py-3">
+            <div class="alert alert-info py-2 mb-3">
+                Eksport CSV/PDF pobiera cały wynik dla bieżących filtrów. Przy dużej bazie zawęź wyszukiwanie lub status przed eksportem.
+            </div>
             <form id="fefo-filter-form"
                   hx-get="/warehouse/fefo-report"
                   hx-target="#fefo-table-container"

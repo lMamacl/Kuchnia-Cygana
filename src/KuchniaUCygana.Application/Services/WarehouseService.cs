@@ -174,9 +174,9 @@ public sealed class WarehouseService : IWarehouseService
     }
 
     /// <inheritdoc/>
-    public async Task<IEnumerable<InventoryAlertDto>> GetSmartAlertsAsync()
+    public async Task<IEnumerable<InventoryAlertDto>> GetSmartAlertsAsync(int? limit = null)
     {
-        var alerts = await _inventoryAnalyzer.AnalyzeAsync();
+        var alerts = await _inventoryAnalyzer.AnalyzeAsync(limit);
         return _mapper.Map<IEnumerable<InventoryAlertDto>>(alerts);
     }
 

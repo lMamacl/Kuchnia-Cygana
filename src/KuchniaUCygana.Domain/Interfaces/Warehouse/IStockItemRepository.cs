@@ -36,7 +36,7 @@ public interface IStockItemRepository : IRepository<StockItem>
 
     Task<StockItemStockRow?> GetStockLookupByIdAsync(int stockItemId);
 
-    Task<IEnumerable<SmartInventoryAlertRow>> GetSmartInventoryAlertRowsAsync(DateTimeOffset now);
+    Task<IEnumerable<SmartInventoryAlertRow>> GetSmartInventoryAlertRowsAsync(DateTimeOffset now, int? limit = null);
 }
 
 /// <summary>

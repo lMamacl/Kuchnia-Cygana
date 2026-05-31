@@ -45,17 +45,46 @@ public sealed class DeliveryRouteRepository : BaseRepository<DeliveryRoute>, IDe
 
 
     public async Task<List<DeliveryRoute>> GetRoutesWithStopsAsync(DateTimeOffset date)
-{
-    using var db = Factory.CreateConnection();
-    var sqlRoutes = "SELECT * FROM [DeliveryRoutes] WHERE CAST([RouteDate] AS DATE) = CAST(@Date AS DATE) AND [IsDeleted] = 0";
-    var routes = (await db.QueryAsync<DeliveryRoute>(sqlRoutes, new { Date = date.Date })).ToList();
-    
-    foreach (var route in routes)
     {
-        var sqlStops = "SELECT * FROM [DeliveryRouteStops] WHERE [RouteId] = @RouteId AND [IsDeleted] = 0 ORDER BY [SequenceNumber]";
-        var stops = await db.QueryAsync<DeliveryRouteStop>(sqlStops, new { RouteId = route.Id });
-        route.Stops = stops.ToList();
+        using var db = Factory.CreateConnection();
+        var from = date.Date;
+        var to = from.AddDays(1);
+        const string sqlRoutes = """
+            SELECT *
+            FROM [DeliveryRoutes]
+            WHERE [RouteDate] >= @From
+              AND [RouteDate] < @To
+              AND [IsDeleted] = 0
+            ORDER BY [Id];
+            """;
+        var routes = (await db.QueryAsync<DeliveryRoute>(sqlRoutes, new { From = from, To = to })).ToList();
+
+        if (routes.Count == 0)
+        {
+            return routes;
+        }
+
+        const string sqlStops = """
+            SELECT *
+            FROM [DeliveryRouteStops]
+            WHERE [RouteId] IN @RouteIds
+              AND [IsDeleted] = 0
+            ORDER BY [RouteId], [SequenceNumber];
+            """;
+        var stops = (await db.QueryAsync<DeliveryRouteStop>(
+            sqlStops,
+            new { RouteIds = routes.Select(route => route.Id).ToArray() })).ToList();
+        var stopsByRoute = stops
+            .GroupBy(stop => stop.RouteId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        foreach (var route in routes)
+        {
+            route.Stops = stopsByRoute.TryGetValue(route.Id, out var routeStops)
+                ? routeStops
+                : new List<DeliveryRouteStop>();
+        }
+
+        return routes;
     }
-    return routes;
-}
 }

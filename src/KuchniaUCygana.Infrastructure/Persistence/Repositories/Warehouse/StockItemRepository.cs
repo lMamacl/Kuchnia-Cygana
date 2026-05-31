@@ -209,12 +209,13 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
             new { stockItemId, search = (string?)null });
     }
 
-    public async Task<IEnumerable<SmartInventoryAlertRow>> GetSmartInventoryAlertRowsAsync(DateTimeOffset now)
+    public async Task<IEnumerable<SmartInventoryAlertRow>> GetSmartInventoryAlertRowsAsync(DateTimeOffset now, int? limit = null)
     {
         using var db = _connectionFactory.CreateConnection();
 
         var nowUtc = now.UtcDateTime;
         var cutoffUtc = now.UtcDateTime.AddDays(7);
+        var safeLimit = limit.HasValue ? Math.Clamp(limit.Value, 1, 500) : int.MaxValue;
 
         return await db.QueryAsync<SmartInventoryAlertRow>(
             """
@@ -236,50 +237,65 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
                     SUM(b.[CurrentQuantity]) AS [CurrentQuantity]
                 FROM ActiveBatches b
                 GROUP BY b.[StockItemId]
+            ),
+            AlertRows AS (
+                SELECT
+                    si.[Id] AS [StockItemId],
+                    si.[Name] AS [StockItemName],
+                    CAST(NULL AS nvarchar(50)) AS [SupplierBatchNumber],
+                    si.[WarehouseCategoryId] AS [CategoryId],
+                    wc.[Name] AS [Category],
+                    CASE WHEN COALESCE(t.[CurrentQuantity], 0) <= 0 THEN N'NoStock' ELSE N'BelowMinimum' END AS [AlertCode],
+                    COALESCE(t.[CurrentQuantity], 0) AS [CurrentQuantity],
+                    si.[MinimumLevel],
+                    CAST(NULL AS datetimeoffset) AS [EarliestExpiry],
+                    CAST(NULL AS int) AS [DaysUntilExpiry]
+                FROM [StockItems] si
+                INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
+                LEFT JOIN StockTotals t ON t.[StockItemId] = si.[Id]
+                WHERE si.[IsDeleted] = 0
+                  AND si.[MinimumLevel] > 0
+                  AND COALESCE(t.[CurrentQuantity], 0) < si.[MinimumLevel]
+
+                UNION ALL
+
+                SELECT
+                    si.[Id] AS [StockItemId],
+                    si.[Name] AS [StockItemName],
+                    b.[SupplierBatchNumber],
+                    si.[WarehouseCategoryId] AS [CategoryId],
+                    wc.[Name] AS [Category],
+                    CASE
+                        WHEN b.[ExpiryDate] <= @nowUtc THEN N'Expired'
+                        WHEN DATEDIFF(day, @nowUtc, b.[ExpiryDate]) <= 3 THEN N'ExpiringWithin3Days'
+                        ELSE N'ExpiringWithin7Days'
+                    END AS [AlertCode],
+                    b.[CurrentQuantity],
+                    CAST(NULL AS decimal(18, 2)) AS [MinimumLevel],
+                    b.[ExpiryDate] AS [EarliestExpiry],
+                    DATEDIFF(day, @nowUtc, b.[ExpiryDate]) AS [DaysUntilExpiry]
+                FROM ActiveBatches b
+                INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId] AND si.[IsDeleted] = 0
+                INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
+                WHERE b.[ExpiryDate] IS NOT NULL
+                  AND b.[ExpiryDate] <= @cutoffUtc
             )
             SELECT
-                si.[Id] AS [StockItemId],
-                si.[Name] AS [StockItemName],
-                CAST(NULL AS nvarchar(50)) AS [SupplierBatchNumber],
-                si.[WarehouseCategoryId] AS [CategoryId],
-                wc.[Name] AS [Category],
-                CASE WHEN COALESCE(t.[CurrentQuantity], 0) <= 0 THEN N'NoStock' ELSE N'BelowMinimum' END AS [AlertCode],
-                COALESCE(t.[CurrentQuantity], 0) AS [CurrentQuantity],
-                si.[MinimumLevel],
-                CAST(NULL AS datetimeoffset) AS [EarliestExpiry],
-                CAST(NULL AS int) AS [DaysUntilExpiry]
-            FROM [StockItems] si
-            INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
-            LEFT JOIN StockTotals t ON t.[StockItemId] = si.[Id]
-            WHERE si.[IsDeleted] = 0
-              AND si.[MinimumLevel] > 0
-              AND COALESCE(t.[CurrentQuantity], 0) < si.[MinimumLevel]
-
-            UNION ALL
-
-            SELECT
-                si.[Id] AS [StockItemId],
-                si.[Name] AS [StockItemName],
-                b.[SupplierBatchNumber],
-                si.[WarehouseCategoryId] AS [CategoryId],
-                wc.[Name] AS [Category],
-                CASE
-                    WHEN b.[ExpiryDate] <= @nowUtc THEN N'Expired'
-                    WHEN DATEDIFF(day, @nowUtc, b.[ExpiryDate]) <= 3 THEN N'ExpiringWithin3Days'
-                    ELSE N'ExpiringWithin7Days'
-                END AS [AlertCode],
-                b.[CurrentQuantity],
-                CAST(NULL AS decimal(18, 2)) AS [MinimumLevel],
-                b.[ExpiryDate] AS [EarliestExpiry],
-                DATEDIFF(day, @nowUtc, b.[ExpiryDate]) AS [DaysUntilExpiry]
-            FROM ActiveBatches b
-            INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId] AND si.[IsDeleted] = 0
-            INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
-            WHERE b.[ExpiryDate] IS NOT NULL
-              AND b.[ExpiryDate] <= @cutoffUtc
+                TOP (@limit)
+                [StockItemId],
+                [StockItemName],
+                [SupplierBatchNumber],
+                [CategoryId],
+                [Category],
+                [AlertCode],
+                [CurrentQuantity],
+                [MinimumLevel],
+                [EarliestExpiry],
+                [DaysUntilExpiry]
+            FROM AlertRows
             ORDER BY [AlertCode], [DaysUntilExpiry], [StockItemName];
             """,
-            new { nowUtc, cutoffUtc });
+            new { nowUtc, cutoffUtc, limit = safeLimit });
     }
 
     private const string StockRowsCte = """

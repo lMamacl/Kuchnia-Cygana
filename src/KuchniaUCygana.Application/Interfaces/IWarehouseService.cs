@@ -15,7 +15,7 @@ public interface IWarehouseService
 
     Task PerformBatchInventoryAsync(IEnumerable<BatchInventoryAdjustment> adjustments);
 
-    Task<IEnumerable<InventoryAlertDto>> GetSmartAlertsAsync();
+    Task<IEnumerable<InventoryAlertDto>> GetSmartAlertsAsync(int? limit = null);
 
     Task<IEnumerable<StockItemDto>> GetStockOverviewAsync();
 

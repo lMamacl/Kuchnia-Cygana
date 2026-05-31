@@ -18,15 +18,18 @@ public sealed class LogisticsDeliveryDataProvider : ILogisticsDeliveryDataProvid
         decimal defaultDeliveryLoadKg = 1m)
     {
         using var db = _connectionFactory.CreateConnection();
+        var from = deliveryDate.Date;
+        var to = from.AddDays(1);
         var deliveries = await db.QueryAsync<LogisticsDeliveryCandidate>(
             BaseSql + @"
-            WHERE CAST(dc.[DeliveryDate] AS date) = CAST(@DeliveryDate AS date)
+            WHERE dc.[DeliveryDate] >= @From
+              AND dc.[DeliveryDate] < @To
               AND dc.[IsSkipped] = 0
               AND dc.[IsDeleted] = 0
               AND o.[IsDeleted] = 0
               AND a.[IsDeleted] = 0
             " + GroupBySql,
-            new { DeliveryDate = deliveryDate.Date, DefaultDeliveryLoadKg = defaultDeliveryLoadKg });
+            new { From = from, To = to, DefaultDeliveryLoadKg = defaultDeliveryLoadKg });
 
         return deliveries.ToList();
     }

@@ -58,9 +58,9 @@ public sealed class SmartInventoryAnalyzer
     /// <summary>
     /// Generuje pełną listę alertów: poniżej minimum + przeterminowane + bliskie przeterminowania.
     /// </summary>
-    public async Task<IReadOnlyList<InventoryAlert>> AnalyzeAsync()
+    public async Task<IReadOnlyList<InventoryAlert>> AnalyzeAsync(int? limit = null)
     {
-        var rows = await _stockItemRepository.GetSmartInventoryAlertRowsAsync(DateTimeOffset.UtcNow);
+        var rows = await _stockItemRepository.GetSmartInventoryAlertRowsAsync(DateTimeOffset.UtcNow, limit);
         var alerts = new List<InventoryAlert>();
 
         foreach (var row in rows)

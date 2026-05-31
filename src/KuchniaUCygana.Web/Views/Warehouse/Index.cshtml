@@ -52,7 +52,7 @@
                     </div>
                 </div>
                 <div class="h1 mb-2 mt-1 text-danger">@alerts.Count</div>
-                <div class="text-secondary small">Wymaga natychmiastowej reakcji</div>
+                <div class="text-secondary small">Najważniejsze alerty na pulpicie</div>
             </div>
         </div>
     </div>
@@ -86,14 +86,14 @@
                             Alerty (@alerts.Count)
                         </button>
                         <div class="dropdown-menu dropdown-menu-end p-2 shadow-lg" aria-labelledby="alertsDropdown" style="width: 400px; max-height: 400px; overflow-y: auto; z-index: 1060;">
-                            <h6 class="dropdown-header text-danger font-weight-bold fw-bold mb-2">Inteligentne Alerty (maks. 15)</h6>
+                            <h6 class="dropdown-header text-danger font-weight-bold fw-bold mb-2">Inteligentne alerty (maks. 15)</h6>
                             @if (!alerts.Any())
                             {
                                 <div class="text-muted p-3 text-center">Wszystkie zapasy w normie. Brak alertów.</div>
                             }
                             else
                             {
-                                foreach (var alert in alerts.Take(15))
+                                foreach (var alert in alerts)
                                 {
                                     var isDanger = alert.AlertType == "LOW_STOCK" || (alert.DaysUntilExpiry.HasValue && alert.DaysUntilExpiry <= 3);
                                     <button type="button" class="dropdown-item d-flex align-items-start gap-2 p-2 rounded mb-1 text-wrap border-0"

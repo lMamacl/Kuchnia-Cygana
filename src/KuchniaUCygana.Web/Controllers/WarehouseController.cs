@@ -47,7 +47,7 @@ public sealed class WarehouseController : Controller
     [HttpGet("")]
     public async Task<IActionResult> Index()
     {
-        var alerts = await warehouseService.GetSmartAlertsAsync();
+        var alerts = await warehouseService.GetSmartAlertsAsync(limit: 15);
 
         var filter = new StockTableFilterDto { Page = 1, PageSize = 15 };
         var stockPage = await warehouseService.GetStockTablePageAsync(filter);
@@ -85,7 +85,7 @@ public sealed class WarehouseController : Controller
     [HttpGet("alerts")]
     public async Task<IActionResult> Alerts()
     {
-        var alerts = await warehouseService.GetSmartAlertsAsync();
+        var alerts = await warehouseService.GetSmartAlertsAsync(limit: 100);
         return PartialView("_AlertsPartial", alerts);
     }
 
