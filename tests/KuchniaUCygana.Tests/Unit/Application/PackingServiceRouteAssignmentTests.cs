@@ -24,11 +24,15 @@ public sealed class PackingServiceRouteAssignmentTests
         var date = new DateOnly(2035, 6, 1);
         var sessionRepository = new InMemoryPackingSessionRepository();
         var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
         var service = CreateService(
             sessionRepository,
             bagRepository,
             new ReorderedRouteManifestProvider(),
-            new CalendarAwareOrderProvider(date));
+            new CalendarAwareOrderProvider(date),
+            itemRepository);
+        await CreateSessionWithItemAsync(date, sessionRepository, bagRepository, itemRepository, PackingItemStatus.Pending, deliveryCalendarId: 100, orderId: 1);
+        await CreateSessionWithItemAsync(date, sessionRepository, bagRepository, itemRepository, PackingItemStatus.Pending, deliveryCalendarId: 200, orderId: 2);
 
         var board = await service.GetPackingBoardAsync(date);
 
@@ -218,11 +222,168 @@ public sealed class PackingServiceRouteAssignmentTests
             .WithMessage("*Powód redruku*");
     }
 
+    [Fact]
+    public async Task GenerateMissingTransportLabelsForRouteAsync_RejectsRouteWithUnpackedBag()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository);
+        await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.FoilPrinted);
+
+        var act = async () => await service.GenerateMissingTransportLabelsForRouteAsync(date, 7);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*spakowaniu wszystkich toreb*");
+    }
+
+    [Fact]
+    public async Task GenerateMissingTransportLabelsForRouteAsync_CreatesOnlyMissingLabels()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            labelRepository);
+        var (sessionOne, bagOne, _) = await CreatePackedSessionAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            deliveryCalendarId: 100,
+            orderId: 1);
+        await CreatePackedSessionAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            deliveryCalendarId: 200,
+            orderId: 2);
+        await labelRepository.InsertAsync(new PackingLabel
+        {
+            PackingSessionId = sessionOne.Id,
+            PackingBagId = bagOne.Id,
+            LabelType = LabelType.Shipping,
+            QrCode = "https://test.local/delivery/verify/existing",
+            PrintNumber = 1,
+            PrintedAt = DateTimeOffset.UtcNow,
+        });
+
+        var labels = await service.GenerateMissingTransportLabelsForRouteAsync(date, 7);
+
+        labels.Should().HaveCount(2);
+        var stored = (await labelRepository.GetAllAsync()).ToList();
+        stored.Should().HaveCount(2);
+        stored.Count(label => label.PackingBagId == bagOne.Id).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ConfirmTransportLabelAttachedAsync_RejectsOlderPrintAndConfirmsLatest()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            labelRepository);
+        var (session, bag, _) = await CreatePackedSessionAsync(date, sessionRepository, bagRepository, itemRepository);
+        var oldLabelId = await labelRepository.InsertAsync(new PackingLabel
+        {
+            PackingSessionId = session.Id,
+            PackingBagId = bag.Id,
+            LabelType = LabelType.Shipping,
+            QrCode = "https://test.local/delivery/verify/old",
+            PrintNumber = 1,
+        });
+        var latestLabelId = await labelRepository.InsertAsync(new PackingLabel
+        {
+            PackingSessionId = session.Id,
+            PackingBagId = bag.Id,
+            LabelType = LabelType.Shipping,
+            QrCode = "https://test.local/delivery/verify/latest",
+            PrintNumber = 2,
+        });
+
+        var oldAct = async () => await service.ConfirmTransportLabelAttachedAsync(oldLabelId);
+        await oldAct.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*najnowszej etykiety*");
+
+        var latest = await service.ConfirmTransportLabelAttachedAsync(latestLabelId);
+
+        latest.IsAttached.Should().BeTrue();
+        var storedLatest = await labelRepository.GetByIdAsync(latestLabelId);
+        storedLatest!.AttachedAt.Should().NotBeNull();
+        storedLatest.AttachedByUserId.Should().Be(7);
+        storedLatest.AttachedBy.Should().Be("test-user");
+    }
+
+    [Fact]
+    public async Task GenerateTransportLabelsAsync_ReprintStartsAsNotAttached()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            labelRepository);
+        var (session, bag, _) = await CreatePackedSessionAsync(date, sessionRepository, bagRepository, itemRepository);
+        await labelRepository.InsertAsync(new PackingLabel
+        {
+            PackingSessionId = session.Id,
+            PackingBagId = bag.Id,
+            LabelType = LabelType.Shipping,
+            QrCode = "https://test.local/delivery/verify/attached",
+            PrintNumber = 1,
+            AttachedAt = DateTimeOffset.UtcNow,
+            AttachedBy = "packer",
+        });
+
+        var labels = (await service.GenerateTransportLabelsAsync(session.Id, "Druk uszkodzony", forceNewPrint: true)).ToList();
+
+        labels.Should().ContainSingle();
+        labels.Single().PrintNumber.Should().Be(2);
+        labels.Single().IsAttached.Should().BeFalse();
+        var latest = (await labelRepository.GetAllAsync()).OrderByDescending(label => label.PrintNumber).First();
+        latest.AttachedAt.Should().BeNull();
+    }
+
     private static async Task<(PackingSession Session, PackingBag Bag, PackingItem Item)> CreatePackedSessionAsync(
         DateOnly date,
         InMemoryPackingSessionRepository sessionRepository,
         InMemoryPackingBagRepository bagRepository,
-        InMemoryRepository<PackingItem> itemRepository)
+        InMemoryRepository<PackingItem> itemRepository,
+        int deliveryCalendarId = 100,
+        int orderId = 1)
     {
         return await CreateSessionWithItemAsync(
             date,
@@ -231,7 +392,9 @@ public sealed class PackingServiceRouteAssignmentTests
             itemRepository,
             PackingItemStatus.Packed,
             PackingStatus.Packed,
-            PackingBagStatus.Packed);
+            PackingBagStatus.Packed,
+            deliveryCalendarId,
+            orderId);
     }
 
     private static async Task<(PackingSession Session, PackingBag Bag, PackingItem Item)> CreateSessionWithItemAsync(
@@ -241,15 +404,17 @@ public sealed class PackingServiceRouteAssignmentTests
         InMemoryRepository<PackingItem> itemRepository,
         PackingItemStatus itemStatus,
         PackingStatus sessionStatus = PackingStatus.Pending,
-        PackingBagStatus bagStatus = PackingBagStatus.Pending)
+        PackingBagStatus bagStatus = PackingBagStatus.Pending,
+        int deliveryCalendarId = 100,
+        int orderId = 1)
     {
         var session = new PackingSession
         {
             PackingDate = date,
-            OrderId = 1,
-            DeliveryCalendarId = 100,
-            ClientName = "Klient 1",
-            ClientPublicId = "TEST0001",
+            OrderId = orderId,
+            DeliveryCalendarId = deliveryCalendarId,
+            ClientName = $"Klient {orderId}",
+            ClientPublicId = $"TEST{orderId:D4}",
             Status = sessionStatus,
         };
         session.Id = await sessionRepository.InsertAsync(session);
@@ -515,6 +680,12 @@ public sealed class PackingServiceRouteAssignmentTests
         public Task<IEnumerable<PackingBag>> GetBySessionIdAsync(int packingSessionId)
         {
             return Task.FromResult(this.Entities.Where(b => b.PackingSessionId == packingSessionId));
+        }
+
+        public Task<IReadOnlyList<PackingBag>> GetBySessionIdsAsync(IEnumerable<int> packingSessionIds)
+        {
+            var ids = packingSessionIds.ToHashSet();
+            return Task.FromResult<IReadOnlyList<PackingBag>>(this.Entities.Where(b => ids.Contains(b.PackingSessionId)).ToList());
         }
 
         public Task<PackingBag?> GetByCodeAsync(string bagCode)

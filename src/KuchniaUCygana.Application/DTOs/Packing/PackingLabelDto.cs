@@ -60,5 +60,11 @@ public sealed class PackingLabelDto
 
     public string? PrintedBy { get; set; }
 
+    public bool IsAttached { get; set; }
+
+    public DateTimeOffset? AttachedAt { get; set; }
+
+    public string? AttachedBy { get; set; }
+
     public string? LabelDataJson { get; set; }
 }

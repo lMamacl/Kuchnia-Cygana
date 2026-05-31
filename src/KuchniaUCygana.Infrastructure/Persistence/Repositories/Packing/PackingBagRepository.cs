@@ -26,6 +26,28 @@ public sealed class PackingBagRepository : BaseRepository<PackingBag>, IPackingB
             new { packingSessionId });
     }
 
+    public async Task<IReadOnlyList<PackingBag>> GetBySessionIdsAsync(IEnumerable<int> packingSessionIds)
+    {
+        var ids = packingSessionIds.Where(id => id > 0).Distinct().ToArray();
+        if (ids.Length == 0)
+        {
+            return Array.Empty<PackingBag>();
+        }
+
+        using var db = Factory.CreateConnection();
+        var bags = await db.QueryAsync<PackingBag>(
+            """
+            SELECT *
+            FROM PackingBags
+            WHERE PackingSessionId IN @ids
+              AND IsDeleted = 0
+            ORDER BY PackingSessionId, BagNumber, Id;
+            """,
+            new { ids });
+
+        return bags.ToList();
+    }
+
     public async Task<PackingBag?> GetByCodeAsync(string bagCode)
     {
         using var db = Factory.CreateConnection();

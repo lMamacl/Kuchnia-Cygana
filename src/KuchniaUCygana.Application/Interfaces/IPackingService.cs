@@ -11,8 +11,6 @@ public interface IPackingService
 
     Task<PackingSessionDto> StartPackingSessionAsync(DateOnly date, string packedBy);
 
-    Task<PackingItemDto> PackClientDietAsync(int sessionId, int orderId);
-
     Task<IEnumerable<PackingItemDto>> PrepareOrderBoxesAsync(int packingSessionId);
 
     Task MarkBoxPackedAsync(int packingItemId, string packedBy);
@@ -30,13 +28,28 @@ public interface IPackingService
         string? reprintReason = null,
         bool forceNewPrint = false);
 
+    Task<IEnumerable<PackingLabelDto>> GenerateTransportLabelsForBagAsync(
+        int packingBagId,
+        string? reprintReason = null,
+        bool forceNewPrint = false);
+
     Task<IEnumerable<PackingLabelDto>> GenerateLabelsAsync(int sessionId);
+
+    Task<IEnumerable<PackingLabelDto>> GetTransportLabelsForSessionAsync(int sessionId);
+
+    Task<IEnumerable<PackingLabelDto>> GetTransportLabelsForRouteAsync(DateOnly date, int routeId);
 
     Task<IEnumerable<PackingLabelDto>> GetTransportLabelsForDeliveryAsync(
         DateOnly date,
         int routeId,
         string? reprintReason = null,
         bool forceNewPrint = false);
+
+    Task<IReadOnlyList<PackingLabelDto>> GenerateMissingTransportLabelsForRouteAsync(DateOnly date, int routeId);
+
+    Task<PackingLabelDto> ConfirmTransportLabelAttachedAsync(int labelId);
+
+    Task<int> ConfirmTransportLabelsAttachedAsync(IReadOnlyCollection<int> labelIds);
 
     Task<IEnumerable<PackingSessionDto>> GetSessionsByDateAsync(DateOnly date);
 
@@ -48,4 +61,6 @@ public interface IPackingService
         int packingItemId,
         string operatorName,
         string? reprintReason = null);
+
+    Task<PackingLabelDto?> GetLatestFoilLabelAsync(int packingItemId);
 }

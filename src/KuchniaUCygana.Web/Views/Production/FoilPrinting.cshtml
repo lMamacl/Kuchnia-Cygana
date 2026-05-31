@@ -56,10 +56,14 @@
                                aria-label="Filtruj po dacie" />
                     </div>
                     <div class="col-auto">
-                        <button type="button" id="btn-print-selected" class="btn btn-indigo" disabled>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
-                            Drukuj zaznaczone (<span id="selected-count">0</span>)
-                        </button>
+                        <form asp-action="FoilLabelsBulk" method="post" target="_blank" id="bulk-print-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="ids" id="bulk-print-ids" />
+                            <button type="submit" id="btn-print-selected" class="btn btn-indigo" disabled>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
+                                Drukuj zaznaczone (<span id="selected-count">0</span>)
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -108,7 +112,7 @@
                                     </td>
                                     <td>
                                         <div class="fw-bold text-dark">Zamówienie #@box.Session.OrderId</div>
-                                        <div class="text-secondary small">Klient: @box.Session.ClientName</div>
+                                        <div class="text-secondary small">ID klienta: @box.Session.ClientPublicIdDisplay</div>
                                     </td>
                                     <td>
                                         <span class="badge bg-@color-lt text-@color d-inline-flex align-items-center gap-1">
@@ -118,10 +122,20 @@
                                     </td>
                                     <td>
                                         <div class="btn-list flex-nowrap justify-content-end">
-                                            <a asp-action="FoilLabel" asp-route-packingItemId="@box.Item.Id" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
-                                                Etykieta
-                                            </a>
+                                            @if (box.Item.Status == "Pending")
+                                            {
+                                                <form asp-action="PrintFoilLabel" asp-route-packingItemId="@box.Item.Id" method="post" target="_blank">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
+                                                        Drukuj
+                                                    </button>
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <a asp-action="FoilLabel" asp-route-packingItemId="@box.Item.Id" target="_blank" class="btn btn-sm btn-outline-primary">Podgląd</a>
+                                            }
                                         </div>
                                     </td>
                                 </tr>
@@ -166,17 +180,21 @@
                 });
             });
 
-            if (btnPrint) {
-                btnPrint.addEventListener("click", function () {
+            const bulkForm = document.getElementById("bulk-print-form");
+            const bulkIds = document.getElementById("bulk-print-ids");
+
+            if (bulkForm) {
+                bulkForm.addEventListener("submit", function (event) {
                     const checked = document.querySelectorAll(".box-select:checked");
                     const ids = Array.from(checked).map(cb => cb.getAttribute("data-id")).join(",");
-                    if (ids) {
-                        const url = '@Url.Action("FoilLabelsBulk", "Production")?ids=' + ids;
-                        window.open(url, '_blank');
-                        setTimeout(function () {
-                            window.location.reload();
-                        }, 1000);
+                    if (!ids) {
+                        event.preventDefault();
+                        return;
                     }
+                    bulkIds.value = ids;
+                    setTimeout(function () {
+                        window.location.reload();
+                    }, 1000);
                 });
             }
         });

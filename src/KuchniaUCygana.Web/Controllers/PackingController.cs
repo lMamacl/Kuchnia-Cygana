@@ -14,24 +14,60 @@ public sealed class PackingController : Controller
     private readonly IPackingService packingService;
     private readonly ILoadingService loadingService;
     private readonly IPackingIncidentService packingIncidentService;
+    private readonly IPackingSynchronizationService packingSynchronizationService;
+    private readonly IPackingBagService packingBagService;
 
     public PackingController(
         IPackingService packingService,
         ILoadingService loadingService,
-        IPackingIncidentService packingIncidentService)
+        IPackingIncidentService packingIncidentService,
+        IPackingSynchronizationService packingSynchronizationService,
+        IPackingBagService packingBagService)
     {
         this.packingService = packingService;
         this.loadingService = loadingService;
         this.packingIncidentService = packingIncidentService;
+        this.packingSynchronizationService = packingSynchronizationService;
+        this.packingBagService = packingBagService;
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(DateOnly? date)
+    public async Task<IActionResult> Index(
+        DateOnly? date,
+        string? search,
+        int? routeId,
+        string? labelStatus,
+        string? bagStatus,
+        int page = 1,
+        int pageSize = 20,
+        string? mode = null)
     {
+        if (string.Equals(mode, "labels", StringComparison.OrdinalIgnoreCase))
+        {
+            return RedirectToAction(nameof(LabelsIndex), new
+            {
+                date,
+                search,
+                routeId,
+                labelStatus,
+                bagStatus,
+                page,
+                pageSize,
+            });
+        }
+
         var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
         var board = await packingService.GetPackingBoardAsync(selectedDate);
-        ViewBag.SelectedDate = selectedDate;
-        return View(board);
+        return View(BuildPackingIndexViewModel(
+            board,
+            selectedDate,
+            search,
+            routeId,
+            "all",
+            bagStatus,
+            page,
+            pageSize,
+            "packing"));
     }
 
     [HttpGet("loading")]
@@ -52,8 +88,8 @@ public sealed class PackingController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Start(DateOnly date, string packedBy)
     {
-        await packingService.StartPackingSessionAsync(date, packedBy);
-        TempData["Success"] = "Lista toreb do kompletacji odświeżona.";
+        var result = await packingSynchronizationService.EnsureSessionsForDateAsync(date, packedBy);
+        TempData["Success"] = $"Synchronizacja kompletacji zakończona. Nowe sesje: {result.CreatedSessions}, nowe torby: {result.CreatedBags}, aktualizacje: {result.UpdatedSessions}.";
         return RedirectToAction(nameof(Index), new { date });
     }
 
@@ -73,10 +109,30 @@ public sealed class PackingController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var board = await packingService.GetPackingBoardAsync(session.PackingDate);
-        var bag = board.Routes
-            .SelectMany(r => r.Bags)
-            .FirstOrDefault(b => b.PackingSessionId == sessionId);
+        var physicalBag = (await packingBagService.GetBagsForSessionAsync(sessionId))
+            .OrderBy(b => b.BagNumber)
+            .ThenBy(b => b.Id)
+            .FirstOrDefault();
+        var activeBoxes = session.Items
+            .Where(item => item.Status is not "Damaged" and not "Missing")
+            .ToList();
+        var bag = physicalBag is null
+            ? null
+            : new PackingBagDto
+            {
+                PackingBagId = physicalBag.Id,
+                PackingSessionId = session.Id,
+                DeliveryCalendarId = session.DeliveryCalendarId,
+                BagNumber = physicalBag.BagNumber,
+                BagCode = physicalBag.BagCode,
+                OrderId = session.OrderId ?? 0,
+                ClientPublicId = session.ClientPublicIdDisplay,
+                Status = physicalBag.Status.ToString(),
+                StatusText = TranslateBagStatus(physicalBag.Status),
+                StatusColor = GetBagStatusColor(physicalBag.Status),
+                TotalBoxes = activeBoxes.Count,
+                PackedBoxes = activeBoxes.Count(item => item.Status == "Packed"),
+            };
 
         return View(new PackingSessionViewModel
         {
@@ -88,11 +144,14 @@ public sealed class PackingController : Controller
 
     [HttpPost("pack-client")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> PackClient(int sessionId, int orderId)
+    public IActionResult PackClient(int sessionId, int orderId)
     {
         try
         {
-            await packingService.PackClientDietAsync(sessionId, orderId);
+            if (DateTime.UtcNow.Ticks >= 0)
+            {
+                throw new InvalidOperationException("Automatyczne pakowanie całego zamówienia jest wyłączone. Użyj skanowania pudełek albo ręcznego spakowania pojedynczych pudełek.");
+            }
             TempData["Success"] = $"Zamówienie #{orderId} spakowane.";
         }
         catch (InvalidOperationException ex)
@@ -107,23 +166,24 @@ public sealed class PackingController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult GenerateManifest(int routeId, DateOnly date)
     {
-        return RedirectToAction("Route", "Loading", new { routeId, date });
+        return RedirectToLoadingManifest(routeId, date);
     }
 
     [HttpPost("loading/{routeId:int}/manifest/verify")]
     [ValidateAntiForgeryToken]
     public IActionResult VerifyManifest(int routeId, DateOnly date)
     {
-        return RedirectToAction("Route", "Loading", new { routeId, date });
+        return RedirectToLoadingManifest(routeId, date);
     }
 
     [HttpGet("loading/{routeId:int}/manifest")]
     public IActionResult ManifestJson(int routeId, DateOnly date)
     {
-        return RedirectToAction("ManifestJson", "Loading", new { routeId, date });
+        return RedirectToLoadingManifest(routeId, date);
     }
 
     [HttpPost("session/{sessionId:int}/prepare-boxes")]
+    [Authorize(Roles = "Packing,PackingManager,Admin")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> PrepareBoxes(int sessionId)
     {
@@ -141,6 +201,7 @@ public sealed class PackingController : Controller
     }
 
     [HttpPost("box/{packingItemId:int}/pack")]
+    [Authorize(Roles = "Packing,PackingManager,Admin")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> MarkBoxPacked(int packingItemId, int sessionId, string packedBy)
     {
@@ -343,18 +404,173 @@ public sealed class PackingController : Controller
         return RedirectToAction(nameof(Delivery), new { routeId, date });
     }
 
-    [HttpGet("labels")]
-    public IActionResult LabelsIndex()
+    [HttpGet("label")]
+    public IActionResult LabelAlias(
+        DateOnly? date,
+        string? search,
+        int? routeId,
+        string? labelStatus,
+        string? bagStatus,
+        int page = 1,
+        int pageSize = 20)
     {
-        return View();
+        return RedirectToAction(nameof(LabelsIndex), new { date, search, routeId, labelStatus, bagStatus, page, pageSize });
+    }
+
+    [HttpGet("labels")]
+    public async Task<IActionResult> LabelsIndex(
+        DateOnly? date,
+        string? search,
+        int? routeId,
+        string? labelStatus,
+        string? bagStatus,
+        int page = 1,
+        int pageSize = 20)
+    {
+        var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        var board = await packingService.GetPackingBoardAsync(selectedDate);
+        return View("LabelsIndex", BuildPackingIndexViewModel(
+            board,
+            selectedDate,
+            search,
+            routeId,
+            labelStatus,
+            bagStatus,
+            page,
+            pageSize,
+            "labels"));
     }
 
     [HttpGet("labels/{sessionId:int}")]
     public async Task<IActionResult> Labels(int sessionId)
     {
-        var labels = await packingService.GenerateTransportLabelsAsync(sessionId);
+        var labels = (await packingService.GetTransportLabelsForSessionAsync(sessionId)).ToList();
+        if (labels.Count == 0)
+        {
+            TempData["Error"] = "Brak wygenerowanej etykiety transportowej dla tej torby. Użyj akcji Drukuj w widoku etykiet.";
+            return RedirectToAction(nameof(Session), new { sessionId });
+        }
+
         ViewBag.SessionId = sessionId;
         return View(labels);
+    }
+
+    [HttpPost("labels/{sessionId:int}/generate")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GenerateLabel(int sessionId, DateOnly? date, string? returnUrl = null)
+    {
+        try
+        {
+            await packingService.GenerateTransportLabelsAsync(sessionId);
+            TempData["Success"] = "Wygenerowano etykietę transportową.";
+            return RedirectToAction(nameof(Labels), new { sessionId });
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return LocalRedirect(SafeReturnUrl(returnUrl, date));
+    }
+
+    [HttpPost("labels/bags/{packingBagId:int}/generate")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GenerateBagLabel(int packingBagId, DateOnly? date, string? returnUrl = null)
+    {
+        try
+        {
+            var labels = (await packingService.GenerateTransportLabelsForBagAsync(packingBagId)).ToList();
+            TempData["Success"] = "Wygenerowano etykietę transportową.";
+            return labels.Count > 0
+                ? RedirectToAction(nameof(Labels), new { sessionId = labels[0].PackingSessionId })
+                : LocalRedirect(SafeReturnUrl(returnUrl, date));
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return LocalRedirect(SafeReturnUrl(returnUrl, date));
+    }
+
+    [HttpGet("labels/routes/{routeId:int}")]
+    public async Task<IActionResult> RouteLabels(int routeId, DateOnly date)
+    {
+        try
+        {
+            var labels = (await packingService.GetTransportLabelsForRouteAsync(date, routeId)).ToList();
+            if (labels.Count == 0)
+            {
+                TempData["Error"] = "Brak wygenerowanych etykiet transportowych dla tej trasy. Najpierw wygeneruj brakujące etykiety.";
+                return RedirectToAction(nameof(LabelsIndex), new { date, routeId });
+            }
+
+            ViewBag.RouteId = routeId;
+            ViewBag.SelectedDate = date;
+            return View("Labels", labels);
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(LabelsIndex), new { date, routeId });
+        }
+    }
+
+    [HttpPost("labels/routes/{routeId:int}/generate-missing")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GenerateMissingRouteLabels(int routeId, DateOnly date, string? returnUrl = null)
+    {
+        try
+        {
+            var labels = await packingService.GenerateMissingTransportLabelsForRouteAsync(date, routeId);
+            TempData["Success"] = $"Etykiety transportowe gotowe dla trasy: {labels.Count}.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return LocalRedirect(SafeReturnUrl(returnUrl, date));
+    }
+
+    [HttpPost("labels/{labelId:int}/attached")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfirmLabelAttached(int labelId, DateOnly? date, string? returnUrl = null)
+    {
+        try
+        {
+            await packingService.ConfirmTransportLabelAttachedAsync(labelId);
+            TempData["Success"] = "Potwierdzono przyklejenie etykiety transportowej.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return LocalRedirect(SafeReturnUrl(returnUrl, date));
+    }
+
+    [HttpPost("labels/attached")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfirmSelectedLabelsAttached(DateOnly? date, List<int> labelIds, string? returnUrl = null)
+    {
+        if (labelIds.Count == 0)
+        {
+            TempData["Error"] = "Zaznacz co najmniej jedna etykiete do potwierdzenia.";
+            return LocalRedirect(SafeReturnUrl(returnUrl, date));
+        }
+
+        try
+        {
+            var count = await packingService.ConfirmTransportLabelsAttachedAsync(labelIds);
+            TempData["Success"] = $"Potwierdzono przyklejenie etykiet: {count}.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return LocalRedirect(SafeReturnUrl(returnUrl, date));
     }
 
     [HttpGet("labels/{sessionId:int}/reprint")]
@@ -363,7 +579,13 @@ public sealed class PackingController : Controller
     {
         try
         {
-            var labels = (await packingService.GenerateTransportLabelsAsync(sessionId)).ToList();
+            var labels = (await packingService.GetTransportLabelsForSessionAsync(sessionId)).ToList();
+            if (labels.Count == 0)
+            {
+                TempData["Error"] = "Nie można redrukować etykiety, której jeszcze nie wygenerowano.";
+                return RedirectToAction(nameof(LabelsIndex));
+            }
+
             var model = new TransportLabelReprintFormViewModel
             {
                 SessionId = sessionId,
@@ -411,12 +633,9 @@ public sealed class PackingController : Controller
     }
 
     [HttpGet("loading/{routeId:int}/labels")]
-    public async Task<IActionResult> DeliveryLabels(int routeId, DateOnly date)
+    public IActionResult DeliveryLabels(int routeId, DateOnly date)
     {
-        var labels = await packingService.GetTransportLabelsForDeliveryAsync(date, routeId);
-        ViewBag.RouteId = routeId;
-        ViewBag.SelectedDate = date;
-        return View("Labels", labels);
+        return RedirectToAction(nameof(RouteLabels), new { routeId, date });
     }
 
     [HttpPost("loading/{routeId:int}/dispatch")]
@@ -436,6 +655,187 @@ public sealed class PackingController : Controller
 
         return RedirectToAction(nameof(Delivery), new { routeId, date });
     }
+
+    private PackingIndexViewModel BuildPackingIndexViewModel(
+        PackingBoardDto board,
+        DateOnly selectedDate,
+        string? search,
+        int? routeId,
+        string? labelStatus,
+        string? bagStatus,
+        int page,
+        int pageSize,
+        string? mode)
+    {
+        var safePageSize = Math.Clamp(pageSize, 10, 100);
+        var safePage = Math.Max(page, 1);
+        var normalizedMode = string.Equals(mode, "labels", StringComparison.OrdinalIgnoreCase) ? "labels" : "packing";
+        var normalizedLabelStatus = NormalizeFilterValue(labelStatus);
+        var normalizedBagStatus = NormalizeFilterValue(bagStatus);
+        var normalizedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+
+        var rows = board.Routes
+            .SelectMany(route => route.Bags.Select(bag => new PackingRouteBagRow(route, bag)))
+            .Where(row => !routeId.HasValue || row.Route.RouteId == routeId.Value)
+            .Where(row => MatchesSearch(row, normalizedSearch))
+            .Where(row => MatchesBagStatus(row.Bag, normalizedBagStatus))
+            .Where(row => normalizedMode != "labels" || MatchesLabelStatus(row.Bag, normalizedLabelStatus))
+            .OrderBy(row => row.Route.RouteName)
+            .ThenBy(row => row.Bag.StopNumber)
+            .ThenBy(row => row.Bag.OrderId)
+            .ToList();
+
+        var totalBags = rows.Count;
+        var totalPages = totalBags == 0 ? 1 : (int)Math.Ceiling(totalBags / (double)safePageSize);
+        safePage = Math.Min(safePage, totalPages);
+        var pageRows = rows
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToList();
+
+        var filteredBoard = new PackingBoardDto
+        {
+            PackingDate = board.PackingDate,
+            TotalBags = board.TotalBags,
+            PackedBags = board.PackedBags,
+            LoadedBags = board.LoadedBags,
+            Routes = pageRows
+                .GroupBy(row => row.Route.RouteId)
+                .Select(group => CreateRoutePage(group.First().Route, group.Select(row => row.Bag).ToList()))
+                .ToList(),
+        };
+
+        return new PackingIndexViewModel
+        {
+            SelectedDate = selectedDate,
+            Board = filteredBoard,
+            AllRoutes = board.Routes.Where(route => route.TotalBags > 0).ToList(),
+            Mode = normalizedMode,
+            Search = normalizedSearch,
+            RouteId = routeId,
+            LabelStatus = normalizedLabelStatus,
+            BagStatus = normalizedBagStatus,
+            Page = safePage,
+            PageSize = safePageSize,
+            TotalBags = totalBags,
+        };
+    }
+
+    private static PackingRouteDto CreateRoutePage(PackingRouteDto source, List<PackingBagDto> bags)
+    {
+        return new PackingRouteDto
+        {
+            RouteId = source.RouteId,
+            RouteName = source.RouteName,
+            VehicleId = source.VehicleId,
+            VehicleRegistration = source.VehicleRegistration,
+            TotalBags = source.TotalBags,
+            PackedBags = source.PackedBags,
+            LoadedBags = source.LoadedBags,
+            DispatchedBags = source.DispatchedBags,
+            AllBagsPacked = source.AllBagsPacked,
+            AllBagsLoaded = source.AllBagsLoaded,
+            HasManifest = source.HasManifest,
+            IsManifestVerified = source.IsManifestVerified,
+            ManifestId = source.ManifestId,
+            ManifestNumber = source.ManifestNumber,
+            ManifestGeneratedAt = source.ManifestGeneratedAt,
+            ManifestVerifiedAt = source.ManifestVerifiedAt,
+            ManifestWorkerApprovedAt = source.ManifestWorkerApprovedAt,
+            ManifestSentToLogisticsAt = source.ManifestSentToLogisticsAt,
+            ManifestRequiresRegeneration = source.ManifestRequiresRegeneration,
+            ManifestRequiresRegenerationReason = source.ManifestRequiresRegenerationReason,
+            CanGenerateManifest = source.CanGenerateManifest,
+            CanVerifyManifest = source.CanVerifyManifest,
+            CanWorkerApproveManifest = source.CanWorkerApproveManifest,
+            CanSupervisorApproveManifest = source.CanSupervisorApproveManifest,
+            CanLoadBags = source.CanLoadBags,
+            CanDispatchDelivery = source.CanDispatchDelivery,
+            Bags = bags,
+        };
+    }
+
+    private static bool MatchesSearch(PackingRouteBagRow row, string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return true;
+        }
+
+        return Contains(row.Bag.OrderId.ToString(), search) ||
+            Contains(row.Bag.DeliveryCalendarId?.ToString(), search) ||
+            Contains(row.Bag.BagCode, search) ||
+            Contains(row.Bag.ClientPublicId, search) ||
+            Contains(row.Route.RouteName, search) ||
+            Contains(row.Route.VehicleRegistration, search);
+    }
+
+    private static bool MatchesBagStatus(PackingBagDto bag, string bagStatus)
+    {
+        return bagStatus == "all" || string.Equals(bag.Status, bagStatus, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesLabelStatus(PackingBagDto bag, string labelStatus)
+    {
+        return labelStatus switch
+        {
+            "missing" => !bag.HasLabels,
+            "generated" => bag.HasLabels,
+            "attached" => bag.IsTransportLabelAttached,
+            "not-attached" => bag.HasLabels && !bag.IsTransportLabelAttached,
+            _ => true,
+        };
+    }
+
+    private static bool Contains(string? value, string search)
+    {
+        return !string.IsNullOrWhiteSpace(value) &&
+            value.Contains(search, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeFilterValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "all" : value.Trim().ToLowerInvariant();
+    }
+
+    private static string TranslateBagStatus(PackingBagStatus status)
+    {
+        return status switch
+        {
+            PackingBagStatus.Pending => "W toku",
+            PackingBagStatus.Packed => "Spakowana",
+            PackingBagStatus.Labeled => "Z etykietą",
+            PackingBagStatus.Manifested => "W manifeście",
+            PackingBagStatus.Loaded => "Załadowana",
+            PackingBagStatus.Dispatched => "Wysłana",
+            PackingBagStatus.Damaged => "Uszkodzona",
+            _ => status.ToString(),
+        };
+    }
+
+    private static string GetBagStatusColor(PackingBagStatus status)
+    {
+        return status switch
+        {
+            PackingBagStatus.Packed => "success",
+            PackingBagStatus.Labeled => "azure",
+            PackingBagStatus.Manifested => "indigo",
+            PackingBagStatus.Loaded => "primary",
+            PackingBagStatus.Dispatched => "dark",
+            PackingBagStatus.Damaged => "danger",
+            _ => "secondary",
+        };
+    }
+
+    private string SafeReturnUrl(string? returnUrl, DateOnly? date)
+    {
+        var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        return !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)
+            ? returnUrl
+            : Url.Action(nameof(LabelsIndex), new { date = selectedDate }) ?? "/";
+    }
+
+    private sealed record PackingRouteBagRow(PackingRouteDto Route, PackingBagDto Bag);
 
     private async Task<PackingItemIssueFormViewModel> BuildItemIssueViewModelAsync(
         int sessionId,
@@ -472,11 +872,10 @@ public sealed class PackingController : Controller
     {
         var session = await packingService.GetSessionByIdAsync(sessionId)
             ?? throw new InvalidOperationException($"Sesja kompletacji #{sessionId} nie istnieje.");
-        var board = await packingService.GetPackingBoardAsync(session.PackingDate);
-        var bag = board.Routes
-            .SelectMany(r => r.Bags)
-            .FirstOrDefault(b => b.PackingBagId == packingBagId)
+        var bag = (await packingBagService.GetBagsForSessionAsync(sessionId))
+            .FirstOrDefault(b => b.Id == packingBagId)
             ?? throw new InvalidOperationException($"Torba #{packingBagId} nie należy do tej sesji.");
+        var totalBoxes = session.Items.Count(item => item.Status is not "Damaged" and not "Missing");
 
         return new PackingBagIssueFormViewModel
         {
@@ -485,8 +884,8 @@ public sealed class PackingController : Controller
             ClientPublicId = session.ClientPublicIdDisplay,
             DeliveryCalendarId = session.DeliveryCalendarId,
             BagCode = bag.BagCode,
-            Status = bag.StatusText,
-            TotalBoxes = bag.TotalBoxes,
+            Status = bag.Status.ToString(),
+            TotalBoxes = totalBoxes,
             ReasonFlags = selectedFlags ?? new List<PackingIncidentReasonFlag>(),
             Description = description,
             ReasonOptions = BagIssueReasonOptions,
@@ -504,6 +903,14 @@ public sealed class PackingController : Controller
         {
             ModelState.AddModelError(nameof(PackingItemIssueFormViewModel.Description), "Opis jest wymagany dla powodu „Inne”.");
         }
+    }
+
+    private IActionResult RedirectToLoadingManifest(int routeId, DateOnly date)
+    {
+        var url = Url.Action("Manifest", "Loading", new { routeId, date = date.ToString("yyyy-MM-dd") })
+            ?? $"/loading/{routeId}/manifest?date={date:yyyy-MM-dd}";
+
+        return Redirect(url);
     }
 
     private static readonly IReadOnlyList<PackingIssueReasonOption> ItemIssueReasonOptions =

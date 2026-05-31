@@ -94,14 +94,21 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
                 scheduledStatus = (int)DeliveryStatus.Scheduled,
             })).ToList();
 
+        var orderIds = deliveries.Select(d => d.OrderId).Distinct().ToArray();
+        var itemRows = orderIds.Length == 0
+            ? new List<OrderItemRow>()
+            : (await db.QueryAsync<OrderItemRow>(
+                OrderItemsForDeliveriesSql,
+                new { orderIds })).ToList();
+        var itemsByOrder = itemRows
+            .GroupBy(item => item.OrderId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
         var result = new List<OrderDeliveryInfo>(deliveries.Count);
 
         foreach (var delivery in deliveries)
         {
-            var items = await db.QueryAsync<OrderItemRow>(
-                OrderItemsForDeliverySql,
-                new { orderId = delivery.OrderId });
-
+            itemsByOrder.TryGetValue(delivery.OrderId, out var items);
             result.Add(new OrderDeliveryInfo(
                 delivery.DeliveryCalendarId,
                 delivery.OrderId,
@@ -116,7 +123,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
                 delivery.Longitude,
                 delivery.DeliveryDate,
                 delivery.DeliveryWindowName ?? string.Empty,
-                items.Select(item => new OrderItemInfo(
+                (items ?? new List<OrderItemRow>()).Select(item => new OrderItemInfo(
                     item.DietId,
                     item.DietName,
                     item.DietVariantId,
@@ -214,6 +221,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
 
     private const string OrderItemsForDeliverySql = """
         SELECT
+            OrderId,
             DietId,
             DietName,
             DietVariantId,
@@ -223,6 +231,20 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         WHERE OrderId = @orderId
           AND IsDeleted = 0
         ORDER BY Id;
+        """;
+
+    private const string OrderItemsForDeliveriesSql = """
+        SELECT
+            OrderId,
+            DietId,
+            DietName,
+            DietVariantId,
+            VariantName,
+            CaloriesPerDay
+        FROM OrderItems
+        WHERE OrderId IN @orderIds
+          AND IsDeleted = 0
+        ORDER BY OrderId, Id;
         """;
 
     private sealed class ActiveOrderRow
@@ -273,6 +295,8 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
 
     private sealed class OrderItemRow
     {
+        public int OrderId { get; set; }
+
         public int DietId { get; set; }
 
         public string DietName { get; set; } = string.Empty;

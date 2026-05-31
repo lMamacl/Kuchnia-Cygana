@@ -84,6 +84,13 @@ public class PackingLabel : BaseEntity<int>
 
     [StringLength(100)]
     public string? PrintedBy { get; set; }
+
+    public DateTimeOffset? AttachedAt { get; set; }
+
+    public int? AttachedByUserId { get; set; }
+
+    [StringLength(100)]
+    public string? AttachedBy { get; set; }
 }
 
 /// <summary>

@@ -16,7 +16,8 @@
     var scanCode = TempData["ScanCode"]?.ToString();
     var scanMeal = TempData["ScanMeal"]?.ToString();
     var scanStatus = TempData["ScanStatus"]?.ToString();
-    var canUseTechnicalBoxFallback = boxes.Count == 0 && (User.IsInRole("PackingManager") || User.IsInRole("Admin"));
+    var canUseManualEmergencyPacking = User.IsInRole("Packing") || User.IsInRole("PackingManager") || User.IsInRole("Admin");
+    var canUseSimulationBoxFallback = boxes.Count == 0 && canUseManualEmergencyPacking;
 }
 
 @functions {
@@ -109,15 +110,6 @@
                         </form>
                     }
 
-                    @if (session.Status != "Pending" && bag?.CanGenerateTransportLabel == true)
-                    {
-                        <a asp-action="Labels" asp-route-sessionId="@session.Id" class="btn btn-indigo">Drukuj etykietę transportową</a>
-                    }
-                    else if (session.Status != "Pending")
-                    {
-                        <button type="button" class="btn btn-outline-secondary" disabled>Brak trasy dla etykiety</button>
-                    }
-
                     @if (bag is not null && session.Status != "Loaded" && session.Status != "Dispatched")
                     {
                         <a asp-action="BagIssue"
@@ -128,7 +120,9 @@
                         </a>
                     }
 
-                    <a asp-action="Index" asp-route-date="@session.PackingDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wróć</a>
+                    <a asp-action="Index" asp-route-date="@session.PackingDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><line x1="5" y1="12" x2="19" y2="12" /><line x1="5" y1="12" x2="11" y2="18" /><line x1="5" y1="12" x2="11" y2="6" /></svg> Wróć do listy toreb
+                    </a>
                 </div>
             </div>
         </div>
@@ -183,7 +177,7 @@
                             <tr>
                                 <td colspan="5" class="text-secondary">
                                     <div>Brak pudełek w tej dostawie. Pudełka powinny pojawić się po akceptacji gotowania w kuchni.</div>
-                                    @if (canUseTechnicalBoxFallback)
+                                    @if (canUseSimulationBoxFallback)
                                     {
                                         <form asp-action="PrepareBoxes" asp-route-sessionId="@session.Id" method="post" class="mt-2">
                                             @Html.AntiForgeryToken()
@@ -225,9 +219,9 @@
                                 </td>
                                 <td class="text-end">
                                     <div class="d-flex flex-column gap-2 align-items-end">
-                                        @if (box.CanPackManually)
+                                        @if (box.CanPackManually && canUseManualEmergencyPacking)
                                         {
-                                            <form asp-action="MarkBoxPacked" asp-route-packingItemId="@box.Id" method="post">
+                                            <form asp-action="MarkBoxPacked" asp-route-packingItemId="@box.Id" method="post" class="d-flex flex-column gap-1" style="min-width: 220px;">
                                                 @Html.AntiForgeryToken()
                                                 <input type="hidden" name="sessionId" value="@session.Id" />
                                                 <input type="hidden" name="packedBy" value="@packedBy" />

@@ -47,9 +47,21 @@ public sealed class PackingRouteDto
 
     public DateTimeOffset? ManifestVerifiedAt { get; set; }
 
+    public DateTimeOffset? ManifestWorkerApprovedAt { get; set; }
+
+    public DateTimeOffset? ManifestSentToLogisticsAt { get; set; }
+
+    public bool ManifestRequiresRegeneration { get; set; }
+
+    public string? ManifestRequiresRegenerationReason { get; set; }
+
     public bool CanGenerateManifest { get; set; }
 
     public bool CanVerifyManifest { get; set; }
+
+    public bool CanWorkerApproveManifest { get; set; }
+
+    public bool CanSupervisorApproveManifest { get; set; }
 
     public bool CanLoadBags { get; set; }
 
@@ -104,9 +116,21 @@ public sealed class PackingBagDto
 
     public bool HasLabels { get; set; }
 
+    public int? TransportLabelId { get; set; }
+
+    public int TransportLabelPrintNumber { get; set; }
+
+    public bool IsTransportLabelAttached { get; set; }
+
+    public DateTimeOffset? TransportLabelAttachedAt { get; set; }
+
+    public string? TransportLabelAttachedBy { get; set; }
+
     public bool CanPackBag { get; set; }
 
     public bool CanLoad { get; set; }
 
     public bool CanGenerateTransportLabel { get; set; }
+
+    public bool CanConfirmTransportLabelAttached { get; set; }
 }

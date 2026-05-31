@@ -206,25 +206,6 @@ public sealed class ProductionController : Controller
         var targetDate = date ?? DateOnly.FromDateTime(DateTime.Today);
         var sessions = (await packingService.GetSessionsByDateAsync(targetDate)).ToList();
 
-        // Automatycznie generujemy pudełka dla dzisiejszych zamówień, jeśli nie zostały jeszcze utworzone
-        foreach (var session in sessions)
-        {
-            if (session.Items.Count == 0 && session.OrderId.HasValue)
-            {
-                try
-                {
-                    await packingService.PrepareOrderBoxesAsync(session.Id);
-                }
-                catch (Exception)
-                {
-                    // Ignorujemy błędy generowania dla pojedynczych sesji (np. brak diety w bazie)
-                }
-            }
-        }
-
-        // Pobieramy sesje ponownie, tym razem z załadowanymi pudełkami
-        sessions = (await packingService.GetSessionsByDateAsync(targetDate)).ToList();
-
         ViewBag.SelectedDate = targetDate;
         return View(sessions);
     }
@@ -275,6 +256,28 @@ public sealed class ProductionController : Controller
     [HttpGet("foil-label/{packingItemId:int}")]
     public async Task<IActionResult> FoilLabel(int packingItemId)
     {
+        try
+        {
+            var label = await packingService.GetLatestFoilLabelAsync(packingItemId);
+            if (label is null)
+            {
+                TempData["Error"] = "Brak wygenerowanej etykiety produktowej. Użyj przycisku Drukuj z listy foliowania.";
+                return RedirectToAction(nameof(FoilPrinting));
+            }
+
+            return View(label);
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(FoilPrinting));
+        }
+    }
+
+    [HttpPost("foil-label/{packingItemId:int}/print")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PrintFoilLabel(int packingItemId)
+    {
         var operatorName = User.Identity?.Name ?? "Kuchnia";
         try
         {
@@ -292,7 +295,8 @@ public sealed class ProductionController : Controller
     /// Zbiorczy wydruk etykiet foliowych (bulk).
     /// GET /production/foil-labels-bulk?ids=1,2,3
     /// </summary>
-    [HttpGet("foil-labels-bulk")]
+    [HttpPost("foil-labels-bulk")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> FoilLabelsBulk(string ids)
     {
         var operatorName = User.Identity?.Name ?? "Kuchnia";
