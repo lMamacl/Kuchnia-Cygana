@@ -8,11 +8,17 @@ public sealed class MealDetailDto : MealDto
 
     public decimal? CookedWeightGrams { get; set; }
 
+    public int? ShelfLifeHours { get; set; }
+
+    public bool UseEarliestIngredientExpiry { get; set; }
+
     public bool RequiresCoreTemperatureCheck { get; set; }
 
     public decimal? MinimumCoreTemperatureCelsius { get; set; }
 
     public List<RecipeItemDto> Recipe { get; set; } = new();
+
+    public List<MealRecipeComponentDto> Components { get; set; } = new();
 
     public List<MealImageDto> Images { get; set; } = new();
 }

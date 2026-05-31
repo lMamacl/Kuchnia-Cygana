@@ -31,6 +31,27 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
             new { stockItemId });
     }
 
+    public async Task<IEnumerable<Batch>> GetActiveBatchesByWarehouseCategoryAsync(int warehouseCategoryId)
+    {
+        using var db = Factory.CreateConnection();
+
+        return await db.QueryAsync<Batch>(
+            """
+            SELECT b.*
+            FROM [Batches] b
+            INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId]
+            WHERE si.[WarehouseCategoryId] = @warehouseCategoryId
+              AND si.[IsDeleted] = 0
+              AND b.[IsDepleted] = 0
+              AND b.[IsDeleted] = 0
+            ORDER BY
+              CASE WHEN b.[ExpiryDate] IS NULL THEN 1 ELSE 0 END,
+              b.[ExpiryDate],
+              b.[Id];
+            """,
+            new { warehouseCategoryId });
+    }
+
     public async Task<IEnumerable<Batch>> GetBatchesByStockItemAsync(int stockItemId)
     {
         using var db = Factory.CreateConnection();

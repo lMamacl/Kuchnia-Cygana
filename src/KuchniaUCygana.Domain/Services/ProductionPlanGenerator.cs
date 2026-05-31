@@ -66,8 +66,10 @@ public sealed class ProductionPlanGenerator
         if (orders.Count == 0)
             throw new InvalidOperationException($"Brak aktywnych zamówień na dzień {productionDate}.");
 
-        // 3. Pobierz plan diet — posiłki przypisane do wariantów (M2)
-        var dietPlan = (await _dietDataProvider.GetPlanForDateAsync(productionDate)).ToList();
+        // 3. Pobierz opublikowany snapshot planu M2; legacy plan zostaje fallbackiem kompatybilności.
+        var snapshot = await _dietDataProvider.GetPublishedPlanSnapshotAsync(productionDate);
+        var dietPlan = snapshot?.Items.Select(MapSnapshotItemToDietPlanEntry).ToList()
+            ?? (await _dietDataProvider.GetPlanForDateAsync(productionDate)).ToList();
         if (dietPlan.Count == 0)
         {
             throw new InvalidOperationException(
@@ -102,13 +104,19 @@ public sealed class ProductionPlanGenerator
         {
             var dietEntry = dietPlan.FirstOrDefault(d =>
                 d.MealId == key.MealId && d.DietVariantId == key.DietVariantId);
+            var snapshotItem = snapshot?.Items.FirstOrDefault(i =>
+                i.MealId == key.MealId && i.DietVariantId == key.DietVariantId);
 
             items.Add(new ProductionPlanItem
             {
                 ProductionPlanId = planId,
                 MealId = key.MealId,
-                MealName = dietEntry?.MealName ?? $"Posiłek #{key.MealId}",
+                MealName = snapshotItem?.MealName ?? dietEntry?.MealName ?? $"Posiłek #{key.MealId}",
                 DietVariantId = key.DietVariantId,
+                DietMenuPlanItemId = snapshotItem?.DietMenuPlanItemId,
+                RecipeComponentVersionIds = snapshotItem is null
+                    ? null
+                    : string.Join(",", snapshotItem.Components.Select(c => c.RecipeComponentVersionId).Distinct()),
                 PlannedQuantity = quantity,
                 CookedQuantity = 0,
                 Status = ProductionItemStatus.Planned,
@@ -124,7 +132,9 @@ public sealed class ProductionPlanGenerator
             .GroupBy(kv => kv.Key.MealId)
             .ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
 
-        var foodCostReport = await _foodCostCalculator.CalculateAsync(mealQtyDict);
+        var foodCostReport = snapshot is null
+            ? await _foodCostCalculator.CalculateAsync(mealQtyDict)
+            : _foodCostCalculator.CalculateFromSnapshot(mealQuantities, snapshot);
 
         return new PlanGenerationResult
         {
@@ -133,6 +143,22 @@ public sealed class ProductionPlanGenerator
             FoodCostReport = foodCostReport,
         };
     }
+
+    private static DietPlanEntry MapSnapshotItemToDietPlanEntry(PublishedDietPlanItemDto item)
+        => new()
+        {
+            PlanDate = item.PlanDate,
+            PlanStatus = "Published",
+            MealId = item.MealId,
+            MealName = item.MealName,
+            CategoryId = item.CategoryId,
+            CategoryName = item.CategoryName,
+            DietVariantId = item.DietVariantId,
+            MealSlot = item.MealSlot,
+            SortOrder = item.SortOrder,
+            ServingMultiplier = item.ServingMultiplier,
+            ServingWeightGrams = item.CookedWeightGrams ?? item.RawWeightGrams ?? item.ServingMultiplier * 100m,
+        };
 
     /// <summary>
     /// Agreguje: ile porcji każdego posiłku (MealId+DietVariantId) potrzeba.

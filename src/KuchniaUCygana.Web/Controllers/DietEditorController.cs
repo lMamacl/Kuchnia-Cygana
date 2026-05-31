@@ -11,11 +11,16 @@ public sealed class DietEditorController : Controller
 {
     private readonly IDietManagementService _dietService;
     private readonly IMealManagementService _mealService;
+    private readonly IRecipeComponentManagementService _recipeComponentService;
 
-    public DietEditorController(IDietManagementService dietService, IMealManagementService mealService)
+    public DietEditorController(
+        IDietManagementService dietService,
+        IMealManagementService mealService,
+        IRecipeComponentManagementService recipeComponentService)
     {
         _dietService = dietService;
         _mealService = mealService;
+        _recipeComponentService = recipeComponentService;
     }
 
     // GET
@@ -58,22 +63,25 @@ public sealed class DietEditorController : Controller
     }
 
     [HttpGet("recipes")]
-    public IActionResult Recipes()
+    public async Task<IActionResult> Recipes(string? query)
     {
         ViewData["Title"] = "Przepisy";
         ViewData["Section"] = "Diety";
-        ViewData["Description"] = "Widok przepisow jest jeszcze szkieletem; szczegoly receptur sa dostepne w posilkach.";
-        return View();
+        ViewData["Description"] = "Wersjonowane przepisy-skladowe uzywane przez posilki.";
+        ViewBag.Query = query;
+        return View(await _recipeComponentService.SearchAsync(query));
     }
 
     [HttpGet("recipe")]
     [HttpGet("recipe/{mealId:int}")]
-    public IActionResult Recipe(int? mealId)
+    public IActionResult Recipe(int? mealId, int? componentVersionId)
     {
         ViewData["Title"] = "Edycja przepisu";
         ViewData["Section"] = "Diety";
         ViewData["Description"] = mealId.HasValue
-            ? $"Szkielet edycji przepisu dla posilku #{mealId.Value}."
+            ? componentVersionId.HasValue
+                ? $"Szkielet edycji przepisu dla posilku #{mealId.Value}, wersja skladowej #{componentVersionId.Value}."
+                : $"Szkielet edycji przepisu dla posilku #{mealId.Value}."
             : "Wybierz posilek, aby przejsc do receptury.";
         return View();
     }

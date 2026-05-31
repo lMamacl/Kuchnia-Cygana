@@ -14,19 +14,22 @@ public sealed class MealsController : Controller
     private readonly IAiDescriptionService _aiService;
     private readonly ICategoryService _categoryService;
     private readonly IIngredientManagementService _ingredientService;
+    private readonly IRecipeComponentManagementService _recipeComponentService;
 
     public MealsController(
         IMealManagementService mealService,
         IImageManagementService imageService,
         IAiDescriptionService aiService,
         ICategoryService categoryService,
-        IIngredientManagementService ingredientService)
+        IIngredientManagementService ingredientService,
+        IRecipeComponentManagementService recipeComponentService)
     {
         _mealService = mealService;
         _imageService = imageService;
         _aiService = aiService;
         _categoryService = categoryService;
         _ingredientService = ingredientService;
+        _recipeComponentService = recipeComponentService;
     }
 
     [HttpGet("")]
@@ -63,6 +66,7 @@ public sealed class MealsController : Controller
     {
         var meal = await _mealService.GetMealWithDetailsAsync(id);
         if (meal == null) return NotFound();
+        ViewBag.ComponentVersions = await _recipeComponentService.GetPublishedVersionOptionsAsync();
         return View(meal);
     }
 

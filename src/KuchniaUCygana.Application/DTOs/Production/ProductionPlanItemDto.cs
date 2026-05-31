@@ -17,6 +17,10 @@ public sealed class ProductionPlanItemDto
 
     public int DietVariantId { get; set; }
 
+    public int? DietMenuPlanItemId { get; set; }
+
+    public string? RecipeComponentVersionIds { get; set; }
+
     public int PlannedQuantity { get; set; }
 
     public int CookedQuantity { get; set; }

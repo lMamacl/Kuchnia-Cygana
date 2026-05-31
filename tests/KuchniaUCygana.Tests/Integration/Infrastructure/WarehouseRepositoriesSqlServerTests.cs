@@ -1297,6 +1297,11 @@ public sealed class WarehouseRepositoriesSqlServerTests
             return Get7DayPlanAsync(date);
         }
 
+        public Task<PublishedDietPlanSnapshotDto?> GetPublishedPlanSnapshotAsync(DateOnly date)
+        {
+            return Task.FromResult<PublishedDietPlanSnapshotDto?>(null);
+        }
+
         public Task<IEnumerable<RecipeIngredientEntry>> GetRecipeForMealAsync(int mealId)
         {
             return Task.FromResult(Enumerable.Empty<RecipeIngredientEntry>());

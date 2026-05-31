@@ -12,6 +12,7 @@ public sealed class MealManagementService : IMealManagementService
 {
     private readonly IMealRepository mealRepository;
     private readonly IRecipeRepository recipeRepository;
+    private readonly IRecipeComponentRepository recipeComponentRepository;
     private readonly IMealImageRepository mealImageRepository;
     private readonly IRecipeEngine recipeEngine;
     private readonly IMapper mapper;
@@ -19,12 +20,14 @@ public sealed class MealManagementService : IMealManagementService
     public MealManagementService(
         IMealRepository mealRepository,
         IRecipeRepository recipeRepository,
+        IRecipeComponentRepository recipeComponentRepository,
         IMealImageRepository mealImageRepository,
         IRecipeEngine recipeEngine,
         IMapper mapper)
     {
         this.mealRepository = mealRepository;
         this.recipeRepository = recipeRepository;
+        this.recipeComponentRepository = recipeComponentRepository;
         this.mealImageRepository = mealImageRepository;
         this.recipeEngine = recipeEngine;
         this.mapper = mapper;
@@ -47,6 +50,47 @@ public sealed class MealManagementService : IMealManagementService
         {
             // można doczytać nazwę składnika
         }
+
+        var componentRows = await this.recipeComponentRepository.GetMealComponentDetailsAsync(mealId);
+        detail.Components = componentRows
+            .GroupBy(row => row.RecipeComponentVersionId)
+            .Select(group =>
+            {
+                var first = group.First();
+                return new MealRecipeComponentDto
+                {
+                    RecipeComponentId = first.RecipeComponentId,
+                    RecipeComponentVersionId = first.RecipeComponentVersionId,
+                    ComponentName = first.ComponentName,
+                    VersionNumber = first.VersionNumber,
+                    VersionStatus = first.VersionStatus,
+                    Role = first.Role,
+                    QuantityPerServing = first.QuantityPerServing,
+                    Unit = first.Unit,
+                    SortOrder = first.SortOrder,
+                    Instructions = first.Instructions,
+                    ShelfLifeHours = first.ShelfLifeHours,
+                    UseEarliestIngredientExpiry = first.UseEarliestIngredientExpiry,
+                    Ingredients = group
+                        .Where(row => row.IngredientId > 0)
+                        .Select(row => new RecipeComponentIngredientDto
+                        {
+                            IngredientId = row.IngredientId,
+                            IngredientName = row.IngredientName,
+                            StockItemId = row.StockItemId,
+                            WarehouseCategoryId = row.WarehouseCategoryId,
+                            WarehouseCategoryName = row.WarehouseCategoryName,
+                            WeightInGrams = row.WeightInGrams,
+                            YieldFactor = row.YieldFactor <= 0 ? 1.0m : row.YieldFactor,
+                            IsOptional = row.IsOptional,
+                            Notes = row.Notes,
+                        })
+                        .ToList(),
+                };
+            })
+            .OrderBy(component => component.SortOrder)
+            .ToList();
+
         var images = await this.mealImageRepository.GetByMealIdAsync(mealId);
         detail.Images = this.mapper.Map<List<MealImageDto>>(images);
         return detail;

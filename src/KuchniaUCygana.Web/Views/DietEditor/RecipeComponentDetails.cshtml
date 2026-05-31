@@ -1,0 +1,94 @@
+@model KuchniaUCygana.Application.DTOs.Menu.RecipeComponentDetailDto
+@{
+    Layout = "_LayoutStaff";
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="d-flex justify-content-between gap-3 flex-wrap">
+                    <div>
+                        <div class="text-uppercase text-secondary small fw-bold">Skladowa #@Model.Id</div>
+                        <h2 class="mb-1">@Model.Name</h2>
+                        @if (!string.IsNullOrWhiteSpace(Model.Description))
+                        {
+                            <div class="text-secondary">@Model.Description</div>
+                        }
+                    </div>
+                    <a asp-controller="DietEditor" asp-action="Recipes" class="btn btn-outline-secondary align-self-start">Lista skladowych</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Wersje</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Wersja</th>
+                            <th>Status</th>
+                            <th>Kompletnosc</th>
+                            <th>Zmiana</th>
+                            <th class="w-1"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var version in Model.Versions)
+                        {
+                            <tr>
+                                <td>v@version.VersionNumber</td>
+                                <td><span class="badge bg-blue-lt">@version.Status</span></td>
+                                <td>
+                                    @if (version.IsComplete)
+                                    {
+                                        <span class="badge bg-green-lt">Kompletna</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-orange-lt">Braki</span>
+                                    }
+                                </td>
+                                <td>@version.ChangeSummary</td>
+                                <td>
+                                    <a asp-controller="RecipeComponents"
+                                       asp-action="Version"
+                                       asp-route-componentId="@Model.Id"
+                                       asp-route-versionId="@version.Id"
+                                       class="btn btn-sm btn-outline-primary">Otworz</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-body border-top">
+                <form asp-controller="RecipeComponents" asp-action="CreateVersion" asp-route-componentId="@Model.Id" method="post" class="row g-3">
+                    @Html.AntiForgeryToken()
+                    <div class="col-md-4">
+                        <label class="form-label">Kopiuj z wersji</label>
+                        <select name="SourceVersionId" class="form-select">
+                            <option value="">Pusta wersja</option>
+                            @foreach (var version in Model.Versions)
+                            {
+                                <option value="@version.Id">v@version.VersionNumber (@version.Status)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Opis zmiany</label>
+                        <input name="ChangeSummary" class="form-control" maxlength="500" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Nowa wersja</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

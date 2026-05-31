@@ -21,6 +21,14 @@ public sealed class FoodCostEntryDto
 
     public int? StockItemId { get; set; }
 
+    public int? WarehouseCategoryId { get; set; }
+
+    public string? WarehouseCategoryName { get; set; }
+
+    public int? RecipeComponentVersionId { get; set; }
+
+    public string? ComponentName { get; set; }
+
     public string IngredientName { get; set; } = string.Empty;
 
     public decimal TotalWeightGrams { get; set; }

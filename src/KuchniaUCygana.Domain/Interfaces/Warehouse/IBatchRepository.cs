@@ -13,6 +13,8 @@ public interface IBatchRepository : IRepository<Batch>
     /// </summary>
     Task<IEnumerable<Batch>> GetActiveBatchesByStockItemAsync(int stockItemId);
 
+    Task<IEnumerable<Batch>> GetActiveBatchesByWarehouseCategoryAsync(int warehouseCategoryId);
+
     Task<IEnumerable<Batch>> GetBatchesByStockItemAsync(int stockItemId);
 
     /// <summary>

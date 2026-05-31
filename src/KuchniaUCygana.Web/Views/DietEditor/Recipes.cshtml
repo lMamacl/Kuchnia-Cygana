@@ -1,4 +1,85 @@
+@model IReadOnlyList<KuchniaUCygana.Application.DTOs.Menu.RecipeComponentListItemDto>
 @{
     Layout = "_LayoutStaff";
+    var query = ViewBag.Query as string;
 }
-@await Html.PartialAsync("_StaffPlaceholder")
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Przepisy-skladowe</h3>
+                <div class="card-actions">
+                    <form method="get" asp-controller="DietEditor" asp-action="Recipes" class="d-flex gap-2">
+                        <input type="search" name="query" value="@query" class="form-control form-control-sm" placeholder="Szukaj skladowej" />
+                        <button type="submit" class="btn btn-sm btn-outline-primary">Szukaj</button>
+                    </form>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Nazwa</th>
+                            <th>Status wersji</th>
+                            <th class="text-center">Wersje</th>
+                            <th class="w-1"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var component in Model)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-bold">@component.Name</div>
+                                    @if (!string.IsNullOrWhiteSpace(component.Description))
+                                    {
+                                        <div class="text-secondary small">@component.Description</div>
+                                    }
+                                </td>
+                                <td>
+                                    @if (component.LatestVersionId.HasValue)
+                                    {
+                                        <span class="badge bg-blue-lt">v@component.LatestVersionNumber @component.LatestVersionStatus</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-lt">Brak wersji</span>
+                                    }
+                                </td>
+                                <td class="text-center">@component.VersionCount</td>
+                                <td>
+                                    <a asp-controller="RecipeComponents" asp-action="Details" asp-route-id="@component.Id" class="btn btn-sm btn-outline-primary">Otworz</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Nowa skladowa</h3>
+            </div>
+            <div class="card-body">
+                <form asp-controller="RecipeComponents" asp-action="Create" method="post" class="row g-3">
+                    @Html.AntiForgeryToken()
+                    <div class="col-md-4">
+                        <label class="form-label">Nazwa</label>
+                        <input name="Name" class="form-control" required maxlength="200" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Opis</label>
+                        <input name="Description" class="form-control" maxlength="2000" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Utworz</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
