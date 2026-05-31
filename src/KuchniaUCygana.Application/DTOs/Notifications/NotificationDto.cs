@@ -19,4 +19,6 @@ public sealed class NotificationDto
     public bool IsRead { get; set; }
 
     public DateTimeOffset DeliveredAt { get; set; }
+
+    public DateTimeOffset? ReadAt { get; set; }
 }

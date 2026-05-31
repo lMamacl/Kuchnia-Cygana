@@ -48,6 +48,7 @@ public static class StaffNavigationCatalog
             true,
             [
                 new("Mapa dzialow", "Staff", "Index", "home", "Start panelu pracowniczego i szybkie przejscia.", "staff dashboard home mapa dzialow"),
+                new("Powiadomienia", "Notifications", "Index", "bell", "Pełna lista powiadomień użytkownika.", "powiadomienia alerty inbox"),
             ]),
         new(
             "kitchen",

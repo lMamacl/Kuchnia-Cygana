@@ -3,8 +3,8 @@
 @{
     var isAuthenticated = User.Identity?.IsAuthenticated == true;
     var userName = isAuthenticated
-        ? User.Identity?.Name ?? "Uzytkownik"
-        : "Podglad uzytkownika";
+        ? User.Identity?.Name ?? "Użytkownik"
+        : "Podgląd użytkownika";
     var userRole = User.Claims
         .Where(claim => claim.Type == ClaimTypes.Role)
         .Select(claim => claim.Value)
@@ -47,7 +47,7 @@
         </div>
 
         <div class="navbar-nav flex-row order-md-last ms-auto staff-top-actions">
-            <button class="nav-link px-2 staff-icon-button" type="button" data-staff-theme-toggle title="Tryb ciemny" aria-label="Przelacz tryb ciemny">
+            <button class="nav-link px-2 staff-icon-button" type="button" data-staff-theme-toggle title="Tryb ciemny" aria-label="Przełącz tryb ciemny">
                 @Html.Raw(StaffIconCatalog.Get("moon"))
             </button>
 
@@ -69,11 +69,13 @@
                     {
                         @foreach (var notification in notificationSummary.Items)
                         {
+                            var message = notification.Message.Length > 120
+                                ? $"{notification.Message[..120]}..."
+                                : notification.Message;
+
                             <div class="dropdown-item-text">
                                 <div class="d-flex align-items-start gap-2">
-                                    <span class="badge bg-@(notification.Severity == "Danger" ? "red" : notification.Severity == "Warning" ? "yellow" : "azure")-lt mt-1">
-                                        @(notification.IsRead ? "OK" : "Nowe")
-                                    </span>
+                                    <span class="badge bg-@(notification.Severity == "Danger" ? "red" : notification.Severity == "Warning" ? "yellow" : "azure")-lt mt-1">Nowe</span>
                                     <div>
                                         @if (!string.IsNullOrWhiteSpace(notification.LinkUrl))
                                         {
@@ -83,21 +85,20 @@
                                         {
                                             <span class="fw-semibold">@notification.Title</span>
                                         }
-                                        <div class="text-secondary small">@notification.Message</div>
-                                        @if (!notification.IsRead)
-                                        {
-                                            <form asp-controller="Notifications" asp-action="MarkAsRead" asp-route-userNotificationId="@notification.UserNotificationId" method="post" class="mt-1">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="returnUrl" value="@returnUrl" />
-                                                <button type="submit" class="btn btn-link btn-sm p-0">Oznacz jako przeczytane</button>
-                                            </form>
-                                        }
+                                        <div class="text-secondary small">@message</div>
+                                        <div class="text-secondary small">@notification.DeliveredAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                        <form asp-controller="Notifications" asp-action="MarkAsRead" asp-route-userNotificationId="@notification.UserNotificationId" method="post" class="mt-1">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                            <button type="submit" class="btn btn-link btn-sm p-0">Oznacz jako przeczytane</button>
+                                        </form>
                                     </div>
                                 </div>
                             </div>
                         }
                     }
                     <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" asp-controller="Notifications" asp-action="Index">Wszystkie powiadomienia</a>
                     @if (notificationSummary.UnreadCount > 0)
                     {
                         <form asp-controller="Notifications" asp-action="MarkAllAsRead" method="post" class="px-3 py-1">
@@ -106,13 +107,11 @@
                             <button type="submit" class="btn btn-link btn-sm p-0">Oznacz wszystkie jako przeczytane</button>
                         </form>
                     }
-                    <a class="dropdown-item" asp-controller="Warehouse" asp-action="HaccpReport">Temperatury HACCP</a>
-                    <a class="dropdown-item" asp-controller="Production" asp-action="CookingCards">Karty gotowania</a>
                 </div>
             </div>
 
             <div class="nav-item dropdown">
-                <button class="nav-link px-2 staff-icon-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Szybkie przejscia" aria-label="Szybkie przejscia">
+                <button class="nav-link px-2 staff-icon-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Szybkie przejścia" aria-label="Szybkie przejścia">
                     @Html.Raw(StaffIconCatalog.Get("grid"))
                 </button>
                 <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
@@ -125,7 +124,7 @@
             </div>
 
             <div class="nav-item dropdown">
-                <button class="nav-link d-flex lh-1 text-reset p-0 staff-user-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Podglad uzytkownika" aria-label="Podglad uzytkownika">
+                <button class="nav-link d-flex lh-1 text-reset p-0 staff-user-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Podgląd użytkownika" aria-label="Podgląd użytkownika">
                     <span class="avatar avatar-sm staff-avatar">@avatarText</span>
                     <span class="d-none d-xl-block ps-2 text-start">
                         <span class="staff-user-name">@userName</span>
