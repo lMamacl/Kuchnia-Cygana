@@ -44,6 +44,25 @@ public sealed class PackingManifest : BaseEntity<int>
 
     public int? VerifiedByUserId { get; set; }
 
+    public DateTimeOffset? WorkerApprovedAt { get; set; }
+
+    [StringLength(100)]
+    public string? WorkerApprovedBy { get; set; }
+
+    public int? WorkerApprovedByUserId { get; set; }
+
+    public DateTimeOffset? SentToLogisticsAt { get; set; }
+
+    public int? SentToLogisticsByUserId { get; set; }
+
+    public bool RequiresRegeneration { get; set; }
+
+    [StringLength(500)]
+    public string? RequiresRegenerationReason { get; set; }
+
+    [StringLength(128)]
+    public string? SnapshotHash { get; set; }
+
     public int? DriverUserId { get; set; }
 
     public int ManifestVersion { get; set; } = 1;

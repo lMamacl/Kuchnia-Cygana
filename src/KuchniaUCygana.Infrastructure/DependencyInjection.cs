@@ -4,6 +4,7 @@ using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Entities.Customers;
 using KuchniaUCygana.Domain.Entities.Orders;
+using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces.Orders;
@@ -69,6 +70,12 @@ public static class DependencyInjection
         services.AddScoped<IProductionPlanRepository, ProductionPlanRepository>();
         services.AddScoped<IPackingSessionRepository, PackingSessionRepository>();
         services.AddScoped<IPackingBagRepository, PackingBagRepository>();
+        services.AddScoped<IPackingLabelRepository, PackingLabelRepository>();
+        services.AddScoped<IRepository<PackingLabel>>(sp => sp.GetRequiredService<IPackingLabelRepository>());
+        services.AddScoped<IPackingManifestRepository, PackingManifestRepository>();
+        services.AddScoped<IRepository<PackingManifest>>(sp => sp.GetRequiredService<IPackingManifestRepository>());
+        services.AddScoped<IPackingManifestIssueRepository, PackingManifestIssueRepository>();
+        services.AddScoped<IRepository<PackingManifestIssue>>(sp => sp.GetRequiredService<IPackingManifestIssueRepository>());
         services.AddScoped<IPackingIncidentRepository, PackingIncidentRepository>();
         services.AddScoped<IBoxLabelRepository, BoxLabelRepository>();
         services.AddScoped<ITemperatureLogRepository, TemperatureLogRepository>();
@@ -138,11 +145,13 @@ public static class DependencyInjection
         services.AddScoped<IHaccpLocationService, Application.Services.HaccpLocationService>();
         services.AddScoped<INotificationService, Application.Services.NotificationService>();
         services.AddScoped<IPackingService, Application.Services.PackingService>();
+        services.AddScoped<IPackingSynchronizationService, Application.Services.PackingSynchronizationService>();
         services.AddScoped<IPackingBagService, Application.Services.PackingBagService>();
         services.AddScoped<IPackingIncidentService, Application.Services.PackingIncidentService>();
         services.AddScoped<IBoxLabelService, Application.Services.BoxLabelService>();
         services.AddScoped<ICookingSessionService, Application.Services.CookingSessionService>();
         services.AddScoped<ILoadingService, Application.Services.LoadingService>();
+        services.AddScoped<IManifestService>(sp => (Application.Services.LoadingService)sp.GetRequiredService<ILoadingService>());
         services.AddScoped<ITemperatureService, Application.Services.TemperatureService>();
 
         // Module 2 (Menu) Domain services.

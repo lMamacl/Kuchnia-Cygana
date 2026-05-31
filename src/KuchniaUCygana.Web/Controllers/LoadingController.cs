@@ -9,20 +9,25 @@ namespace KuchniaUCygana.Web.Controllers;
 [Route("loading")]
 public sealed class LoadingController : Controller
 {
-    private readonly IPackingService packingService;
-    private readonly ILoadingService loadingService;
+    private readonly IPackingService _packingService;
+    private readonly ILoadingService _loadingService;
+    private readonly IManifestService _manifestService;
 
-    public LoadingController(IPackingService packingService, ILoadingService loadingService)
+    public LoadingController(
+        IPackingService packingService,
+        ILoadingService loadingService,
+        IManifestService manifestService)
     {
-        this.packingService = packingService;
-        this.loadingService = loadingService;
+        _packingService = packingService;
+        _loadingService = loadingService;
+        _manifestService = manifestService;
     }
 
     [HttpGet("")]
     public async Task<IActionResult> Index(DateOnly? date)
     {
         var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
-        var board = await packingService.GetPackingBoardAsync(selectedDate);
+        var board = await _packingService.GetPackingBoardAsync(selectedDate);
         ViewBag.SelectedDate = selectedDate;
         return View(board);
     }
@@ -31,7 +36,7 @@ public sealed class LoadingController : Controller
     public async Task<IActionResult> Route(int routeId, DateOnly? date)
     {
         var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
-        var board = await packingService.GetPackingBoardAsync(selectedDate);
+        var board = await _packingService.GetPackingBoardAsync(selectedDate);
         var route = board.Routes.FirstOrDefault(r => r.RouteId == routeId);
 
         if (route is null)
@@ -44,88 +49,121 @@ public sealed class LoadingController : Controller
         {
             SelectedDate = selectedDate,
             Route = route,
-            Manifest = await loadingService.GetManifestAsync(selectedDate, routeId),
+            Manifest = await _manifestService.GetManifestAsync(selectedDate, routeId),
         });
     }
 
+    [HttpGet("{routeId:int}/manifest")]
+    public async Task<IActionResult> Manifest(int routeId, DateOnly? date)
+    {
+        var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        try
+        {
+            var manifestControl = await _manifestService.GetManifestControlAsync(selectedDate, routeId);
+            return View(new PackingDeliveryViewModel
+            {
+                SelectedDate = selectedDate,
+                Route = manifestControl.Route,
+                Manifest = manifestControl.Manifest,
+                ManifestControl = manifestControl,
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index), new { date = selectedDate });
+        }
+    }
+
     [HttpPost("{routeId:int}/manifest")]
+    [HttpPost("{routeId:int}/manifest/generate")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> GenerateManifest(int routeId, DateOnly date, string? changeReason)
     {
         try
         {
             var generatedBy = User.Identity?.Name ?? "Packing";
-            var manifest = await loadingService.GenerateManifestAsync(date, routeId, generatedBy, changeReason);
-            TempData["Success"] = $"Zapisano manifest dostawy {manifest.ManifestNumber}.";
-            return RedirectToAction(nameof(ManifestPreview), new { routeId, date });
+            var manifest = await _manifestService.GenerateManifestAsync(date, routeId, generatedBy, changeReason);
+            TempData["Success"] = $"Zapisano manifest {manifest.ManifestNumber}.";
         }
         catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
         }
 
-        return RedirectToAction(nameof(Route), new { routeId, date });
+        return RedirectToManifest(routeId, date);
     }
 
-    [HttpGet("{routeId:int}/manifest/preview")]
-    public async Task<IActionResult> ManifestPreview(int routeId, DateOnly date)
-    {
-        var board = await packingService.GetPackingBoardAsync(date);
-        var route = board.Routes.FirstOrDefault(r => r.RouteId == routeId);
-        if (route is null)
-        {
-            TempData["Error"] = $"Dostawa/trasa #{routeId} nie istnieje.";
-            return RedirectToAction(nameof(Index), new { date });
-        }
-
-        var manifest = await loadingService.GetManifestAsync(date, routeId);
-        if (manifest is null)
-        {
-            TempData["Error"] = $"Brak zapisanego manifestu dla trasy #{routeId} z dnia {date:dd.MM.yyyy}.";
-            return RedirectToAction(nameof(Route), new { routeId, date });
-        }
-
-        return View(new PackingDeliveryViewModel
-        {
-            SelectedDate = date,
-            Route = route,
-            Manifest = manifest,
-        });
-    }
-
-    [HttpPost("{routeId:int}/manifest/verify")]
+    [HttpPost("{routeId:int}/manifest/worker-approve")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> VerifyManifest(int routeId, DateOnly date, bool confirmedManifest)
+    public async Task<IActionResult> WorkerApproveManifest(int routeId, DateOnly date, bool confirmedManifest)
     {
         if (!confirmedManifest)
         {
-            TempData["Error"] = "Przed zatwierdzeniem potwierdź kontrolę zgodności manifestu z torbami.";
-            return RedirectToAction(nameof(ManifestPreview), new { routeId, date });
+            TempData["Error"] = "Przed zatwierdzeniem potwierdź kontrolę manifestu.";
+            return RedirectToManifest(routeId, date);
         }
 
         try
         {
-            var verifiedBy = User.Identity?.Name ?? "Packing";
-            var manifest = await loadingService.VerifyManifestAsync(date, routeId, verifiedBy);
-            TempData["Success"] = $"Manifest {manifest.ManifestNumber} zweryfikowany.";
-            return RedirectToAction(nameof(ManifestPreview), new { routeId, date });
+            var approvedBy = User.Identity?.Name ?? "Packing";
+            await _manifestService.ApproveManifestByWorkerAsync(date, routeId, approvedBy);
+            TempData["Success"] = "Manifest zatwierdzony przez pracownika. Przełożony otrzyma powiadomienie.";
         }
         catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
         }
 
-        return RedirectToAction(nameof(ManifestPreview), new { routeId, date });
+        return RedirectToManifest(routeId, date);
     }
 
-    [HttpGet("{routeId:int}/manifest")]
-    public async Task<IActionResult> ManifestJson(int routeId, DateOnly date)
+    [HttpPost("{routeId:int}/manifest/supervisor-approve")]
+    [Authorize(Roles = "PackingManager,Admin")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SupervisorApproveManifest(int routeId, DateOnly date, bool confirmedSupervisor)
     {
-        var manifest = await loadingService.GetManifestAsync(date, routeId);
+        if (!confirmedSupervisor)
+        {
+            TempData["Error"] = "Przed finalnym zatwierdzeniem potwierdź wysłanie manifestu do logistyki.";
+            return RedirectToManifest(routeId, date);
+        }
+
+        try
+        {
+            var approvedBy = User.Identity?.Name ?? "PackingManager";
+            await _manifestService.ApproveManifestBySupervisorAsync(date, routeId, approvedBy);
+            TempData["Success"] = "Manifest finalnie zatwierdzony i wysłany do logistyki.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToManifest(routeId, date);
+    }
+
+    [HttpGet("{routeId:int}/manifest/preview")]
+    public IActionResult ManifestPreview(int routeId, DateOnly date)
+    {
+        return RedirectToManifest(routeId, date);
+    }
+
+    [HttpPost("{routeId:int}/manifest/verify")]
+    [ValidateAntiForgeryToken]
+    public IActionResult VerifyManifest(int routeId, DateOnly date, bool confirmedManifest)
+    {
+        return RedirectToManifest(routeId, date);
+    }
+
+    [HttpGet("{routeId:int}/manifest/payload")]
+    public async Task<IActionResult> ManifestPayload(int routeId, DateOnly date)
+    {
+        var manifest = await _manifestService.GetManifestAsync(date, routeId);
         if (manifest is null)
         {
             TempData["Error"] = $"Brak zapisanego manifestu dla trasy #{routeId} z dnia {date:dd.MM.yyyy}.";
-            return RedirectToAction(nameof(Route), new { routeId, date });
+            return RedirectToManifest(routeId, date);
         }
 
         return Content(manifest.PayloadJson, "application/json");
@@ -137,7 +175,7 @@ public sealed class LoadingController : Controller
     {
         try
         {
-            await loadingService.LoadOrderBagAsync(sessionId);
+            await _loadingService.LoadOrderBagAsync(sessionId);
             TempData["Success"] = "Torba załadowana do auta.";
         }
         catch (InvalidOperationException ex)
@@ -160,8 +198,8 @@ public sealed class LoadingController : Controller
 
         try
         {
-            var bag = await loadingService.LoadBagByCodeAsync(routeId, transportCode);
-            TempData["Success"] = $"Zeskanowano i załadowano torbę: {transportCode} (Zamówienie #{bag.OrderId}, Klient: {bag.ClientName})";
+            var bag = await _loadingService.LoadBagByCodeAsync(routeId, transportCode);
+            TempData["Success"] = $"Zeskanowano i załadowano torbę: {transportCode} (zamówienie #{bag.OrderId}, klient ID: {bag.ClientPublicId ?? "-"})";
         }
         catch (InvalidOperationException ex)
         {
@@ -172,68 +210,24 @@ public sealed class LoadingController : Controller
     }
 
     [HttpGet("{routeId:int}/labels")]
-    public async Task<IActionResult> DeliveryLabels(int routeId, DateOnly date)
+    public IActionResult DeliveryLabels(int routeId, DateOnly date)
     {
-        var labels = await packingService.GetTransportLabelsForDeliveryAsync(date, routeId);
-        ViewBag.RouteId = routeId;
-        ViewBag.SelectedDate = date;
-        return View("Labels", labels);
+        return RedirectToAction("RouteLabels", "Packing", new { routeId, date });
     }
 
     [HttpGet("{routeId:int}/labels/reprint")]
     [Authorize(Roles = "PackingManager,Admin")]
-    public async Task<IActionResult> ReprintDeliveryLabelsForm(int routeId, DateOnly date)
+    public IActionResult ReprintDeliveryLabelsForm(int routeId, DateOnly date)
     {
-        try
-        {
-            var labels = (await packingService.GetTransportLabelsForDeliveryAsync(date, routeId)).ToList();
-            var model = new TransportLabelReprintFormViewModel
-            {
-                RouteId = routeId,
-                Date = date,
-                Labels = labels,
-            };
-
-            return View("ReprintDeliveryLabels", model);
-        }
-        catch (InvalidOperationException ex)
-        {
-            TempData["Error"] = ex.Message;
-            return RedirectToAction(nameof(DeliveryLabels), new { routeId, date });
-        }
+        return RedirectToAction("LabelsIndex", "Packing", new { routeId, date });
     }
 
     [HttpPost("{routeId:int}/labels/reprint")]
     [Authorize(Roles = "PackingManager,Admin")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ReprintDeliveryLabels(int routeId, DateOnly date, string reprintReason)
+    public IActionResult ReprintDeliveryLabels(int routeId, DateOnly date, string reprintReason)
     {
-        if (string.IsNullOrWhiteSpace(reprintReason))
-        {
-            TempData["Error"] = "Podaj powód redruku etykiet transportowych.";
-            return RedirectToAction(nameof(ReprintDeliveryLabelsForm), new { routeId, date });
-        }
-
-        try
-        {
-            var labels = await packingService.GetTransportLabelsForDeliveryAsync(
-                date,
-                routeId,
-                reprintReason,
-                forceNewPrint: true);
-            TempData["Success"] = $"Wygenerowano redruk {labels.Count()} etykiet transportowych.";
-            return RedirectToAction(nameof(DeliveryLabels), new { routeId, date });
-        }
-        catch (InvalidOperationException ex)
-        {
-            TempData["Error"] = ex.Message;
-            return RedirectToAction(nameof(DeliveryLabels), new { routeId, date });
-        }
-        catch (Exception ex)
-        {
-            TempData["Error"] = $"Nie udało się wygenerować redruku etykiet transportowych: {ex.Message}";
-            return RedirectToAction(nameof(ReprintDeliveryLabelsForm), new { routeId, date });
-        }
+        return RedirectToAction("LabelsIndex", "Packing", new { routeId, date });
     }
 
     [HttpPost("{routeId:int}/dispatch")]
@@ -243,8 +237,8 @@ public sealed class LoadingController : Controller
     {
         try
         {
-            await loadingService.DispatchAsync(date, routeId);
-            TempData["Success"] = "Cała dostawa zatwierdzona do wysyłki.";
+            await _loadingService.DispatchAsync(date, routeId);
+            TempData["Success"] = "Załadunek zakończony i dostawa wysłana.";
         }
         catch (InvalidOperationException ex)
         {
@@ -252,5 +246,13 @@ public sealed class LoadingController : Controller
         }
 
         return RedirectToAction(nameof(Route), new { routeId, date });
+    }
+
+    private IActionResult RedirectToManifest(int routeId, DateOnly date)
+    {
+        var url = Url.Action(nameof(Manifest), new { routeId, date = date.ToString("yyyy-MM-dd") })
+            ?? $"/loading/{routeId}/manifest?date={date:yyyy-MM-dd}";
+
+        return Redirect(url);
     }
 }

@@ -143,7 +143,6 @@
             var publicId = string.IsNullOrWhiteSpace(label.ClientPublicId)
                 ? "BRAK"
                 : label.ClientPublicId.Length > 8 ? label.ClientPublicId.Substring(0, 8) : label.ClientPublicId;
-            var qrData = System.Net.WebUtility.UrlEncode(label.QrCode);
             var isReprint = label.PrintNumber > 1;
 
             <div class="col-md-6">
@@ -172,7 +171,9 @@
                             </div>
                         </div>
                         <div class="col-auto text-center">
-                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=@qrData" class="transport-label__qr" alt="Kod QR torby" />
+                            <div class="transport-label__qr d-flex align-items-center justify-content-center text-center small fw-bold">
+                                @label.BagCode
+                            </div>
                             <div class="transport-label__code mt-2">@label.BagCode</div>
                         </div>
                     </div>

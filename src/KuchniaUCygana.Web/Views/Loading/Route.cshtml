@@ -1,15 +1,31 @@
 @model KuchniaUCygana.Web.Models.PackingDeliveryViewModel
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Dostawa do auta";
+    ViewData["Title"] = "Załadunek auta";
     ViewData["Section"] = "Załadunek";
-    ViewData["Description"] = "Manifest, etykiety transportowe i załadunek całej dostawy.";
+    ViewData["Description"] = "Skanowanie i ręczne ładowanie toreb do auta.";
 
     var route = Model.Route;
     var selectedDate = Model.SelectedDate;
     var manifest = Model.Manifest;
-    var manifestColor = route.IsManifestVerified ? "success" : route.HasManifest ? "warning" : "secondary";
-    var manifestText = route.IsManifestVerified ? "Manifest zweryfikowany" : route.HasManifest ? "Manifest do weryfikacji" : "Brak manifestu";
+    var manifestColor = route.IsManifestVerified
+        ? "success"
+        : route.ManifestRequiresRegeneration
+            ? "danger"
+            : route.ManifestWorkerApprovedAt.HasValue
+                ? "warning"
+                : route.HasManifest
+                    ? "azure"
+                    : "secondary";
+    var manifestText = route.IsManifestVerified
+        ? "Manifest finalny"
+        : route.ManifestRequiresRegeneration
+            ? "Manifest wymaga regeneracji"
+            : route.ManifestWorkerApprovedAt.HasValue
+                ? "Czeka na przełożonego"
+                : route.HasManifest
+                    ? "Czeka na pracownika"
+                    : "Brak manifestu";
 }
 
 <div class="row row-cards">
@@ -18,69 +34,57 @@
             <div class="card-body py-4">
                 <div class="row align-items-center g-3">
                     <div class="col">
-                        <div class="text-uppercase text-secondary small fw-bold">Dostawa #@route.RouteId</div>
+                        <div class="text-uppercase text-secondary small fw-bold">Załadunek trasy #@route.RouteId</div>
                         <h2 class="h1 mb-1 text-dark">@route.RouteName</h2>
                         <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
                             <span>Auto: <strong>@route.VehicleRegistration</strong></span>
                             <span>Torby: <strong>@route.TotalBags</strong></span>
-                            <span>Gotowe: <strong>@route.PackedBags</strong></span>
+                            <span>Spakowane: <strong>@route.PackedBags</strong></span>
                             <span>Załadowane: <strong>@route.LoadedBags</strong></span>
                             <span>Data: <strong>@selectedDate.ToString("dd.MM.yyyy")</strong></span>
                         </div>
+                        @if (manifest is not null)
+                        {
+                            <div class="text-secondary small mt-3">
+                                Manifest: <strong>@manifest.ManifestNumber</strong>,
+                                wygenerowany @manifest.GeneratedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                @if (manifest.IsVerified && manifest.VerifiedAt.HasValue)
+                                {
+                                    <span>, finalnie zatwierdzony @manifest.VerifiedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                                }
+                            </div>
+                        }
                     </div>
                     <div class="col-auto">
                         <span class="badge bg-@manifestColor-lt text-@manifestColor">@manifestText</span>
                     </div>
                 </div>
-                @if (manifest is not null)
-                {
-                    <div class="text-secondary small mt-3">
-                        Manifest: <strong>@manifest.ManifestNumber</strong>,
-                        wygenerowany @manifest.GeneratedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
-                        @if (manifest.IsVerified && manifest.VerifiedAt.HasValue)
-                        {
-                            <span>, zweryfikowany @manifest.VerifiedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
-                        }
-                    </div>
-                }
             </div>
         </div>
     </div>
 
     <div class="col-12">
-        <div class="card card-premium">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <h3 class="card-title">Operacje dostawy</h3>
-                <div class="btn-list">
-                    <form asp-action="GenerateManifest" asp-route-routeId="@route.RouteId" method="post">
+        <div class="card">
+            <div class="card-body d-flex flex-wrap align-items-center gap-2">
+                <a asp-controller="Packing" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-routeId="@route.RouteId" class="btn btn-outline-primary">Kompletacja trasy</a>
+                <a asp-controller="Packing" asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-routeId="@route.RouteId" class="btn btn-outline-primary">Etykiety trasy</a>
+                <a asp-action="Manifest" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Manifest cyfrowy</a>
+                <a asp-action="Route" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-primary">Załadunek (Transport)</a>
+                <a asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><line x1="5" y1="12" x2="19" y2="12" /><line x1="5" y1="12" x2="11" y2="18" /><line x1="5" y1="12" x2="11" y2="6" /></svg> Wróć do tras
+                </a>
+                @if (User.IsInRole("PackingManager") || User.IsInRole("Admin"))
+                {
+                    <form asp-action="DispatchDelivery" asp-route-routeId="@route.RouteId" method="post" class="ms-auto">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
-                        @if (route.HasManifest)
-                        {
-                            <input type="text" name="changeReason" class="form-control" placeholder="Powód regeneracji" />
-                        }
-                        <button type="submit" class="btn btn-outline-primary" disabled="@(!route.CanGenerateManifest ? "disabled" : null)">
-                            @(route.HasManifest ? "Regeneruj manifest" : "Generuj manifest")
-                        </button>
+                        <button type="submit" class="btn btn-success" disabled="@(!route.CanDispatchDelivery ? "disabled" : null)">Zakończ załadunek</button>
                     </form>
-                    @if (route.HasManifest)
-                    {
-                        <a asp-action="ManifestPreview" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-success">Kontrola manifestu</a>
-                        <a asp-action="ManifestJson" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Payload JSON</a>
-                    }
-                    <a asp-action="DeliveryLabels" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Drukuj etykiety transportowe</a>
-                    <form asp-action="DispatchDelivery" asp-route-routeId="@route.RouteId" method="post">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
-                        <button type="submit" class="btn btn-success" disabled="@(!route.CanDispatchDelivery ? "disabled" : null)">Wyślij całą dostawę</button>
-                    </form>
-                    <a asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wróć</a>
-                </div>
+                }
             </div>
         </div>
     </div>
 
-    <!-- Symulator skanowania etykiet transportowych (toreb) -->
     <div class="col-12">
         <div class="card card-premium bg-dark-lt text-dark">
             <div class="card-body">
@@ -89,20 +93,24 @@
                     <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
                     <div class="row align-items-center g-3">
                         <div class="col-md-3">
-                            <label for="transport-code-input" class="form-label fw-bold mb-0">Symulator skanera toreb (aut):</label>
+                            <label for="transport-code-input" class="form-label fw-bold mb-0">Skaner toreb:</label>
                         </div>
                         <div class="col-md-7">
-                            <div class="input-group">
-                                <span class="input-group-text bg-white text-muted">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7V5a2 2 0 0 1 2 -2h2" /><path d="M4 17v2a2 2 0 0 0 2 2h2" /><path d="M16 3h2a2 2 0 0 1 2 2v2" /><path d="M16 21h2a2 2 0 0 0 2 -2v-2" /><path d="M7 12h10" /><path d="M10 9v6" /><path d="M14 9v6" /></svg>
-                                </span>
-                                <input type="text" id="transport-code-input" name="transportCode" class="form-control form-control-lg bg-white" placeholder="Zeskanuj etykietę transportową torby (np. BAG-123456)..." autofocus />
-                            </div>
+                            <input type="text"
+                                   id="transport-code-input"
+                                   name="transportCode"
+                                   class="form-control form-control-lg bg-white"
+                                   placeholder="Zeskanuj QR lub wpisz kod BAG-..."
+                                   autofocus />
                         </div>
                         <div class="col-md-2">
                             <button type="submit" class="btn btn-indigo btn-lg w-100" disabled="@(!route.CanLoadBags ? "disabled" : null)">Załaduj</button>
                         </div>
                     </div>
+                    @if (!route.CanLoadBags)
+                    {
+                        <div class="text-danger small mt-2">Załadunek jest dostępny dopiero po finalnym zatwierdzeniu manifestu i potwierdzeniu przyklejenia etykiet.</div>
+                    }
                 </form>
             </div>
         </div>
@@ -111,7 +119,7 @@
     <div class="col-12">
         <div class="card card-premium">
             <div class="card-header">
-                <h3 class="card-title">Torby w dostawie</h3>
+                <h3 class="card-title">Załadunek toreb</h3>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table table-premium">
@@ -119,11 +127,11 @@
                         <tr>
                             <th class="w-1">Stop</th>
                             <th>Zamówienie</th>
-                            <th>Odbiorca</th>
+                            <th>Identyfikator</th>
                             <th>Adres</th>
                             <th>Pudełka</th>
                             <th>Status</th>
-                            <th>Manifest</th>
+                            <th>Etykieta</th>
                             <th class="w-1 text-end">Akcja</th>
                         </tr>
                     </thead>
@@ -137,16 +145,20 @@
                                     <div class="fw-bold text-dark">#@bag.OrderId</div>
                                     <div class="text-secondary small">@bag.DeliveryWindow</div>
                                 </td>
-                                <td class="fw-bold text-dark">@bag.ClientName</td>
+                                <td class="fw-bold text-dark">@(bag.ClientPublicId ?? "-")</td>
                                 <td class="text-secondary small">@bag.Address</td>
                                 <td class="fw-bold text-dark">@bag.PackedBoxes/@bag.TotalBoxes</td>
                                 <td>
                                     <span class="badge bg-@bag.StatusColor-lt text-@bag.StatusColor">@bag.StatusText</span>
                                 </td>
                                 <td>
-                                    @if (bag.HasLabels)
+                                    @if (bag.HasLabels && bag.IsTransportLabelAttached)
                                     {
-                                        <span class="badge bg-success-lt text-success">Etykieta gotowa</span>
+                                        <span class="badge bg-success-lt text-success">Przyklejona</span>
+                                    }
+                                    else if (bag.HasLabels)
+                                    {
+                                        <span class="badge bg-warning-lt text-warning">Nieprzyklejona</span>
                                     }
                                     else
                                     {
@@ -155,7 +167,6 @@
                                 </td>
                                 <td>
                                     <div class="btn-list flex-nowrap justify-content-end">
-                                        <a asp-controller="Packing" asp-action="Session" asp-route-sessionId="@bag.PackingSessionId" class="btn btn-sm btn-outline-secondary">Torba</a>
                                         <form asp-action="LoadBag" asp-route-routeId="@route.RouteId" asp-route-sessionId="@bag.PackingSessionId" method="post">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
@@ -174,12 +185,14 @@
 
 @section Scripts {
     <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            const transportInput = document.getElementById("transport-code-input");
-            if (transportInput) {
-                transportInput.focus();
+        (() => {
+            const manifestUrl = "@Url.Action("Manifest", new { routeId = route.RouteId, date = selectedDate.ToString("yyyy-MM-dd") })";
+            if (window.location.hash === "#manifest" && manifestUrl) {
+                window.location.replace(manifestUrl);
+                return;
             }
-        });
+
+            document.getElementById("transport-code-input")?.focus();
+        })();
     </script>
 }
-

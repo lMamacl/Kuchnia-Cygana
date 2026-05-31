@@ -9,4 +9,6 @@ public sealed class PackingDeliveryViewModel
     public PackingRouteDto Route { get; set; } = null!;
 
     public PackingManifestDto? Manifest { get; set; }
+
+    public ManifestControlDto? ManifestControl { get; set; }
 }
