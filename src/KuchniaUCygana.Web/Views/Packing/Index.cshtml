@@ -3,7 +3,7 @@
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Kompletacja toreb";
     ViewData["Section"] = "Pakowanie";
-    ViewData["Description"] = "Pakowanie pudelek do toreb. Zaladunek aut jest osobnym ekranem.";
+    ViewData["Description"] = "Pakowanie pudełek do toreb. Załadunek aut jest osobnym ekranem.";
 
     DateOnly selectedDate = ViewBag.SelectedDate ?? Model.PackingDate;
     var progress = Model.TotalBags > 0 ? Model.PackedBags * 100 / Model.TotalBags : 0;
@@ -19,7 +19,7 @@
                         <h2 class="h1 mb-1 text-dark">@selectedDate.ToString("dd.MM.yyyy")</h2>
                         <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
                             <span>Torby: <strong>@Model.TotalBags</strong></span>
-                            <span>Gotowe do zaladunku: <strong>@Model.PackedBags</strong></span>
+                            <span>Gotowe do załadunku: <strong>@Model.PackedBags</strong></span>
                         </div>
                     </div>
                     <div class="col-md-4">
@@ -36,7 +36,7 @@
                                value="@selectedDate.ToString("yyyy-MM-dd")"
                                onchange="window.location.href='?date=' + this.value"
                                aria-label="Filtruj po dacie" />
-                        <a asp-action="Loading" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-indigo">Przejdz do zaladunku aut</a>
+                        <a asp-controller="Loading" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-indigo">Przejdź do załadunku aut</a>
                     </div>
                 </div>
             </div>
@@ -46,7 +46,7 @@
     @if (Model.TotalBags == 0)
     {
         <div class="col-12">
-            <div class="alert alert-info">Brak aktywnych zamowien do kompletacji dla wybranej daty.</div>
+            <div class="alert alert-info">Brak aktywnych zamówień do kompletacji dla wybranej daty.</div>
         </div>
     }
 
@@ -61,7 +61,7 @@
                     </div>
                     <div class="d-flex align-items-center gap-3">
                         <span class="badge bg-success-lt text-success">@route.PackedBags gotowe</span>
-                        <a asp-action="Delivery" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-indigo">Ekran zaladunku</a>
+                        <a asp-controller="Loading" asp-action="Route" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-indigo">Ekran załadunku</a>
                     </div>
                 </div>
 
@@ -70,10 +70,10 @@
                         <thead>
                             <tr>
                                 <th class="w-1">Stop</th>
-                                <th>Zamowienie</th>
-                                <th>Odbiorca</th>
-                                <th>Adres</th>
-                                <th>Pudelka</th>
+                                <th>Zamówienie</th>
+                                <th>Identyfikator</th>
+                                <th>DeliveryCalendarId</th>
+                                <th>Pudełka</th>
                                 <th>Status torby</th>
                                 <th class="w-1 text-end">Akcja</th>
                             </tr>
@@ -88,10 +88,10 @@
                                         <div class="text-secondary small">@bag.DeliveryWindow</div>
                                     </td>
                                     <td>
-                                        <div class="fw-bold text-dark">@bag.ClientName</div>
+                                        <div class="fw-bold text-dark">@(bag.ClientPublicId ?? "-")</div>
                                         <span class="badge bg-indigo-lt text-indigo">@bag.DietType</span>
                                     </td>
-                                    <td class="text-secondary small">@bag.Address</td>
+                                    <td class="text-secondary small">@(bag.DeliveryCalendarId?.ToString() ?? "-")</td>
                                     <td>
                                         <span class="fw-bold text-dark">@bag.PackedBoxes/@bag.TotalBoxes</span>
                                     </td>

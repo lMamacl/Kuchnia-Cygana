@@ -17,4 +17,8 @@ public sealed class ScanBoxResponse
     public bool AllBoxesPacked { get; set; }
 
     public string ClientName { get; set; } = string.Empty;
+
+    public string ClientPublicId { get; set; } = string.Empty;
+
+    public string Status { get; set; } = string.Empty;
 }

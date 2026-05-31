@@ -16,6 +16,16 @@ public class PackingItem : AuditableEntity<int>
     public int PackingSessionId { get; set; }
 
     /// <summary>
+    /// Fizyczna torba, do ktorej przypisano pudelko.
+    /// </summary>
+    public int? PackingBagId { get; set; }
+
+    /// <summary>
+    /// Pozycja planu produkcji, z ktorej powstalo pudelko.
+    /// </summary>
+    public int? ProductionPlanItemId { get; set; }
+
+    /// <summary>
     /// ID posiłku z Modułu 2 (bridge).
     /// </summary>
     public int MealId { get; set; }
@@ -57,6 +67,12 @@ public class PackingItem : AuditableEntity<int>
     /// Czy pudełko jest uszkodzone / zgłoszono brak.
     /// </summary>
     public bool IsDamaged { get; set; }
+
+    public int? ReplacementForPackingItemId { get; set; }
+
+    public DateTimeOffset? IssueReportedAt { get; set; }
+
+    public int? IssueReportedByUserId { get; set; }
 
     /// <summary>
     /// Uwagi (np. przyczyna uszkodzenia).

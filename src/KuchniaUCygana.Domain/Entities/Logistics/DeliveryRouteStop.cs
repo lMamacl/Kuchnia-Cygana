@@ -1,5 +1,6 @@
 ﻿using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace KuchniaUCygana.Domain.Entities.Logistics;
 
@@ -8,6 +9,7 @@ namespace KuchniaUCygana.Domain.Entities.Logistics;
 /// Encja audytowana — śledzi twórcę i autora zmian dla celów operacyjnych.
 /// </summary>
 
+[Table("DeliveryRouteStops")]
 public sealed class DeliveryRouteStop : AuditableEntity
 {
     public int RouteId { get; set; }

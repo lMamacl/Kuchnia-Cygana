@@ -1,0 +1,78 @@
+@model KuchniaUCygana.Web.Models.PackingItemIssueFormViewModel
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Zgłoszenie pudełka";
+    ViewData["Section"] = "Pakowanie";
+    ViewData["Description"] = "Prosty formularz zgłoszenia problemu z pudełkiem.";
+}
+
+<div class="row row-cards">
+    <div class="col-lg-8">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Zgłoś problem z pudełkiem</h3>
+            </div>
+            <div class="card-body">
+                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <div class="text-secondary small">Identyfikator klienta</div>
+                        <div class="fw-bold">@Model.ClientPublicId</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-secondary small">DeliveryCalendarId</div>
+                        <div class="fw-bold">@(Model.DeliveryCalendarId?.ToString() ?? "-")</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-secondary small">Kod pudełka</div>
+                        <div class="fw-bold font-monospace">@(Model.BoxCode ?? "-")</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-secondary small">Status</div>
+                        <div class="fw-bold">@Model.Status</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="text-secondary small">Danie</div>
+                        <div class="fw-bold">@Model.MealName</div>
+                        <div class="text-secondary small">Wariant @Model.DietVariantId</div>
+                    </div>
+                </div>
+
+                <form asp-action="ItemIssue" asp-route-sessionId="@Model.SessionId" asp-route-packingItemId="@Model.PackingItemId" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="SessionId" />
+                    <input type="hidden" asp-for="PackingItemId" />
+
+                    <div class="mb-3">
+                        <label class="form-label">Co się stało?</label>
+                        <div class="row g-2">
+                            @foreach (var option in Model.ReasonOptions)
+                            {
+                                var id = $"reason-{(int)option.Flag}";
+                                <div class="col-md-6">
+                                    <label class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="ReasonFlags" id="@id" value="@((int)option.Flag)" checked="@Model.ReasonFlags.Contains(option.Flag)" />
+                                        <span class="form-check-label">@option.Label</span>
+                                    </label>
+                                </div>
+                            }
+                        </div>
+                        <span asp-validation-for="ReasonFlags" class="text-danger"></span>
+                    </div>
+
+                    <div class="mb-4">
+                        <label asp-for="Description" class="form-label">Opis zgłoszenia</label>
+                        <textarea asp-for="Description" class="form-control" rows="4" maxlength="1000" placeholder="Dopisz szczegóły, jeśli są potrzebne. Opis jest wymagany przy opcji Inne."></textarea>
+                        <span asp-validation-for="Description" class="text-danger"></span>
+                    </div>
+
+                    <div class="btn-list">
+                        <button type="submit" class="btn btn-danger">Wyślij zgłoszenie</button>
+                        <a asp-action="Session" asp-route-sessionId="@Model.SessionId" class="btn btn-outline-secondary">Wróć</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

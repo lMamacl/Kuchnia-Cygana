@@ -19,11 +19,24 @@ public interface IPackingService
 
     Task PackOrderBagAsync(int packingSessionId, string packedBy);
 
-    Task<IEnumerable<PackingLabelDto>> GenerateTransportLabelsAsync(int sessionId);
+    Task<ScanBoxResponse> ScanBoxAsync(int sessionId, string barcode, string packedBy);
+
+    Task<PackingItemDto> ReportPackingItemIssueAsync(ReportPackingItemIssueRequest request);
+
+    Task<PackingBagDto> ReportPackingBagDamageAsync(ReportPackingBagDamageRequest request);
+
+    Task<IEnumerable<PackingLabelDto>> GenerateTransportLabelsAsync(
+        int sessionId,
+        string? reprintReason = null,
+        bool forceNewPrint = false);
 
     Task<IEnumerable<PackingLabelDto>> GenerateLabelsAsync(int sessionId);
 
-    Task<IEnumerable<PackingLabelDto>> GetTransportLabelsForDeliveryAsync(DateOnly date, int routeId);
+    Task<IEnumerable<PackingLabelDto>> GetTransportLabelsForDeliveryAsync(
+        DateOnly date,
+        int routeId,
+        string? reprintReason = null,
+        bool forceNewPrint = false);
 
     Task<IEnumerable<PackingSessionDto>> GetSessionsByDateAsync(DateOnly date);
 
@@ -31,5 +44,8 @@ public interface IPackingService
 
     Task PackBoxByCodeAsync(int sessionId, string barcode, string packedBy);
 
-    Task<PackingLabelDto> PrintFoilLabelAsync(int packingItemId, string operatorName);
+    Task<PackingLabelDto> PrintFoilLabelAsync(
+        int packingItemId,
+        string operatorName,
+        string? reprintReason = null);
 }

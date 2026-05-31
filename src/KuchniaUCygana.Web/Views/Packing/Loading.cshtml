@@ -1,9 +1,9 @@
 @model KuchniaUCygana.Application.DTOs.Packing.PackingBoardDto
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Zaladunek aut";
+    ViewData["Title"] = "Załadunek aut";
     ViewData["Section"] = "Pakowanie";
-    ViewData["Description"] = "Dostawy per auto/trasa, manifesty i zaladunek gotowych toreb.";
+    ViewData["Description"] = "Dostawy per auto/trasa, manifesty i załadunek gotowych toreb.";
 
     DateOnly selectedDate = ViewBag.SelectedDate ?? Model.PackingDate;
 }
@@ -14,13 +14,13 @@
             <div class="card-body py-4">
                 <div class="row align-items-center g-3">
                     <div class="col">
-                        <div class="text-uppercase text-secondary small fw-bold">Zaladunek aut</div>
+                        <div class="text-uppercase text-secondary small fw-bold">Załadunek aut</div>
                         <h2 class="h1 mb-1 text-dark">@selectedDate.ToString("dd.MM.yyyy")</h2>
                         <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
                             <span>Dostawy: <strong>@Model.Routes.Count(r => r.TotalBags > 0)</strong></span>
                             <span>Torby: <strong>@Model.TotalBags</strong></span>
                             <span>Gotowe: <strong>@Model.PackedBags</strong></span>
-                            <span>Zaladowane: <strong>@Model.LoadedBags</strong></span>
+                            <span>Załadowane: <strong>@Model.LoadedBags</strong></span>
                         </div>
                     </div>
                     <div class="col-auto d-flex flex-wrap gap-2">
@@ -29,7 +29,7 @@
                                value="@selectedDate.ToString("yyyy-MM-dd")"
                                onchange="window.location.href='?date=' + this.value"
                                aria-label="Filtruj po dacie" />
-                        <a asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wroc do kompletacji</a>
+                        <a asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wróć do kompletacji</a>
                     </div>
                 </div>
             </div>
@@ -52,12 +52,12 @@
                         <div class="col-md-5">
                             <div class="d-flex flex-wrap gap-2">
                                 <span class="badge bg-success-lt text-success">@route.PackedBags/@route.TotalBags gotowe</span>
-                                <span class="badge bg-indigo-lt text-indigo">@route.LoadedBags/@route.TotalBags zaladowane</span>
+                                <span class="badge bg-indigo-lt text-indigo">@route.LoadedBags/@route.TotalBags załadowane</span>
                                 <span class="badge bg-@manifestColor-lt text-@manifestColor">@manifestText</span>
                             </div>
                         </div>
                         <div class="col-auto">
-                            <a asp-action="Delivery" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Otworz dostawe</a>
+                            <a asp-action="Delivery" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Otwórz dostawę</a>
                         </div>
                     </div>
                 </div>

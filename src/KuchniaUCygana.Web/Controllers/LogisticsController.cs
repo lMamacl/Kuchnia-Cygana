@@ -12,11 +12,16 @@ public sealed class LogisticsController : Controller
 {
     private readonly IVehicleService _vehicleService;
     private readonly IGeocodeService _geocodeService;
+    private readonly IDeliveryRouteService _deliveryRouteService;
 
-    public LogisticsController(IVehicleService vehicleService, IGeocodeService geocodeService)
+    public LogisticsController(
+        IVehicleService vehicleService,
+        IGeocodeService geocodeService,
+        IDeliveryRouteService deliveryRouteService)
     {
         _vehicleService = vehicleService;
         _geocodeService = geocodeService;
+        _deliveryRouteService = deliveryRouteService;
     }
 
     [HttpGet("")]
@@ -29,12 +34,26 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet("routes")]
-    public IActionResult Routes()
+    public async Task<IActionResult> Routes(DateTimeOffset? date)
     {
+        var selectedDate = date ?? DateTimeOffset.Now;
         ViewData["Title"] = "Trasy";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = "Lista tras z filtrem dnia.";
-        return View();
+        ViewBag.SelectedDate = selectedDate;
+        return View(await _deliveryRouteService.GetRoutesForDateAsync(selectedDate));
+    }
+
+    [HttpPost("routes/generate")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GenerateRoutes(GenerateDailyRoutesRequest request)
+    {
+        var result = await _deliveryRouteService.GenerateDailyRoutesAsync(request);
+        TempData[result.Succeeded ? "Success" : "Error"] = result.Succeeded
+            ? $"Wygenerowano {result.GeneratedRoutesCount} tras i {result.PlannedStopsCount} stopow."
+            : string.Join(" ", result.Issues.Select(i => i.Message));
+
+        return RedirectToAction(nameof(Routes), new { date = request.RouteDate.ToString("yyyy-MM-dd") });
     }
 
     [HttpGet("routes/create")]
@@ -47,12 +66,13 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet("routes/{id:int?}")]
-    public IActionResult RouteDetails(int? id)
+    public async Task<IActionResult> RouteDetails(int? id)
     {
         ViewData["Title"] = "Edycja trasy";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = id.HasValue ? $"Placeholder trasy #{id}." : "Placeholder edycji trasy.";
-        return View();
+        var route = id.HasValue ? await _deliveryRouteService.GetRouteDetailsAsync(id.Value) : null;
+        return View(route);
     }
 
     [HttpGet("routes/{id:int}/map")]

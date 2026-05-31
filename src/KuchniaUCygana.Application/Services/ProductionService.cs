@@ -17,6 +17,7 @@ public sealed class ProductionService : IProductionService
     private readonly IProductionPlanRepository _planRepository;
     private readonly IRepository<ProductionPlanItem> _itemRepository;
     private readonly IDietDataProvider _dietProvider;
+    private readonly IPackingService _packingService;
     private readonly FefoService _fefoService;
     private readonly IMapper _mapper;
     private readonly ILogger<ProductionService> _logger;
@@ -26,6 +27,7 @@ public sealed class ProductionService : IProductionService
         IProductionPlanRepository planRepository,
         IRepository<ProductionPlanItem> itemRepository,
         IDietDataProvider dietProvider,
+        IPackingService packingService,
         FefoService fefoService,
         IMapper mapper,
         ILogger<ProductionService> logger)
@@ -34,6 +36,7 @@ public sealed class ProductionService : IProductionService
         _planRepository = planRepository;
         _itemRepository = itemRepository;
         _dietProvider = dietProvider;
+        _packingService = packingService;
         _fefoService = fefoService;
         _mapper = mapper;
         _logger = logger;
@@ -167,6 +170,16 @@ public sealed class ProductionService : IProductionService
         item.ActualReadyTime = TimeOnly.FromDateTime(DateTime.Now);
 
         await _itemRepository.UpdateAsync(item);
+
+        var plan = await _planRepository.GetByIdAsync(item.ProductionPlanId);
+        if (plan is not null)
+        {
+            var sessions = (await _packingService.GetSessionsByDateAsync(plan.ProductionDate)).ToList();
+            foreach (var session in sessions.Where(s => s.Items.Count == 0 && s.OrderId.HasValue))
+            {
+                await _packingService.PrepareOrderBoxesAsync(session.Id);
+            }
+        }
 
         if (item.CookedQuantity < item.PlannedQuantity * 0.9m)
         {

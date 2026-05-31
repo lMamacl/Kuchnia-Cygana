@@ -11,6 +11,8 @@ public sealed class PackingLabelDto
 
     public int? PackingSessionId { get; set; }
 
+    public int? PackingBagId { get; set; }
+
     public string LabelType { get; set; } = string.Empty;
 
     public string QrCode { get; set; } = string.Empty;
@@ -25,6 +27,22 @@ public sealed class PackingLabelDto
     // Etykieta wysyłkowa
     public string? ClientName { get; set; }
 
+    public string? ClientPublicId { get; set; }
+
+    public string? Address { get; set; }
+
+    public string? BagCode { get; set; }
+
+    public int? DeliveryCalendarId { get; set; }
+
+    public int? StopNumber { get; set; }
+
+    public string? VehicleRegistration { get; set; }
+
+    public int TotalBoxes { get; set; }
+
+    public int PackedBoxes { get; set; }
+
     public string? RouteInfo { get; set; }
 
     public string? DeliveryWindow { get; set; }
@@ -35,4 +53,12 @@ public sealed class PackingLabelDto
     public string? MealsList { get; set; }
 
     public string? ReprintReason { get; set; }
+
+    public int PrintNumber { get; set; } = 1;
+
+    public DateTimeOffset? PrintedAt { get; set; }
+
+    public string? PrintedBy { get; set; }
+
+    public string? LabelDataJson { get; set; }
 }

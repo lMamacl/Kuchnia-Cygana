@@ -610,9 +610,14 @@ public sealed class WarehouseRepositoriesSqlServerTests
             new BaseRepository<PackingItem>(connectionFactory),
             new BaseRepository<PackingLabel>(connectionFactory),
             new BaseRepository<PackingManifest>(connectionFactory),
+            new PackingBagRepository(connectionFactory),
+            new BoxLabelRepository(connectionFactory),
+            new PackingStatusLogRepository(connectionFactory),
             new M1OrderDataProvider(connectionFactory),
             new TestDietDataProvider(),
             new MockDeliveryManifestProvider(),
+            new TestApplicationUrlProvider(),
+            new TestCurrentUserService(),
             mapper,
             NullLogger<PackingService>.Instance);
     }
@@ -626,8 +631,10 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
         return new LoadingService(
             new PackingSessionRepository(connectionFactory),
+            new PackingBagRepository(connectionFactory),
             new BaseRepository<PackingLabel>(connectionFactory),
             new BaseRepository<PackingManifest>(connectionFactory),
+            new PackingStatusLogRepository(connectionFactory),
             packingService,
             mapper,
             NullLogger<LoadingService>.Instance);
@@ -1302,6 +1309,26 @@ public sealed class WarehouseRepositoriesSqlServerTests
                 MealId = mealId,
                 MealName = $"Meal {mealId}",
             });
+        }
+    }
+
+    private sealed class TestApplicationUrlProvider : IApplicationUrlProvider
+    {
+        public string BaseUrl => "https://test.local";
+    }
+
+    private sealed class TestCurrentUserService : ICurrentUserService
+    {
+        public bool IsAuthenticated => true;
+
+        public int? GetUserId()
+        {
+            return 7;
+        }
+
+        public string? GetUserName()
+        {
+            return "test-user";
         }
     }
 }

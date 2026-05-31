@@ -9,9 +9,13 @@ namespace KuchniaUCygana.Domain.Interfaces.External;
 /// </summary>
 public sealed class ActiveOrderEntry
 {
+    public int DeliveryCalendarId { get; set; }
+
     public int OrderId { get; set; }
 
     public int ClientId { get; set; }
+
+    public string? ClientPublicId { get; set; }
 
     public string ClientName { get; set; } = string.Empty;
 

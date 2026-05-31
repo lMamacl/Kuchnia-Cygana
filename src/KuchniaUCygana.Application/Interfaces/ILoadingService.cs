@@ -18,7 +18,11 @@ public interface ILoadingService
     /// <summary>
     /// Generuje manifest dostawy dla wybranej trasy i dnia.
     /// </summary>
-    Task<PackingManifestDto> GenerateManifestAsync(DateOnly date, int routeId, string generatedBy);
+    Task<PackingManifestDto> GenerateManifestAsync(
+        DateOnly date,
+        int routeId,
+        string generatedBy,
+        string? changeReason = null);
 
     /// <summary>
     /// Pobiera najnowszy manifest dostawy dla wybranej trasy i dnia.

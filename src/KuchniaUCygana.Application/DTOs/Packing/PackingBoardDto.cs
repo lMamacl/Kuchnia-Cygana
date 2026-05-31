@@ -60,11 +60,21 @@ public sealed class PackingRouteDto
 
 public sealed class PackingBagDto
 {
+    public int PackingBagId { get; set; }
+
     public int PackingSessionId { get; set; }
+
+    public int? DeliveryCalendarId { get; set; }
+
+    public int BagNumber { get; set; }
+
+    public string BagCode { get; set; } = string.Empty;
 
     public int OrderId { get; set; }
 
     public string ClientName { get; set; } = string.Empty;
+
+    public string? ClientPublicId { get; set; }
 
     public string DietType { get; set; } = string.Empty;
 
@@ -97,4 +107,6 @@ public sealed class PackingBagDto
     public bool CanPackBag { get; set; }
 
     public bool CanLoad { get; set; }
+
+    public bool CanGenerateTransportLabel { get; set; }
 }

@@ -66,6 +66,30 @@ public sealed class DependencyInjectionTests
     }
 
     [Fact]
+    public void AddInfrastructure_Registers_M4DeliveryManifestProvider_ByDefault()
+    {
+        var config = CreateConfiguration();
+        var services = new ServiceCollection();
+
+        services.AddInfrastructure(config);
+        var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IDeliveryManifestProvider>().Should().BeOfType<M4DeliveryManifestProvider>();
+    }
+
+    [Fact]
+    public void AddInfrastructure_Registers_MockDeliveryManifestProvider_WhenConfigured()
+    {
+        var config = CreateConfiguration(deliveryManifestProvider: "Mock");
+        var services = new ServiceCollection();
+
+        services.AddInfrastructure(config);
+        var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IDeliveryManifestProvider>().Should().BeOfType<MockDeliveryManifestProvider>();
+    }
+
+    [Fact]
     public void AddInfrastructure_Registers_Module3RepositoryContracts()
     {
         var config = CreateConfiguration();
@@ -78,7 +102,7 @@ public sealed class DependencyInjectionTests
         provider.GetRequiredService<ITemperatureLogRepository>().Should().NotBeNull();
     }
 
-    private static IConfiguration CreateConfiguration(string? orderProvider = null)
+    private static IConfiguration CreateConfiguration(string? orderProvider = null, string? deliveryManifestProvider = null)
     {
         var values = new Dictionary<string, string?>
         {
@@ -88,6 +112,11 @@ public sealed class DependencyInjectionTests
         if (orderProvider is not null)
         {
             values["OrderProvider"] = orderProvider;
+        }
+
+        if (deliveryManifestProvider is not null)
+        {
+            values["DeliveryManifestProvider"] = deliveryManifestProvider;
         }
 
         return new ConfigurationBuilder()

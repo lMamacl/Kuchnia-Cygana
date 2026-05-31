@@ -10,6 +10,7 @@ namespace KuchniaUCygana.Domain.Entities.Logistics;
 /// przypisanego kierowcę i pojazd.
 /// </summary>
 
+[Table("DeliveryRoutes")]
 public sealed class DeliveryRoute : AuditableEntity
 {
     public DateTimeOffset RouteDate { get; set; }

@@ -42,6 +42,19 @@ public sealed class PackingManifest : BaseEntity<int>
     [StringLength(100)]
     public string? VerifiedBy { get; set; }
 
+    public int? VerifiedByUserId { get; set; }
+
+    public int? DriverUserId { get; set; }
+
+    public int ManifestVersion { get; set; } = 1;
+
+    public int? SupersedesManifestId { get; set; }
+
+    [StringLength(250)]
+    public string? ChangeReason { get; set; }
+
+    public bool IsSuperseded { get; set; }
+
     [Required]
     public string PayloadJson { get; set; } = string.Empty;
 }

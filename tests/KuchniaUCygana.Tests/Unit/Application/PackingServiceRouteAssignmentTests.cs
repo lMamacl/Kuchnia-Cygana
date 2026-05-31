@@ -1,0 +1,600 @@
+using AutoMapper;
+using FluentAssertions;
+using KuchniaUCygana.Application.DTOs.Packing;
+using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Application.Mappings;
+using KuchniaUCygana.Application.Services;
+using KuchniaUCygana.Domain.Common;
+using KuchniaUCygana.Domain.Entities.Packing;
+using KuchniaUCygana.Domain.Entities.Production;
+using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Domain.Interfaces;
+using KuchniaUCygana.Domain.Interfaces.External;
+using KuchniaUCygana.Domain.Interfaces.Packing;
+using KuchniaUCygana.Domain.Interfaces.Production;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace KuchniaUCygana.Tests.Unit.Application;
+
+public sealed class PackingServiceRouteAssignmentTests
+{
+    [Fact]
+    public async Task GetPackingBoardAsync_AssignsBagsByDeliveryCalendarId_NotOrderPosition()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date));
+
+        var board = await service.GetPackingBoardAsync(date);
+
+        var bags = board.Routes.Single().Bags.OrderBy(b => b.StopNumber).ToList();
+        bags.Should().HaveCount(2);
+        bags[0].DeliveryCalendarId.Should().Be(200);
+        bags[0].OrderId.Should().Be(2);
+        bags[1].DeliveryCalendarId.Should().Be(100);
+        bags[1].OrderId.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GenerateTransportLabelsAsync_DoesNotStoreClientNameInTransportLabelSnapshot()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            labelRepository);
+        var (session, bag, _) = await CreatePackedSessionAsync(date, sessionRepository, bagRepository, itemRepository);
+
+        var labels = (await service.GenerateTransportLabelsAsync(session.Id)).ToList();
+
+        labels.Should().ContainSingle();
+        labels.Single().ClientName.Should().BeNull();
+        var stored = (await labelRepository.GetAllAsync()).Single();
+        stored.ClientName.Should().BeNull();
+        stored.LabelDataJson.Should().NotContain("Klient 1");
+        stored.LabelDataJson.Should().NotContain("ClientName");
+        stored.PackingBagId.Should().Be(bag.Id);
+    }
+
+    [Fact]
+    public async Task ScanBoxAsync_RejectsInvalidBoxStates()
+    {
+        var cases = new[]
+        {
+            (Status: PackingItemStatus.FoilPrinted, HasLabel: false),
+            (Status: PackingItemStatus.Pending, HasLabel: true),
+            (Status: PackingItemStatus.Damaged, HasLabel: true),
+            (Status: PackingItemStatus.Missing, HasLabel: true),
+            (Status: PackingItemStatus.Packed, HasLabel: true),
+        };
+
+        foreach (var testCase in cases)
+        {
+            var date = new DateOnly(2035, 6, 1);
+            var sessionRepository = new InMemoryPackingSessionRepository();
+            var bagRepository = new InMemoryPackingBagRepository();
+            var itemRepository = new InMemoryRepository<PackingItem>();
+            var boxLabelRepository = new InMemoryBoxLabelRepository();
+            var service = CreateService(
+                sessionRepository,
+                bagRepository,
+                new ReorderedRouteManifestProvider(),
+                new CalendarAwareOrderProvider(date),
+                itemRepository,
+                boxLabelRepository: boxLabelRepository);
+            var (session, _, item) = await CreateSessionWithItemAsync(
+                date,
+                sessionRepository,
+                bagRepository,
+                itemRepository,
+                testCase.Status);
+
+            if (testCase.HasLabel)
+            {
+                await boxLabelRepository.InsertAsync(new BoxLabel
+                {
+                    PackingItemId = item.Id,
+                    QrCode = item.BoxCode!,
+                    PrintNumber = 1,
+                    PrintedAt = DateTimeOffset.UtcNow,
+                });
+            }
+
+            var result = await service.ScanBoxAsync(session.Id, item.BoxCode!, "packer");
+
+            result.Success.Should().BeFalse($"status {testCase.Status} with label={testCase.HasLabel} must be rejected");
+            result.ClientName.Should().BeEmpty();
+            item.Status.Should().Be(testCase.Status);
+        }
+    }
+
+    [Fact]
+    public async Task ReportPackingItemIssueAsync_CreatesReplacementAndBlocksClosing()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository);
+        var (session, _, item) = await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.FoilPrinted);
+
+        var replacement = await service.ReportPackingItemIssueAsync(new ReportPackingItemIssueRequest
+        {
+            PackingItemId = item.Id,
+            IssueType = nameof(PackingItemStatus.Damaged),
+            Reason = "Pekniete opakowanie",
+        });
+
+        item.Status.Should().Be(PackingItemStatus.Damaged);
+        item.ReplacementForPackingItemId.Should().BeNull();
+        replacement.Status.Should().Be(nameof(PackingItemStatus.Pending));
+        replacement.ReplacementForPackingItemId.Should().Be(item.Id);
+        var refreshed = await service.GetSessionByIdAsync(session.Id);
+        refreshed!.CanCloseBag.Should().BeFalse();
+        refreshed.Items.Should().Contain(i => i.ReplacementForPackingItemId == item.Id);
+    }
+
+    [Fact]
+    public async Task ReportPackingBagDamageAsync_CreatesNewBagAndRequiresRescan()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository);
+        var (session, damagedBag, item) = await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Packed);
+
+        var replacementBag = await service.ReportPackingBagDamageAsync(new ReportPackingBagDamageRequest
+        {
+            PackingBagId = damagedBag.Id,
+            Reason = "Rozerwana raczka",
+        });
+
+        damagedBag.Status.Should().Be(PackingBagStatus.Damaged);
+        damagedBag.ReplacementPackingBagId.Should().Be(replacementBag.PackingBagId);
+        replacementBag.BagCode.Should().NotBe(damagedBag.BagCode);
+        item.PackingBagId.Should().Be(replacementBag.PackingBagId);
+        item.Status.Should().Be(PackingItemStatus.FoilPrinted);
+    }
+
+    [Fact]
+    public async Task PrintFoilLabelAsync_ReprintRequiresReason()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var boxLabelRepository = new InMemoryBoxLabelRepository();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            boxLabelRepository: boxLabelRepository);
+        var (_, _, item) = await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Pending);
+
+        await service.PrintFoilLabelAsync(item.Id, "kitchen");
+        var act = async () => await service.PrintFoilLabelAsync(item.Id, "kitchen");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Powód redruku*");
+    }
+
+    private static async Task<(PackingSession Session, PackingBag Bag, PackingItem Item)> CreatePackedSessionAsync(
+        DateOnly date,
+        InMemoryPackingSessionRepository sessionRepository,
+        InMemoryPackingBagRepository bagRepository,
+        InMemoryRepository<PackingItem> itemRepository)
+    {
+        return await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Packed,
+            PackingStatus.Packed,
+            PackingBagStatus.Packed);
+    }
+
+    private static async Task<(PackingSession Session, PackingBag Bag, PackingItem Item)> CreateSessionWithItemAsync(
+        DateOnly date,
+        InMemoryPackingSessionRepository sessionRepository,
+        InMemoryPackingBagRepository bagRepository,
+        InMemoryRepository<PackingItem> itemRepository,
+        PackingItemStatus itemStatus,
+        PackingStatus sessionStatus = PackingStatus.Pending,
+        PackingBagStatus bagStatus = PackingBagStatus.Pending)
+    {
+        var session = new PackingSession
+        {
+            PackingDate = date,
+            OrderId = 1,
+            DeliveryCalendarId = 100,
+            ClientName = "Klient 1",
+            ClientPublicId = "TEST0001",
+            Status = sessionStatus,
+        };
+        session.Id = await sessionRepository.InsertAsync(session);
+
+        var bag = new PackingBag
+        {
+            PackingSessionId = session.Id,
+            BagNumber = 1,
+            BagCode = $"BAG-{session.Id:D6}-01",
+            Status = bagStatus,
+        };
+        bag.Id = await bagRepository.InsertAsync(bag);
+
+        var item = new PackingItem
+        {
+            PackingSessionId = session.Id,
+            PackingBagId = bag.Id,
+            MealId = 501,
+            MealName = "Test meal",
+            DietVariantId = 1,
+            BoxCode = $"BOX-{session.Id:D6}-01",
+            Status = itemStatus,
+            PackedAt = itemStatus == PackingItemStatus.Packed ? DateTimeOffset.UtcNow : null,
+            PackedBy = itemStatus == PackingItemStatus.Packed ? "packer" : null,
+        };
+        item.Id = await itemRepository.InsertAsync(item);
+        session.Items.Add(item);
+
+        return (session, bag, item);
+    }
+
+    private static PackingService CreateService(
+        IPackingSessionRepository sessionRepository,
+        IPackingBagRepository bagRepository,
+        IDeliveryManifestProvider manifestProvider,
+        IOrderDataProvider orderProvider,
+        IRepository<PackingItem>? itemRepository = null,
+        IRepository<PackingLabel>? labelRepository = null,
+        IRepository<PackingManifest>? manifestRepository = null,
+        IBoxLabelRepository? boxLabelRepository = null)
+    {
+        var mapperConfiguration = new MapperConfiguration(
+            cfg => cfg.AddProfile<ProductionProfile>(),
+            NullLoggerFactory.Instance);
+
+        return new PackingService(
+            sessionRepository,
+            itemRepository ?? new InMemoryRepository<PackingItem>(),
+            labelRepository ?? new InMemoryRepository<PackingLabel>(),
+            manifestRepository ?? new InMemoryRepository<PackingManifest>(),
+            bagRepository,
+            boxLabelRepository ?? new InMemoryBoxLabelRepository(),
+            new InMemoryPackingStatusLogRepository(),
+            orderProvider,
+            new EmptyDietDataProvider(),
+            manifestProvider,
+            new TestApplicationUrlProvider(),
+            new TestCurrentUserService(),
+            mapperConfiguration.CreateMapper(),
+            NullLogger<PackingService>.Instance);
+    }
+
+    private sealed class CalendarAwareOrderProvider : IOrderDataProvider
+    {
+        private readonly DateOnly _date;
+
+        public CalendarAwareOrderProvider(DateOnly date)
+        {
+            _date = date;
+        }
+
+        public Task<IEnumerable<ActiveOrderEntry>> GetActiveOrdersAsync(DateOnly deliveryDate)
+        {
+            return Task.FromResult<IEnumerable<ActiveOrderEntry>>(new[]
+            {
+                new ActiveOrderEntry
+                {
+                    DeliveryCalendarId = 100,
+                    OrderId = 1,
+                    ClientId = 1,
+                    ClientPublicId = "TEST0001",
+                    ClientName = "Klient 1",
+                    DietVariantId = 1,
+                    DeliveryDate = deliveryDate,
+                },
+                new ActiveOrderEntry
+                {
+                    DeliveryCalendarId = 200,
+                    OrderId = 2,
+                    ClientId = 2,
+                    ClientPublicId = "TEST0002",
+                    ClientName = "Klient 2",
+                    DietVariantId = 2,
+                    DeliveryDate = deliveryDate,
+                },
+            });
+        }
+
+        public Task<ActiveOrderEntry?> GetOrderByIdAsync(int orderId)
+        {
+            return Task.FromResult<ActiveOrderEntry?>(null);
+        }
+
+        public Task<IEnumerable<OrderDeliveryInfo>> GetDeliveriesForDateAsync(DateTime date)
+        {
+            return Task.FromResult<IEnumerable<OrderDeliveryInfo>>(new[]
+            {
+                CreateDelivery(100, 1, "Klient 1"),
+                CreateDelivery(200, 2, "Klient 2"),
+            });
+        }
+
+        private OrderDeliveryInfo CreateDelivery(int deliveryCalendarId, int orderId, string clientName)
+        {
+            return new OrderDeliveryInfo(
+                deliveryCalendarId,
+                orderId,
+                $"ORD-{orderId}",
+                orderId,
+                $"TEST{orderId:D4}",
+                clientName,
+                $"Adres {orderId}",
+                "Warszawa",
+                "00-001",
+                52.2,
+                21.0,
+                _date.ToDateTime(TimeOnly.FromTimeSpan(TimeSpan.FromHours(8))),
+                "08:00-09:00",
+                Array.Empty<OrderItemInfo>());
+        }
+    }
+
+    private sealed class ReorderedRouteManifestProvider : IDeliveryManifestProvider
+    {
+        public Task<IEnumerable<RouteEntry>> GetRoutesForDateAsync(DateOnly date)
+        {
+            return Task.FromResult<IEnumerable<RouteEntry>>(new[]
+            {
+                new RouteEntry
+                {
+                    RouteId = 7,
+                    RouteName = "Trasa testowa",
+                    VehicleId = 1,
+                    VehicleRegistration = "WA TEST",
+                    Stops =
+                    {
+                        new RouteStopEntry { StopId = 1, SequenceNumber = 1, DeliveryCalendarId = 200 },
+                        new RouteStopEntry { StopId = 2, SequenceNumber = 2, DeliveryCalendarId = 100 },
+                    },
+                },
+            });
+        }
+
+        public Task<RouteEntry?> GetRouteByIdAsync(int routeId)
+        {
+            return Task.FromResult<RouteEntry?>(null);
+        }
+    }
+
+    private sealed class EmptyDietDataProvider : IDietDataProvider
+    {
+        public Task<IEnumerable<DietPlanEntry>> Get7DayPlanAsync(DateOnly startDate)
+        {
+            return Task.FromResult(Enumerable.Empty<DietPlanEntry>());
+        }
+
+        public Task<IEnumerable<DietPlanEntry>> GetPlanForDateAsync(DateOnly date)
+        {
+            return Task.FromResult(Enumerable.Empty<DietPlanEntry>());
+        }
+
+        public Task<IEnumerable<RecipeIngredientEntry>> GetRecipeForMealAsync(int mealId)
+        {
+            return Task.FromResult(Enumerable.Empty<RecipeIngredientEntry>());
+        }
+
+        public Task<MealCookingDetailsEntry?> GetMealCookingDetailsAsync(int mealId)
+        {
+            return Task.FromResult<MealCookingDetailsEntry?>(null);
+        }
+    }
+
+    private sealed class TestApplicationUrlProvider : IApplicationUrlProvider
+    {
+        public string BaseUrl => "https://test.local";
+    }
+
+    private sealed class TestCurrentUserService : ICurrentUserService
+    {
+        public bool IsAuthenticated => true;
+
+        public int? GetUserId()
+        {
+            return 7;
+        }
+
+        public string? GetUserName()
+        {
+            return "test-user";
+        }
+    }
+
+    private sealed class InMemoryPackingSessionRepository : InMemoryRepository<PackingSession>, IPackingSessionRepository
+    {
+        public Task<IEnumerable<PackingSession>> GetActiveByDateAsync(DateOnly date)
+        {
+            return Task.FromResult(this.Entities.Where(s => s.PackingDate == date));
+        }
+
+        public Task<PackingSession?> GetWithItemsAsync(int sessionId)
+        {
+            return Task.FromResult(this.Entities.FirstOrDefault(s => s.Id == sessionId));
+        }
+
+        public Task<PackingSession?> GetByDateAndOrderAsync(DateOnly date, int orderId)
+        {
+            return Task.FromResult(this.Entities.FirstOrDefault(s => s.PackingDate == date && s.OrderId == orderId));
+        }
+
+        public Task<IEnumerable<PackingSession>> GetByDateWithItemsAsync(DateOnly date)
+        {
+            return Task.FromResult(this.Entities.Where(s => s.PackingDate == date));
+        }
+
+        public Task<IEnumerable<PackingItem>> GetSessionItemsAsync(int sessionId)
+        {
+            return Task.FromResult(Enumerable.Empty<PackingItem>());
+        }
+
+        public Task<IEnumerable<PackingLabel>> GetLabelsBySessionAsync(int sessionId)
+        {
+            return Task.FromResult(Enumerable.Empty<PackingLabel>());
+        }
+
+        public Task<PackingLabel?> GetShippingLabelAsync(int sessionId)
+        {
+            return Task.FromResult<PackingLabel?>(null);
+        }
+
+        public Task<PackingLabel?> GetProductLabelAsync(int packingItemId)
+        {
+            return Task.FromResult<PackingLabel?>(null);
+        }
+
+        public Task<IEnumerable<string>> GetMealIngredientsAsync(int mealId)
+        {
+            return Task.FromResult(Enumerable.Empty<string>());
+        }
+
+        public Task<IEnumerable<string>> GetMealAllergensAsync(int mealId)
+        {
+            return Task.FromResult(Enumerable.Empty<string>());
+        }
+
+        public Task<int?> GetMealCaloriesAsync(int mealId)
+        {
+            return Task.FromResult<int?>(null);
+        }
+    }
+
+    private sealed class InMemoryPackingBagRepository : InMemoryRepository<PackingBag>, IPackingBagRepository
+    {
+        public Task<IEnumerable<PackingBag>> GetBySessionIdAsync(int packingSessionId)
+        {
+            return Task.FromResult(this.Entities.Where(b => b.PackingSessionId == packingSessionId));
+        }
+
+        public Task<PackingBag?> GetByCodeAsync(string bagCode)
+        {
+            return Task.FromResult(this.Entities.FirstOrDefault(b => b.BagCode == bagCode));
+        }
+
+        public Task<PackingBag?> GetDefaultForSessionAsync(int packingSessionId)
+        {
+            return Task.FromResult(this.Entities
+                .OrderBy(b => b.BagNumber)
+                .FirstOrDefault(b => b.PackingSessionId == packingSessionId && b.Status != PackingBagStatus.Damaged));
+        }
+    }
+
+    private sealed class InMemoryBoxLabelRepository : InMemoryRepository<BoxLabel>, IBoxLabelRepository
+    {
+        public Task<BoxLabel?> GetLatestForPackingItemAsync(int packingItemId)
+        {
+            return Task.FromResult(this.Entities.LastOrDefault(l => l.PackingItemId == packingItemId));
+        }
+
+        public Task<BoxLabel?> GetByQrCodeAsync(string qrCode)
+        {
+            return Task.FromResult(this.Entities.LastOrDefault(l => l.QrCode == qrCode));
+        }
+
+        public Task<int> GetPrintCountAsync(int packingItemId)
+        {
+            return Task.FromResult(this.Entities.Count(l => l.PackingItemId == packingItemId));
+        }
+    }
+
+    private sealed class InMemoryPackingStatusLogRepository : InMemoryRepository<PackingStatusLog>, IPackingStatusLogRepository
+    {
+        public Task<IEnumerable<PackingStatusLog>> GetBySessionIdAsync(int packingSessionId)
+        {
+            return Task.FromResult(this.Entities.Where(l => l.PackingSessionId == packingSessionId));
+        }
+    }
+
+    private class InMemoryRepository<TEntity> : IRepository<TEntity>
+        where TEntity : BaseEntity<int>
+    {
+        private int _nextId = 1;
+
+        protected List<TEntity> Entities { get; } = new();
+
+        public Task<TEntity?> GetByIdAsync(int id)
+        {
+            return Task.FromResult(this.Entities.FirstOrDefault(e => e.Id == id));
+        }
+
+        public Task<IEnumerable<TEntity>> GetAllAsync()
+        {
+            return Task.FromResult<IEnumerable<TEntity>>(this.Entities);
+        }
+
+        public Task<int> InsertAsync(TEntity entity)
+        {
+            entity.Id = this._nextId++;
+            this.Entities.Add(entity);
+            return Task.FromResult(entity.Id);
+        }
+
+        public Task<bool> UpdateAsync(TEntity entity)
+        {
+            var index = this.Entities.FindIndex(e => e.Id == entity.Id);
+            if (index >= 0)
+            {
+                this.Entities[index] = entity;
+                return Task.FromResult(true);
+            }
+
+            return Task.FromResult(false);
+        }
+
+        public Task<bool> DeleteAsync(int id)
+        {
+            return Task.FromResult(this.Entities.RemoveAll(e => e.Id == id) > 0);
+        }
+    }
+}

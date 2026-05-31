@@ -58,10 +58,11 @@ public static class StaffNavigationCatalog
             [
                 new("Pulpit kuchni", "Production", "Index", "kitchen", "Zbiorczy ekran dzialu kuchni.", "produkcja kuchnia plan"),
                 new("Generuj plan", "Production", "Generate", "wand", "Przygotowanie dziennego planu produkcji.", "generowanie planu produkcji"),
-                new("Plan dnia", "Production", "Plan", "calendar", "Podglad planu produkcyjnego.", "plan dnia produkcji"),
+                new("Plan dnia", "Production", "Plan", "calendar", "Podgląd planu produkcyjnego.", "plan dnia produkcji"),
                 new("Karty gotowania", "Production", "CookingCards", "clipboard", "Lista kart gotowania do realizacji.", "karty gotowania receptury"),
-                new("Karta gotowania", "Production", "CookingCard", "clipboard-check", "Podglad pojedynczej karty gotowania.", "karta gotowania szczegoly"),
+                new("Karta gotowania", "Production", "CookingCard", "clipboard-check", "Podgląd pojedynczej karty gotowania.", "karta gotowania szczegóły"),
                 new("Foliowanie dań", "Production", "FoilPrinting", "tag", "Ekran foliowania dań i druku etykiet produktowych.", "foliowanie etykiety pakowanie"),
+                new("Ponowne przygotowanie", "Production", "Rework", "alert", "Zamienniki pudełek zgłoszone przez kompletację.", "kuchnia ponowne przygotowanie zamiennik awarie"),
             ]),
         new(
             "warehouse",
@@ -95,11 +96,11 @@ public static class StaffNavigationCatalog
             "packing",
             "Kompletacja",
             "packing",
-            "Kompletacja toreb, zaladunek aut i manifesty dostaw.",
+            "Kompletacja toreb, załadunek aut i manifesty dostaw.",
             true,
             [
-                new("Kompletacja toreb", "Packing", "Index", "packing", "Pakowanie pudelek do toreb.", "pakowanie kompletacja torby"),
-                new("Zaladunek aut", "Packing", "Loading", "truck", "Manifesty dostaw i zaladunek aut.", "zaladunek auta manifest dostawa"),
+                new("Kompletacja toreb", "Packing", "Index", "packing", "Pakowanie pudełek do toreb.", "pakowanie kompletacja torby"),
+                new("Załadunek aut", "Loading", "Index", "truck", "Manifesty dostaw i załadunek aut.", "załadunek auta manifest dostawa"),
                 new("Etykiety transportowe", "Packing", "LabelsIndex", "tag", "Etykiety transportowe w trybie preview.", "etykiety qr transport"),
             ]),
         new(
@@ -113,7 +114,7 @@ public static class StaffNavigationCatalog
                 new("Nowa dieta", "DietEditor", "Create", "plus", "Kreator nowej diety.", "nowa dieta"),
                 new("Posilki", "DietEditor", "Meals", "meal", "Posilki w diecie.", "posilki dieta"),
                 new("Przepisy", "DietEditor", "Recipes", "recipes", "Baza przepisow.", "przepisy receptury"),
-                new("Edycja przepisu", "DietEditor", "Recipe", "recipes", "Podglad pojedynczego przepisu.", "przepis edycja"),
+                new("Edycja przepisu", "DietEditor", "Recipe", "recipes", "Podgląd pojedynczego przepisu.", "przepis edycja"),
             ]),
         new(
             "logistics",
@@ -140,18 +141,19 @@ public static class StaffNavigationCatalog
                 new("Uzytkownicy", "Admin", "Users", "users", "Zarzadzanie uzytkownikami.", "uzytkownicy"),
                 new("Role", "Admin", "Roles", "shield", "Role i uprawnienia.", "role uprawnienia"),
                 new("Ustawienia", "Admin", "Settings", "settings", "Ustawienia systemowe.", "ustawienia konfiguracja"),
+                new("Awarie kompletacji", "Admin", "PackingIncidents", "alert", "Obsługa zgłoszeń pudełek i toreb.", "awarie kompletacja zgłoszenia torby pudełka"),
             ]),
         new(
             "mobile",
             "Mobile",
             "mobile",
-            "Mobilny podglad pracy kierowcy.",
+            "Mobilny podgląd pracy kierowcy.",
             false,
             [
                 new("Panel kierowcy", "DriverMobile", "Index", "mobile", "Start widoku kierowcy.", "driver kierowca mobile trasa"),
                 new("Stop", "DriverMobile", "Stop", "route", "Aktywny stop kierowcy.", "stop dostawa"),
                 new("Potwierdzenie", "DriverMobile", "Confirm", "clipboard-check", "Potwierdzenie dostawy.", "potwierdzenie dostawy"),
-                new("Problem", "DriverMobile", "Problem", "alert", "Zgloszenie problemu na trasie.", "problem dostawa"),
+                new("Problem", "DriverMobile", "Problem", "alert", "Zgłoszenie problemu na trasie.", "problem dostawa"),
                 new("Podsumowanie", "DriverMobile", "Summary", "report", "Podsumowanie dnia kierowcy.", "podsumowanie kierowcy"),
             ]),
     ];

@@ -3,7 +3,7 @@
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Dostawa do auta";
     ViewData["Section"] = "Pakowanie";
-    ViewData["Description"] = "Manifest, etykiety transportowe i zaladunek calej dostawy.";
+    ViewData["Description"] = "Manifest, etykiety transportowe i załadunek całej dostawy.";
 
     var route = Model.Route;
     var selectedDate = Model.SelectedDate;
@@ -24,7 +24,7 @@
                             <span>Auto: <strong>@route.VehicleRegistration</strong></span>
                             <span>Torby: <strong>@route.TotalBags</strong></span>
                             <span>Gotowe: <strong>@route.PackedBags</strong></span>
-                            <span>Zaladowane: <strong>@route.LoadedBags</strong></span>
+                            <span>Załadowane: <strong>@route.LoadedBags</strong></span>
                             <span>Data: <strong>@selectedDate.ToString("dd.MM.yyyy")</strong></span>
                         </div>
                     </div>
@@ -70,9 +70,9 @@
                     <form asp-action="DispatchDelivery" asp-route-routeId="@route.RouteId" method="post">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
-                        <button type="submit" class="btn btn-success" disabled="@(!route.CanDispatchDelivery ? "disabled" : null)">Wyslij cala dostawe</button>
+                        <button type="submit" class="btn btn-success" disabled="@(!route.CanDispatchDelivery ? "disabled" : null)">Wyślij całą dostawę</button>
                     </form>
-                    <a asp-action="Loading" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wroc</a>
+                    <a asp-action="Loading" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wróć</a>
                 </div>
             </div>
         </div>
@@ -116,10 +116,10 @@
                     <thead>
                         <tr>
                             <th class="w-1">Stop</th>
-                            <th>Zamowienie</th>
-                            <th>Odbiorca</th>
-                            <th>Adres</th>
-                            <th>Pudelka</th>
+                            <th>Zamówienie</th>
+                            <th>Identyfikator</th>
+                            <th>DeliveryCalendarId</th>
+                            <th>Pudełka</th>
                             <th>Status</th>
                             <th>Manifest</th>
                             <th class="w-1 text-end">Akcja</th>
@@ -135,8 +135,8 @@
                                     <div class="fw-bold text-dark">#@bag.OrderId</div>
                                     <div class="text-secondary small">@bag.DeliveryWindow</div>
                                 </td>
-                                <td class="fw-bold text-dark">@bag.ClientName</td>
-                                <td class="text-secondary small">@bag.Address</td>
+                                <td class="fw-bold text-dark">@(bag.ClientPublicId ?? "-")</td>
+                                <td class="text-secondary small">@(bag.DeliveryCalendarId?.ToString() ?? "-")</td>
                                 <td class="fw-bold text-dark">@bag.PackedBoxes/@bag.TotalBoxes</td>
                                 <td>
                                     <span class="badge bg-@bag.StatusColor-lt text-@bag.StatusColor">@bag.StatusText</span>
@@ -157,7 +157,7 @@
                                         <form asp-action="LoadBag" asp-route-routeId="@route.RouteId" asp-route-sessionId="@bag.PackingSessionId" method="post">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
-                                            <button type="submit" class="btn btn-sm btn-indigo" disabled="@(!canLoad ? "disabled" : null)">Zaladuj</button>
+                                            <button type="submit" class="btn btn-sm btn-indigo" disabled="@(!canLoad ? "disabled" : null)">Załaduj</button>
                                         </form>
                                     </div>
                                 </td>

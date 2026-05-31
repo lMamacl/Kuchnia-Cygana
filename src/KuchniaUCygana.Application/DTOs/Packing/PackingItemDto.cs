@@ -32,4 +32,16 @@ public sealed class PackingItemDto
     public bool IsDamaged { get; set; }
 
     public string? Remarks { get; set; }
+
+    public int? ReplacementForPackingItemId { get; set; }
+
+    public DateTimeOffset? IssueReportedAt { get; set; }
+
+    public int? IssueReportedByUserId { get; set; }
+
+    public bool CanPackManually { get; set; }
+
+    public bool CanReportIssue { get; set; }
+
+    public string? BlockReason { get; set; }
 }

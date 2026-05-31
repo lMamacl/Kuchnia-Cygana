@@ -36,4 +36,12 @@ public sealed class PackingManifestDto
     public int? VerifiedByUserId { get; set; }
 
     public int? DriverUserId { get; set; }
+
+    public int ManifestVersion { get; set; } = 1;
+
+    public int? SupersedesManifestId { get; set; }
+
+    public string? ChangeReason { get; set; }
+
+    public bool IsSuperseded { get; set; }
 }

@@ -4,9 +4,11 @@
 // w celu wygenerowania dziennego planu produkcji.
 
 public sealed record OrderDeliveryInfo(
+    int DeliveryCalendarId,
     int OrderId,
     string OrderNumber,
     int CustomerId,
+    string? ClientPublicId,
     string CustomerFullName,
     string AddressFullLine,
     string City,

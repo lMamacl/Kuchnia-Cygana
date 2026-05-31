@@ -29,6 +29,9 @@ public class PackingSession : AuditableEntity<int>
     [StringLength(150)]
     public string? ClientName { get; set; }
 
+    [StringLength(50)]
+    public string? ClientPublicId { get; set; }
+
     /// <summary>
     /// Kto pakował (username magazyniera).
     /// </summary>

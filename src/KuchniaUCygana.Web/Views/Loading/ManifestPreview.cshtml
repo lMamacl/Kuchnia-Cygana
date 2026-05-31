@@ -1,0 +1,137 @@
+@model KuchniaUCygana.Web.Models.PackingDeliveryViewModel
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Kontrola manifestu";
+    ViewData["Section"] = "Załadunek";
+    ViewData["Description"] = "Podgląd i zatwierdzenie manifestu przed załadunkiem auta.";
+
+    var route = Model.Route;
+    var manifest = Model.Manifest!;
+    var selectedDate = Model.SelectedDate;
+    var statusColor = manifest.IsVerified ? "success" : "warning";
+    var statusText = manifest.IsVerified ? "Manifest zatwierdzony" : "Manifest wymaga kontroli";
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body py-4">
+                <div class="row align-items-center g-3">
+                    <div class="col">
+                        <div class="text-uppercase text-secondary small fw-bold">Manifest @manifest.ManifestNumber</div>
+                        <h2 class="h1 mb-1 text-dark">@route.RouteName</h2>
+                        <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
+                            <span>Data: <strong>@selectedDate.ToString("dd.MM.yyyy")</strong></span>
+                            <span>Auto: <strong>@route.VehicleRegistration</strong></span>
+                            <span>Wersja: <strong>@manifest.ManifestVersion</strong></span>
+                            <span>Torby: <strong>@route.TotalBags</strong></span>
+                            <span>Pudełka: <strong>@route.Bags.Sum(b => b.TotalBoxes)</strong></span>
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <span class="badge bg-@statusColor-lt text-@statusColor">@statusText</span>
+                    </div>
+                </div>
+                <div class="text-secondary small mt-3">
+                    Wygenerowano: <strong>@manifest.GeneratedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</strong>
+                    przez <strong>@(manifest.GeneratedBy ?? "System")</strong>
+                    @if (!string.IsNullOrWhiteSpace(manifest.ChangeReason))
+                    {
+                        <span> | Powód zmiany: <strong>@manifest.ChangeReason</strong></span>
+                    }
+                    @if (manifest.IsVerified && manifest.VerifiedAt.HasValue)
+                    {
+                        <span> | Zatwierdzono: <strong>@manifest.VerifiedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</strong></span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h3 class="card-title">Kontrola przed załadunkiem</h3>
+                <div class="btn-list">
+                    <a asp-action="Route" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wróć do trasy</a>
+                    <a asp-action="ManifestJson" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Payload JSON</a>
+                </div>
+            </div>
+            @if (!manifest.IsVerified)
+            {
+                <div class="card-body border-bottom">
+                    <form asp-action="VerifyManifest" asp-route-routeId="@route.RouteId" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                        <div class="row align-items-center g-3">
+                            <div class="col">
+                                <label class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" name="confirmedManifest" value="true" required />
+                                    <span class="form-check-label">Potwierdzam zgodność stopów, toreb, etykiet i liczby pudełek z fizyczną dostawą.</span>
+                                </label>
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-success" disabled="@(!route.CanVerifyManifest ? "disabled" : null)">Zatwierdz manifest</button>
+                            </div>
+                        </div>
+                        @if (!route.CanVerifyManifest)
+                        {
+                            <div class="text-danger small mt-2">Manifest można zatwierdzić dopiero, gdy wszystkie torby są spakowane i gotowe do załadunku.</div>
+                        }
+                    </form>
+                </div>
+            }
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th class="w-1">Stop</th>
+                            <th>DeliveryCalendarId</th>
+                            <th>Odbiorca</th>
+                            <th>Adres</th>
+                            <th>Torba</th>
+                            <th>Etykieta</th>
+                            <th>Pudełka</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var bag in route.Bags.OrderBy(b => b.StopNumber).ThenBy(b => b.BagNumber))
+                        {
+                            <tr>
+                                <td class="fw-bold text-dark">#@bag.StopNumber</td>
+                                <td>
+                                    <div class="fw-bold text-dark">@(bag.DeliveryCalendarId?.ToString() ?? "-")</div>
+                                    <div class="text-secondary small">Zamówienie #@bag.OrderId</div>
+                                </td>
+                                <td class="fw-bold text-dark">@bag.ClientName</td>
+                                <td>
+                                    <div class="text-secondary small">@bag.Address</div>
+                                    <div class="text-secondary small">@bag.DeliveryWindow</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@bag.BagCode</div>
+                                    <div class="text-secondary small">Torba @bag.BagNumber</div>
+                                </td>
+                                <td>
+                                    @if (bag.HasLabels)
+                                    {
+                                        <span class="badge bg-success-lt text-success">Transportowa gotowa</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger-lt text-danger">Brak etykiety</span>
+                                    }
+                                </td>
+                                <td class="fw-bold text-dark">@bag.PackedBoxes/@bag.TotalBoxes</td>
+                                <td>
+                                    <span class="badge bg-@bag.StatusColor-lt text-@bag.StatusColor">@bag.StatusText</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

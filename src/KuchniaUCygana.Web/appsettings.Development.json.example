@@ -13,5 +13,15 @@
   "OpenAI": {
     "ApiKey": ""
   },
-  "OrderProvider": "Mock"
+  "Application": {
+    "BaseUrl": "https://localhost:5001"
+  },
+  "PackingResources": {
+    "TransportBagStockItemId": null,
+    "TransportBagWasteQuantity": 1,
+    "BoxContainerStockItemId": null,
+    "BoxContainerWasteQuantity": 1
+  },
+  "OrderProvider": "Mock",
+  "DeliveryManifestProvider": "Mock"
 }

@@ -164,7 +164,7 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
             FROM PackingLabels
             WHERE PackingSessionId = @sessionId
               AND LabelType = @labelType
-            ORDER BY Id;
+            ORDER BY PrintNumber DESC, Id DESC;
             """,
             new
             {
@@ -182,7 +182,7 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
             FROM PackingLabels
             WHERE PackingItemId = @packingItemId
               AND LabelType = @labelType
-            ORDER BY Id;
+            ORDER BY Id DESC;
             """,
             new
             {

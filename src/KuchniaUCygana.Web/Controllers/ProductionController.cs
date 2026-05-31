@@ -21,11 +21,16 @@ public sealed class ProductionController : Controller
 {
     private readonly IProductionService productionService;
     private readonly IPackingService packingService;
+    private readonly IPackingIncidentService packingIncidentService;
 
-    public ProductionController(IProductionService productionService, IPackingService packingService)
+    public ProductionController(
+        IProductionService productionService,
+        IPackingService packingService,
+        IPackingIncidentService packingIncidentService)
     {
         this.productionService = productionService;
         this.packingService = packingService;
+        this.packingIncidentService = packingIncidentService;
     }
 
     // ── Plan dnia ─────────────────────────────────────────────
@@ -222,6 +227,45 @@ public sealed class ProductionController : Controller
 
         ViewBag.SelectedDate = targetDate;
         return View(sessions);
+    }
+
+    [HttpGet("rework")]
+    public async Task<IActionResult> Rework(DateOnly? date)
+    {
+        var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        return View(new KitchenReworkViewModel
+        {
+            SelectedDate = selectedDate,
+            Incidents = await packingIncidentService.GetKitchenReworkAsync(selectedDate),
+        });
+    }
+
+    [HttpPost("rework/{incidentId:int}/start")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartRework(int incidentId, DateOnly date)
+    {
+        await packingIncidentService.MarkKitchenInProgressAsync(new HandlePackingIncidentRequest
+        {
+            IncidentId = incidentId,
+            Notes = "Kuchnia rozpoczęła ponowne przygotowanie.",
+        });
+
+        TempData["Success"] = $"Oznaczono zgłoszenie #{incidentId} jako rozpoczęte.";
+        return RedirectToAction(nameof(Rework), new { date });
+    }
+
+    [HttpPost("rework/{incidentId:int}/prepared")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MarkReworkPrepared(int incidentId, DateOnly date)
+    {
+        await packingIncidentService.MarkKitchenPreparedAsync(new HandlePackingIncidentRequest
+        {
+            IncidentId = incidentId,
+            Notes = "Kuchnia oznaczyła zamiennik jako przygotowany.",
+        });
+
+        TempData["Success"] = $"Oznaczono zgłoszenie #{incidentId} jako przygotowane.";
+        return RedirectToAction(nameof(Rework), new { date });
     }
 
     /// <summary>

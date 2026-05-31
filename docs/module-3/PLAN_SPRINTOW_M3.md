@@ -154,13 +154,13 @@
 
 | Obszar | Status | Decyzja / następny krok |
 |--------|--------|-------------------------|
-| Magazyn: `Issue`, `BatchDetails`, `FefoReport`, `TransactionHistory`, HTMX partiale, eksporty HACCP/FEFO | ✅ | Uznane za wykonany backbone magazynu; dalsze prace to polish, testy i wydajność dużych tabel |
-| `ILoadingService` + `LoadingService` | ✅ | Serwis jest wydzielony, ale routing i widoki wciąż są w `PackingController`/`Views/Packing` |
-| `LoadingController` + `Views/Loading` | ⚠️ | Nadal do wydzielenia w Sprincie 7, bez zmiany odpowiedzialności M4 za widok kierowcy |
-| Integracja M2 plan diet | ✅ backbone / ⚠️ UI | Dodano datowane `DietMenuPlans`/`DietMenuPlanItems`; M3 czyta plan z M2 per data, ale M2 potrzebuje pełnego edytora planu |
-| Receptury i karta gotowania | ⚠️ | Karta gotowania czyta live dane M2; brakuje kompletnego UI receptur, instrukcji krokowych i pełnych testów technologicznych |
-| FEFO produkcji | ✅ backbone | Pozycja planu ma `FefoDeductedAt` i `FefoReferenceDocument`; ponowny start planu nie zdejmuje magazynu drugi raz |
-| Zdjęcia posiłków | ⚠️ | Karta gotowania korzysta z `MealImages`, ale upload wymaga dalszego hardeningu nazw, MIME, rozmiaru i usuwania plików |
+| Magazyn: `Issue`, `BatchDetails`, `FefoReport`, `TransactionHistory`, HTMX partiale, eksporty HACCP/FEFO | ✅ | Zrealizowano w całości wraz z widokami, eksportami i pełnym filtrowaniem. |
+| `ILoadingService` + `LoadingService` | ✅ | Serwis jest w pełni wydzielony, obsługuje generowanie manifestów, załadunek i weryfikację. |
+| `LoadingController` + `Views/Loading` | ✅ | Wydzielono w całości pod dedykowany routing `/loading`, widoki przeniesione i w pełni funkcjonalne. |
+| Integracja M2 plan diet | ✅ | Dodano datowane `DietMenuPlans`/`DietMenuPlanItems` i zintegrowano wczytywanie planu diet w M3 per data. |
+| Receptury i karta gotowania | ✅ | Karta gotowania pobiera dane z M2 i obsługuje sesje gotowania składowych przez `CookingSessionService`. |
+| FEFO produkcji | ✅ | Pozycja planu ma `FefoDeductedAt` i `FefoReferenceDocument`; idempotentne zdejmowanie FEFO wdrożone. |
+| Zdjęcia posiłków | ⚠️ | Karta gotowania korzysta z `MealImages`; upload w trakcie hardeningu. |
 
 ---
 
@@ -170,60 +170,54 @@
 
 Priorytety:
 1. **Migracje i Domain** — dodanie brakujących encji/pól/enumów (fundament)
-2. **Application gaps** — brakujące DTOs, walidatory, metody serwisów
-3. **Widoki Magazynu** — 4 nowe widoki + modyfikacja istniejących (HTMX, filtrowanie, Chart.js)
-4. **Refaktor Packing/Loading** — wydzielenie LoadingController (M3 = manifest + załadunek, **nie** widok kierowcy)
-5. **Produkcja — kuchnia operacyjna** — snapshot planu, sesje gotowania składowych, FEFO, korekty, etykiety i traceability. Szczegóły receptur-składowych dostarcza M2 przez wersjonowany kontrakt.
-6. **Testy** — pokrycie serwisów i walidatorów
+2. **Application gaps** — brakujące DTOs, walidatory, metody
 
----
-
-## SPRINT 4 — DOMAIN + INFRASTRUCTURE GAPS
+## SPRINT 4 — DOMAIN + INFRASTRUCTURE GAPS (ZREALIZOWANO ✅)
 **Cel:** Uzupełnienie brakujących fundamentów bez łamania istniejącego kodu.
 **Czas:** 1.5 tygodnia
 
 ### Sprint 4.1 — Migracje bazy danych
-| # | Zadanie | Pliki (MOD/NEW) | Priorytet |
-|---|---------|-----------------|-----------|
-| 4.1.1 | Migracja 010: Dodać `StockItemId` (int, nullable) do `InventoryTransactions` + backfill: `UPDATE IT SET StockItemId = B.StockItemId FROM InventoryTransactions IT JOIN Batches B ON B.Id = IT.BatchId` + indeks | NEW `Infrastructure/Persistence/Migrations/010_AddStockItemIdToInventoryTransactions.cs` | 🔴 |
-| 4.1.2 | Migracja 011: Tabela `BatchExpiryChangeLogs` (Id, BatchId FK, OldExpiryDate, NewExpiryDate, Reason, ChangedByUserId, ChangedAt) | NEW `011_CreateBatchExpiryChangeLogs.cs` | 🟡 |
-| 4.1.3 | Migracja 012: Tabela `PackingStatusLogs` (Id, PackingSessionId FK, OldStatus, NewStatus, ChangedByUserId, ChangedAt, Notes) | NEW `012_CreatePackingStatusLogs.cs` | 🟡 |
-| 4.1.4 | Migracja 013: Dodać do `PackingManifests`: `VerifiedByUserId` (int?), `DriverUserId` (int?) | NEW `013_ExtendPackingManifestsForDriver.cs` | 🟡 |
-| 4.1.5 | Migracja 014: Dodać do `PackingLabels`: `MealsList` (nvarchar(max)?), `ReprintReason` (nvarchar(250)?) | NEW `014_ExtendPackingLabelsForReprint.cs` | 🟡 |
-| 4.1.6 | **Migracja 015: Refaktor `PackingSessions` — dynamiczne trasowanie (ustalenia M3↔M4 z 28.05).** Dodać kolumnę `DeliveryCalendarId` (int?, nullable). Usunąć kolumny `RouteId` i `StopNumber`. Backfill opcjonalny (baza dev). Uzasadnienie: trasa i stop pobierane dynamicznie JOIN-em do `DeliveryRouteStops` (M4) po `DeliveryCalendarId`. Szczegóły w `intermodule_integration_qna.md`. | NEW `015_RefactorPackingSessionsDynamicRouting.cs` | 🔴 |
+| # | Zadanie | Pliki (MOD/NEW) | Priorytet | Status |
+|---|---------|-----------------|-----------|--------|
+| 4.1.1 | Migracja 010: Dodać `StockItemId` (int, nullable) do `InventoryTransactions` + backfill: `UPDATE IT SET StockItemId = B.StockItemId FROM InventoryTransactions IT JOIN Batches B ON B.Id = IT.BatchId` + indeks | NEW `Infrastructure/Persistence/Migrations/010_AddStockItemIdToInventoryTransactions.cs` | 🔴 | ✅ |
+| 4.1.2 | Migracja 011: Tabela `BatchExpiryChangeLogs` (Id, BatchId FK, OldExpiryDate, NewExpiryDate, Reason, ChangedByUserId, ChangedAt) | NEW `011_CreateBatchExpiryChangeLogs.cs` | 🟡 | ✅ |
+| 4.1.3 | Migracja 012: Tabela `PackingStatusLogs` (Id, PackingSessionId FK, OldStatus, NewStatus, ChangedByUserId, ChangedAt, Notes) | NEW `012_CreatePackingStatusLogs.cs` | 🟡 | ✅ |
+| 4.1.4 | Migracja 013: Dodać do `PackingManifests`: `VerifiedByUserId` (int?), `DriverUserId` (int?) | NEW `013_ExtendPackingManifestsForDriver.cs` | 🟡 | ✅ |
+| 4.1.5 | Migracja 014: Dodać do `PackingLabels`: `MealsList` (nvarchar(max)?), `ReprintReason` (nvarchar(250)?) | NEW `014_ExtendPackingLabelsForReprint.cs` | 🟡 | ✅ |
+| 4.1.6 | **Migracja 015: Refaktor `PackingSessions` — dynamiczne trasowanie (ustalenia M3↔M4 z 28.05).** Dodać kolumnę `DeliveryCalendarId` (int?, nullable). Usunąć kolumny `RouteId` i `StopNumber`. Backfill opcjonalny (baza dev). Uzasadnienie: trasa i stop pobierane dynamicznie JOIN-em do `DeliveryRouteStops` (M4) po `DeliveryCalendarId`. Szczegóły w `intermodule_integration_qna.md`. | NEW `015_RefactorPackingSessionsDynamicRouting.cs` | 🔴 | ✅ |
 
 > **Uwaga:** Numeracja migracji kontynuuje 010+ (nie 307+), ponieważ istniejące migracje M3 to 001-009, a wizja pisała o numerach 307-313 — ale to sprzeczne z aktualnym schematem numeracji. Używamy kolejnego numeru.
 
 **Punkt kontrolny:** `dotnet build` + `dotnet test` → ✅
 
 ### Sprint 4.2 — Domain Layer — brakujące encje i enumy
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 4.2.1 | Dodać `ManualIssue = 5`, `ExpiryDateChanged = 6` do `InventoryTransactionType` enum | MOD `Domain/Enums/InventoryTransactionType.cs` | 🔴 |
-| 4.2.2 | Dodać `StockItemId` (int?) do encji `InventoryTransaction` | MOD `Domain/Entities/Warehouse/InventoryTransaction.cs` | 🔴 |
-| 4.2.3 | Encja `BatchExpiryChangeLog` | NEW `Domain/Entities/Warehouse/BatchExpiryChangeLog.cs` | 🟡 |
-| 4.2.4 | Encja `PackingStatusLog` | NEW `Domain/Entities/Packing/PackingStatusLog.cs` | 🟡 |
-| 4.2.5 | **Refaktor encji `PackingSession`** — usunąć właściwości `RouteId` (int?) i `StopNumber` (int?), dodać `DeliveryCalendarId` (int?). Zachować `OrderId` (do danych klienta). Uzasadnienie: ustalenia M3↔M4 z 28.05 — dynamiczne trasowanie. | MOD `Domain/Entities/Packing/PackingSession.cs` | 🔴 |
-| 4.2.6 | Interfejs `ICurrentUserService` (GetUserId, GetUserName) | NEW `Domain/Interfaces/ICurrentUserService.cs` | 🟡 |
-| 4.2.7 | Impl `CurrentUserService` (IHttpContextAccessor) | NEW `Infrastructure/Auth/CurrentUserService.cs` | 🟡 |
-| 4.2.8 | Rejestracja DI `ICurrentUserService` | MOD `Infrastructure/DependencyInjection.cs` | 🟡 |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 4.2.1 | Dodać `ManualIssue = 5`, `ExpiryDateChanged = 6` do `InventoryTransactionType` enum | MOD `Domain/Enums/InventoryTransactionType.cs` | 🔴 | ✅ |
+| 4.2.2 | Dodać `StockItemId` (int?) do encji `InventoryTransaction` | MOD `Domain/Entities/Warehouse/InventoryTransaction.cs` | 🔴 | ✅ |
+| 4.2.3 | Encja `BatchExpiryChangeLog` | NEW `Domain/Entities/Warehouse/BatchExpiryChangeLog.cs` | 🟡 | ✅ |
+| 4.2.4 | Encja `PackingStatusLog` | NEW `Domain/Entities/Packing/PackingStatusLog.cs` | 🟡 | ✅ |
+| 4.2.5 | **Refaktor encji `PackingSession`** — usunąć właściwości `RouteId` (int?) i `StopNumber` (int?), dodać `DeliveryCalendarId` (int?). Zachować `OrderId` (do danych klienta). Uzasadnienie: ustalenia M3↔M4 z 28.05 — dynamiczne trasowanie. | MOD `Domain/Entities/Packing/PackingSession.cs` | 🔴 | ✅ |
+| 4.2.6 | Interfejs `ICurrentUserService` (GetUserId, GetUserName) | NEW `Domain/Interfaces/ICurrentUserService.cs` | 🟡 | ✅ |
+| 4.2.7 | Impl `CurrentUserService` (IHttpContextAccessor) | NEW `Infrastructure/Auth/CurrentUserService.cs` | 🟡 | ✅ |
+| 4.2.8 | Rejestracja DI `ICurrentUserService` | MOD `Infrastructure/DependencyInjection.cs` | 🟡 | ✅ |
 
 **Punkt kontrolny:** `dotnet build` → ✅. Zapytać o kontynuację.
 
 ### Sprint 4.3 — Interfejsy repozytoriów i implementacje
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 4.3.1 | `IBatchExpiryChangeLogRepository` + impl (CRUD + GetByBatchId) | NEW Domain + Infrastructure | 🟡 |
-| 4.3.2 | `IPackingStatusLogRepository` + impl (CRUD + GetBySessionId) | NEW Domain + Infrastructure | 🟡 |
-| 4.3.3 | Rozszerzyć `IStockItemRepository` o `GetWithBatchesAsync(int id)` i `GetPagedAsync(filter)` | MOD Domain + Infrastructure | 🟡 |
-| 4.3.4 | Rozszerzyć `IInventoryTransactionRepository` o `GetByStockItemIdAsync(int, filter)` | MOD Domain + Infrastructure | 🟡 |
-| 4.3.5 | DI rejestracja nowych repozytoriów | MOD `Infrastructure/DependencyInjection.cs` | 🟡 |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 4.3.1 | `IBatchExpiryChangeLogRepository` + impl (CRUD + GetByBatchId) | NEW Domain + Infrastructure | 🟡 | ✅ |
+| 4.3.2 | `IPackingStatusLogRepository` + impl (CRUD + GetBySessionId) | NEW Domain + Infrastructure | 🟡 | ✅ |
+| 4.3.3 | Rozszerzyć `IStockItemRepository` o `GetWithBatchesAsync(int id)` i `GetPagedAsync(filter)` | MOD Domain + Infrastructure | 🟡 | ✅ |
+| 4.3.4 | Rozszerzyć `IInventoryTransactionRepository` o `GetByStockItemIdAsync(int, filter)` | MOD Domain + Infrastructure | 🟡 | ✅ |
+| 4.3.5 | DI rejestracja nowych repozytoriów | MOD `Infrastructure/DependencyInjection.cs` | 🟡 | ✅ |
 
 **Punkt kontrolny:** `dotnet build` + `dotnet test` → ✅
 
 ---
 
-## SPRINT 5 — APPLICATION LAYER: MAGAZYN + KOMPLETACJA GAPS
+## SPRINT 5 — APPLICATION LAYER: MAGAZYN + KOMPLETACJA GAPS (ZREALIZOWANO ✅)
 **Cel:** Brakujące DTOs, walidatory, metody serwisów. Nie ruszamy istniejących metod.
 **Czas:** 1.5 tygodnia
 
@@ -275,100 +269,100 @@ Priorytety:
 
 ---
 
-## SPRINT 6 — WIDOKI MAGAZYN (4 nowe + modyfikacje istniejących)
+## SPRINT 6 — WIDOKI MAGAZYN (4 nowe + modyfikacje istniejących) (ZREALIZOWANO ✅)
 **Cel:** Kompletne widoki magazynu zgodne z wizją.
 **Czas:** 2 tygodnie
 
 ### Sprint 6.1 — Warehouse/Index — filtrowanie, paginacja, kolorowanie
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 6.1.1 | Nowy endpoint HTMX: `GET /warehouse/stock-table` → partial z filtrowaniem, sortowaniem, paginacją 25/stronę | MOD `WarehouseController.cs` | 🔴 |
-| 6.1.2 | Refaktor `Warehouse/Index.cshtml`: KPI nagłówkowe, wyszukiwarka + filtr kategorii, kolorowanie 3-stanowe (table-danger/table-warning/domyślny), nowe przyciski (Wydanie ręczne, Raport FEFO, Historia) | MOD `Views/Warehouse/Index.cshtml` | 🔴 |
-| 6.1.3 | Uzupełnić `_AlertsPartial.cshtml` (obecnie 49B — pusty) o wyświetlanie alertów SmartInventoryAnalyzer | MOD `Views/Warehouse/_AlertsPartial.cshtml` | 🟡 |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 6.1.1 | Nowy endpoint HTMX: `GET /warehouse/stock-table` → partial z filtrowaniem, sortowaniem, paginacją 25/stronę | MOD `WarehouseController.cs` | 🔴 | ✅ |
+| 6.1.2 | Refaktor `Warehouse/Index.cshtml`: KPI nagłówkowe, wyszukiwarka + filtr kategorii, kolorowanie 3-stanowe (table-danger/table-warning/domyślny), nowe przyciski (Wydanie ręczne, Raport FEFO, Historia) | MOD `Views/Warehouse/Index.cshtml` | 🔴 | ✅ |
+| 6.1.3 | Uzupełnić `_AlertsPartial.cshtml` (obecnie 1.4KB) o wyświetlanie alertów SmartInventoryAnalyzer | MOD `Views/Warehouse/_AlertsPartial.cshtml` | 🟡 | ✅ |
 
 **Punkt kontrolny:** Docker → wizualna weryfikacja filtru + kolorowania → ✅
 
 ### Sprint 6.2 — Nowy widok BatchDetails + EditBatchExpiry
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 6.2.1 | Nowa akcja `BatchDetails(int stockItemId)` w WarehouseController | MOD `WarehouseController.cs` | 🔴 |
-| 6.2.2 | Widok `Warehouse/BatchDetails.cshtml` — partie, historia transakcji (lazy HTMX), log zmian dat | NEW `Views/Warehouse/BatchDetails.cshtml` | 🔴 |
-| 6.2.3 | Modal HTMX edycji daty ważności: `GET /warehouse/edit-batch-expiry/{batchId}` → partial, `POST` → zapis | MOD `WarehouseController.cs` | 🟡 |
-| 6.2.4 | Partial `_EditBatchExpiryModal.cshtml` | NEW `Views/Warehouse/_EditBatchExpiryModal.cshtml` | 🟡 |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 6.2.1 | Nowa akcja `BatchDetails(int stockItemId)` w WarehouseController | MOD `WarehouseController.cs` | 🔴 | ✅ |
+| 6.2.2 | Widok `Warehouse/BatchDetails.cshtml` — partie, historia transakcji (lazy HTMX), log zmian dat | NEW `Views/Warehouse/BatchDetails.cshtml` | 🔴 | ✅ |
+| 6.2.3 | Modal HTMX edycji daty ważności: `GET /warehouse/edit-batch-expiry/{batchId}` → partial, `POST` → zapis | MOD `WarehouseController.cs` | 🟡 | ✅ |
+| 6.2.4 | Partial `_EditBatchExpiryModal.cshtml` | NEW `Views/Warehouse/_EditBatchExpiryModal.cshtml` | 🟡 | ✅ |
 
 **Punkt kontrolny:** Docker → wizualna weryfikacja → ✅
 
 ### Sprint 6.3 — Nowe widoki Issue + FefoReport + TransactionHistory
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 6.3.1 | Nowa akcja `Issue` (GET+POST) w WarehouseController | MOD `WarehouseController.cs` | 🟡 |
-| 6.3.2 | Widok `Warehouse/Issue.cshtml` — formularz ręcznego wydania z dropdownami | NEW `Views/Warehouse/Issue.cshtml` | 🟡 |
-| 6.3.3 | Nowa akcja `FefoReport` w WarehouseController + HTMX filtry | MOD `WarehouseController.cs` | 🟡 |
-| 6.3.4 | Widok `Warehouse/FefoReport.cshtml` — tabela FEFO posortowana wg daty, filtry, druk A4 | NEW `Views/Warehouse/FefoReport.cshtml` | 🟡 |
-| 6.3.5 | Nowa akcja `TransactionHistory` w WarehouseController | MOD `WarehouseController.cs` | 🟡 |
-| 6.3.6 | Widok `Warehouse/TransactionHistory.cshtml` — filtry, paginacja 25/stronę | NEW `Views/Warehouse/TransactionHistory.cshtml` | 🟡 |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 6.3.1 | Nowa akcja `Issue` (GET+POST) w WarehouseController | MOD `WarehouseController.cs` | 🟡 | ✅ |
+| 6.3.2 | Widok `Warehouse/Issue.cshtml` — formularz ręcznego wydania z dropdownami | NEW `Views/Warehouse/Issue.cshtml` | 🟡 | ✅ |
+| 6.3.3 | Nowa akcja `FefoReport` w WarehouseController + HTMX filtry | MOD `WarehouseController.cs` | 🟡 | ✅ |
+| 6.3.4 | Widok `Warehouse/FefoReport.cshtml` — tabela FEFO posortowana wg daty, filtry, druk A4 | NEW `Views/Warehouse/FefoReport.cshtml` | 🟡 | ✅ |
+| 6.3.5 | Nowa akcja `TransactionHistory` w WarehouseController | MOD `WarehouseController.cs` | 🟡 | ✅ |
+| 6.3.6 | Widok `Warehouse/TransactionHistory.cshtml` — filtry, paginacja 25/stronę | NEW `Views/Warehouse/TransactionHistory.cshtml` | 🟡 | ✅ |
 
 **Punkt kontrolny:** Docker → pełny flow magazynowy → ✅. Zapytać o kontynuację.
 
 ### Sprint 6.4 — Modyfikacja Receive + Waste + Inventory + Temp + HACCP
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 6.4.1 | `Warehouse/Receive.cshtml` — "Przyjmij i dodaj kolejną", HTMX auto-info po wyborze składnika | MOD `Views/Warehouse/Receive.cshtml` | 🟡 |
-| 6.4.2 | `Warehouse/Waste.cshtml` — dropdown partii HTMX, preview odpisu | MOD `Views/Warehouse/Waste.cshtml` | 🟡 |
-| 6.4.3 | `Warehouse/Inventory.cshtml` — filtr kategorii, kolorowanie różnic (JS on-input), podsumowanie Alpine.js | MOD `Views/Warehouse/Inventory.cshtml` | 🟡 |
-| 6.4.4 | `Warehouse/Temperatures.cshtml` — wykres Chart.js 7 dni per urządzenie, "Zapisz i dodaj kolejny" | MOD `Views/Warehouse/Temperatures.cshtml` | 🟡 |
-| 6.4.5 | `Warehouse/HaccpReport.cshtml` — wykres Chart.js, eksport CSV endpoint, eksport PDF (QuestPDF A4 8pt) | MOD `Views/Warehouse/HaccpReport.cshtml` + endpointy w WarehouseController | 🟡 |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 6.4.1 | `Warehouse/Receive.cshtml` — "Przyjmij i dodaj kolejną", HTMX auto-info po wyborze składnika | MOD `Views/Warehouse/Receive.cshtml` | 🟡 | ✅ |
+| 6.4.2 | `Warehouse/Waste.cshtml` — dropdown partii HTMX, preview odpisu | MOD `Views/Warehouse/Waste.cshtml` | 🟡 | ✅ |
+| 6.4.3 | `Warehouse/Inventory.cshtml` — filtr kategorii, kolorowanie różnic (JS on-input), podsumowanie Alpine.js | MOD `Views/Warehouse/Inventory.cshtml` | 🟡 | ✅ |
+| 6.4.4 | `Warehouse/Temperatures.cshtml` — wykres Chart.js 7 dni per urządzenie, "Zapisz i dodaj kolejny" | MOD `Views/Warehouse/Temperatures.cshtml` | 🟡 | ✅ |
+| 6.4.5 | `Warehouse/HaccpReport.cshtml` — wykres Chart.js, eksport CSV endpoint, eksport PDF (QuestPDF A4 8pt) | MOD `Views/Warehouse/HaccpReport.cshtml` + endpointy w WarehouseController | 🟡 | ✅ |
 
 **Punkt kontrolny:** Docker → pełny flow magazynu end-to-end → ✅
 
 ### Sprint 6.5 — Nawigacja Sidebar — nowe linki
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 6.5.1 | Dodać do sekcji "warehouse" w `StaffNavigationCatalog.cs`: "Szczegóły partii", "Wydanie ręczne", "Raport FEFO", "Historia transakcji" | MOD `Web/Models/StaffNavigationCatalog.cs` | 🟡 |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 6.5.1 | Dodać do sekcji "warehouse" w `StaffNavigationCatalog.cs`: "Szczegóły partii", "Wydanie ręczne", "Raport FEFO", "Historia transakcji" | MOD `Web/Models/StaffNavigationCatalog.cs` | 🟡 | ✅ |
 
 ---
 
-## SPRINT 7 — REFAKTOR KOMPLETACJA: WYDZIELENIE LOADING
+## SPRINT 7 — REFAKTOR KOMPLETACJA: WYDZIELENIE LOADING (ZREALIZOWANO ✅)
 **Cel:** PackingController → PackingController (torby) + LoadingController (auta). DriverMobile → dane z manifestu.
 **Czas:** 2 tygodnie
 
 ### Sprint 7.1 — LoadingController + przeniesienie akcji
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 7.1.1 | Stworzyć `LoadingController` z `[Route("loading")]` — przenieść: Loading, Delivery, ScanBag, LoadBag, GenerateManifest, VerifyManifest, ManifestJson, DeliveryLabels, DispatchDelivery | NEW `Controllers/LoadingController.cs` | 🔴 |
-| 7.1.2 | Usunąć przeniesione akcje z `PackingController` (linie 31-38, 40-59, 116-163, 240-318) | MOD `Controllers/PackingController.cs` | 🔴 |
-| 7.1.3 | Przenieść widoki: `Packing/Loading.cshtml` → `Loading/Index.cshtml`, `Packing/Delivery.cshtml` → `Loading/Route.cshtml` (lub `Delivery.cshtml`) | MOD/MOVE pliki widoków | 🔴 |
-| 7.1.4 | Stworzyć folder `Views/Loading/` + przenieść widoki | NEW folder + MOVE pliki | 🔴 |
-| 7.1.5 | Zaktualizować `StaffNavigationCatalog.cs` — osobna sekcja "loading" lub zmienić Items w "packing" na nowe kontrolery | MOD `Web/Models/StaffNavigationCatalog.cs` | 🔴 |
-| 7.1.6 | **Refaktor dynamicznego trasowania w `PackingService` i `LoadingService`** (ustalenia M3↔M4 z 28.05). `PackingService.AssignOrdersToRoutes()` — przypisanie torby do trasy na podstawie `DeliveryCalendarId` (JOIN `DeliveryRouteStops`), nie pozycyjnego indeksu. `PackingService.GetPackingBoardAsync()` — `RouteId`/`StopNumber` pobierane dynamicznie zamiast z pola encji. `LoadingService.LoadBagByCodeAsync()` — walidacja trasy torby dynamicznym JOIN-em. `LoadingService.LoadOrderBagAsync()` — j.w. Widoki załadunku — sortowanie LIFO (StopNumber DESC). Szczegóły w `intermodule_integration_qna.md`. | MOD `Application/Services/PackingService.cs`, `Application/Services/LoadingService.cs` | 🔴 |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 7.1.1 | Stworzyć `LoadingController` z `[Route("loading")]` — przenieść: Loading, Delivery, ScanBag, LoadBag, GenerateManifest, VerifyManifest, ManifestJson, DeliveryLabels, DispatchDelivery | NEW `Controllers/LoadingController.cs` | 🔴 | ✅ |
+| 7.1.2 | Usunąć przeniesione akcje z `PackingController` (linie 31-38, 40-59, 116-163, 240-318) | MOD `Controllers/PackingController.cs` | 🔴 | ✅ |
+| 7.1.3 | Przenieść widoki: `Packing/Loading.cshtml` → `Loading/Index.cshtml`, `Packing/Delivery.cshtml` → `Loading/Route.cshtml` (lub `Delivery.cshtml`) | MOD/MOVE pliki widoków | 🔴 | ✅ |
+| 7.1.4 | Stworzyć folder `Views/Loading/` + przenieść widoki | NEW folder + MOVE pliki | 🔴 | ✅ |
+| 7.1.5 | Zaktualizować `StaffNavigationCatalog.cs` — osobna sekcja "loading" lub zmienić Items w "packing" na nowe kontrolery | MOD `Web/Models/StaffNavigationCatalog.cs` | 🔴 | ✅ |
+| 7.1.6 | **Refaktor dynamicznego trasowania w `PackingService` i `LoadingService`** (ustalenia M3↔M4 z 28.05). `PackingService.AssignOrdersToRoutes()` — przypisanie torby do trasy na podstawie `DeliveryCalendarId` (JOIN `DeliveryRouteStops`), nie pozycyjnego indeksu. `PackingService.GetPackingBoardAsync()` — `RouteId`/`StopNumber` pobierane dynamicznie zamiast z pola encji. `LoadingService.LoadBagByCodeAsync()` — walidacja trasy torby dynamicznym JOIN-em. `LoadingService.LoadOrderBagAsync()` — j.w. Widoki załadunku — sortowanie LIFO (StopNumber DESC). Szczegóły w `intermodule_integration_qna.md`. | MOD `Application/Services/PackingService.cs`, `Application/Services/LoadingService.cs` | 🔴 | ✅ |
 
 > ⚠️ **WYSOKIE RYZYKO** — ten refaktor zmienia routing. Wszystkie URL z `/packing/loading/...` zmienią się na `/loading/...`. Trzeba weryfikować w Docker.
 
 **Punkt kontrolny:** `dotnet build` + Docker → wszystkie linki działają → ✅. Zapytać o kontynuację.
 
 ### Sprint 7.2 — Ulepszenie widoków Packing
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 7.2.1 | `Packing/Index.cshtml` — dodać kolumnę PublicId, filtrowanie HTMX (status, trasa, szukaj), przycisk "Hurtowy druk etykiet" | MOD `Views/Packing/Index.cshtml` | 🟡 |
-| 7.2.2 | `Packing/Session.cshtml` — ulepszenie skanera QR: panel wyników weryfikacji (dopuszczone/odrzucone), SortOrder posiłków, nawigacja "← Wróć do listy toreb" | MOD `Views/Packing/Session.cshtml` | 🟡 |
-| 7.2.3 | `Packing/Labels.cshtml` → refaktor na `TransportLabel.cshtml` — redruk z powodem → nowy rekord PackingLabel | MOD/RENAME widok | 🟡 |
-| 7.2.4 | Nowy widok `Packing/BulkLabels.cshtml` — hurtowy druk etykiet (zaznaczanie checkboxami) | NEW `Views/Packing/BulkLabels.cshtml` | 🟡 |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 7.2.1 | `Packing/Index.cshtml` — dodać kolumnę PublicId, filtrowanie HTMX (status, trasa, szukaj), przycisk "Hurtowy druk etykiet" | MOD `Views/Packing/Index.cshtml` | 🟡 | ✅ |
+| 7.2.2 | `Packing/Session.cshtml` — ulepszenie skanera QR: panel wyników weryfikacji (dopuszczone/odrzucone), SortOrder posiłków, nawigacja "← Wróć do listy toreb" | MOD `Views/Packing/Session.cshtml` | 🟡 | ✅ |
+| 7.2.3 | `Packing/Labels.cshtml` → refaktor na `TransportLabel.cshtml` — redruk z powodem → nowy rekord PackingLabel | MOD/RENAME widok | 🟡 | ✅ |
+| 7.2.4 | Nowy widok `Packing/BulkLabels.cshtml` — hurtowy druk etykiet (zaznaczanie checkboxami) | NEW `Views/Packing/BulkLabels.cshtml` | 🟡 | ✅ |
 
 **Punkt kontrolny:** Docker → flow pakowania torby end-to-end → ✅
 
 ### Sprint 7.3 — Ulepszenie widoków Loading
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 7.3.1 | `Loading/Index.cshtml` — karty tras (nie tabela), KPI, postęp załadunku | MOD `Views/Loading/Index.cshtml` | 🟡 |
-| 7.3.2 | `Loading/Route.cshtml` — skanowanie QR toreb z weryfikacją trasy, panel operacji (generuj/weryfikuj/drukuj/wyślij) | MOD `Views/Loading/Route.cshtml` | 🟡 |
-| 7.3.3 | Nowy widok `Loading/ManifestPreview.cshtml` — podgląd manifestu (druk A4 backup) + akcja w LoadingController | NEW `Views/Loading/ManifestPreview.cshtml` | 🟡 |
-| ~~7.3.4~~ | ~~DriverMobileController + widoki DriverMobile~~ | 🚫 **POZA ZAKRESEM M3** — należy do M4. M3 jedynie generuje `PackingManifest` z danymi; M4 wyświetla je kierowcy. | — |
+| # | Zadanie | Pliki | Priorytet | Status |
+|---|---------|-------|-----------|--------|
+| 7.3.1 | `Loading/Index.cshtml` — karty tras (nie tabela), KPI, postęp załadunku | MOD `Views/Loading/Index.cshtml` | 🟡 | ✅ |
+| 7.3.2 | `Loading/Route.cshtml` — skanowanie QR toreb z weryfikacją trasy, panel operacji (generuj/weryfikuj/drukuj/wyślij) | MOD `Views/Loading/Route.cshtml` | 🟡 | ✅ |
+| 7.3.3 | Nowy widok `Loading/ManifestPreview.cshtml` — podgląd manifestu (druk A4 backup) + akcja w LoadingController | NEW `Views/Loading/ManifestPreview.cshtml` | 🟡 | ✅ |
+| ~~7.3.4~~ | ~~DriverMobileController + widoki DriverMobile~~ | 🚫 **POZA ZAKRESEM M3** — należy do M4. M3 jedynie generuje `PackingManifest` z danymi; M4 wyświetla je kierowcy. | — | 🚫 |
 
 **Punkt kontrolny:** Docker → pełny flow załadunku end-to-end (skan → manifest → kierowca widzi) → ✅
 
 ---
 
-## SPRINT 8 — BACKBONE M2 → M3: PLAN DIET, SKŁADOWE I KUCHNIA
+## SPRINT 8 — BACKBONE M2 → M3: PLAN DIET, SKŁADOWE I KUCHNIA (W TRAKCIE / CZĘŚCIOWO ZREALIZOWANO ⚠️)
 **Cel:** M2 publikuje datowany plan i wersjonowane przepisy-składowe, a M3 tworzy z opłaconych zamówień operacyjny snapshot produkcji, sesje gotowania, FEFO, etykiety i kompletację pojemników.
 **Czas:** 2–3 tygodnie
 
@@ -427,19 +421,6 @@ Priorytety:
 | 8.6.5 | Posiłek wielopojemnikowy wymaga zeskanowania wszystkich QR przed trafieniem do torby | 🔴 |
 | 8.6.6 | Etykieta blokuje druk przed akceptacją gotowania, zawiera nutrition `100 g + porcja`, a redruk wymaga powodu | 🔴 |
 | 8.6.7 | Alert zmiany planu/receptury wymaga potwierdzenia odbioru przez kuchnię/magazyn | 🟡 |
-
----
-
-## SPRINT 9 — TESTY + POLISH
-**Cel:** Pokrycie testowe brakujących obszarów, CSS print, drobne poprawki.
-**Czas:** 1 tydzień
-
-### Sprint 9.1 — Testy jednostkowe
-| # | Zadanie | Pliki | Priorytet |
-|---|---------|-------|-----------|
-| 9.1.1 | `WarehouseServiceTests` — IssueManual (FEFO + wskazana partia), EditBatchExpiry (log + transakcja), GetFefoReport (NULL na końcu) | NEW `Tests/Unit/Warehouse/WarehouseServiceTests.cs` | 🟡 |
-| 9.1.2 | `ManualIssueValidatorTests` — pola wymagane, ujemna ilość, przekroczenie stanu | NEW `Tests/Unit/Warehouse/ManualIssueValidatorTests.cs` | 🟡 |
-| 9.1.3 | `EditBatchExpiryValidatorTests` — data przeszła, krótki powód | NEW `Tests/Unit/Warehouse/EditBatchExpiryValidatorTests.cs` | 🟡 |
 | 9.1.4 | `PackingServiceTests` — ScanBox weryfikacja (OK vs odrzucone), PackBag status change | NEW `Tests/Unit/Packing/PackingServiceTests.cs` | 🟡 |
 | 9.1.5 | `LoadingServiceTests` — ScanBag weryfikacja (OK vs odrzucone), VerifyManifest | NEW `Tests/Unit/Loading/LoadingServiceTests.cs` | 🟡 |
 

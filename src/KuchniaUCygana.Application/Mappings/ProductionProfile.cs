@@ -45,6 +45,19 @@ public sealed class ProductionProfile : Profile
         CreateMap<PackingLabel, PackingLabelDto>()
             .ForMember(d => d.LabelType, o => o.MapFrom(s => s.LabelType.ToString()));
 
+        CreateMap<BoxLabel, PackingLabelDto>()
+            .ForMember(d => d.LabelType, o => o.MapFrom(_ => LabelType.Product.ToString()))
+            .ForMember(d => d.PackingSessionId, o => o.Ignore())
+            .ForMember(d => d.PackingBagId, o => o.Ignore())
+            .ForMember(d => d.DishName, o => o.Ignore())
+            .ForMember(d => d.Allergens, o => o.Ignore())
+            .ForMember(d => d.Kcal, o => o.Ignore())
+            .ForMember(d => d.ClientName, o => o.Ignore())
+            .ForMember(d => d.RouteInfo, o => o.Ignore())
+            .ForMember(d => d.DeliveryWindow, o => o.Ignore())
+            .ForMember(d => d.Ingredients, o => o.Ignore())
+            .ForMember(d => d.MealsList, o => o.Ignore());
+
         CreateMap<PackingManifest, PackingManifestDto>();
 
         // FoodCostReport → FoodCostReportDto (domain model → DTO)

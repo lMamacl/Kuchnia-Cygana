@@ -36,8 +36,10 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
 
         return rows.Select(row => new ActiveOrderEntry
         {
+            DeliveryCalendarId = row.DeliveryCalendarId,
             OrderId = row.OrderId,
             ClientId = row.ClientId,
+            ClientPublicId = row.ClientPublicId,
             ClientName = row.ClientName,
             DietVariantId = row.DietVariantId,
             DeliveryDate = DateOnly.FromDateTime(row.DeliveryDate),
@@ -65,8 +67,10 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
 
         return new ActiveOrderEntry
         {
+            DeliveryCalendarId = row.DeliveryCalendarId,
             OrderId = row.OrderId,
             ClientId = row.ClientId,
+            ClientPublicId = row.ClientPublicId,
             ClientName = row.ClientName,
             DietVariantId = row.DietVariantId,
             DeliveryDate = DateOnly.FromDateTime(row.DeliveryDate),
@@ -99,9 +103,11 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
                 new { orderId = delivery.OrderId });
 
             result.Add(new OrderDeliveryInfo(
+                delivery.DeliveryCalendarId,
                 delivery.OrderId,
                 delivery.OrderNumber,
                 delivery.CustomerId,
+                delivery.ClientPublicId,
                 delivery.CustomerFullName,
                 delivery.AddressFullLine,
                 delivery.City,
@@ -124,7 +130,9 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
     private const string ActiveOrdersSql = """
         SELECT
             o.Id AS OrderId,
+            dc.Id AS DeliveryCalendarId,
             u.Id AS ClientId,
+            LOWER(CONVERT(varchar(36), cp.PublicId)) AS ClientPublicId,
             CONCAT(u.FirstName, ' ', u.LastName) AS ClientName,
             oi.DietVariantId AS DietVariantId,
             dc.DeliveryDate AS DeliveryDate
@@ -132,6 +140,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         INNER JOIN Orders o ON o.Id = dc.OrderId
         INNER JOIN OrderItems oi ON oi.OrderId = o.Id
         INNER JOIN Users u ON u.Id = o.CustomerId
+        LEFT JOIN CustomerProfiles cp ON cp.UserId = u.Id AND cp.IsDeleted = 0
         WHERE dc.DeliveryDate >= @from
           AND dc.DeliveryDate < @to
           AND o.Status IN (@paidStatus, @inProductionStatus)
@@ -146,7 +155,9 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
     private const string ActiveOrderByIdSql = """
         SELECT TOP 1
             o.Id AS OrderId,
+            dc.Id AS DeliveryCalendarId,
             u.Id AS ClientId,
+            LOWER(CONVERT(varchar(36), cp.PublicId)) AS ClientPublicId,
             CONCAT(u.FirstName, ' ', u.LastName) AS ClientName,
             oi.DietVariantId AS DietVariantId,
             dc.DeliveryDate AS DeliveryDate
@@ -154,6 +165,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         INNER JOIN OrderItems oi ON oi.OrderId = o.Id
         INNER JOIN DeliveryCalendar dc ON dc.OrderId = o.Id
         INNER JOIN Users u ON u.Id = o.CustomerId
+        LEFT JOIN CustomerProfiles cp ON cp.UserId = u.Id AND cp.IsDeleted = 0
         WHERE o.Id = @orderId
           AND o.Status IN (@paidStatus, @inProductionStatus)
           AND dc.Status = @scheduledStatus
@@ -167,8 +179,10 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
     private const string DeliveriesForDateSql = """
         SELECT
             o.Id AS OrderId,
+            dc.Id AS DeliveryCalendarId,
             o.OrderNumber AS OrderNumber,
             u.Id AS CustomerId,
+            LOWER(CONVERT(varchar(36), cp.PublicId)) AS ClientPublicId,
             CONCAT(u.FirstName, ' ', u.LastName) AS CustomerFullName,
             CASE
                 WHEN a.ApartmentNumber IS NULL OR a.ApartmentNumber = ''
@@ -184,6 +198,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         FROM DeliveryCalendar dc
         INNER JOIN Orders o ON o.Id = dc.OrderId
         INNER JOIN Users u ON u.Id = o.CustomerId
+        LEFT JOIN CustomerProfiles cp ON cp.UserId = u.Id AND cp.IsDeleted = 0
         INNER JOIN Addresses a ON a.Id = dc.AddressId
         LEFT JOIN DeliveryWindows dw ON dw.Id = dc.DeliveryWindowId
         WHERE dc.DeliveryDate >= @from
@@ -214,7 +229,11 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
     {
         public int OrderId { get; set; }
 
+        public int DeliveryCalendarId { get; set; }
+
         public int ClientId { get; set; }
+
+        public string? ClientPublicId { get; set; }
 
         public string ClientName { get; set; } = string.Empty;
 
@@ -227,9 +246,13 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
     {
         public int OrderId { get; set; }
 
+        public int DeliveryCalendarId { get; set; }
+
         public string OrderNumber { get; set; } = string.Empty;
 
         public int CustomerId { get; set; }
+
+        public string? ClientPublicId { get; set; }
 
         public string CustomerFullName { get; set; } = string.Empty;
 

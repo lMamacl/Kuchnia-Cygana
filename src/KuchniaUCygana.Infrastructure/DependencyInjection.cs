@@ -1,4 +1,5 @@
 using FluentMigrator.Runner;
+using KuchniaUCygana.Application.Configuration;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Entities.Customers;
@@ -11,6 +12,7 @@ using KuchniaUCygana.Domain.Interfaces.Production;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Adapters;
 using KuchniaUCygana.Infrastructure.Cache;
+using KuchniaUCygana.Infrastructure.Configuration;
 using KuchniaUCygana.Infrastructure.ExternalServices.AI;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 using KuchniaUCygana.Infrastructure.ExternalServices.Stripe;
@@ -22,6 +24,7 @@ using KuchniaUCygana.Infrastructure.Persistence.Repositories;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
+using KuchniaUCygana.Infrastructure.Persistence.Providers;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
 using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
@@ -48,6 +51,8 @@ public static class DependencyInjection
 
         DapperTypeHandlers.Register();
 
+        services.Configure<PackingResourcesOptions>(configuration.GetSection("PackingResources"));
+
         services.AddSingleton<IDbConnectionFactory>(_ => new SqlServerConnectionFactory(connectionString));
         services.AddScoped(typeof(IRepository<>), typeof(BaseRepository<>));
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
@@ -63,6 +68,9 @@ public static class DependencyInjection
         services.AddScoped<IHaccpTemperatureAlertRepository, HaccpTemperatureAlertRepository>();
         services.AddScoped<IProductionPlanRepository, ProductionPlanRepository>();
         services.AddScoped<IPackingSessionRepository, PackingSessionRepository>();
+        services.AddScoped<IPackingBagRepository, PackingBagRepository>();
+        services.AddScoped<IPackingIncidentRepository, PackingIncidentRepository>();
+        services.AddScoped<IBoxLabelRepository, BoxLabelRepository>();
         services.AddScoped<ITemperatureLogRepository, TemperatureLogRepository>();
         services.AddScoped<IBatchExpiryChangeLogRepository, BatchExpiryChangeLogRepository>();
         services.AddScoped<IPackingStatusLogRepository, PackingStatusLogRepository>();
@@ -104,7 +112,16 @@ public static class DependencyInjection
         }
 
         services.AddScoped<IDietDataProvider, DietDataAdapter>();
-        services.AddScoped<IDeliveryManifestProvider, M4DeliveryManifestProvider>();
+        if (string.Equals(configuration["DeliveryManifestProvider"], "Mock", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IDeliveryManifestProvider, MockDeliveryManifestProvider>();
+        }
+        else
+        {
+            services.AddScoped<IDeliveryManifestProvider, M4DeliveryManifestProvider>();
+        }
+
+        services.AddScoped<ILogisticsDeliveryDataProvider, LogisticsDeliveryDataProvider>();
 
         services.AddScoped<Domain.Services.FefoService>();
         services.AddScoped<Domain.Services.FoodCostCalculator>();
@@ -114,12 +131,17 @@ public static class DependencyInjection
         // Module 3 application services.
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<IApplicationUrlProvider, ConfigurationApplicationUrlProvider>();
         services.AddScoped<IProductionService, Application.Services.ProductionService>();
         services.AddScoped<IWarehouseService, Application.Services.WarehouseService>();
         services.AddScoped<IWarehouseCategoryService, Application.Services.WarehouseCategoryService>();
         services.AddScoped<IHaccpLocationService, Application.Services.HaccpLocationService>();
         services.AddScoped<INotificationService, Application.Services.NotificationService>();
         services.AddScoped<IPackingService, Application.Services.PackingService>();
+        services.AddScoped<IPackingBagService, Application.Services.PackingBagService>();
+        services.AddScoped<IPackingIncidentService, Application.Services.PackingIncidentService>();
+        services.AddScoped<IBoxLabelService, Application.Services.BoxLabelService>();
+        services.AddScoped<ICookingSessionService, Application.Services.CookingSessionService>();
         services.AddScoped<ILoadingService, Application.Services.LoadingService>();
         services.AddScoped<ITemperatureService, Application.Services.TemperatureService>();
 
@@ -146,8 +168,9 @@ public static class DependencyInjection
 
         // Module 4 (Logistics) services.
         services.AddScoped<IVehicleService, VehicleService>();
+        services.AddScoped<IDeliveryRouteService, RoutingService>();
         services.AddScoped<GeocodingOrchestrator>();
-        services.AddScoped<IRouteOptimizer, GoogleMapsRoutingService>();
+        services.AddScoped<IRouteOptimizer, NearestNeighborRouteOptimizer>();
         services.AddHostedService<DailyGeocodingWorker>();
 
         services
