@@ -586,6 +586,11 @@ public sealed class PackingServiceRouteAssignmentTests
             return Task.FromResult(Enumerable.Empty<DietPlanEntry>());
         }
 
+        public Task<PublishedDietPlanSnapshotDto?> GetPublishedPlanSnapshotAsync(DateOnly date)
+        {
+            return Task.FromResult<PublishedDietPlanSnapshotDto?>(null);
+        }
+
         public Task<IEnumerable<RecipeIngredientEntry>> GetRecipeForMealAsync(int mealId)
         {
             return Task.FromResult(Enumerable.Empty<RecipeIngredientEntry>());

@@ -30,6 +30,11 @@ public class ProductionPlanItem : AuditableEntity<int>
     /// </summary>
     public int DietVariantId { get; set; }
 
+    public int? DietMenuPlanItemId { get; set; }
+
+    [StringLength(500)]
+    public string? RecipeComponentVersionIds { get; set; }
+
     /// <summary>
     /// Zaplanowana ilość porcji.
     /// </summary>

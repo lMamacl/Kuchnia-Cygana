@@ -210,80 +210,14 @@ public sealed class ProductionService : IProductionService
         }
         else
         {
-            var recipesByItem = new Dictionary<int, List<RecipeIngredientEntry>>();
-            var requiredByStockItem = new Dictionary<int, decimal>();
-            var missingMappings = new List<string>();
-
-            foreach (var item in pendingItems)
+            var snapshot = await _dietProvider.GetPublishedPlanSnapshotAsync(plan.ProductionDate);
+            if (snapshot is not null)
             {
-                var recipe = (await _dietProvider.GetRecipeForMealAsync(item.MealId)).ToList();
-                if (recipe.Count == 0)
-                {
-                    throw new InvalidOperationException($"Brak receptury M2 dla posilku {item.MealName} (ID {item.MealId}).");
-                }
-
-                recipesByItem[item.Id] = recipe;
-
-                foreach (var ingredient in recipe)
-                {
-                    if (!ingredient.StockItemId.HasValue)
-                    {
-                        missingMappings.Add($"{ingredient.IngredientName} (IngredientId {ingredient.IngredientId})");
-                        continue;
-                    }
-
-                    var totalQuantity = ingredient.WeightInGrams * item.PlannedQuantity;
-                    requiredByStockItem[ingredient.StockItemId.Value] =
-                        requiredByStockItem.GetValueOrDefault(ingredient.StockItemId.Value) + totalQuantity;
-                }
+                await ProduceFromSnapshotAsync(planId, pendingItems, snapshot);
             }
-
-            if (missingMappings.Count > 0)
+            else
             {
-                throw new InvalidOperationException(
-                    "Nie mozna wykonac FEFO. Brak mapowania skladnikow M2 do magazynu: " +
-                    string.Join(", ", missingMappings.Distinct()));
-            }
-
-            var shortages = new List<string>();
-            foreach (var (stockItemId, requiredQuantity) in requiredByStockItem)
-            {
-                var available = await _fefoService.GetAvailableQuantityAsync(stockItemId);
-                if (available < requiredQuantity)
-                {
-                    shortages.Add($"StockItemId {stockItemId}: potrzeba {requiredQuantity:0.##}, dostepne {available:0.##}");
-                }
-            }
-
-            if (shortages.Count > 0)
-            {
-                throw new InvalidOperationException(
-                    "Nie mozna wykonac FEFO. Braki magazynowe: " + string.Join("; ", shortages));
-            }
-
-            foreach (var item in pendingItems)
-            {
-                var referenceDocument = $"PLAN-{planId}-ITEM-{item.Id}";
-
-                foreach (var ingredient in recipesByItem[item.Id])
-                {
-                    var totalQuantity = ingredient.WeightInGrams * item.PlannedQuantity;
-
-                    await _fefoService.DeductByFefoAsync(
-                        ingredient.StockItemId!.Value,
-                        totalQuantity,
-                        $"Produkcja polproduktow plan {planId}, posilek {item.MealId}",
-                        referenceDocument);
-                }
-
-                item.FefoDeductedAt = DateTimeOffset.UtcNow;
-                item.FefoReferenceDocument = referenceDocument;
-                if (item.Status == ProductionItemStatus.Planned)
-                {
-                    item.Status = ProductionItemStatus.Cooking;
-                }
-
-                await _itemRepository.UpdateAsync(item);
+                await ProduceFromLegacyRecipesAsync(planId, pendingItems);
             }
         }
 
@@ -292,4 +226,208 @@ public sealed class ProductionService : IProductionService
 
         _logger.LogInformation("Utworzono polprodukty dla planu {PlanId} i zaktualizowano magazyn", planId);
     }
+
+    private async Task ProduceFromLegacyRecipesAsync(int planId, List<ProductionPlanItem> pendingItems)
+    {
+        var recipesByItem = new Dictionary<int, List<RecipeIngredientEntry>>();
+        var requiredByStockItem = new Dictionary<int, decimal>();
+        var missingMappings = new List<string>();
+
+        foreach (var item in pendingItems)
+        {
+            var recipe = (await _dietProvider.GetRecipeForMealAsync(item.MealId)).ToList();
+            if (recipe.Count == 0)
+            {
+                throw new InvalidOperationException($"Brak receptury M2 dla posilku {item.MealName} (ID {item.MealId}).");
+            }
+
+            recipesByItem[item.Id] = recipe;
+
+            foreach (var ingredient in recipe)
+            {
+                if (!ingredient.StockItemId.HasValue)
+                {
+                    missingMappings.Add($"{ingredient.IngredientName} (IngredientId {ingredient.IngredientId})");
+                    continue;
+                }
+
+                var totalQuantity = ingredient.WeightInGrams * item.PlannedQuantity;
+                requiredByStockItem[ingredient.StockItemId.Value] =
+                    requiredByStockItem.GetValueOrDefault(ingredient.StockItemId.Value) + totalQuantity;
+            }
+        }
+
+        if (missingMappings.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Nie mozna wykonac FEFO. Brak mapowania skladnikow M2 do magazynu: " +
+                string.Join(", ", missingMappings.Distinct()));
+        }
+
+        var shortages = new List<string>();
+        foreach (var (stockItemId, requiredQuantity) in requiredByStockItem)
+        {
+            var available = await _fefoService.GetAvailableQuantityAsync(stockItemId);
+            if (available < requiredQuantity)
+            {
+                shortages.Add($"StockItemId {stockItemId}: potrzeba {requiredQuantity:0.##}, dostepne {available:0.##}");
+            }
+        }
+
+        if (shortages.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Nie mozna wykonac FEFO. Braki magazynowe: " + string.Join("; ", shortages));
+        }
+
+        foreach (var item in pendingItems)
+        {
+            var referenceDocument = $"PLAN-{planId}-ITEM-{item.Id}";
+
+            foreach (var ingredient in recipesByItem[item.Id])
+            {
+                var totalQuantity = ingredient.WeightInGrams * item.PlannedQuantity;
+
+                await _fefoService.DeductByFefoAsync(
+                    ingredient.StockItemId!.Value,
+                    totalQuantity,
+                    $"Produkcja polproduktow plan {planId}, posilek {item.MealId}",
+                    referenceDocument);
+            }
+
+            await MarkItemFefoDeductedAsync(item, referenceDocument);
+        }
+    }
+
+    private async Task ProduceFromSnapshotAsync(
+        int planId,
+        List<ProductionPlanItem> pendingItems,
+        PublishedDietPlanSnapshotDto snapshot)
+    {
+        var snapshotItemsByPlanItem = snapshot.Items.ToDictionary(
+            item => (item.MealId, item.DietVariantId),
+            item => item);
+        var requirementsByItem = new Dictionary<int, List<SnapshotIngredientRequirement>>();
+        var missingMappings = new List<string>();
+
+        foreach (var item in pendingItems)
+        {
+            if (!snapshotItemsByPlanItem.TryGetValue((item.MealId, item.DietVariantId), out var snapshotItem))
+            {
+                throw new InvalidOperationException(
+                    $"Brak pozycji snapshotu M2 dla posilku {item.MealName} (MealId {item.MealId}, DietVariantId {item.DietVariantId}).");
+            }
+
+            var requirements = new List<SnapshotIngredientRequirement>();
+            foreach (var component in snapshotItem.Components)
+            {
+                foreach (var ingredient in component.Ingredients)
+                {
+                    if (!ingredient.StockItemId.HasValue && !ingredient.WarehouseCategoryId.HasValue)
+                    {
+                        missingMappings.Add($"{ingredient.IngredientName} (IngredientId {ingredient.IngredientId})");
+                        continue;
+                    }
+
+                    requirements.Add(new SnapshotIngredientRequirement(
+                        component.RecipeComponentVersionId,
+                        component.ComponentName,
+                        ingredient.IngredientId,
+                        ingredient.IngredientName,
+                        ingredient.StockItemId,
+                        ingredient.WarehouseCategoryId,
+                        ingredient.WeightInGrams
+                            * component.QuantityPerServing
+                            * snapshotItem.ServingMultiplier
+                            * item.PlannedQuantity));
+                }
+            }
+
+            requirementsByItem[item.Id] = requirements;
+        }
+
+        if (missingMappings.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Nie mozna wykonac FEFO. Brak mapowania skladnikow M2 do magazynu: " +
+                string.Join(", ", missingMappings.Distinct()));
+        }
+
+        var shortages = new List<string>();
+        foreach (var requirement in requirementsByItem.Values.SelectMany(r => r).GroupBy(CreateRequirementKey))
+        {
+            var first = requirement.First();
+            var requiredQuantity = requirement.Sum(r => r.RequiredQuantity);
+            var available = first.StockItemId.HasValue
+                ? await _fefoService.GetAvailableQuantityAsync(first.StockItemId.Value)
+                : await _fefoService.GetAvailableQuantityByCategoryAsync(first.WarehouseCategoryId!.Value);
+
+            if (available < requiredQuantity)
+            {
+                var key = first.StockItemId.HasValue
+                    ? $"StockItemId {first.StockItemId.Value}"
+                    : $"WarehouseCategoryId {first.WarehouseCategoryId!.Value}";
+                shortages.Add($"{key}: potrzeba {requiredQuantity:0.##}, dostepne {available:0.##}");
+            }
+        }
+
+        if (shortages.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Nie mozna wykonac FEFO. Braki magazynowe: " + string.Join("; ", shortages));
+        }
+
+        foreach (var item in pendingItems)
+        {
+            var referenceDocument = $"PLAN-{planId}-ITEM-{item.Id}";
+            foreach (var requirement in requirementsByItem[item.Id])
+            {
+                var reason = $"Produkcja skladowej {requirement.ComponentName} plan {planId}, posilek {item.MealId}";
+                if (requirement.StockItemId.HasValue)
+                {
+                    await _fefoService.DeductByFefoAsync(
+                        requirement.StockItemId.Value,
+                        requirement.RequiredQuantity,
+                        reason,
+                        referenceDocument);
+                }
+                else
+                {
+                    await _fefoService.DeductByFefoCategoryAsync(
+                        requirement.WarehouseCategoryId!.Value,
+                        requirement.RequiredQuantity,
+                        reason,
+                        referenceDocument);
+                }
+            }
+
+            await MarkItemFefoDeductedAsync(item, referenceDocument);
+        }
+    }
+
+    private async Task MarkItemFefoDeductedAsync(ProductionPlanItem item, string referenceDocument)
+    {
+        item.FefoDeductedAt = DateTimeOffset.UtcNow;
+        item.FefoReferenceDocument = referenceDocument;
+        if (item.Status == ProductionItemStatus.Planned)
+        {
+            item.Status = ProductionItemStatus.Cooking;
+        }
+
+        await _itemRepository.UpdateAsync(item);
+    }
+
+    private static string CreateRequirementKey(SnapshotIngredientRequirement requirement)
+        => requirement.StockItemId.HasValue
+            ? $"S:{requirement.StockItemId.Value}"
+            : $"C:{requirement.WarehouseCategoryId!.Value}";
+
+    private sealed record SnapshotIngredientRequirement(
+        int RecipeComponentVersionId,
+        string ComponentName,
+        int IngredientId,
+        string IngredientName,
+        int? StockItemId,
+        int? WarehouseCategoryId,
+        decimal RequiredQuantity);
 }

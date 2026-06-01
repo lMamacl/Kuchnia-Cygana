@@ -1,0 +1,121 @@
+@model KuchniaUCygana.Application.DTOs.Menu.DietMenuWeekDto
+@{
+    Layout = "_LayoutStaff";
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h3 class="card-title">Plan menu @Model.StartDate.ToString("yyyy-MM-dd") - @Model.EndDate.ToString("yyyy-MM-dd")</h3>
+                <form method="get" asp-controller="DietMenuPlan" asp-action="Index" class="d-flex gap-2">
+                    <input type="date" name="startDate" value="@Model.StartDate.ToString("yyyy-MM-dd")" class="form-control form-control-sm" />
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Pokaz</button>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Dzien</th>
+                            <th>Status</th>
+                            <th class="text-center">Pozycje</th>
+                            <th>Braki</th>
+                            <th class="w-1 text-end">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var day in Model.Days)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-bold">@day.PlanDate.ToString("yyyy-MM-dd")</div>
+                                    <div class="text-secondary small">@day.PlanDate.DayOfWeek</div>
+                                </td>
+                                <td>
+                                    @if (day.Status == "Published")
+                                    {
+                                        <span class="badge bg-success-lt text-success">Published</span>
+                                    }
+                                    else if (day.Status == "Draft")
+                                    {
+                                        <span class="badge bg-blue-lt text-blue">Draft</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-lt text-secondary">Brak planu</span>
+                                    }
+                                </td>
+                                <td class="text-center">@day.Items.Count</td>
+                                <td>
+                                    @if (day.Validation.Warnings.Count == 0)
+                                    {
+                                        <span class="badge bg-success-lt text-success">Kompletny</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning-lt text-warning">@day.Validation.Warnings.Count brakow</span>
+                                    }
+                                    @if (!day.CanEdit && !string.IsNullOrWhiteSpace(day.EditBlockReason))
+                                    {
+                                        <div class="text-secondary small">@day.EditBlockReason</div>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="btn-list flex-nowrap justify-content-end">
+                                        @if (day.HasPlan)
+                                        {
+                                            <a asp-controller="DietMenuPlan" asp-action="Day" asp-route-date="@day.PlanDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-primary">Edytuj</a>
+                                            @if (day.CanEdit)
+                                            {
+                                                <form asp-controller="DietMenuPlan" asp-action="Publish" asp-route-planId="@day.Id" method="post">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="planDate" value="@day.PlanDate.ToString("yyyy-MM-dd")" />
+                                                    <button type="submit" class="btn btn-sm btn-outline-success" @(day.Validation.CanPublish ? null : "disabled")>Publikuj</button>
+                                                </form>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <form asp-controller="DietMenuPlan" asp-action="CreateDay" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="PlanDate" value="@day.PlanDate.ToString("yyyy-MM-dd")" />
+                                                <button type="submit" class="btn btn-sm btn-primary">Utworz draft</button>
+                                            </form>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Kopiowanie dnia</h3>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    @foreach (var day in Model.Days.Where(d => d.HasPlan))
+                    {
+                        <div class="col-md-6 col-xl-4">
+                            <form asp-controller="DietMenuPlan" asp-action="CopyDay" asp-route-planId="@day.Id" method="post" class="d-flex gap-2 align-items-end">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="returnDate" value="@day.PlanDate.ToString("yyyy-MM-dd")" />
+                                <div class="flex-fill">
+                                    <label class="form-label">@day.PlanDate.ToString("yyyy-MM-dd") -></label>
+                                    <input type="date" name="TargetDate" class="form-control form-control-sm" required />
+                                </div>
+                                <button type="submit" class="btn btn-sm btn-outline-primary">Kopiuj</button>
+                            </form>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

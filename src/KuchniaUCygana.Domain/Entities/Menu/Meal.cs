@@ -26,6 +26,10 @@ public sealed class Meal : AuditableEntity
 
     public decimal? CookedWeightGrams { get; set; }
 
+    public int? ShelfLifeHours { get; set; }
+
+    public bool UseEarliestIngredientExpiry { get; set; }
+
     public bool RequiresCoreTemperatureCheck { get; set; }
 
     public decimal? MinimumCoreTemperatureCelsius { get; set; }

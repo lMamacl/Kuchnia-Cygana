@@ -16,6 +16,7 @@ public sealed class MenuProfile : Profile
         this.CreateMap<Meal, MealDetailDto>()
             .IncludeBase<Meal, MealDto>()
             .ForMember(dest => dest.Recipe, opt => opt.Ignore())
+            .ForMember(dest => dest.Components, opt => opt.Ignore())
             .ForMember(dest => dest.Images, opt => opt.Ignore());
         this.CreateMap<Ingredient, IngredientDto>().ReverseMap();
         this.CreateMap<Allergen, AllergenDto>().ReverseMap();

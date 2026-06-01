@@ -133,12 +133,77 @@ public sealed class FefoService
         return result;
     }
 
+    public async Task<FefoDeductionResult> DeductByFefoCategoryAsync(
+        int warehouseCategoryId,
+        decimal requiredQuantity,
+        string reason,
+        string? referenceDocument = null)
+    {
+        if (requiredQuantity <= 0)
+            throw new ArgumentException("Ilosc do zdjecia musi byc wieksza od 0.", nameof(requiredQuantity));
+
+        var activeBatches = (await _batchRepository.GetActiveBatchesByWarehouseCategoryAsync(warehouseCategoryId)).ToList();
+
+        var result = new FefoDeductionResult();
+        var remaining = requiredQuantity;
+
+        foreach (var batch in activeBatches)
+        {
+            if (remaining <= 0)
+                break;
+
+            var toDeduct = Math.Min(remaining, batch.CurrentQuantity);
+
+            batch.CurrentQuantity -= toDeduct;
+            if (batch.CurrentQuantity <= 0)
+            {
+                batch.CurrentQuantity = 0;
+                batch.IsDepleted = true;
+            }
+
+            await _batchRepository.UpdateAsync(batch);
+
+            await _transactionRepository.InsertAsync(new InventoryTransaction
+            {
+                BatchId = batch.Id,
+                StockItemId = batch.StockItemId,
+                TransactionType = InventoryTransactionType.ProductionIssue,
+                QuantityChanged = -toDeduct,
+                Reason = reason,
+                ReferenceDocument = referenceDocument,
+            });
+
+            result.Deductions.Add(new BatchDeduction
+            {
+                BatchId = batch.Id,
+                SupplierBatchNumber = batch.SupplierBatchNumber,
+                ExpiryDate = batch.ExpiryDate,
+                QuantityDeducted = toDeduct,
+                RemainingInBatch = batch.CurrentQuantity,
+            });
+
+            remaining -= toDeduct;
+        }
+
+        result.TotalDeducted = requiredQuantity - remaining;
+        result.IsFullyDeducted = remaining <= 0;
+        result.Shortage = Math.Max(0, remaining);
+
+        return result;
+    }
+
     /// <summary>
     /// Sprawdza dostępność składnika bez zdejmowania.
     /// </summary>
     public async Task<decimal> GetAvailableQuantityAsync(int stockItemId)
     {
         var batches = await _batchRepository.GetActiveBatchesByStockItemAsync(stockItemId);
+        return batches.Sum(b => b.CurrentQuantity);
+    }
+
+    public async Task<decimal> GetAvailableQuantityByCategoryAsync(int warehouseCategoryId)
+    {
+        var batches = await _batchRepository.GetActiveBatchesByWarehouseCategoryAsync(warehouseCategoryId);
         return batches.Sum(b => b.CurrentQuantity);
     }
 

@@ -95,6 +95,8 @@ public static class DependencyInjection
         services.AddScoped<IMealRepository, MealRepository>();
         services.AddScoped<INutritionFactRepository, NutritionFactRepository>();
         services.AddScoped<IRecipeRepository, RecipeRepository>();
+        services.AddScoped<IRecipeComponentRepository, RecipeComponentRepository>();
+        services.AddScoped<IDietMenuPlanRepository, DietMenuPlanRepository>();
 
         // Module 4 (Logistics) repositories.
         services.AddScoped<IDeliveryRouteRepository, DeliveryRouteRepository>();
@@ -174,6 +176,8 @@ public static class DependencyInjection
         services.AddScoped<MenuAppInterfaces.IIngredientManagementService, MenuAppServices.IngredientManagementService>();
         services.AddScoped<MenuAppInterfaces.IMealManagementService, MenuAppServices.MealManagementService>();
         services.AddScoped<MenuAppInterfaces.INutritionService, MenuAppServices.NutritionService>();
+        services.AddScoped<MenuAppInterfaces.IRecipeComponentManagementService, MenuAppServices.RecipeComponentManagementService>();
+        services.AddScoped<MenuAppInterfaces.IDietMenuPlanManagementService, MenuAppServices.DietMenuPlanManagementService>();
 
         // Module 4 (Logistics) services.
         services.AddScoped<IVehicleService, VehicleService>();
