@@ -35,6 +35,11 @@ public class ProductionPlanItem : AuditableEntity<int>
     [StringLength(500)]
     public string? RecipeComponentVersionIds { get; set; }
 
+    [StringLength(64)]
+    public string? M2SnapshotHash { get; set; }
+
+    public string? M2SnapshotJson { get; set; }
+
     /// <summary>
     /// Zaplanowana ilość porcji.
     /// </summary>
@@ -73,4 +78,9 @@ public class ProductionPlanItem : AuditableEntity<int>
 
     [StringLength(50)]
     public string? FefoReferenceDocument { get; set; }
+
+    public DateTimeOffset? PackagingDeductedAt { get; set; }
+
+    [StringLength(50)]
+    public string? PackagingReferenceDocument { get; set; }
 }

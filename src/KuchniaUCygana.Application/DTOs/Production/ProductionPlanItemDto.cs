@@ -21,6 +21,8 @@ public sealed class ProductionPlanItemDto
 
     public string? RecipeComponentVersionIds { get; set; }
 
+    public string? M2SnapshotHash { get; set; }
+
     public int PlannedQuantity { get; set; }
 
     public int CookedQuantity { get; set; }
@@ -37,4 +39,8 @@ public sealed class ProductionPlanItemDto
     public DateTimeOffset? FefoDeductedAt { get; set; }
 
     public string? FefoReferenceDocument { get; set; }
+
+    public DateTimeOffset? PackagingDeductedAt { get; set; }
+
+    public string? PackagingReferenceDocument { get; set; }
 }

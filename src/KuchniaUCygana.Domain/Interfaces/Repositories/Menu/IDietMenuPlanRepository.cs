@@ -77,6 +77,14 @@ public sealed class DietMenuPlanItemRow
     public int ComponentCount { get; set; }
 
     public int LegacyRecipeCount { get; set; }
+
+    public bool HasNutrition { get; set; }
+
+    public int AllergenCount { get; set; }
+
+    public int PackagingRequirementCount { get; set; }
+
+    public int MissingWarehouseCategoryCount { get; set; }
 }
 
 public sealed class MealPlanSearchRow

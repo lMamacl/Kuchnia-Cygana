@@ -44,6 +44,30 @@ public sealed class DietMenuPlanManagementServiceTests
     }
 
     [Fact]
+    public async Task PublishAsync_RejectsPlanItemWithoutLabelData()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        var item = CreateValidItem();
+        item.HasNutrition = false;
+        item.AllergenCount = 0;
+        item.PackagingRequirementCount = 0;
+        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreateDraftPlan());
+        repository.Setup(r => r.GetPlanItemsAsync(10)).ReturnsAsync(new[]
+        {
+            item,
+        });
+        var recipeEngine = new Mock<IRecipeEngine>();
+        recipeEngine.Setup(r => r.ValidateRecipeAsync(5)).ReturnsAsync(true);
+        var service = CreateService(repository, recipeEngine);
+
+        var act = async () => await service.PublishAsync(new PublishDietMenuPlanRequest { DietMenuPlanId = 10 });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*nutrition*alergenow*opakowania*");
+        repository.Verify(r => r.PublishAsync(It.IsAny<int>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
     public async Task CopyDayAsync_RejectsEmptySourceDay()
     {
         var repository = new Mock<IDietMenuPlanRepository>();
@@ -129,6 +153,10 @@ public sealed class DietMenuPlanManagementServiceTests
             SortOrder = 3,
             ComponentCount = 1,
             LegacyRecipeCount = 0,
+            HasNutrition = true,
+            AllergenCount = 1,
+            PackagingRequirementCount = 1,
+            MissingWarehouseCategoryCount = 0,
         };
     }
 }

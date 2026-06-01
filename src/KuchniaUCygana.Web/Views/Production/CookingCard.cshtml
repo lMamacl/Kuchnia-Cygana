@@ -142,6 +142,102 @@
             </div>
         }
 
+        @if (Model.Components.Any())
+        {
+            <div class="card card-premium mb-4">
+                <div class="card-header bg-transparent">
+                    <h3 class="card-title">Skladowe ze snapshotu M2</h3>
+                </div>
+                <div class="card-body">
+                    <div class="accordion" id="snapshotComponents">
+                        @foreach (var component in Model.Components)
+                        {
+                            var collapseId = $"snapshot-component-{component.RecipeComponentVersionId}";
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="heading-@collapseId">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="false" aria-controls="@collapseId">
+                                        <span class="fw-bold me-2">@component.ComponentName</span>
+                                        <span class="badge bg-blue-lt text-blue me-2">@component.TotalQuantity.ToString("0.###") @component.Unit</span>
+                                        @if (component.RequiresCoreTemperatureCheck)
+                                        {
+                                            <span class="badge bg-orange-lt text-orange">Temp. @component.MinimumCoreTemperatureCelsius?.ToString("0.#") C</span>
+                                        }
+                                    </button>
+                                </h2>
+                                <div id="@collapseId" class="accordion-collapse collapse" aria-labelledby="heading-@collapseId" data-bs-parent="#snapshotComponents">
+                                    <div class="accordion-body">
+                                        @if (!string.IsNullOrWhiteSpace(component.Instructions))
+                                        {
+                                            <div class="bg-light p-3 border rounded mb-3">@component.Instructions</div>
+                                        }
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-vcenter">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Skladnik</th>
+                                                        <th class="text-end">Na 1 porcje</th>
+                                                        <th class="text-end">Lacznie</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var ingredient in component.Ingredients)
+                                                    {
+                                                        <tr>
+                                                            <td>@ingredient.IngredientName</td>
+                                                            <td class="text-end">@FormatWeight(ingredient.WeightPerServing)</td>
+                                                            <td class="text-end fw-bold">@FormatWeight(ingredient.TotalWeight)</td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        @if (component.PackagingRequirements.Any())
+                                        {
+                                            <div class="mt-3 small text-secondary">
+                                                Opakowania: @string.Join(", ", component.PackagingRequirements.Select(p => $"{p.ResourceName} x {p.TotalQuantity:0.##} {p.Unit}"))
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (Model.PackagingRequirements.Any())
+        {
+            <div class="card card-premium mb-4">
+                <div class="card-header bg-transparent">
+                    <h3 class="card-title">Pudelka i pojemniki</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-vcenter card-table">
+                        <thead>
+                            <tr>
+                                <th>Zasob</th>
+                                <th>Rola</th>
+                                <th class="text-end">Na 1 porcje</th>
+                                <th class="text-end">Lacznie</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var packaging in Model.PackagingRequirements)
+                            {
+                                <tr>
+                                    <td>@packaging.ResourceName</td>
+                                    <td>@(packaging.ContainerRole ?? "-")</td>
+                                    <td class="text-end">@packaging.QuantityPerServing.ToString("0.##") @packaging.Unit</td>
+                                    <td class="text-end fw-bold">@packaging.TotalQuantity.ToString("0.##") @packaging.Unit</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
         <div class="card card-premium">
             <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
                 <h3 class="card-title">Zapotrzebowanie na Składniki (Skalowane)</h3>

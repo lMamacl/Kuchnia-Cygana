@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Threading.Tasks;
 using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Enums;
@@ -33,6 +37,12 @@ public sealed class PlanGenerationResult
 /// </summary>
 public sealed class ProductionPlanGenerator
 {
+    private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = false,
+    };
+
     private readonly IOrderDataProvider _orderDataProvider;
     private readonly IDietDataProvider _dietDataProvider;
     private readonly FoodCostCalculator _foodCostCalculator;
@@ -106,6 +116,7 @@ public sealed class ProductionPlanGenerator
                 d.MealId == key.MealId && d.DietVariantId == key.DietVariantId);
             var snapshotItem = snapshot?.Items.FirstOrDefault(i =>
                 i.MealId == key.MealId && i.DietVariantId == key.DietVariantId);
+            var snapshotPayload = snapshotItem is null ? null : CreateSnapshotPayload(snapshotItem);
 
             items.Add(new ProductionPlanItem
             {
@@ -117,6 +128,8 @@ public sealed class ProductionPlanGenerator
                 RecipeComponentVersionIds = snapshotItem is null
                     ? null
                     : string.Join(",", snapshotItem.Components.Select(c => c.RecipeComponentVersionId).Distinct()),
+                M2SnapshotJson = snapshotPayload?.Json,
+                M2SnapshotHash = snapshotPayload?.Hash,
                 PlannedQuantity = quantity,
                 CookedQuantity = 0,
                 Status = ProductionItemStatus.Planned,
@@ -248,4 +261,14 @@ public sealed class ProductionPlanGenerator
         => dietPlan.FirstOrDefault(d => d.MealId == mealId && d.DietVariantId == dietVariantId)?.SortOrder
             ?? dietPlan.FirstOrDefault(d => d.MealId == mealId)?.SortOrder
             ?? int.MaxValue;
+
+    private static SnapshotPayload CreateSnapshotPayload(PublishedDietPlanItemDto item)
+    {
+        var json = JsonSerializer.Serialize(item, SnapshotJsonOptions);
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+        return new SnapshotPayload(json, hash);
+    }
+
+    private sealed record SnapshotPayload(string Json, string Hash);
 }

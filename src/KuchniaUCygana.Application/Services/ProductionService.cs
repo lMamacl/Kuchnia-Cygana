@@ -1,4 +1,5 @@
 using AutoMapper;
+using System.Text.Json;
 using KuchniaUCygana.Application.DTOs.Production;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Production;
@@ -96,6 +97,12 @@ public sealed class ProductionService : IProductionService
             ?? throw new InvalidOperationException($"Pozycja planu {planItemId} nie istnieje.");
 
         var details = await _dietProvider.GetMealCookingDetailsAsync(item.MealId);
+        var storedSnapshot = TryDeserializeSnapshotItem(item);
+        if (storedSnapshot is not null)
+        {
+            return BuildCookingCardFromSnapshot(item, storedSnapshot, details);
+        }
+
         var recipe = (await _dietProvider.GetRecipeForMealAsync(item.MealId)).ToList();
 
         var card = new CookingCardDto
@@ -165,6 +172,8 @@ public sealed class ProductionService : IProductionService
         var item = await _itemRepository.GetByIdAsync(planItemId)
             ?? throw new InvalidOperationException($"Pozycja planu {planItemId} nie istnieje.");
 
+        await DeductPackagingIfNeededAsync(item, actualQuantity);
+
         item.CookedQuantity = (int)actualQuantity;
         item.Status = ProductionItemStatus.Cooked;
         item.ActualReadyTime = TimeOnly.FromDateTime(DateTime.Now);
@@ -210,7 +219,12 @@ public sealed class ProductionService : IProductionService
         }
         else
         {
-            var snapshot = await _dietProvider.GetPublishedPlanSnapshotAsync(plan.ProductionDate);
+            var snapshot = BuildStoredSnapshot(plan.ProductionDate, pendingItems);
+            if (snapshot is null)
+            {
+                snapshot = await _dietProvider.GetPublishedPlanSnapshotAsync(plan.ProductionDate);
+            }
+
             if (snapshot is not null)
             {
                 await ProduceFromSnapshotAsync(planId, pendingItems, snapshot);
@@ -405,6 +419,339 @@ public sealed class ProductionService : IProductionService
         }
     }
 
+    private async Task DeductPackagingIfNeededAsync(ProductionPlanItem item, decimal actualQuantity)
+    {
+        if (item.PackagingDeductedAt.HasValue)
+        {
+            _logger.LogInformation(
+                "Opakowania dla pozycji {PlanItemId} byly juz zdjete - pominieto ponowne zdejmowanie.",
+                item.Id);
+            return;
+        }
+
+        var snapshotItem = TryDeserializeSnapshotItem(item);
+        if (snapshotItem is null)
+        {
+            return;
+        }
+
+        var requirements = BuildPackagingRequirements(snapshotItem, actualQuantity).ToList();
+        if (requirements.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Nie mozna zatwierdzic gotowania. Snapshot M2 dla posilku {item.MealName} nie zawiera wymaganych opakowan.");
+        }
+
+        var shortages = new List<string>();
+        foreach (var group in requirements.GroupBy(CreatePackagingRequirementKey))
+        {
+            var first = group.First();
+            var requiredQuantity = group.Sum(r => r.RequiredQuantity);
+            if (requiredQuantity <= 0)
+            {
+                continue;
+            }
+
+            var available = first.StockItemId.HasValue
+                ? await _fefoService.GetAvailableQuantityAsync(first.StockItemId.Value)
+                : await _fefoService.GetAvailableQuantityByCategoryAsync(first.WarehouseCategoryId!.Value);
+
+            if (available < requiredQuantity)
+            {
+                var key = first.StockItemId.HasValue
+                    ? $"StockItemId {first.StockItemId.Value}"
+                    : $"WarehouseCategoryId {first.WarehouseCategoryId!.Value}";
+                shortages.Add($"{first.ResourceName} ({key}): potrzeba {requiredQuantity:0.##}, dostepne {available:0.##}");
+            }
+        }
+
+        if (shortages.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Nie mozna zatwierdzic gotowania. Braki opakowan: " + string.Join("; ", shortages));
+        }
+
+        var referenceDocument = $"PLAN-{item.ProductionPlanId}-ITEM-{item.Id}-PACKAGING";
+        foreach (var requirement in requirements.Where(r => r.RequiredQuantity > 0))
+        {
+            var reason = $"Opakowania po gotowaniu plan {item.ProductionPlanId}, posilek {item.MealId}";
+            if (requirement.StockItemId.HasValue)
+            {
+                await _fefoService.DeductByFefoAsync(
+                    requirement.StockItemId.Value,
+                    requirement.RequiredQuantity,
+                    reason,
+                    referenceDocument);
+            }
+            else
+            {
+                await _fefoService.DeductByFefoCategoryAsync(
+                    requirement.WarehouseCategoryId!.Value,
+                    requirement.RequiredQuantity,
+                    reason,
+                    referenceDocument);
+            }
+        }
+
+        item.PackagingDeductedAt = DateTimeOffset.UtcNow;
+        item.PackagingReferenceDocument = referenceDocument;
+    }
+
+    private static CookingCardDto BuildCookingCardFromSnapshot(
+        ProductionPlanItem item,
+        PublishedDietPlanItemDto snapshotItem,
+        MealCookingDetailsEntry? details)
+    {
+        var card = new CookingCardDto
+        {
+            PlanItemId = item.Id,
+            MealId = item.MealId,
+            MealName = snapshotItem.MealName,
+            CategoryName = snapshotItem.CategoryName ?? details?.CategoryName,
+            Description = details?.Description,
+            PreparationInstructions = details?.PreparationInstructions,
+            MainImageUrl = details?.MainImageUrl,
+            PreparationTimeMinutes = details?.PreparationTimeMinutes ?? 0,
+            DietVariantId = item.DietVariantId,
+            PlannedQuantity = item.PlannedQuantity,
+            ProductionGroup = item.ProductionGroup,
+            EstimatedReadyTime = item.EstimatedReadyTime.HasValue
+                ? item.EstimatedReadyTime.Value.ToString("HH:mm")
+                : null,
+            RawWeightGrams = snapshotItem.RawWeightGrams,
+            CookedWeightGrams = snapshotItem.CookedWeightGrams,
+            NutritionFacts = snapshotItem.Nutrition is null
+                ? null
+                : new CookingCardNutritionDto
+                {
+                    CaloriesPer100g = snapshotItem.Nutrition.CaloriesPer100g,
+                    ProteinPer100g = snapshotItem.Nutrition.ProteinPer100g,
+                    CarbohydratesPer100g = snapshotItem.Nutrition.CarbohydratesPer100g,
+                    FatPer100g = snapshotItem.Nutrition.FatPer100g,
+                    FiberPer100g = snapshotItem.Nutrition.FiberPer100g,
+                },
+            Allergens = snapshotItem.Allergens,
+        };
+
+        foreach (var component in snapshotItem.Components.OrderBy(c => c.SortOrder))
+        {
+            var componentDto = new CookingCardComponentDto
+            {
+                RecipeComponentVersionId = component.RecipeComponentVersionId,
+                ComponentName = component.ComponentName,
+                Role = component.Role,
+                QuantityPerServing = component.QuantityPerServing * snapshotItem.ServingMultiplier,
+                Unit = component.Unit,
+                TotalQuantity = component.QuantityPerServing * snapshotItem.ServingMultiplier * item.PlannedQuantity,
+                Instructions = component.Instructions,
+                RequiresCoreTemperatureCheck = component.Ingredients.Any(i => i.RequiresCoreTemperatureCheck),
+                MinimumCoreTemperatureCelsius = MaxTemperature(component.Ingredients),
+            };
+
+            foreach (var ingredient in component.Ingredients)
+            {
+                var weightPerServing = ingredient.WeightInGrams * component.QuantityPerServing * snapshotItem.ServingMultiplier;
+                var ingredientDto = new CookingCardIngredientDto
+                {
+                    IngredientId = ingredient.IngredientId,
+                    StockItemId = ingredient.StockItemId,
+                    IngredientName = ingredient.IngredientName,
+                    WarehouseCategoryName = ingredient.WarehouseCategoryName,
+                    WeightPerServing = weightPerServing,
+                    TotalWeight = weightPerServing * item.PlannedQuantity,
+                    YieldFactor = ingredient.YieldFactor,
+                    RequiresCoreTemperatureCheck = ingredient.RequiresCoreTemperatureCheck,
+                    MinimumCoreTemperatureCelsius = ingredient.MinimumCoreTemperatureCelsius,
+                    IsOptional = ingredient.IsOptional,
+                };
+
+                componentDto.Ingredients.Add(ingredientDto);
+                AddAggregatedIngredient(card.Ingredients, ingredientDto);
+            }
+
+            foreach (var packaging in component.PackagingRequirements)
+            {
+                var quantityPerServing = packaging.Quantity * component.QuantityPerServing * snapshotItem.ServingMultiplier;
+                componentDto.PackagingRequirements.Add(MapPackaging(packaging, quantityPerServing, item.PlannedQuantity));
+            }
+
+            card.Components.Add(componentDto);
+        }
+
+        foreach (var packaging in snapshotItem.PackagingRequirements)
+        {
+            card.PackagingRequirements.Add(MapPackaging(packaging, packaging.Quantity, item.PlannedQuantity));
+        }
+
+        foreach (var component in card.Components)
+        {
+            card.PackagingRequirements.AddRange(component.PackagingRequirements);
+        }
+
+        card.RequiresCoreTemperatureCheck = card.Components.Any(c => c.RequiresCoreTemperatureCheck);
+        card.MinimumCoreTemperatureCelsius = MaxTemperature(card.Ingredients);
+        card.MissingWarehouseMappings = snapshotItem.Components
+            .SelectMany(c => c.Ingredients)
+            .Where(i => !i.StockItemId.HasValue && !i.WarehouseCategoryId.HasValue)
+            .Select(i => $"{i.IngredientName} (ID {i.IngredientId})")
+            .Distinct()
+            .ToList();
+
+        return card;
+    }
+
+    private static IEnumerable<PackagingRequirement> BuildPackagingRequirements(
+        PublishedDietPlanItemDto snapshotItem,
+        decimal actualQuantity)
+    {
+        foreach (var packaging in snapshotItem.PackagingRequirements)
+        {
+            yield return CreatePackagingRequirement(packaging, packaging.Quantity * actualQuantity);
+        }
+
+        foreach (var component in snapshotItem.Components)
+        {
+            foreach (var packaging in component.PackagingRequirements)
+            {
+                yield return CreatePackagingRequirement(
+                    packaging,
+                    packaging.Quantity * component.QuantityPerServing * snapshotItem.ServingMultiplier * actualQuantity);
+            }
+        }
+    }
+
+    private static PackagingRequirement CreatePackagingRequirement(PackagingRequirementDto packaging, decimal requiredQuantity)
+    {
+        if (!packaging.StockItemId.HasValue && !packaging.WarehouseCategoryId.HasValue)
+        {
+            throw new InvalidOperationException(
+                $"Opakowanie '{packaging.ResourceName}' nie ma mapowania StockItemId ani WarehouseCategoryId.");
+        }
+
+        return new PackagingRequirement(
+            packaging.ResourceName,
+            packaging.StockItemId,
+            packaging.WarehouseCategoryId,
+            requiredQuantity);
+    }
+
+    private static PublishedDietPlanSnapshotDto? BuildStoredSnapshot(DateOnly planDate, List<ProductionPlanItem> pendingItems)
+    {
+        var snapshotItems = pendingItems
+            .Select(TryDeserializeSnapshotItem)
+            .Where(item => item is not null)
+            .Select(item => item!)
+            .ToList();
+
+        if (snapshotItems.Count == 0)
+        {
+            return null;
+        }
+
+        if (snapshotItems.Count != pendingItems.Count)
+        {
+            throw new InvalidOperationException(
+                "Plan produkcji ma czesciowy snapshot M2. Nie mozna mieszac live danych M2 z zamrozonym snapshotem.");
+        }
+
+        return new PublishedDietPlanSnapshotDto
+        {
+            PlanDate = planDate,
+            PlanStatus = "Snapshot",
+            Items = snapshotItems,
+        };
+    }
+
+    private static PublishedDietPlanItemDto? TryDeserializeSnapshotItem(ProductionPlanItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.M2SnapshotJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<PublishedDietPlanItemDto>(item.M2SnapshotJson);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(
+                $"Snapshot M2 dla pozycji planu {item.Id} jest uszkodzony i nie moze zostac uzyty operacyjnie.",
+                ex);
+        }
+    }
+
+    private static void AddAggregatedIngredient(List<CookingCardIngredientDto> target, CookingCardIngredientDto ingredient)
+    {
+        var existing = target.FirstOrDefault(i =>
+            i.IngredientId == ingredient.IngredientId
+            && i.StockItemId == ingredient.StockItemId
+            && i.WarehouseCategoryName == ingredient.WarehouseCategoryName);
+
+        if (existing is null)
+        {
+            target.Add(ingredient);
+            return;
+        }
+
+        existing.WeightPerServing += ingredient.WeightPerServing;
+        existing.TotalWeight += ingredient.TotalWeight;
+        existing.RequiresCoreTemperatureCheck |= ingredient.RequiresCoreTemperatureCheck;
+        existing.MinimumCoreTemperatureCelsius = MaxTemperature(existing.MinimumCoreTemperatureCelsius, ingredient.MinimumCoreTemperatureCelsius);
+    }
+
+    private static CookingCardPackagingDto MapPackaging(PackagingRequirementDto packaging, decimal quantityPerServing, int plannedQuantity)
+        => new()
+        {
+            ResourceName = packaging.ResourceName,
+            StockItemId = packaging.StockItemId,
+            WarehouseCategoryId = packaging.WarehouseCategoryId,
+            QuantityPerServing = quantityPerServing,
+            TotalQuantity = quantityPerServing * plannedQuantity,
+            Unit = packaging.Unit,
+            ContainerRole = packaging.ContainerRole,
+        };
+
+    private static decimal? MaxTemperature(IEnumerable<ComponentIngredientDto> ingredients)
+    {
+        var values = ingredients
+            .Where(i => i.RequiresCoreTemperatureCheck && i.MinimumCoreTemperatureCelsius.HasValue)
+            .Select(i => i.MinimumCoreTemperatureCelsius!.Value)
+            .ToList();
+
+        return values.Count == 0 ? null : values.Max();
+    }
+
+    private static decimal? MaxTemperature(IEnumerable<CookingCardIngredientDto> ingredients)
+    {
+        var values = ingredients
+            .Where(i => i.RequiresCoreTemperatureCheck && i.MinimumCoreTemperatureCelsius.HasValue)
+            .Select(i => i.MinimumCoreTemperatureCelsius!.Value)
+            .ToList();
+
+        return values.Count == 0 ? null : values.Max();
+    }
+
+    private static decimal? MaxTemperature(decimal? first, decimal? second)
+    {
+        if (!first.HasValue)
+        {
+            return second;
+        }
+
+        if (!second.HasValue)
+        {
+            return first;
+        }
+
+        return Math.Max(first.Value, second.Value);
+    }
+
+    private static string CreatePackagingRequirementKey(PackagingRequirement requirement)
+        => requirement.StockItemId.HasValue
+            ? $"S:{requirement.StockItemId.Value}"
+            : $"C:{requirement.WarehouseCategoryId!.Value}";
+
     private async Task MarkItemFefoDeductedAsync(ProductionPlanItem item, string referenceDocument)
     {
         item.FefoDeductedAt = DateTimeOffset.UtcNow;
@@ -427,6 +774,12 @@ public sealed class ProductionService : IProductionService
         string ComponentName,
         int IngredientId,
         string IngredientName,
+        int? StockItemId,
+        int? WarehouseCategoryId,
+        decimal RequiredQuantity);
+
+    private sealed record PackagingRequirement(
+        string ResourceName,
         int? StockItemId,
         int? WarehouseCategoryId,
         decimal RequiredQuantity);

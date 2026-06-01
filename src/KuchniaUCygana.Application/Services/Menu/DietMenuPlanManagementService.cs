@@ -227,6 +227,26 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
             warnings.Add("posilek nie ma skladowych ani legacy receptury");
         }
 
+        if (!row.HasNutrition)
+        {
+            warnings.Add("brak kompletnego nutrition posilku");
+        }
+
+        if (row.AllergenCount == 0)
+        {
+            warnings.Add("brak alergenow posilku lub skladowych");
+        }
+
+        if (row.PackagingRequirementCount == 0)
+        {
+            warnings.Add("brak opakowania produkcyjnego");
+        }
+
+        if (row.MissingWarehouseCategoryCount > 0)
+        {
+            warnings.Add($"brak kategorii magazynowej dla {row.MissingWarehouseCategoryCount} skladnikow");
+        }
+
         var isRecipeValid = row.ComponentCount > 0 || row.LegacyRecipeCount > 0
             ? await this.recipeEngine.ValidateRecipeAsync(row.MealId)
             : false;

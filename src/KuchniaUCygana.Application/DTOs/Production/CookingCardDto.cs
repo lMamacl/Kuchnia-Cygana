@@ -48,6 +48,10 @@ public sealed class CookingCardDto
     /// Lista składników z przeliczonymi gramaturami (na całą ilość porcji).
     /// </summary>
     public List<CookingCardIngredientDto> Ingredients { get; set; } = new();
+
+    public List<CookingCardComponentDto> Components { get; set; } = new();
+
+    public List<CookingCardPackagingDto> PackagingRequirements { get; set; } = new();
 }
 
 /// <summary>
@@ -93,4 +97,46 @@ public sealed class CookingCardNutritionDto
     public decimal FatPer100g { get; set; }
 
     public decimal FiberPer100g { get; set; }
+}
+
+public sealed class CookingCardComponentDto
+{
+    public int RecipeComponentVersionId { get; set; }
+
+    public string ComponentName { get; set; } = string.Empty;
+
+    public string? Role { get; set; }
+
+    public decimal QuantityPerServing { get; set; }
+
+    public string Unit { get; set; } = string.Empty;
+
+    public decimal TotalQuantity { get; set; }
+
+    public string? Instructions { get; set; }
+
+    public bool RequiresCoreTemperatureCheck { get; set; }
+
+    public decimal? MinimumCoreTemperatureCelsius { get; set; }
+
+    public List<CookingCardIngredientDto> Ingredients { get; set; } = new();
+
+    public List<CookingCardPackagingDto> PackagingRequirements { get; set; } = new();
+}
+
+public sealed class CookingCardPackagingDto
+{
+    public string ResourceName { get; set; } = string.Empty;
+
+    public int? StockItemId { get; set; }
+
+    public int? WarehouseCategoryId { get; set; }
+
+    public decimal QuantityPerServing { get; set; }
+
+    public decimal TotalQuantity { get; set; }
+
+    public string Unit { get; set; } = "pcs";
+
+    public string? ContainerRole { get; set; }
 }

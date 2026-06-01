@@ -365,12 +365,25 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
                 i.[ServingSizeMultiplier],
                 i.[SortOrder],
                 COALESCE(componentCounts.[ComponentCount], 0) AS [ComponentCount],
-                COALESCE(recipeCounts.[LegacyRecipeCount], 0) AS [LegacyRecipeCount]
+                COALESCE(recipeCounts.[LegacyRecipeCount], 0) AS [LegacyRecipeCount],
+                CASE
+                    WHEN nf.[MealId] IS NOT NULL
+                     AND nf.[CaloriesPer100g] IS NOT NULL
+                     AND nf.[ProteinPer100g] IS NOT NULL
+                     AND nf.[CarbohydratesPer100g] IS NOT NULL
+                     AND nf.[FatPer100g] IS NOT NULL
+                     AND nf.[FiberPer100g] IS NOT NULL THEN CAST(1 AS bit)
+                    ELSE CAST(0 AS bit)
+                END AS [HasNutrition],
+                COALESCE(allergenCounts.[AllergenCount], 0) AS [AllergenCount],
+                COALESCE(packagingCounts.[PackagingRequirementCount], 0) AS [PackagingRequirementCount],
+                COALESCE(mappingCounts.[MissingWarehouseCategoryCount], 0) AS [MissingWarehouseCategoryCount]
             FROM [DietMenuPlanItems] i
             INNER JOIN [DietMenuPlans] p ON p.[Id] = i.[DietMenuPlanId]
             INNER JOIN [DietVariants] dv ON dv.[Id] = i.[DietVariantId]
             INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
             INNER JOIN [Meals] m ON m.[Id] = i.[MealId]
+            LEFT JOIN [NutritionFacts] nf ON nf.[MealId] = m.[Id]
             OUTER APPLY (
                 SELECT COUNT(*) AS [ComponentCount]
                 FROM [MealRecipeComponents] mrc
@@ -385,6 +398,71 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
                 WHERE r.[MealId] = i.[MealId]
                   AND r.[IsDeleted] = 0
             ) recipeCounts
+            OUTER APPLY (
+                SELECT COUNT(DISTINCT [AllergenId]) AS [AllergenCount]
+                FROM (
+                    SELECT ma.[AllergenId]
+                    FROM [MealAllergens] ma
+                    WHERE ma.[MealId] = i.[MealId]
+
+                    UNION
+
+                    SELECT ia.[AllergenId]
+                    FROM [Recipes] r
+                    INNER JOIN [IngredientAllergens] ia ON ia.[IngredientId] = r.[IngredientId]
+                    WHERE r.[MealId] = i.[MealId]
+                      AND r.[IsDeleted] = 0
+
+                    UNION
+
+                    SELECT ia.[AllergenId]
+                    FROM [MealRecipeComponents] mrc
+                    INNER JOIN [RecipeComponentIngredients] rci ON rci.[RecipeComponentVersionId] = mrc.[RecipeComponentVersionId]
+                    INNER JOIN [IngredientAllergens] ia ON ia.[IngredientId] = rci.[IngredientId]
+                    WHERE mrc.[MealId] = i.[MealId]
+                      AND mrc.[IsDeleted] = 0
+                      AND rci.[IsDeleted] = 0
+                ) allergens
+            ) allergenCounts
+            OUTER APPLY (
+                SELECT COUNT(*) AS [PackagingRequirementCount]
+                FROM [PackagingRequirements] pr
+                WHERE pr.[IsDeleted] = 0
+                  AND (
+                        pr.[MealId] = i.[MealId]
+                        OR pr.[RecipeComponentVersionId] IN (
+                            SELECT mrc.[RecipeComponentVersionId]
+                            FROM [MealRecipeComponents] mrc
+                            WHERE mrc.[MealId] = i.[MealId]
+                              AND mrc.[IsDeleted] = 0
+                        )
+                  )
+            ) packagingCounts
+            OUTER APPLY (
+                SELECT COUNT(*) AS [MissingWarehouseCategoryCount]
+                FROM (
+                    SELECT COALESCE(rci.[WarehouseCategoryId], ing.[WarehouseCategoryId], si.[WarehouseCategoryId]) AS [WarehouseCategoryId]
+                    FROM [MealRecipeComponents] mrc
+                    INNER JOIN [RecipeComponentIngredients] rci ON rci.[RecipeComponentVersionId] = mrc.[RecipeComponentVersionId]
+                    INNER JOIN [Ingredients] ing ON ing.[Id] = rci.[IngredientId]
+                    LEFT JOIN [StockItems] si ON si.[BaseIngredientId] = ing.[Id] AND si.[IsDeleted] = 0
+                    WHERE mrc.[MealId] = i.[MealId]
+                      AND mrc.[IsDeleted] = 0
+                      AND rci.[IsDeleted] = 0
+                      AND ing.[IsDeleted] = 0
+
+                    UNION ALL
+
+                    SELECT COALESCE(ing.[WarehouseCategoryId], si.[WarehouseCategoryId]) AS [WarehouseCategoryId]
+                    FROM [Recipes] r
+                    INNER JOIN [Ingredients] ing ON ing.[Id] = r.[IngredientId]
+                    LEFT JOIN [StockItems] si ON si.[BaseIngredientId] = ing.[Id] AND si.[IsDeleted] = 0
+                    WHERE r.[MealId] = i.[MealId]
+                      AND r.[IsDeleted] = 0
+                      AND ing.[IsDeleted] = 0
+                ) mappings
+                WHERE mappings.[WarehouseCategoryId] IS NULL
+            ) mappingCounts
             WHERE i.[IsDeleted] = 0
               AND i.[IsActive] = 1
               AND p.[IsDeleted] = 0
