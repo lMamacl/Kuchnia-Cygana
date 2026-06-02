@@ -12,6 +12,8 @@ public interface IMealManagementService
 
     Task<MealDto> CreateMealAsync(CreateMealRequest request);
 
+    Task<int> CreateMealVariantAsync(CreateMealVariantRequest request);
+
     Task UpdateMealAsync(int mealId, UpdateMealRequest request);
 
     Task DeleteMealAsync(int mealId);

@@ -3,6 +3,7 @@ using KuchniaUCygana.Application.DTOs.Menu;
 using KuchniaUCygana.Application.Interfaces.Menu;
 using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Domain.Interfaces.Services.Menu;
 
@@ -13,23 +14,29 @@ public sealed class MealManagementService : IMealManagementService
     private readonly IMealRepository mealRepository;
     private readonly IRecipeRepository recipeRepository;
     private readonly IRecipeComponentRepository recipeComponentRepository;
+    private readonly IMealVariantRepository mealVariantRepository;
     private readonly IMealImageRepository mealImageRepository;
     private readonly IRecipeEngine recipeEngine;
+    private readonly ICurrentUserService currentUser;
     private readonly IMapper mapper;
 
     public MealManagementService(
         IMealRepository mealRepository,
         IRecipeRepository recipeRepository,
         IRecipeComponentRepository recipeComponentRepository,
+        IMealVariantRepository mealVariantRepository,
         IMealImageRepository mealImageRepository,
         IRecipeEngine recipeEngine,
+        ICurrentUserService currentUser,
         IMapper mapper)
     {
         this.mealRepository = mealRepository;
         this.recipeRepository = recipeRepository;
         this.recipeComponentRepository = recipeComponentRepository;
+        this.mealVariantRepository = mealVariantRepository;
         this.mealImageRepository = mealImageRepository;
         this.recipeEngine = recipeEngine;
+        this.currentUser = currentUser;
         this.mapper = mapper;
     }
 
@@ -91,6 +98,13 @@ public sealed class MealManagementService : IMealManagementService
             .OrderBy(component => component.SortOrder)
             .ToList();
 
+        var variants = await this.mealVariantRepository.GetByMealIdAsync(mealId);
+        foreach (var variant in variants)
+        {
+            var components = await this.mealVariantRepository.GetComponentsAsync(variant.Id);
+            detail.Variants.Add(MapMealVariant(variant, components));
+        }
+
         var images = await this.mealImageRepository.GetByMealIdAsync(mealId);
         detail.Images = this.mapper.Map<List<MealImageDto>>(images);
         return detail;
@@ -108,6 +122,38 @@ public sealed class MealManagementService : IMealManagementService
         meal.Status = MealStatus.Draft;
         await this.mealRepository.InsertAsync(meal);
         return this.mapper.Map<MealDto>(meal);
+    }
+
+    public async Task<int> CreateMealVariantAsync(CreateMealVariantRequest request)
+    {
+        var meal = await this.mealRepository.GetByIdAsync(request.MealId)
+            ?? throw new InvalidOperationException($"Posilek #{request.MealId} nie istnieje.");
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            throw new InvalidOperationException("Nazwa wariantu jest wymagana.");
+        }
+
+        var sourceVariantId = request.SourceMealVariantId;
+        if (!sourceVariantId.HasValue)
+        {
+            sourceVariantId = (await this.mealVariantRepository.GetDefaultByMealIdAsync(request.MealId))?.Id;
+        }
+
+        return await this.mealVariantRepository.CreateAsync(new MealVariant
+        {
+            MealId = request.MealId,
+            Name = request.Name.Trim(),
+            VariantType = string.IsNullOrWhiteSpace(request.VariantType) ? "Standard" : request.VariantType.Trim(),
+            Status = "Draft",
+            Description = $"Wariant utworzony dla posilku {meal.Name}.",
+            IsDefault = false,
+            RawWeightGrams = meal.RawWeightGrams,
+            CookedWeightGrams = meal.CookedWeightGrams,
+            NutritionSource = "Aggregated",
+            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedBy = this.currentUser.GetUserName(),
+        }, sourceVariantId, this.currentUser.GetUserName());
     }
 
     public async Task UpdateMealAsync(int mealId, UpdateMealRequest request)
@@ -140,5 +186,69 @@ public sealed class MealManagementService : IMealManagementService
         if (meal is null) return;
         meal.Status = MealStatus.Archived;
         await this.mealRepository.UpdateAsync(meal);
+    }
+
+    private static MealVariantDto MapMealVariant(
+        MealVariantRow row,
+        IReadOnlyList<MealVariantComponentRow> components)
+    {
+        var warnings = new List<string>();
+        if (components.Count == 0)
+        {
+            warnings.Add("brak skladowych wariantu");
+        }
+
+        if (!row.CaloriesPer100g.HasValue
+            || !row.ProteinPer100g.HasValue
+            || !row.CarbohydratesPer100g.HasValue
+            || !row.FatPer100g.HasValue
+            || !row.FiberPer100g.HasValue)
+        {
+            warnings.Add("brak pelnego nutrition wariantu");
+        }
+
+        if (!row.AllergensApproved)
+        {
+            warnings.Add("alergeny wariantu nie sa zatwierdzone");
+        }
+
+        return new MealVariantDto
+        {
+            Id = row.Id,
+            MealId = row.MealId,
+            Name = row.Name,
+            VariantType = row.VariantType,
+            Status = row.Status,
+            Description = row.Description,
+            IsDefault = row.IsDefault,
+            RawWeightGrams = row.RawWeightGrams,
+            CookedWeightGrams = row.CookedWeightGrams,
+            CaloriesPer100g = row.CaloriesPer100g,
+            ProteinPer100g = row.ProteinPer100g,
+            CarbohydratesPer100g = row.CarbohydratesPer100g,
+            FatPer100g = row.FatPer100g,
+            FiberPer100g = row.FiberPer100g,
+            NutritionSource = row.NutritionSource,
+            NutritionOverrideReason = row.NutritionOverrideReason,
+            AllergensApproved = row.AllergensApproved,
+            AllergenOverrideReason = row.AllergenOverrideReason,
+            ValidationWarnings = warnings,
+            IsComplete = warnings.Count == 0,
+            Components = components.Select(component => new MealVariantComponentDto
+            {
+                Id = component.Id,
+                MealVariantId = component.MealVariantId,
+                RecipeComponentId = component.RecipeComponentId,
+                RecipeComponentVersionId = component.RecipeComponentVersionId,
+                ComponentName = component.ComponentName,
+                VersionNumber = component.VersionNumber,
+                VersionStatus = component.VersionStatus,
+                Role = component.Role,
+                QuantityPerServing = component.QuantityPerServing,
+                Unit = component.Unit,
+                SortOrder = component.SortOrder,
+                IsOptional = component.IsOptional,
+            }).ToList(),
+        };
     }
 }

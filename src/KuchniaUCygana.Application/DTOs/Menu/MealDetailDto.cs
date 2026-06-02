@@ -20,5 +20,7 @@ public sealed class MealDetailDto : MealDto
 
     public List<MealRecipeComponentDto> Components { get; set; } = new();
 
+    public List<MealVariantDto> Variants { get; set; } = new();
+
     public List<MealImageDto> Images { get; set; } = new();
 }

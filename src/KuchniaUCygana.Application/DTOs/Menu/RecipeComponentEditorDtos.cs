@@ -4,9 +4,17 @@ public sealed class RecipeComponentListItemDto
 {
     public int Id { get; set; }
 
+    public int? CategoryId { get; set; }
+
+    public string? CategoryName { get; set; }
+
     public string Name { get; set; } = string.Empty;
 
     public string? Description { get; set; }
+
+    public string? ImageUrl { get; set; }
+
+    public int PreparationTimeMinutes { get; set; }
 
     public bool IsActive { get; set; }
 
@@ -23,9 +31,17 @@ public sealed class RecipeComponentDetailDto
 {
     public int Id { get; set; }
 
+    public int? CategoryId { get; set; }
+
+    public string? CategoryName { get; set; }
+
     public string Name { get; set; } = string.Empty;
 
     public string? Description { get; set; }
+
+    public string? ImageUrl { get; set; }
+
+    public int PreparationTimeMinutes { get; set; }
 
     public bool IsActive { get; set; }
 
@@ -83,6 +99,18 @@ public sealed class RecipeComponentVersionDetailDto
 
     public bool UseEarliestIngredientExpiry { get; set; }
 
+    public string NutritionSource { get; set; } = "Manual";
+
+    public string? NutritionOverrideReason { get; set; }
+
+    public bool AllergensApproved { get; set; }
+
+    public string? AllergenOverrideReason { get; set; }
+
+    public DateTimeOffset? AllergensApprovedAt { get; set; }
+
+    public string? AllergensApprovedBy { get; set; }
+
     public string? ChangeSummary { get; set; }
 
     public bool IsTechnologyChange { get; set; } = true;
@@ -98,6 +126,8 @@ public sealed class RecipeComponentVersionDetailDto
     public List<RecipeComponentIngredientEditDto> Ingredients { get; set; } = new();
 
     public List<PackagingRequirementEditDto> PackagingRequirements { get; set; } = new();
+
+    public List<RecipeComponentInstructionSectionDto> InstructionSections { get; set; } = new();
 
     public List<string> ValidationWarnings { get; set; } = new();
 
@@ -169,7 +199,13 @@ public sealed class CreateRecipeComponentRequest
 {
     public string Name { get; set; } = string.Empty;
 
+    public int? CategoryId { get; set; }
+
     public string? Description { get; set; }
+
+    public string? ImageUrl { get; set; }
+
+    public int PreparationTimeMinutes { get; set; }
 }
 
 public sealed class CreateRecipeComponentVersionRequest
@@ -206,6 +242,14 @@ public sealed class UpdateRecipeComponentVersionRequest
     public int? ShelfLifeHours { get; set; }
 
     public bool UseEarliestIngredientExpiry { get; set; }
+
+    public string NutritionSource { get; set; } = "Manual";
+
+    public string? NutritionOverrideReason { get; set; }
+
+    public bool AllergensApproved { get; set; }
+
+    public string? AllergenOverrideReason { get; set; }
 
     public string? ChangeSummary { get; set; }
 
@@ -269,4 +313,70 @@ public sealed class AttachComponentToMealRequest
     public string Unit { get; set; } = "portion";
 
     public int SortOrder { get; set; }
+}
+
+public sealed class RecipeComponentInstructionSectionDto
+{
+    public int Id { get; set; }
+
+    public int RecipeComponentVersionId { get; set; }
+
+    public string? Title { get; set; }
+
+    public int SortOrder { get; set; }
+
+    public List<RecipeComponentInstructionStepDto> Steps { get; set; } = new();
+}
+
+public sealed class RecipeComponentInstructionStepDto
+{
+    public int Id { get; set; }
+
+    public int RecipeComponentInstructionSectionId { get; set; }
+
+    public string StepText { get; set; } = string.Empty;
+
+    public int SortOrder { get; set; }
+
+    public bool RequiresControl { get; set; }
+
+    public string? ControlType { get; set; }
+
+    public decimal? ExpectedValue { get; set; }
+
+    public string? ExpectedUnit { get; set; }
+
+    public bool IsCritical { get; set; }
+}
+
+public sealed class SaveInstructionSectionRequest
+{
+    public int Id { get; set; }
+
+    public int RecipeComponentVersionId { get; set; }
+
+    public string? Title { get; set; }
+
+    public int SortOrder { get; set; }
+}
+
+public sealed class SaveInstructionStepRequest
+{
+    public int Id { get; set; }
+
+    public int RecipeComponentInstructionSectionId { get; set; }
+
+    public string StepText { get; set; } = string.Empty;
+
+    public int SortOrder { get; set; }
+
+    public bool RequiresControl { get; set; }
+
+    public string? ControlType { get; set; }
+
+    public decimal? ExpectedValue { get; set; }
+
+    public string? ExpectedUnit { get; set; }
+
+    public bool IsCritical { get; set; }
 }

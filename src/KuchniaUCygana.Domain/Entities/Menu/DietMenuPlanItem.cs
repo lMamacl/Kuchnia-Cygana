@@ -13,6 +13,8 @@ public sealed class DietMenuPlanItem : AuditableEntity
 
     public int MealId { get; set; }
 
+    public int? MealVariantId { get; set; }
+
     [StringLength(40)]
     public string MealSlot { get; set; } = string.Empty;
 

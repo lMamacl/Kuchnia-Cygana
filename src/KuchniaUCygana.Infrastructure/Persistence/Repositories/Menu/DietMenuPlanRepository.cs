@@ -166,11 +166,11 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
         return await db.ExecuteScalarAsync<int>(
             """
             INSERT INTO [DietMenuPlanItems]
-                ([DietMenuPlanId], [DietVariantId], [MealId], [MealSlot], [ServingSizeMultiplier], [SortOrder],
+                ([DietMenuPlanId], [DietVariantId], [MealId], [MealVariantId], [MealSlot], [ServingSizeMultiplier], [SortOrder],
                  [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
             OUTPUT INSERTED.[Id]
             VALUES
-                (@DietMenuPlanId, @DietVariantId, @MealId, @MealSlot, @ServingSizeMultiplier, @SortOrder,
+                (@DietMenuPlanId, @DietVariantId, @MealId, @MealVariantId, @MealSlot, @ServingSizeMultiplier, @SortOrder,
                  1, @CreatedAt, @CreatedBy, 0);
             """,
             item);
@@ -184,6 +184,7 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
             UPDATE [DietMenuPlanItems]
             SET [DietVariantId] = @DietVariantId,
                 [MealId] = @MealId,
+                [MealVariantId] = @MealVariantId,
                 [MealSlot] = @MealSlot,
                 [ServingSizeMultiplier] = @ServingSizeMultiplier,
                 [SortOrder] = @SortOrder,
@@ -284,12 +285,13 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
         await db.ExecuteAsync(
             """
             INSERT INTO [DietMenuPlanItems]
-                ([DietMenuPlanId], [DietVariantId], [MealId], [MealSlot], [ServingSizeMultiplier], [SortOrder],
+                ([DietMenuPlanId], [DietVariantId], [MealId], [MealVariantId], [MealSlot], [ServingSizeMultiplier], [SortOrder],
                  [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
             SELECT
                 @targetPlanId,
                 [DietVariantId],
                 [MealId],
+                [MealVariantId],
                 [MealSlot],
                 [ServingSizeMultiplier],
                 [SortOrder],
@@ -359,6 +361,8 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
                 d.[Name] AS [DietName],
                 dv.[Name] AS [VariantName],
                 i.[MealId],
+                i.[MealVariantId],
+                mv.[Name] AS [MealVariantName],
                 m.[Name] AS [MealName],
                 m.[Status] AS [MealStatus],
                 i.[MealSlot],
@@ -383,14 +387,26 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
             INNER JOIN [DietVariants] dv ON dv.[Id] = i.[DietVariantId]
             INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
             INNER JOIN [Meals] m ON m.[Id] = i.[MealId]
+            LEFT JOIN [MealVariants] mv ON mv.[Id] = i.[MealVariantId] AND mv.[IsDeleted] = 0
             LEFT JOIN [NutritionFacts] nf ON nf.[MealId] = m.[Id]
             OUTER APPLY (
                 SELECT COUNT(*) AS [ComponentCount]
-                FROM [MealRecipeComponents] mrc
-                INNER JOIN [RecipeComponentVersions] rcv ON rcv.[Id] = mrc.[RecipeComponentVersionId]
-                WHERE mrc.[MealId] = i.[MealId]
-                  AND mrc.[IsDeleted] = 0
-                  AND rcv.[IsDeleted] = 0
+                FROM (
+                    SELECT mrc.[RecipeComponentVersionId]
+                    FROM [MealRecipeComponents] mrc
+                    WHERE i.[MealVariantId] IS NULL
+                      AND mrc.[MealId] = i.[MealId]
+                      AND mrc.[IsDeleted] = 0
+
+                    UNION ALL
+
+                    SELECT mvc.[RecipeComponentVersionId]
+                    FROM [MealVariantComponents] mvc
+                    WHERE mvc.[MealVariantId] = i.[MealVariantId]
+                      AND mvc.[IsDeleted] = 0
+                ) componentSource
+                INNER JOIN [RecipeComponentVersions] rcv ON rcv.[Id] = componentSource.[RecipeComponentVersionId]
+                WHERE rcv.[IsDeleted] = 0
             ) componentCounts
             OUTER APPLY (
                 SELECT COUNT(*) AS [LegacyRecipeCount]
@@ -410,7 +426,8 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
                     SELECT ia.[AllergenId]
                     FROM [Recipes] r
                     INNER JOIN [IngredientAllergens] ia ON ia.[IngredientId] = r.[IngredientId]
-                    WHERE r.[MealId] = i.[MealId]
+                    WHERE i.[MealVariantId] IS NULL
+                      AND r.[MealId] = i.[MealId]
                       AND r.[IsDeleted] = 0
 
                     UNION
@@ -419,8 +436,19 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
                     FROM [MealRecipeComponents] mrc
                     INNER JOIN [RecipeComponentIngredients] rci ON rci.[RecipeComponentVersionId] = mrc.[RecipeComponentVersionId]
                     INNER JOIN [IngredientAllergens] ia ON ia.[IngredientId] = rci.[IngredientId]
-                    WHERE mrc.[MealId] = i.[MealId]
+                    WHERE i.[MealVariantId] IS NULL
+                      AND mrc.[MealId] = i.[MealId]
                       AND mrc.[IsDeleted] = 0
+                      AND rci.[IsDeleted] = 0
+
+                    UNION
+
+                    SELECT ia.[AllergenId]
+                    FROM [MealVariantComponents] mvc
+                    INNER JOIN [RecipeComponentIngredients] rci ON rci.[RecipeComponentVersionId] = mvc.[RecipeComponentVersionId]
+                    INNER JOIN [IngredientAllergens] ia ON ia.[IngredientId] = rci.[IngredientId]
+                    WHERE mvc.[MealVariantId] = i.[MealVariantId]
+                      AND mvc.[IsDeleted] = 0
                       AND rci.[IsDeleted] = 0
                 ) allergens
             ) allergenCounts
@@ -435,6 +463,11 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
                             FROM [MealRecipeComponents] mrc
                             WHERE mrc.[MealId] = i.[MealId]
                               AND mrc.[IsDeleted] = 0
+                            UNION
+                            SELECT mvc.[RecipeComponentVersionId]
+                            FROM [MealVariantComponents] mvc
+                            WHERE mvc.[MealVariantId] = i.[MealVariantId]
+                              AND mvc.[IsDeleted] = 0
                         )
                   )
             ) packagingCounts
@@ -446,8 +479,21 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
                     INNER JOIN [RecipeComponentIngredients] rci ON rci.[RecipeComponentVersionId] = mrc.[RecipeComponentVersionId]
                     INNER JOIN [Ingredients] ing ON ing.[Id] = rci.[IngredientId]
                     LEFT JOIN [StockItems] si ON si.[BaseIngredientId] = ing.[Id] AND si.[IsDeleted] = 0
-                    WHERE mrc.[MealId] = i.[MealId]
+                    WHERE i.[MealVariantId] IS NULL
+                      AND mrc.[MealId] = i.[MealId]
                       AND mrc.[IsDeleted] = 0
+                      AND rci.[IsDeleted] = 0
+                      AND ing.[IsDeleted] = 0
+
+                    UNION ALL
+
+                    SELECT COALESCE(rci.[WarehouseCategoryId], ing.[WarehouseCategoryId], si.[WarehouseCategoryId]) AS [WarehouseCategoryId]
+                    FROM [MealVariantComponents] mvc
+                    INNER JOIN [RecipeComponentIngredients] rci ON rci.[RecipeComponentVersionId] = mvc.[RecipeComponentVersionId]
+                    INNER JOIN [Ingredients] ing ON ing.[Id] = rci.[IngredientId]
+                    LEFT JOIN [StockItems] si ON si.[BaseIngredientId] = ing.[Id] AND si.[IsDeleted] = 0
+                    WHERE mvc.[MealVariantId] = i.[MealVariantId]
+                      AND mvc.[IsDeleted] = 0
                       AND rci.[IsDeleted] = 0
                       AND ing.[IsDeleted] = 0
 
@@ -457,7 +503,8 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
                     FROM [Recipes] r
                     INNER JOIN [Ingredients] ing ON ing.[Id] = r.[IngredientId]
                     LEFT JOIN [StockItems] si ON si.[BaseIngredientId] = ing.[Id] AND si.[IsDeleted] = 0
-                    WHERE r.[MealId] = i.[MealId]
+                    WHERE i.[MealVariantId] IS NULL
+                      AND r.[MealId] = i.[MealId]
                       AND r.[IsDeleted] = 0
                       AND ing.[IsDeleted] = 0
                 ) mappings

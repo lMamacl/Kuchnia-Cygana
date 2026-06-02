@@ -35,19 +35,25 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
             )
             SELECT
                 rc.[Id],
+                rc.[CategoryId],
+                c.[Name] AS [CategoryName],
                 rc.[Name],
                 rc.[Description],
+                rc.[ImageUrl],
+                rc.[PreparationTimeMinutes],
                 rc.[IsActive],
                 COUNT(rcv.[Id]) AS [VersionCount],
                 lv.[Id] AS [LatestVersionId],
                 lv.[VersionNumber] AS [LatestVersionNumber],
                 lv.[Status] AS [LatestVersionStatus]
             FROM [RecipeComponents] rc
+            LEFT JOIN [Categories] c ON c.[Id] = rc.[CategoryId]
             LEFT JOIN [RecipeComponentVersions] rcv ON rcv.[RecipeComponentId] = rc.[Id] AND rcv.[IsDeleted] = 0
             LEFT JOIN LatestVersions lv ON lv.[RecipeComponentId] = rc.[Id] AND lv.[RowNumber] = 1
             WHERE rc.[IsDeleted] = 0
               AND (@query IS NULL OR rc.[Name] LIKE @like OR rc.[Description] LIKE @like)
-            GROUP BY rc.[Id], rc.[Name], rc.[Description], rc.[IsActive], lv.[Id], lv.[VersionNumber], lv.[Status]
+            GROUP BY rc.[Id], rc.[CategoryId], c.[Name], rc.[Name], rc.[Description], rc.[ImageUrl],
+                rc.[PreparationTimeMinutes], rc.[IsActive], lv.[Id], lv.[VersionNumber], lv.[Status]
             ORDER BY rc.[Name];
             """,
             new
@@ -65,10 +71,19 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
 
         return await db.QuerySingleOrDefaultAsync<RecipeComponentDetailRow>(
             """
-            SELECT [Id], [Name], [Description], [IsActive]
-            FROM [RecipeComponents]
-            WHERE [Id] = @componentId
-              AND [IsDeleted] = 0;
+            SELECT
+                rc.[Id],
+                rc.[CategoryId],
+                c.[Name] AS [CategoryName],
+                rc.[Name],
+                rc.[Description],
+                rc.[ImageUrl],
+                rc.[PreparationTimeMinutes],
+                rc.[IsActive]
+            FROM [RecipeComponents] rc
+            LEFT JOIN [Categories] c ON c.[Id] = rc.[CategoryId]
+            WHERE rc.[Id] = @componentId
+              AND rc.[IsDeleted] = 0;
             """,
             new { componentId });
     }
@@ -158,6 +173,61 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
             new { versionId });
 
         return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<RecipeComponentInstructionSectionRow>> GetVersionInstructionSectionsAsync(int versionId)
+    {
+        using var db = this.factory.CreateConnection();
+
+        var sections = (await db.QueryAsync<RecipeComponentInstructionSectionRow>(
+            """
+            SELECT
+                [Id],
+                [RecipeComponentVersionId],
+                [Title],
+                [SortOrder]
+            FROM [RecipeComponentInstructionSections]
+            WHERE [RecipeComponentVersionId] = @versionId
+              AND [IsDeleted] = 0
+            ORDER BY [SortOrder], [Id];
+            """,
+            new { versionId })).ToList();
+
+        var sectionIds = sections.Select(s => s.Id).ToArray();
+        if (sectionIds.Length == 0)
+        {
+            return sections;
+        }
+
+        var steps = (await db.QueryAsync<RecipeComponentInstructionStepRow>(
+            """
+            SELECT
+                [Id],
+                [RecipeComponentInstructionSectionId],
+                [StepText],
+                [SortOrder],
+                [RequiresControl],
+                [ControlType],
+                [ExpectedValue],
+                [ExpectedUnit],
+                [IsCritical]
+            FROM [RecipeComponentInstructionSteps]
+            WHERE [RecipeComponentInstructionSectionId] IN @sectionIds
+              AND [IsDeleted] = 0
+            ORDER BY [RecipeComponentInstructionSectionId], [SortOrder], [Id];
+            """,
+            new { sectionIds })).ToList();
+
+        var stepsBySection = steps
+            .GroupBy(s => s.RecipeComponentInstructionSectionId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<RecipeComponentInstructionStepRow>)g.ToList());
+
+        foreach (var section in sections)
+        {
+            section.Steps = stepsBySection.GetValueOrDefault(section.Id) ?? Array.Empty<RecipeComponentInstructionStepRow>();
+        }
+
+        return sections;
     }
 
     public async Task<IReadOnlyList<RecipeComponentVersionOptionRow>> GetPublishedVersionOptionsAsync()
@@ -302,9 +372,11 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
         return await db.QuerySingleAsync<int>(
             """
             INSERT INTO [RecipeComponents]
-                ([Name], [Description], [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
+                ([CategoryId], [Name], [Description], [ImageUrl], [PreparationTimeMinutes],
+                 [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
             VALUES
-                (@Name, @Description, @IsActive, @CreatedAt, @CreatedBy, 0);
+                (@CategoryId, @Name, @Description, @ImageUrl, @PreparationTimeMinutes,
+                 @IsActive, @CreatedAt, @CreatedBy, 0);
             SELECT CAST(SCOPE_IDENTITY() AS int);
             """,
             component);
@@ -334,13 +406,17 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                 ([RecipeComponentId], [VersionNumber], [Status], [Instructions], [YieldQuantity], [YieldUnit],
                  [RawWeightGrams], [CookedWeightGrams], [CaloriesPer100g], [ProteinPer100g],
                  [CarbohydratesPer100g], [FatPer100g], [FiberPer100g], [ShelfLifeHours],
-                 [UseEarliestIngredientExpiry], [ChangeSummary], [IsTechnologyChange],
+                 [UseEarliestIngredientExpiry], [NutritionSource], [NutritionOverrideReason],
+                 [AllergensApproved], [AllergenOverrideReason], [AllergensApprovedAt],
+                 [AllergensApprovedBy], [ChangeSummary], [IsTechnologyChange],
                  [NonTechnologyChangeReason], [CreatedAt], [CreatedBy], [IsDeleted])
             VALUES
                 (@RecipeComponentId, @VersionNumber, @Status, @Instructions, @YieldQuantity, @YieldUnit,
                  @RawWeightGrams, @CookedWeightGrams, @CaloriesPer100g, @ProteinPer100g,
                  @CarbohydratesPer100g, @FatPer100g, @FiberPer100g, @ShelfLifeHours,
-                 @UseEarliestIngredientExpiry, @ChangeSummary, @IsTechnologyChange,
+                 @UseEarliestIngredientExpiry, @NutritionSource, @NutritionOverrideReason,
+                 @AllergensApproved, @AllergenOverrideReason, @AllergensApprovedAt,
+                 @AllergensApprovedBy, @ChangeSummary, @IsTechnologyChange,
                  @NonTechnologyChangeReason, @CreatedAt, @CreatedBy, 0);
             SELECT CAST(SCOPE_IDENTITY() AS int);
             """,
@@ -372,6 +448,41 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                 FROM [PackagingRequirements]
                 WHERE [RecipeComponentVersionId] = @sourceVersionId
                   AND [IsDeleted] = 0;
+
+                INSERT INTO [RecipeComponentInstructionSections]
+                    ([RecipeComponentVersionId], [Title], [SortOrder], [CreatedAt], [CreatedBy], [IsDeleted])
+                SELECT
+                    @versionId, [Title], [SortOrder], @createdAt, @createdBy, 0
+                FROM [RecipeComponentInstructionSections]
+                WHERE [RecipeComponentVersionId] = @sourceVersionId
+                  AND [IsDeleted] = 0;
+
+                INSERT INTO [RecipeComponentInstructionSteps]
+                    ([RecipeComponentInstructionSectionId], [StepText], [SortOrder], [RequiresControl],
+                     [ControlType], [ExpectedValue], [ExpectedUnit], [IsCritical], [CreatedAt], [CreatedBy], [IsDeleted])
+                SELECT
+                    targetSections.[Id],
+                    sourceSteps.[StepText],
+                    sourceSteps.[SortOrder],
+                    sourceSteps.[RequiresControl],
+                    sourceSteps.[ControlType],
+                    sourceSteps.[ExpectedValue],
+                    sourceSteps.[ExpectedUnit],
+                    sourceSteps.[IsCritical],
+                    @createdAt,
+                    @createdBy,
+                    0
+                FROM [RecipeComponentInstructionSections] sourceSections
+                INNER JOIN [RecipeComponentInstructionSections] targetSections
+                    ON targetSections.[RecipeComponentVersionId] = @versionId
+                   AND targetSections.[SortOrder] = sourceSections.[SortOrder]
+                   AND ISNULL(targetSections.[Title], N'') = ISNULL(sourceSections.[Title], N'')
+                INNER JOIN [RecipeComponentInstructionSteps] sourceSteps
+                    ON sourceSteps.[RecipeComponentInstructionSectionId] = sourceSections.[Id]
+                WHERE sourceSections.[RecipeComponentVersionId] = @sourceVersionId
+                  AND sourceSections.[IsDeleted] = 0
+                  AND targetSections.[IsDeleted] = 0
+                  AND sourceSteps.[IsDeleted] = 0;
                 """,
                 new
                 {
@@ -406,6 +517,12 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                 [FiberPer100g] = @FiberPer100g,
                 [ShelfLifeHours] = @ShelfLifeHours,
                 [UseEarliestIngredientExpiry] = @UseEarliestIngredientExpiry,
+                [NutritionSource] = @NutritionSource,
+                [NutritionOverrideReason] = @NutritionOverrideReason,
+                [AllergensApproved] = @AllergensApproved,
+                [AllergenOverrideReason] = @AllergenOverrideReason,
+                [AllergensApprovedAt] = @AllergensApprovedAt,
+                [AllergensApprovedBy] = @AllergensApprovedBy,
                 [ChangeSummary] = @ChangeSummary,
                 [IsTechnologyChange] = @IsTechnologyChange,
                 [NonTechnologyChangeReason] = @NonTechnologyChangeReason,
@@ -573,6 +690,142 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
             new { packagingRequirementId, deletedAt = DateTimeOffset.UtcNow, deletedBy });
     }
 
+    public async Task<int> SaveInstructionSectionAsync(RecipeComponentInstructionSection section)
+    {
+        using var db = this.factory.CreateConnection();
+
+        if (section.Id > 0)
+        {
+            await db.ExecuteAsync(
+                """
+                UPDATE [RecipeComponentInstructionSections]
+                SET [Title] = @Title,
+                    [SortOrder] = @SortOrder,
+                    [UpdatedAt] = @UpdatedAt,
+                    [UpdatedBy] = @UpdatedBy
+                WHERE [Id] = @Id
+                  AND [RecipeComponentVersionId] IN (
+                      SELECT [Id]
+                      FROM [RecipeComponentVersions]
+                      WHERE [Status] = N'Draft'
+                        AND [IsDeleted] = 0
+                  )
+                  AND [IsDeleted] = 0;
+                """,
+                section);
+
+            return section.Id;
+        }
+
+        return await db.QuerySingleAsync<int>(
+            """
+            INSERT INTO [RecipeComponentInstructionSections]
+                ([RecipeComponentVersionId], [Title], [SortOrder], [CreatedAt], [CreatedBy], [IsDeleted])
+            VALUES
+                (@RecipeComponentVersionId, @Title, @SortOrder, @CreatedAt, @CreatedBy, 0);
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """,
+            section);
+    }
+
+    public async Task<int> SaveInstructionStepAsync(RecipeComponentInstructionStep step)
+    {
+        using var db = this.factory.CreateConnection();
+
+        if (step.Id > 0)
+        {
+            await db.ExecuteAsync(
+                """
+                UPDATE [RecipeComponentInstructionSteps]
+                SET [StepText] = @StepText,
+                    [SortOrder] = @SortOrder,
+                    [RequiresControl] = @RequiresControl,
+                    [ControlType] = @ControlType,
+                    [ExpectedValue] = @ExpectedValue,
+                    [ExpectedUnit] = @ExpectedUnit,
+                    [IsCritical] = @IsCritical,
+                    [UpdatedAt] = @UpdatedAt,
+                    [UpdatedBy] = @UpdatedBy
+                WHERE [Id] = @Id
+                  AND [RecipeComponentInstructionSectionId] IN (
+                      SELECT s.[Id]
+                      FROM [RecipeComponentInstructionSections] s
+                      INNER JOIN [RecipeComponentVersions] v ON v.[Id] = s.[RecipeComponentVersionId]
+                      WHERE v.[Status] = N'Draft'
+                        AND v.[IsDeleted] = 0
+                        AND s.[IsDeleted] = 0
+                  )
+                  AND [IsDeleted] = 0;
+                """,
+                step);
+
+            return step.Id;
+        }
+
+        return await db.QuerySingleAsync<int>(
+            """
+            INSERT INTO [RecipeComponentInstructionSteps]
+                ([RecipeComponentInstructionSectionId], [StepText], [SortOrder], [RequiresControl],
+                 [ControlType], [ExpectedValue], [ExpectedUnit], [IsCritical], [CreatedAt], [CreatedBy], [IsDeleted])
+            VALUES
+                (@RecipeComponentInstructionSectionId, @StepText, @SortOrder, @RequiresControl,
+                 @ControlType, @ExpectedValue, @ExpectedUnit, @IsCritical, @CreatedAt, @CreatedBy, 0);
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """,
+            step);
+    }
+
+    public async Task DeleteInstructionSectionAsync(int sectionId, string? deletedBy)
+    {
+        using var db = this.factory.CreateConnection();
+        await db.ExecuteAsync(
+            """
+            UPDATE [RecipeComponentInstructionSteps]
+            SET [IsDeleted] = 1,
+                [DeletedAt] = @deletedAt,
+                [DeletedBy] = @deletedBy
+            WHERE [RecipeComponentInstructionSectionId] = @sectionId
+              AND [IsDeleted] = 0;
+
+            UPDATE [RecipeComponentInstructionSections]
+            SET [IsDeleted] = 1,
+                [DeletedAt] = @deletedAt,
+                [DeletedBy] = @deletedBy
+            WHERE [Id] = @sectionId
+              AND [RecipeComponentVersionId] IN (
+                  SELECT [Id]
+                  FROM [RecipeComponentVersions]
+                  WHERE [Status] = N'Draft'
+                    AND [IsDeleted] = 0
+              )
+              AND [IsDeleted] = 0;
+            """,
+            new { sectionId, deletedAt = DateTimeOffset.UtcNow, deletedBy });
+    }
+
+    public async Task DeleteInstructionStepAsync(int stepId, string? deletedBy)
+    {
+        using var db = this.factory.CreateConnection();
+        await db.ExecuteAsync(
+            """
+            UPDATE [RecipeComponentInstructionSteps]
+            SET [IsDeleted] = 1,
+                [DeletedAt] = @deletedAt,
+                [DeletedBy] = @deletedBy
+            WHERE [Id] = @stepId
+              AND [RecipeComponentInstructionSectionId] IN (
+                  SELECT s.[Id]
+                  FROM [RecipeComponentInstructionSections] s
+                  INNER JOIN [RecipeComponentVersions] v ON v.[Id] = s.[RecipeComponentVersionId]
+                  WHERE v.[Status] = N'Draft'
+                    AND v.[IsDeleted] = 0
+                    AND s.[IsDeleted] = 0
+              )
+              AND [IsDeleted] = 0;
+            """,
+            new { stepId, deletedAt = DateTimeOffset.UtcNow, deletedBy });
+    }
+
     public async Task PublishVersionAsync(int versionId, string? publishedBy)
     {
         using var db = this.factory.CreateConnection();
@@ -659,6 +912,12 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                 rcv.[FiberPer100g],
                 rcv.[ShelfLifeHours],
                 rcv.[UseEarliestIngredientExpiry],
+                rcv.[NutritionSource],
+                rcv.[NutritionOverrideReason],
+                rcv.[AllergensApproved],
+                rcv.[AllergenOverrideReason],
+                rcv.[AllergensApprovedAt],
+                rcv.[AllergensApprovedBy],
                 rcv.[ChangeSummary],
                 rcv.[IsTechnologyChange],
                 rcv.[NonTechnologyChangeReason],

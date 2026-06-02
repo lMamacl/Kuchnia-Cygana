@@ -27,6 +27,10 @@ public sealed class PublishedDietPlanItemDto
 
     public int MealId { get; set; }
 
+    public int? MealVariantId { get; set; }
+
+    public string? MealVariantName { get; set; }
+
     public string MealName { get; set; } = string.Empty;
 
     public int? CategoryId { get; set; }
@@ -56,6 +60,8 @@ public sealed class PublishedDietPlanItemDto
     public IReadOnlyList<MealComponentVersionDto> Components { get; set; } = Array.Empty<MealComponentVersionDto>();
 
     public IReadOnlyList<PackagingRequirementDto> PackagingRequirements { get; set; } = Array.Empty<PackagingRequirementDto>();
+
+    public IReadOnlyList<ComponentInstructionSectionDto> InstructionSections { get; set; } = Array.Empty<ComponentInstructionSectionDto>();
 
     public IReadOnlyList<string> ValidationWarnings { get; set; } = Array.Empty<string>();
 
@@ -100,6 +106,8 @@ public sealed class MealComponentVersionDto
 
     public IReadOnlyList<PackagingRequirementDto> PackagingRequirements { get; set; } = Array.Empty<PackagingRequirementDto>();
 
+    public IReadOnlyList<ComponentInstructionSectionDto> InstructionSections { get; set; } = Array.Empty<ComponentInstructionSectionDto>();
+
     public IReadOnlyList<string> ValidationWarnings { get; set; } = Array.Empty<string>();
 
     public bool IsCompleteForProduction { get; set; }
@@ -130,6 +138,36 @@ public sealed class ComponentIngredientDto
     public bool IsOptional { get; set; }
 
     public string? Notes { get; set; }
+}
+
+public sealed class ComponentInstructionSectionDto
+{
+    public int SectionId { get; set; }
+
+    public string? Title { get; set; }
+
+    public int SortOrder { get; set; }
+
+    public IReadOnlyList<ComponentInstructionStepDto> Steps { get; set; } = Array.Empty<ComponentInstructionStepDto>();
+}
+
+public sealed class ComponentInstructionStepDto
+{
+    public int StepId { get; set; }
+
+    public string StepText { get; set; } = string.Empty;
+
+    public int SortOrder { get; set; }
+
+    public bool RequiresControl { get; set; }
+
+    public string? ControlType { get; set; }
+
+    public decimal? ExpectedValue { get; set; }
+
+    public string? ExpectedUnit { get; set; }
+
+    public bool IsCritical { get; set; }
 }
 
 public sealed class PackagingRequirementDto

@@ -26,7 +26,6 @@ using KuchniaUCygana.Infrastructure.Persistence.Repositories;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
-using KuchniaUCygana.Infrastructure.Persistence.Providers;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
 using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
@@ -96,6 +95,7 @@ public static class DependencyInjection
         services.AddScoped<IMealAllergenRepository, MealAllergenRepository>();
         services.AddScoped<IMealImageRepository, MealImageRepository>();
         services.AddScoped<IMealRepository, MealRepository>();
+        services.AddScoped<IMealVariantRepository, MealVariantRepository>();
         services.AddScoped<INutritionFactRepository, NutritionFactRepository>();
         services.AddScoped<IRecipeRepository, RecipeRepository>();
         services.AddScoped<IRecipeComponentRepository, RecipeComponentRepository>();
@@ -125,6 +125,7 @@ public static class DependencyInjection
         }
 
         services.AddScoped<IDietDataProvider, DietDataAdapter>();
+        services.AddScoped<IDietCatalogProvider, DietCatalogAdapter>();
         if (string.Equals(configuration["DeliveryManifestProvider"], "Mock", StringComparison.OrdinalIgnoreCase))
         {
             services.AddScoped<IDeliveryManifestProvider, MockDeliveryManifestProvider>();

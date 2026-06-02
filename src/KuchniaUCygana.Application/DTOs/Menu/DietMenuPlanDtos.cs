@@ -48,6 +48,10 @@ public sealed class DietMenuPlanItemDto
 
     public int MealId { get; set; }
 
+    public int? MealVariantId { get; set; }
+
+    public string? MealVariantName { get; set; }
+
     public string MealName { get; set; } = string.Empty;
 
     public string MealStatus { get; set; } = string.Empty;
@@ -108,6 +112,8 @@ public sealed class AddDietMenuPlanItemRequest
 
     public int MealId { get; set; }
 
+    public int? MealVariantId { get; set; }
+
     public string MealSlot { get; set; } = "Breakfast";
 
     public decimal ServingSizeMultiplier { get; set; } = 1.0m;
@@ -124,6 +130,8 @@ public sealed class UpdateDietMenuPlanItemRequest
     public int DietVariantId { get; set; }
 
     public int MealId { get; set; }
+
+    public int? MealVariantId { get; set; }
 
     public string MealSlot { get; set; } = "Breakfast";
 

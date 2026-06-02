@@ -26,6 +26,14 @@ public interface IRecipeComponentManagementService
 
     Task DeletePackagingAsync(int packagingRequirementId);
 
+    Task SaveInstructionSectionAsync(SaveInstructionSectionRequest request);
+
+    Task SaveInstructionStepAsync(SaveInstructionStepRequest request);
+
+    Task DeleteInstructionSectionAsync(int sectionId);
+
+    Task DeleteInstructionStepAsync(int stepId);
+
     Task PublishVersionAsync(int versionId);
 
     Task AttachComponentToMealAsync(AttachComponentToMealRequest request);

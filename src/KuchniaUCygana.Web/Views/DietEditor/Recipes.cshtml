@@ -2,6 +2,8 @@
 @{
     Layout = "_LayoutStaff";
     var query = ViewBag.Query as string;
+    var categories = ViewBag.Categories as IEnumerable<KuchniaUCygana.Domain.Entities.Menu.Category>
+        ?? Enumerable.Empty<KuchniaUCygana.Domain.Entities.Menu.Category>();
 }
 
 <div class="row row-cards">
@@ -21,6 +23,8 @@
                     <thead>
                         <tr>
                             <th>Nazwa</th>
+                            <th>Kategoria</th>
+                            <th>Czas</th>
                             <th>Status wersji</th>
                             <th class="text-center">Wersje</th>
                             <th class="w-1"></th>
@@ -37,6 +41,8 @@
                                         <div class="text-secondary small">@component.Description</div>
                                     }
                                 </td>
+                                <td>@(component.CategoryName ?? "-")</td>
+                                <td>@component.PreparationTimeMinutes min</td>
                                 <td>
                                     @if (component.LatestVersionId.HasValue)
                                     {
@@ -71,9 +77,27 @@
                         <label class="form-label">Nazwa</label>
                         <input name="Name" class="form-control" required maxlength="200" />
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-3">
+                        <label class="form-label">Kategoria</label>
+                        <select name="CategoryId" class="form-select">
+                            <option value="">Bez kategorii</option>
+                            @foreach (var category in categories)
+                            {
+                                <option value="@category.Id">@category.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Czas min</label>
+                        <input name="PreparationTimeMinutes" type="number" min="0" value="0" class="form-control" />
+                    </div>
+                    <div class="col-md-5">
                         <label class="form-label">Opis</label>
                         <input name="Description" class="form-control" maxlength="2000" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Zdjecie URL</label>
+                        <input name="ImageUrl" class="form-control" maxlength="500" />
                     </div>
                     <div class="col-md-2 d-flex align-items-end">
                         <button type="submit" class="btn btn-primary w-100">Utworz</button>

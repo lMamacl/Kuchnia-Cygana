@@ -11,6 +11,10 @@
                     <div>
                         <div class="text-uppercase text-secondary small fw-bold">Skladowa #@Model.Id</div>
                         <h2 class="mb-1">@Model.Name</h2>
+                        <div class="d-flex gap-2 flex-wrap mb-2">
+                            <span class="badge bg-indigo-lt">@(Model.CategoryName ?? "Bez kategorii")</span>
+                            <span class="badge bg-green-lt">@Model.PreparationTimeMinutes min</span>
+                        </div>
                         @if (!string.IsNullOrWhiteSpace(Model.Description))
                         {
                             <div class="text-secondary">@Model.Description</div>
