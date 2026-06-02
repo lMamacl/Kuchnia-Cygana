@@ -181,6 +181,7 @@ public static class DependencyInjection
         services.AddScoped<MenuAppInterfaces.IDietMenuPlanManagementService, MenuAppServices.DietMenuPlanManagementService>();
 
         // Module 4 (Logistics) services.
+        services.AddScoped<IDriverService, DriverService>();
         services.AddScoped<IVehicleService, VehicleService>();
         services.AddScoped<IDeliveryRouteService, RoutingService>();
         services.AddScoped<GeocodingOrchestrator>();

@@ -9,6 +9,6 @@ namespace KuchniaUCygana.Domain.Interfaces.Logistics;
 
 public interface IDriverRepository : IRepository<Driver>
 {
-    //jeszcze nie wiem
-    //Task<Driver?> GetByEmailAsync(string email);
+    Task<Driver?> GetByUserIdAsync(int userId);
+    Task<Driver?> GetByLicenseNumberAsync(string licenseNumber);
 }

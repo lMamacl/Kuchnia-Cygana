@@ -13,15 +13,18 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class LogisticsController : Controller
 {
     private readonly IVehicleService _vehicleService;
+    private readonly IDriverService _driverService;
     private readonly IGeocodeService _geocodeService;
     private readonly IDeliveryRouteService _deliveryRouteService;
 
     public LogisticsController(
         IVehicleService vehicleService,
+        IDriverService driverService,
         IGeocodeService geocodeService,
         IDeliveryRouteService deliveryRouteService)
     {
         _vehicleService = vehicleService;
+        _driverService = driverService;
         _geocodeService = geocodeService;
         _deliveryRouteService = deliveryRouteService;
     }
@@ -249,12 +252,90 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet("drivers")]
-    public IActionResult Drivers()
+    public async Task<IActionResult> Drivers()
     {
         ViewData["Title"] = "Kierowcy";
         ViewData["Section"] = "Logistyka";
-        ViewData["Description"] = "Lista kierowcow i przypisania do tras.";
-        return View();
+        ViewData["Description"] = "Profile kierowców uprawnionych do realizacji dostaw.";
+        return View(await _driverService.GetAllAsync());
+    }
+
+    [HttpGet("drivers/create")]
+    public async Task<IActionResult> CreateDriver()
+    {
+        SetCreateDriverViewData();
+        return View("DriversCreate", await BuildDriverCreateViewModelAsync());
+    }
+
+    [HttpPost("drivers/create")]
+    public async Task<IActionResult> CreateDriver(DriverCreateViewModel model)
+    {
+        if (!ModelState.IsValid)
+        {
+            SetCreateDriverViewData();
+            return View("DriversCreate", await BuildDriverCreateViewModelAsync(model.Driver));
+        }
+
+        try
+        {
+            await _driverService.CreateAsync(model.Driver);
+            TempData["Success"] = "Profil kierowcy został utworzony.";
+            return RedirectToAction(nameof(Drivers));
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            SetCreateDriverViewData();
+            return View("DriversCreate", await BuildDriverCreateViewModelAsync(model.Driver));
+        }
+    }
+
+    [HttpGet("drivers/edit/{id:int}")]
+    public async Task<IActionResult> EditDriver(int id)
+    {
+        var driver = await _driverService.GetByIdAsync(id);
+        if (driver == null) return NotFound();
+
+        SetEditDriverViewData(driver.FullName);
+        return View("DriversEdit", BuildDriverEditViewModel(driver));
+    }
+
+    [HttpPost("drivers/edit/{id:int}")]
+    public async Task<IActionResult> EditDriver(int id, DriverEditViewModel model)
+    {
+        if (id != model.Driver.Id) return BadRequest();
+
+        var existing = await _driverService.GetByIdAsync(id);
+        if (existing == null) return NotFound();
+
+        if (!ModelState.IsValid)
+        {
+            SetEditDriverViewData(existing.FullName);
+            return View("DriversEdit", BuildDriverEditViewModel(existing, model.Driver));
+        }
+
+        try
+        {
+            await _driverService.UpdateAsync(id, model.Driver);
+            TempData["Success"] = "Profil kierowcy został zaktualizowany.";
+            return RedirectToAction(nameof(Drivers));
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            SetEditDriverViewData(existing.FullName);
+            return View("DriversEdit", BuildDriverEditViewModel(existing, model.Driver));
+        }
+    }
+
+    [HttpPost("drivers/delete/{id:int}")]
+    public async Task<IActionResult> DeleteDriver(int id)
+    {
+        var deleted = await _driverService.DeleteAsync(id);
+        TempData[deleted ? "Success" : "Error"] = deleted
+            ? "Profil kierowcy został usunięty."
+            : "Nie znaleziono profilu kierowcy.";
+        return RedirectToAction(nameof(Drivers));
     }
 
     [HttpGet("test-geocode")]
@@ -310,5 +391,46 @@ public sealed class LogisticsController : Controller
                 .OrderBy(stop => stop.SequenceNumber)
                 .ToList(),
         };
+    }
+
+    private async Task<DriverCreateViewModel> BuildDriverCreateViewModelAsync(CreateDriverRequest? request = null)
+    {
+        return new DriverCreateViewModel
+        {
+            Driver = request ?? new CreateDriverRequest(),
+            AvailableUsers = await _driverService.GetAssignableUsersAsync(),
+        };
+    }
+
+    private static DriverEditViewModel BuildDriverEditViewModel(
+        DriverDto driver,
+        UpdateDriverRequest? request = null)
+    {
+        return new DriverEditViewModel
+        {
+            Driver = request ?? new UpdateDriverRequest
+            {
+                Id = driver.Id,
+                UserId = driver.UserId,
+                LicenseNumber = driver.LicenseNumber,
+                IsActive = driver.IsActive,
+            },
+            FullName = driver.FullName,
+            Email = driver.Email,
+        };
+    }
+
+    private void SetCreateDriverViewData()
+    {
+        ViewData["Title"] = "Nowy kierowca";
+        ViewData["Section"] = "Logistyka";
+        ViewData["Description"] = "Utwórz profil logistyczny dla istniejącego użytkownika.";
+    }
+
+    private void SetEditDriverViewData(string fullName)
+    {
+        ViewData["Title"] = "Edycja kierowcy";
+        ViewData["Section"] = "Logistyka";
+        ViewData["Description"] = $"Zmiana danych profilu kierowcy {fullName}.";
     }
 }

@@ -1,6 +1,8 @@
 ﻿using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
 
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace KuchniaUCygana.Domain.Entities.Logistics;
 
 /// <summary>
@@ -10,6 +12,7 @@ namespace KuchniaUCygana.Domain.Entities.Logistics;
 /// </summary>
 
 
+[Table("Drivers")]
 public sealed class Driver : AuditableEntity
 {
     public int UserId { get; set; }

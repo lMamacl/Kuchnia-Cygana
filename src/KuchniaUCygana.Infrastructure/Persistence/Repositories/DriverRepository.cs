@@ -1,7 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
@@ -19,9 +17,19 @@ public sealed class DriverRepository : BaseRepository<Driver>, IDriverRepository
     }
 
     // Dodatkowe metody specyficzne dla kierowców, np.:
-    // public async Task<Driver?> GetByPhoneNumberAsync(string phoneNumber)
-    // {
-    //     using var db = Factory.CreateConnection();
-    //     return await db.SingleAsync<Driver>(d => d.PhoneNumber == phoneNumber && !d.IsDeleted);
-    // }
+    public async Task<Driver?> GetByUserIdAsync(int userId)
+    {
+        using var db = Factory.CreateConnection();
+        return await db.QuerySingleOrDefaultAsync<Driver>(
+            "SELECT * FROM [Drivers] WHERE [UserId] = @userId AND [IsDeleted] = 0;",
+            new { userId });
+    }
+
+    public async Task<Driver?> GetByLicenseNumberAsync(string licenseNumber)
+    {
+        using var db = Factory.CreateConnection();
+        return await db.QuerySingleOrDefaultAsync<Driver>(
+            "SELECT * FROM [Drivers] WHERE [LicenseNumber] = @licenseNumber AND [IsDeleted] = 0;",
+            new { licenseNumber });
+    }
 }

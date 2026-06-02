@@ -1,5 +1,115 @@
+@model IEnumerable<DriverDto>
 @{
     Layout = "_LayoutStaff";
+    var drivers = Model.ToList();
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row row-deck row-cards mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Kierowcy ogółem</div>
+                <div class="h1 mb-3">@drivers.Count</div>
+                <div class="text-secondary">Zarejestrowane profile logistyczne</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-success">Aktywni</div>
+                <div class="h1 mb-3 text-success">@drivers.Count(driver => driver.IsActive)</div>
+                <div class="text-secondary">Gotowi do przypisania do tras</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-secondary">Nieaktywni</div>
+                <div class="h1 mb-3">@drivers.Count(driver => !driver.IsActive)</div>
+                <div class="text-secondary">Profile czasowo wyłączone</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-premium">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h3 class="card-title">Wykaz kierowców</h3>
+        <div class="card-actions">
+            <a asp-action="CreateDriver" class="btn btn-primary">
+                @Html.Raw(StaffIconCatalog.Get("plus"))
+                Dodaj kierowcę
+            </a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter table-premium card-table table-striped">
+            <thead>
+                <tr>
+                    <th>Kierowca</th>
+                    <th>Kontakt</th>
+                    <th>Numer prawa jazdy</th>
+                    <th>Status</th>
+                    <th class="w-1">Akcje</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (drivers.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="text-center text-secondary py-4">
+                            Brak profili kierowców. Dodaj pierwszy profil logistyczny.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var driver in drivers)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">@driver.FullName</div>
+                                <div class="text-secondary small">Profil #@driver.Id</div>
+                            </td>
+                            <td>@driver.Email</td>
+                            <td>
+                                <span class="badge bg-blue text-blue-fg p-2 font-monospace">@driver.LicenseNumber</span>
+                            </td>
+                            <td>
+                                @if (driver.IsActive)
+                                {
+                                    <span class="badge bg-success-lt text-success d-inline-flex align-items-center gap-2 py-1 px-2">
+                                        <span class="status-dot-pulse bg-success"></span>
+                                        Aktywny
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-lt text-secondary d-inline-flex align-items-center gap-2 py-1 px-2">
+                                        <span class="status-dot bg-secondary"></span>
+                                        Nieaktywny
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                <div class="btn-list flex-nowrap">
+                                    <a asp-action="EditDriver" asp-route-id="@driver.Id" class="btn btn-sm btn-outline-primary">
+                                        Edytuj
+                                    </a>
+                                    <form asp-action="DeleteDriver" asp-route-id="@driver.Id" method="post"
+                                          onsubmit="return confirm('Czy na pewno chcesz usunąć profil kierowcy @driver.FullName?');"
+                                          class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Usuń</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
