@@ -103,6 +103,7 @@ public static class DependencyInjection
         services.AddScoped<IDeliveryRouteRepository, DeliveryRouteRepository>();
         services.AddScoped<IDeliveryRouteStopRepository, DeliveryRouteStopRepository>();
         services.AddScoped<IDriverRepository, DriverRepository>();
+        services.AddScoped<IDriverVehicleAssignmentRepository, DriverVehicleAssignmentRepository>();
         services.AddScoped<IThermalBagRepository, ThermalBagRepository>();
         services.AddScoped<IVehicleRepository, VehicleRepository>();
 

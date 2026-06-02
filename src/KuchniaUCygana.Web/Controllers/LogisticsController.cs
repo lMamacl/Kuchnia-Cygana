@@ -362,6 +362,60 @@ public sealed class LogisticsController : Controller
         return RedirectToAction(nameof(Drivers));
     }
 
+    [HttpGet("drivers/{id:int}/vehicle")]
+    public async Task<IActionResult> AssignDriverVehicle(int id)
+    {
+        var model = await BuildDriverVehicleAssignmentViewModelAsync(id);
+        if (model == null) return NotFound();
+
+        SetAssignDriverVehicleViewData(model.Driver.FullName);
+        return View("DriversVehicleAssignment", model);
+    }
+
+    [HttpPost("drivers/{id:int}/vehicle")]
+    public async Task<IActionResult> AssignDriverVehicle(int id, DriverVehicleAssignmentViewModel model)
+    {
+        if (!ModelState.IsValid)
+        {
+            var invalidModel = await BuildDriverVehicleAssignmentViewModelAsync(id, model.VehicleId);
+            if (invalidModel == null) return NotFound();
+
+            SetAssignDriverVehicleViewData(invalidModel.Driver.FullName);
+            return View("DriversVehicleAssignment", invalidModel);
+        }
+
+        try
+        {
+            var driver = await _driverService.AssignVehicleAsync(id, model.VehicleId);
+            if (driver == null) return NotFound();
+
+            TempData["Success"] = $"Kierowca {driver.FullName} zostal przypisany do pojazdu {driver.CurrentVehicleRegistration}.";
+            return RedirectToAction(nameof(Drivers));
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            var invalidModel = await BuildDriverVehicleAssignmentViewModelAsync(id, model.VehicleId);
+            if (invalidModel == null) return NotFound();
+
+            SetAssignDriverVehicleViewData(invalidModel.Driver.FullName);
+            return View("DriversVehicleAssignment", invalidModel);
+        }
+    }
+
+    [HttpPost("drivers/{id:int}/vehicle/unassign")]
+    public async Task<IActionResult> UnassignDriverVehicle(int id)
+    {
+        var driver = await _driverService.GetByIdAsync(id);
+        if (driver == null) return NotFound();
+
+        var unassigned = await _driverService.UnassignVehicleAsync(id);
+        TempData[unassigned ? "Success" : "Error"] = unassigned
+            ? $"Zakonczono przypisanie pojazdu dla kierowcy {driver.FullName}."
+            : "Kierowca nie ma aktywnego przypisania do pojazdu.";
+        return RedirectToAction(nameof(Drivers));
+    }
+
     [HttpGet("test-geocode")]
     public IActionResult TestGeokodowania()
     {
@@ -456,5 +510,49 @@ public sealed class LogisticsController : Controller
         ViewData["Title"] = "Edycja kierowcy";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = $"Zmiana danych profilu kierowcy {fullName}.";
+    }
+
+    private async Task<DriverVehicleAssignmentViewModel?> BuildDriverVehicleAssignmentViewModelAsync(
+        int driverId,
+        int? selectedVehicleId = null)
+    {
+        var driver = await _driverService.GetByIdAsync(driverId);
+        if (driver == null) return null;
+
+        var drivers = (await _driverService.GetAllAsync()).ToList();
+        var assignedDrivers = drivers
+            .Where(item => item.CurrentVehicleId.HasValue)
+            .ToDictionary(item => item.CurrentVehicleId!.Value);
+        var vehicles = (await _vehicleService.GetAllAsync())
+            .Where(vehicle => vehicle.Status == VehicleStatus.Active.ToString())
+            .OrderBy(vehicle => vehicle.RegistrationNumber)
+            .Select(vehicle =>
+            {
+                assignedDrivers.TryGetValue(vehicle.Id, out var assignedDriver);
+                return new DriverVehicleOptionViewModel
+                {
+                    VehicleId = vehicle.Id,
+                    RegistrationNumber = vehicle.RegistrationNumber,
+                    Model = vehicle.Model,
+                    IsAvailable = assignedDriver == null || assignedDriver.Id == driver.Id,
+                    IsCurrentForDriver = driver.CurrentVehicleId == vehicle.Id,
+                    AssignedDriverName = assignedDriver?.FullName,
+                };
+            })
+            .ToList();
+
+        return new DriverVehicleAssignmentViewModel
+        {
+            Driver = driver,
+            VehicleId = selectedVehicleId ?? driver.CurrentVehicleId ?? 0,
+            Vehicles = vehicles,
+        };
+    }
+
+    private void SetAssignDriverVehicleViewData(string fullName)
+    {
+        ViewData["Title"] = "Przypisanie pojazdu";
+        ViewData["Section"] = "Logistyka";
+        ViewData["Description"] = $"Wybierz pojazd dla kierowcy {fullName}.";
     }
 }

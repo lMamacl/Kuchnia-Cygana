@@ -1,0 +1,107 @@
+@model DriverVehicleAssignmentViewModel
+@{
+    Layout = "_LayoutStaff";
+    var selectableVehicles = Model.Vehicles.Where(vehicle => vehicle.IsAvailable).ToList();
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Przypisanie pojazdu</h3>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <div class="subheader">Kierowca</div>
+                    <div class="h3 mb-1">@Model.Driver.FullName</div>
+                    <div class="text-secondary">@Model.Driver.Email</div>
+                </div>
+
+                @if (!Model.Driver.IsActive)
+                {
+                    <div class="alert alert-warning alert-premium-smart" role="alert">
+                        Nie mo&zdot;na przypisa&cacute; pojazdu do nieaktywnego kierowcy.
+                    </div>
+                }
+                else if (selectableVehicles.Count == 0)
+                {
+                    <div class="alert alert-warning alert-premium-smart" role="alert">
+                        Brak aktywnych i wolnych pojazd&oacute;w.
+                    </div>
+                }
+                else
+                {
+                    <form asp-action="AssignDriverVehicle" asp-route-id="@Model.Driver.Id" method="post">
+                        @Html.AntiForgeryToken()
+                        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-3"></div>
+
+                        <div class="mb-3">
+                            <label asp-for="VehicleId" class="form-label required">Pojazd</label>
+                            <select asp-for="VehicleId" class="form-select" required>
+                                <option value="">Wybierz pojazd...</option>
+                                @foreach (var vehicle in selectableVehicles)
+                                {
+                                    <option value="@vehicle.VehicleId">
+                                        @vehicle.RegistrationNumber - @vehicle.Model
+                                        @(vehicle.IsCurrentForDriver ? "(obecny przydzial)" : string.Empty)
+                                    </option>
+                                }
+                            </select>
+                            <span asp-validation-for="VehicleId" class="text-danger small mt-1 d-block"></span>
+                        </div>
+
+                        <div class="form-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <a asp-action="Drivers" class="btn btn-link text-secondary">Anuluj i wr&oacute;&cacute;</a>
+                            <button type="submit" class="btn btn-primary">
+                                @Html.Raw(StaffIconCatalog.Get("vehicle"))
+                                Zapisz przydzia&lstrok;
+                            </button>
+                        </div>
+                    </form>
+                }
+            </div>
+
+            @if (Model.Driver.HasVehicleAssignment)
+            {
+                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div>
+                        <div class="fw-semibold">Bie&zdot;&aogon;cy przydzia&lstrok;</div>
+                        <div class="text-secondary small">
+                            @Model.Driver.CurrentVehicleRegistration - @Model.Driver.CurrentVehicleModel
+                        </div>
+                    </div>
+                    <form asp-action="UnassignDriverVehicle" asp-route-id="@Model.Driver.Id" method="post"
+                          onsubmit="return confirm('Czy zakonczyc przypisanie tego pojazdu?');">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-outline-danger">Zako&nacute;cz przydzia&lstrok;</button>
+                    </form>
+                </div>
+            }
+        </div>
+
+        @if (Model.Vehicles.Any(vehicle => !vehicle.IsAvailable))
+        {
+            <div class="card card-premium mt-4">
+                <div class="card-header">
+                    <h3 class="card-title">Zaj&eogon;te pojazdy</h3>
+                </div>
+                <div class="list-group list-group-flush">
+                    @foreach (var vehicle in Model.Vehicles.Where(vehicle => !vehicle.IsAvailable))
+                    {
+                        <div class="list-group-item d-flex align-items-center justify-content-between gap-3">
+                            <div>
+                                <div class="fw-semibold font-monospace">@vehicle.RegistrationNumber</div>
+                                <div class="text-secondary small">@vehicle.Model</div>
+                            </div>
+                            <span class="badge bg-secondary-lt text-secondary">@vehicle.AssignedDriverName</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}

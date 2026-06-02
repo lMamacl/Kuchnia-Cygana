@@ -9,11 +9,16 @@ namespace KuchniaUCygana.Application.Services.Logistics;
 public class VehicleService : IVehicleService
 {
     private readonly IVehicleRepository _vehicleRepo;
+    private readonly IDriverVehicleAssignmentRepository _assignmentRepository;
     private readonly IMapper _mapper;
 
-    public VehicleService(IVehicleRepository vehicleRepo, IMapper mapper)
+    public VehicleService(
+        IVehicleRepository vehicleRepo,
+        IDriverVehicleAssignmentRepository assignmentRepository,
+        IMapper mapper)
     {
         _vehicleRepo = vehicleRepo;
+        _assignmentRepository = assignmentRepository;
         _mapper = mapper;
     }
 
@@ -61,11 +66,17 @@ public class VehicleService : IVehicleService
         if (existing == null) return null;
         _mapper.Map(request, existing);
         await _vehicleRepo.UpdateAsync(existing);
+        if (!existing.IsOperational())
+        {
+            await _assignmentRepository.UnassignVehicleAsync(existing.Id);
+        }
+
         return _mapper.Map<VehicleDto>(existing);
     }
 
     public async Task<bool> DeleteAsync(int id)
     {
+        await _assignmentRepository.UnassignVehicleAsync(id);
         return await _vehicleRepo.DeleteAsync(id);
     }
 }

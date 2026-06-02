@@ -11,21 +11,37 @@ namespace KuchniaUCygana.Application.Services.Logistics;
 public sealed class DriverService : IDriverService
 {
     private readonly IDriverRepository _driverRepository;
+    private readonly IDriverVehicleAssignmentRepository _assignmentRepository;
     private readonly IUserRepository _userRepository;
+    private readonly IVehicleRepository _vehicleRepository;
 
-    public DriverService(IDriverRepository driverRepository, IUserRepository userRepository)
+    public DriverService(
+        IDriverRepository driverRepository,
+        IDriverVehicleAssignmentRepository assignmentRepository,
+        IUserRepository userRepository,
+        IVehicleRepository vehicleRepository)
     {
         _driverRepository = driverRepository;
+        _assignmentRepository = assignmentRepository;
         _userRepository = userRepository;
+        _vehicleRepository = vehicleRepository;
     }
 
     public async Task<IEnumerable<DriverDto>> GetAllAsync()
     {
-        var drivers = await _driverRepository.GetAllAsync();
+        var drivers = (await _driverRepository.GetAllAsync()).ToList();
         var users = (await _userRepository.GetAllAsync()).ToDictionary(user => user.Id);
+        var assignments = (await _assignmentRepository.GetActiveAsync()).ToDictionary(assignment => assignment.DriverId);
+        var vehicles = (await _vehicleRepository.GetAllAsync()).ToDictionary(vehicle => vehicle.Id);
 
         return drivers
-            .Select(driver => Map(driver, users.GetValueOrDefault(driver.UserId)))
+            .Select(driver => Map(
+                driver,
+                users.GetValueOrDefault(driver.UserId),
+                assignments.GetValueOrDefault(driver.Id),
+                assignments.TryGetValue(driver.Id, out var assignment)
+                    ? vehicles.GetValueOrDefault(assignment.VehicleId)
+                    : null))
             .OrderBy(driver => driver.LastName)
             .ThenBy(driver => driver.FirstName)
             .ToList();
@@ -36,7 +52,7 @@ public sealed class DriverService : IDriverService
         var driver = await _driverRepository.GetByIdAsync(id);
         if (driver == null) return null;
 
-        return Map(driver, await _userRepository.GetByIdAsync(driver.UserId));
+        return await MapAsync(driver);
     }
 
     public async Task<IReadOnlyList<DriverUserOptionDto>> GetAssignableUsersAsync()
@@ -101,13 +117,47 @@ public sealed class DriverService : IDriverService
         driver.LicenseNumber = licenseNumber;
         driver.IsActive = request.IsActive;
         await _driverRepository.UpdateAsync(driver);
+        if (!driver.IsActive)
+        {
+            await _assignmentRepository.UnassignDriverAsync(driver.Id);
+        }
 
-        return Map(driver, await _userRepository.GetByIdAsync(driver.UserId));
+        return await MapAsync(driver);
     }
 
-    public Task<bool> DeleteAsync(int id)
+    public async Task<DriverDto?> AssignVehicleAsync(int driverId, int vehicleId)
     {
-        return _driverRepository.DeleteAsync(id);
+        var driver = await _driverRepository.GetByIdAsync(driverId);
+        if (driver == null) return null;
+        if (!driver.IsActive)
+        {
+            throw new InvalidOperationException("Nie mozna przypisac pojazdu do nieaktywnego kierowcy.");
+        }
+
+        var vehicle = await _vehicleRepository.GetByIdAsync(vehicleId);
+        if (vehicle == null || vehicle.Status != VehicleStatus.Active)
+        {
+            throw new InvalidOperationException("Wybrany pojazd nie istnieje albo nie jest aktywny.");
+        }
+
+        await _assignmentRepository.AssignAsync(driverId, vehicleId);
+        return await MapAsync(driver);
+    }
+
+    public async Task<bool> UnassignVehicleAsync(int driverId)
+    {
+        if (await _driverRepository.GetByIdAsync(driverId) == null)
+        {
+            return false;
+        }
+
+        return await _assignmentRepository.UnassignDriverAsync(driverId);
+    }
+
+    public async Task<bool> DeleteAsync(int id)
+    {
+        await _assignmentRepository.UnassignDriverAsync(id);
+        return await _driverRepository.DeleteAsync(id);
     }
 
     private async Task<User> RequireDriverUserAsync(int userId)
@@ -132,7 +182,21 @@ public sealed class DriverService : IDriverService
         return normalized;
     }
 
-    private static DriverDto Map(Driver driver, User? user)
+    private async Task<DriverDto> MapAsync(Driver driver)
+    {
+        var assignment = await _assignmentRepository.GetActiveByDriverIdAsync(driver.Id);
+        return Map(
+            driver,
+            await _userRepository.GetByIdAsync(driver.UserId),
+            assignment,
+            assignment == null ? null : await _vehicleRepository.GetByIdAsync(assignment.VehicleId));
+    }
+
+    private static DriverDto Map(
+        Driver driver,
+        User? user,
+        DriverVehicleAssignment? assignment = null,
+        Vehicle? vehicle = null)
     {
         return new DriverDto
         {
@@ -143,6 +207,9 @@ public sealed class DriverService : IDriverService
             Email = user?.Email ?? string.Empty,
             LicenseNumber = driver.LicenseNumber,
             IsActive = driver.IsActive,
+            CurrentVehicleId = assignment?.VehicleId,
+            CurrentVehicleRegistration = vehicle?.RegistrationNumber,
+            CurrentVehicleModel = vehicle?.Model,
         };
     }
 }

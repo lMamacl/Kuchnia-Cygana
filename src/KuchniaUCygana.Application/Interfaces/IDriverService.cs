@@ -9,5 +9,7 @@ public interface IDriverService
     Task<IReadOnlyList<DriverUserOptionDto>> GetAssignableUsersAsync();
     Task<DriverDto> CreateAsync(CreateDriverRequest request);
     Task<DriverDto?> UpdateAsync(int id, UpdateDriverRequest request);
+    Task<DriverDto?> AssignVehicleAsync(int driverId, int vehicleId);
+    Task<bool> UnassignVehicleAsync(int driverId);
     Task<bool> DeleteAsync(int id);
 }
