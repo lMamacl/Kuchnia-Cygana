@@ -49,6 +49,8 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+        var migrationConnectionString = configuration.GetConnectionString("MigrationConnection")
+            ?? connectionString;
 
         DapperTypeHandlers.Register();
 
@@ -191,7 +193,7 @@ public static class DependencyInjection
             .ConfigureRunner(
                 builder => builder
                     .AddSqlServer()
-                    .WithGlobalConnectionString(connectionString)
+                    .WithGlobalConnectionString(migrationConnectionString)
                     .ScanIn(typeof(DependencyInjection).Assembly).For.Migrations())
             .AddLogging(loggingBuilder => loggingBuilder.AddFluentMigratorConsole());
 
