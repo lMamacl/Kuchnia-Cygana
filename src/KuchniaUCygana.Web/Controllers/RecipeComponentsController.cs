@@ -185,6 +185,67 @@ public sealed class RecipeComponentsController : Controller
         return RedirectToAction(nameof(Version), new { componentId, versionId });
     }
 
+    [HttpPost("{componentId:int}/versions/{versionId:int}/instruction-sections")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveInstructionSection(
+        int componentId,
+        int versionId,
+        SaveInstructionSectionRequest request)
+    {
+        request.RecipeComponentVersionId = versionId;
+        try
+        {
+            await this.recipeComponentService.SaveInstructionSectionAsync(request);
+            TempData["Success"] = "Sekcja instrukcji zostala zapisana.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Version), new { componentId, versionId });
+    }
+
+    [HttpPost("{componentId:int}/versions/{versionId:int}/instruction-sections/{sectionId:int}/steps")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveInstructionStep(
+        int componentId,
+        int versionId,
+        int sectionId,
+        SaveInstructionStepRequest request)
+    {
+        request.RecipeComponentInstructionSectionId = sectionId;
+        try
+        {
+            await this.recipeComponentService.SaveInstructionStepAsync(request);
+            TempData["Success"] = "Krok instrukcji zostal zapisany.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Version), new { componentId, versionId });
+    }
+
+    [HttpPost("{componentId:int}/versions/{versionId:int}/instruction-sections/{sectionId:int}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteInstructionSection(int componentId, int versionId, int sectionId)
+    {
+        await this.recipeComponentService.DeleteInstructionSectionAsync(sectionId);
+        TempData["Success"] = "Sekcja instrukcji zostala usunieta z wersji roboczej.";
+        return RedirectToAction(nameof(Version), new { componentId, versionId });
+    }
+
+    [HttpPost("{componentId:int}/versions/{versionId:int}/instruction-steps/{stepId:int}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteInstructionStep(int componentId, int versionId, int stepId)
+    {
+        await this.recipeComponentService.DeleteInstructionStepAsync(stepId);
+        TempData["Success"] = "Krok instrukcji zostal usuniety z wersji roboczej.";
+        return RedirectToAction(nameof(Version), new { componentId, versionId });
+    }
+
     [HttpPost("attach-to-meal")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AttachToMeal(AttachComponentToMealRequest request)

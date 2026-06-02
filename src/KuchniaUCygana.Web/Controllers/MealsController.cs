@@ -61,6 +61,24 @@ public sealed class MealsController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    [HttpPost("{mealId:int}/variants")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateVariant(int mealId, CreateMealVariantRequest request)
+    {
+        request.MealId = mealId;
+        try
+        {
+            await _mealService.CreateMealVariantAsync(request);
+            TempData["Success"] = "Wariant posilku zostal utworzony.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Details), new { id = mealId });
+    }
+
     [HttpGet("{id:int}")]
     public async Task<IActionResult> Details(int id)
     {

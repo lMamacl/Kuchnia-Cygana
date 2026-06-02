@@ -97,7 +97,7 @@
                                     </td>
                                     <td>
                                         <div class="fw-bold">@item.MealName</div>
-                                        <div class="text-secondary small">x @item.ServingSizeMultiplier.ToString("0.##") | @item.MealStatus</div>
+                                        <div class="text-secondary small">@(item.MealVariantName ?? "wariant bazowy") | x @item.ServingSizeMultiplier.ToString("0.##") | @item.MealStatus</div>
                                     </td>
                                     <td class="text-center">
                                         <span class="badge bg-blue-lt">@item.ComponentCount</span>

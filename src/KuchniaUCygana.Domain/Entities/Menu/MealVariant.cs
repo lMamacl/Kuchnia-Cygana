@@ -4,23 +4,24 @@ using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.Menu;
 
-[Table("RecipeComponentVersions")]
-public sealed class RecipeComponentVersion : AuditableEntity
+[Table("MealVariants")]
+public sealed class MealVariant : AuditableEntity
 {
-    public int RecipeComponentId { get; set; }
+    public int MealId { get; set; }
 
-    public int VersionNumber { get; set; } = 1;
+    [StringLength(160)]
+    public string Name { get; set; } = string.Empty;
+
+    [StringLength(60)]
+    public string VariantType { get; set; } = "Standard";
 
     [StringLength(30)]
     public string Status { get; set; } = "Draft";
 
-    [StringLength(4000)]
-    public string? Instructions { get; set; }
+    [StringLength(1000)]
+    public string? Description { get; set; }
 
-    public decimal YieldQuantity { get; set; } = 1.0m;
-
-    [StringLength(40)]
-    public string YieldUnit { get; set; } = "portion";
+    public bool IsDefault { get; set; }
 
     public decimal? RawWeightGrams { get; set; }
 
@@ -36,12 +37,8 @@ public sealed class RecipeComponentVersion : AuditableEntity
 
     public decimal? FiberPer100g { get; set; }
 
-    public int? ShelfLifeHours { get; set; }
-
-    public bool UseEarliestIngredientExpiry { get; set; }
-
     [StringLength(40)]
-    public string NutritionSource { get; set; } = "Manual";
+    public string NutritionSource { get; set; } = "Aggregated";
 
     [StringLength(500)]
     public string? NutritionOverrideReason { get; set; }
@@ -50,19 +47,6 @@ public sealed class RecipeComponentVersion : AuditableEntity
 
     [StringLength(500)]
     public string? AllergenOverrideReason { get; set; }
-
-    public DateTimeOffset? AllergensApprovedAt { get; set; }
-
-    [StringLength(100)]
-    public string? AllergensApprovedBy { get; set; }
-
-    [StringLength(500)]
-    public string? ChangeSummary { get; set; }
-
-    public bool IsTechnologyChange { get; set; } = true;
-
-    [StringLength(500)]
-    public string? NonTechnologyChangeReason { get; set; }
 
     public DateTimeOffset? PublishedAt { get; set; }
 

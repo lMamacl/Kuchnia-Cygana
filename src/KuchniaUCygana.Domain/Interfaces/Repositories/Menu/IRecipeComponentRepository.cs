@@ -16,6 +16,8 @@ public interface IRecipeComponentRepository
 
     Task<IReadOnlyList<PackagingRequirementRow>> GetVersionPackagingAsync(int versionId);
 
+    Task<IReadOnlyList<RecipeComponentInstructionSectionRow>> GetVersionInstructionSectionsAsync(int versionId);
+
     Task<IReadOnlyList<RecipeComponentVersionOptionRow>> GetPublishedVersionOptionsAsync();
 
     Task<IEnumerable<MealRecipeComponentDetailsRow>> GetMealComponentDetailsAsync(int mealId);
@@ -38,6 +40,14 @@ public interface IRecipeComponentRepository
 
     Task DeletePackagingAsync(int packagingRequirementId, string? deletedBy);
 
+    Task<int> SaveInstructionSectionAsync(RecipeComponentInstructionSection section);
+
+    Task<int> SaveInstructionStepAsync(RecipeComponentInstructionStep step);
+
+    Task DeleteInstructionSectionAsync(int sectionId, string? deletedBy);
+
+    Task DeleteInstructionStepAsync(int stepId, string? deletedBy);
+
     Task PublishVersionAsync(int versionId, string? publishedBy);
 
     Task AttachComponentToMealAsync(MealRecipeComponent component);
@@ -47,9 +57,17 @@ public sealed class RecipeComponentListRow
 {
     public int Id { get; set; }
 
+    public int? CategoryId { get; set; }
+
+    public string? CategoryName { get; set; }
+
     public string Name { get; set; } = string.Empty;
 
     public string? Description { get; set; }
+
+    public string? ImageUrl { get; set; }
+
+    public int PreparationTimeMinutes { get; set; }
 
     public bool IsActive { get; set; }
 
@@ -66,9 +84,17 @@ public sealed class RecipeComponentDetailRow
 {
     public int Id { get; set; }
 
+    public int? CategoryId { get; set; }
+
+    public string? CategoryName { get; set; }
+
     public string Name { get; set; } = string.Empty;
 
     public string? Description { get; set; }
+
+    public string? ImageUrl { get; set; }
+
+    public int PreparationTimeMinutes { get; set; }
 
     public bool IsActive { get; set; }
 }
@@ -108,6 +134,18 @@ public sealed class RecipeComponentVersionRow
     public int? ShelfLifeHours { get; set; }
 
     public bool UseEarliestIngredientExpiry { get; set; }
+
+    public string NutritionSource { get; set; } = "Manual";
+
+    public string? NutritionOverrideReason { get; set; }
+
+    public bool AllergensApproved { get; set; }
+
+    public string? AllergenOverrideReason { get; set; }
+
+    public DateTimeOffset? AllergensApprovedAt { get; set; }
+
+    public string? AllergensApprovedBy { get; set; }
 
     public string? ChangeSummary { get; set; }
 
@@ -224,4 +262,38 @@ public sealed class MealRecipeComponentDetailsRow
     public bool IsOptional { get; set; }
 
     public string? Notes { get; set; }
+}
+
+public sealed class RecipeComponentInstructionSectionRow
+{
+    public int Id { get; set; }
+
+    public int RecipeComponentVersionId { get; set; }
+
+    public string? Title { get; set; }
+
+    public int SortOrder { get; set; }
+
+    public IReadOnlyList<RecipeComponentInstructionStepRow> Steps { get; set; } = Array.Empty<RecipeComponentInstructionStepRow>();
+}
+
+public sealed class RecipeComponentInstructionStepRow
+{
+    public int Id { get; set; }
+
+    public int RecipeComponentInstructionSectionId { get; set; }
+
+    public string StepText { get; set; } = string.Empty;
+
+    public int SortOrder { get; set; }
+
+    public bool RequiresControl { get; set; }
+
+    public string? ControlType { get; set; }
+
+    public decimal? ExpectedValue { get; set; }
+
+    public string? ExpectedUnit { get; set; }
+
+    public bool IsCritical { get; set; }
 }

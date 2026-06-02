@@ -15,7 +15,17 @@ public sealed class IngredientRepository : BaseRepository<Ingredient>, IIngredie
     public async Task<bool> CanDeleteAsync(int ingredientId)
     {
         using var db = this.Factory.CreateConnection();
-        const string sql = "SELECT COUNT(1) FROM [Recipes] WHERE [IngredientId] = @IngredientId;";
+        const string sql = """
+            SELECT
+                (SELECT COUNT(1)
+                 FROM [Recipes]
+                 WHERE [IngredientId] = @IngredientId
+                   AND [IsDeleted] = 0)
+              + (SELECT COUNT(1)
+                 FROM [RecipeComponentIngredients]
+                 WHERE [IngredientId] = @IngredientId
+                   AND [IsDeleted] = 0);
+            """;
         var count = await db.ExecuteScalarAsync<int>(sql, new { IngredientId = ingredientId });
         return count == 0;
     }

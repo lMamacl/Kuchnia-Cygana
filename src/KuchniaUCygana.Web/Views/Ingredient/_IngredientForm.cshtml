@@ -7,6 +7,34 @@
 </div>
 <div class="row">
     <div class="col-md-6 mb-3">
+        <label asp-for="ResourceType" class="form-label">Typ zasobu</label>
+        <select asp-for="ResourceType" class="form-select">
+            <option value="Food">Skladnik spozywczy</option>
+            <option value="Spice">Przyprawa</option>
+            <option value="Packaging">Opakowanie</option>
+            <option value="Container">Pojemnik</option>
+            <option value="Other">Inny</option>
+        </select>
+    </div>
+    <div class="col-md-6 mb-3">
+        <label asp-for="FoodCategoryId" class="form-label">Kategoria zywnosciowa ID</label>
+        <input asp-for="FoodCategoryId" type="number" class="form-control" />
+    </div>
+</div>
+<div class="mb-3">
+    <label asp-for="Description" class="form-label">Opis</label>
+    <textarea asp-for="Description" class="form-control" rows="2"></textarea>
+</div>
+<div class="mb-3">
+    <label asp-for="ProductComposition" class="form-label">Sklad opisowy produktu</label>
+    <textarea asp-for="ProductComposition" class="form-control" rows="2"></textarea>
+</div>
+<div class="mb-3">
+    <label asp-for="ImageUrl" class="form-label">Zdjecie URL</label>
+    <input asp-for="ImageUrl" class="form-control" />
+</div>
+<div class="row">
+    <div class="col-md-6 mb-3">
         <label asp-for="Unit" class="form-label required">Jednostka</label>
         <input asp-for="Unit" class="form-control" placeholder="g, kg, szt." />
     </div>
@@ -19,6 +47,10 @@
     <label asp-for="Notes" class="form-label">Notatki</label>
     <textarea asp-for="Notes" class="form-control" rows="3"></textarea>
 </div>
+<label class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" asp-for="WarehouseCategoryFefoApproved" />
+    <span class="form-check-label">Kategoria magazynowa zatwierdzona dla FEFO bez StockItemId</span>
+</label>
 <label class="form-check form-switch mb-4">
     <input class="form-check-input" type="checkbox" asp-for="IsActive" />
     <span class="form-check-label">Składnik aktywny</span>

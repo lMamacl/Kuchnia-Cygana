@@ -18,4 +18,6 @@ public sealed class Recipe
     public bool IsOptional { get; set; } = false;
 
     public string? Notes { get; set; }
+
+    public bool IsDeleted { get; set; }
 }

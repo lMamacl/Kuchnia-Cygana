@@ -24,6 +24,7 @@ public sealed class RecipeComponentManagementServiceTests
         });
         repository.Setup(r => r.GetVersionIngredientsAsync(10)).ReturnsAsync(Array.Empty<RecipeComponentIngredientRow>());
         repository.Setup(r => r.GetVersionPackagingAsync(10)).ReturnsAsync(Array.Empty<PackagingRequirementRow>());
+        repository.Setup(r => r.GetVersionInstructionSectionsAsync(10)).ReturnsAsync(Array.Empty<RecipeComponentInstructionSectionRow>());
         var service = CreateService(repository);
 
         var act = async () => await service.PublishVersionAsync(10);
@@ -62,6 +63,26 @@ public sealed class RecipeComponentManagementServiceTests
                 WarehouseCategoryId = 8,
                 Quantity = 1m,
                 Unit = "pcs",
+            },
+        });
+        repository.Setup(r => r.GetVersionInstructionSectionsAsync(10)).ReturnsAsync(new[]
+        {
+            new RecipeComponentInstructionSectionRow
+            {
+                Id = 1,
+                RecipeComponentVersionId = 10,
+                Title = "Przygotowanie",
+                SortOrder = 1,
+                Steps = new List<RecipeComponentInstructionStepRow>
+                {
+                    new()
+                    {
+                        Id = 1,
+                        RecipeComponentInstructionSectionId = 1,
+                        StepText = "Wymieszaj skladniki.",
+                        SortOrder = 1,
+                    },
+                },
             },
         });
         var service = CreateService(repository);
@@ -112,6 +133,7 @@ public sealed class RecipeComponentManagementServiceTests
             CarbohydratesPer100g = 8m,
             FatPer100g = 2m,
             FiberPer100g = 0.5m,
+            AllergensApproved = true,
         };
     }
 }

@@ -53,6 +53,8 @@ public sealed class DietDataAdapter : IDietDataProvider
                 m.[CategoryId],
                 c.[Name] AS [CategoryName],
                 i.[DietVariantId],
+                i.[MealVariantId],
+                mv.[Name] AS [MealVariantName],
                 i.[MealSlot],
                 i.[SortOrder],
                 i.[ServingSizeMultiplier] AS [ServingMultiplier],
@@ -68,6 +70,7 @@ public sealed class DietDataAdapter : IDietDataProvider
             FROM [DietMenuPlans] p
             INNER JOIN [DietMenuPlanItems] i ON i.[DietMenuPlanId] = p.[Id]
             INNER JOIN [Meals] m ON m.[Id] = i.[MealId]
+            LEFT JOIN [MealVariants] mv ON mv.[Id] = i.[MealVariantId] AND mv.[IsDeleted] = 0
             LEFT JOIN [Categories] c ON c.[Id] = m.[CategoryId]
             LEFT JOIN [NutritionFacts] nf ON nf.[MealId] = m.[Id]
             WHERE p.[Id] = @dietMenuPlanId
@@ -92,6 +95,7 @@ public sealed class DietDataAdapter : IDietDataProvider
             .Distinct()
             .ToArray();
         var componentIngredientsByVersion = await GetComponentIngredientsByVersionAsync(db, componentVersionIds);
+        var instructionSectionsByVersion = await GetInstructionSectionsByVersionAsync(db, componentVersionIds);
         var legacyIngredientsByMeal = await GetLegacyIngredientsByMealAsync(db, mealIds);
         var packagingByMeal = await GetPackagingByMealAsync(db, mealIds);
         var packagingByComponentVersion = await GetPackagingByComponentVersionAsync(db, componentVersionIds);
@@ -129,6 +133,7 @@ public sealed class DietDataAdapter : IDietDataProvider
                 row,
                 componentsByItem.GetValueOrDefault(row.DietMenuPlanItemId) ?? new List<ComponentRow>(),
                 componentIngredientsByVersion,
+                instructionSectionsByVersion,
                 legacyIngredientsByMeal,
                 packagingByComponentVersion);
             var mealPackaging = packagingByMeal.GetValueOrDefault(row.MealId) ?? new List<PackagingRequirementDto>();
@@ -140,6 +145,8 @@ public sealed class DietDataAdapter : IDietDataProvider
                 DietMenuPlanId = row.DietMenuPlanId,
                 PlanDate = row.PlanDate,
                 MealId = row.MealId,
+                MealVariantId = row.MealVariantId,
+                MealVariantName = row.MealVariantName,
                 MealName = row.MealName,
                 CategoryId = row.CategoryId,
                 CategoryName = row.CategoryName,
@@ -186,6 +193,8 @@ public sealed class DietDataAdapter : IDietDataProvider
                 m.[CategoryId],
                 c.[Name] AS [CategoryName],
                 i.[DietVariantId],
+                NULL AS [MealVariantId],
+                NULL AS [MealVariantName],
                 i.[MealSlot],
                 i.[SortOrder],
                 i.[ServingSizeMultiplier] AS [ServingMultiplier]
@@ -227,6 +236,8 @@ public sealed class DietDataAdapter : IDietDataProvider
                 m.[CategoryId],
                 c.[Name] AS [CategoryName],
                 i.[DietVariantId],
+                NULL AS [MealVariantId],
+                NULL AS [MealVariantName],
                 i.[MealSlot],
                 i.[SortOrder],
                 i.[ServingSizeMultiplier] AS [ServingMultiplier]
@@ -410,7 +421,34 @@ public sealed class DietDataAdapter : IDietDataProvider
                 rcv.[ShelfLifeHours],
                 rcv.[UseEarliestIngredientExpiry]
             FROM [DietMenuPlanItems] i
-            INNER JOIN [MealRecipeComponents] mrc ON mrc.[MealId] = i.[MealId]
+            INNER JOIN (
+                SELECT
+                    i2.[Id] AS [DietMenuPlanItemId],
+                    mrc.[Id],
+                    mrc.[RecipeComponentVersionId],
+                    mrc.[Role],
+                    mrc.[QuantityPerServing],
+                    mrc.[Unit],
+                    mrc.[SortOrder],
+                    mrc.[IsDeleted]
+                FROM [DietMenuPlanItems] i2
+                INNER JOIN [MealRecipeComponents] mrc ON mrc.[MealId] = i2.[MealId]
+                WHERE i2.[MealVariantId] IS NULL
+
+                UNION ALL
+
+                SELECT
+                    i2.[Id] AS [DietMenuPlanItemId],
+                    mvc.[Id],
+                    mvc.[RecipeComponentVersionId],
+                    mvc.[Role],
+                    mvc.[QuantityPerServing],
+                    mvc.[Unit],
+                    mvc.[SortOrder],
+                    mvc.[IsDeleted]
+                FROM [DietMenuPlanItems] i2
+                INNER JOIN [MealVariantComponents] mvc ON mvc.[MealVariantId] = i2.[MealVariantId]
+            ) mrc ON mrc.[DietMenuPlanItemId] = i.[Id]
             INNER JOIN [RecipeComponentVersions] rcv ON rcv.[Id] = mrc.[RecipeComponentVersionId]
             INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
             WHERE i.[DietMenuPlanId] = @dietMenuPlanId
@@ -514,6 +552,80 @@ public sealed class DietDataAdapter : IDietDataProvider
         return rows
             .GroupBy(r => r.RecipeComponentVersionId)
             .ToDictionary(g => g.Key, g => g.Select(MapComponentIngredient).ToList());
+    }
+
+    private static async Task<Dictionary<int, List<ComponentInstructionSectionDto>>> GetInstructionSectionsByVersionAsync(
+        System.Data.IDbConnection db,
+        int[] componentVersionIds)
+    {
+        if (componentVersionIds.Length == 0)
+        {
+            return new Dictionary<int, List<ComponentInstructionSectionDto>>();
+        }
+
+        var sectionRows = (await db.QueryAsync<InstructionSectionRow>(
+            """
+            SELECT
+                [Id],
+                [RecipeComponentVersionId],
+                [Title],
+                [SortOrder]
+            FROM [RecipeComponentInstructionSections]
+            WHERE [RecipeComponentVersionId] IN @componentVersionIds
+              AND [IsDeleted] = 0
+            ORDER BY [RecipeComponentVersionId], [SortOrder], [Id];
+            """,
+            new { componentVersionIds })).ToList();
+
+        var sectionIds = sectionRows.Select(s => s.Id).ToArray();
+        var stepRows = sectionIds.Length == 0
+            ? new List<InstructionStepRow>()
+            : (await db.QueryAsync<InstructionStepRow>(
+                """
+                SELECT
+                    [Id],
+                    [RecipeComponentInstructionSectionId],
+                    [StepText],
+                    [SortOrder],
+                    [RequiresControl],
+                    [ControlType],
+                    [ExpectedValue],
+                    [ExpectedUnit],
+                    [IsCritical]
+                FROM [RecipeComponentInstructionSteps]
+                WHERE [RecipeComponentInstructionSectionId] IN @sectionIds
+                  AND [IsDeleted] = 0
+                ORDER BY [RecipeComponentInstructionSectionId], [SortOrder], [Id];
+                """,
+                new { sectionIds })).ToList();
+
+        var stepsBySection = stepRows
+            .GroupBy(s => s.RecipeComponentInstructionSectionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        return sectionRows
+            .GroupBy(s => s.RecipeComponentVersionId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(section => new ComponentInstructionSectionDto
+                {
+                    SectionId = section.Id,
+                    Title = section.Title,
+                    SortOrder = section.SortOrder,
+                    Steps = (stepsBySection.GetValueOrDefault(section.Id) ?? new List<InstructionStepRow>())
+                        .Select(step => new ComponentInstructionStepDto
+                        {
+                            StepId = step.Id,
+                            StepText = step.StepText,
+                            SortOrder = step.SortOrder,
+                            RequiresControl = step.RequiresControl,
+                            ControlType = step.ControlType,
+                            ExpectedValue = step.ExpectedValue,
+                            ExpectedUnit = step.ExpectedUnit,
+                            IsCritical = step.IsCritical,
+                        })
+                        .ToList(),
+                }).ToList());
     }
 
     private static async Task<Dictionary<int, List<ComponentIngredientDto>>> GetLegacyIngredientsByMealAsync(
@@ -631,6 +743,7 @@ public sealed class DietDataAdapter : IDietDataProvider
         PublishedPlanItemRow item,
         List<ComponentRow> componentRows,
         Dictionary<int, List<ComponentIngredientDto>> componentIngredientsByVersion,
+        Dictionary<int, List<ComponentInstructionSectionDto>> instructionSectionsByVersion,
         Dictionary<int, List<ComponentIngredientDto>> legacyIngredientsByMeal,
         Dictionary<int, List<PackagingRequirementDto>> packagingByComponentVersion)
     {
@@ -667,6 +780,8 @@ public sealed class DietDataAdapter : IDietDataProvider
         {
             var ingredients = componentIngredientsByVersion.GetValueOrDefault(row.RecipeComponentVersionId)
                 ?? new List<ComponentIngredientDto>();
+            var instructionSections = instructionSectionsByVersion.GetValueOrDefault(row.RecipeComponentVersionId)
+                ?? new List<ComponentInstructionSectionDto>();
             var packaging = packagingByComponentVersion.GetValueOrDefault(row.RecipeComponentVersionId)
                 ?? new List<PackagingRequirementDto>();
             var warnings = BuildComponentWarnings(ingredients, packaging);
@@ -690,6 +805,7 @@ public sealed class DietDataAdapter : IDietDataProvider
                 UseEarliestIngredientExpiry = row.UseEarliestIngredientExpiry,
                 Ingredients = ingredients,
                 PackagingRequirements = packaging,
+                InstructionSections = instructionSections,
                 ValidationWarnings = warnings,
                 IsCompleteForProduction = warnings.Count == 0,
             };
@@ -868,6 +984,10 @@ public sealed class DietDataAdapter : IDietDataProvider
 
         public int MealId { get; set; }
 
+        public int? MealVariantId { get; set; }
+
+        public string? MealVariantName { get; set; }
+
         public string MealName { get; set; } = string.Empty;
 
         public int? CategoryId { get; set; }
@@ -944,6 +1064,38 @@ public sealed class DietDataAdapter : IDietDataProvider
         public int? ShelfLifeHours { get; set; }
 
         public bool UseEarliestIngredientExpiry { get; set; }
+    }
+
+    private sealed class InstructionSectionRow
+    {
+        public int Id { get; set; }
+
+        public int RecipeComponentVersionId { get; set; }
+
+        public string? Title { get; set; }
+
+        public int SortOrder { get; set; }
+    }
+
+    private sealed class InstructionStepRow
+    {
+        public int Id { get; set; }
+
+        public int RecipeComponentInstructionSectionId { get; set; }
+
+        public string StepText { get; set; } = string.Empty;
+
+        public int SortOrder { get; set; }
+
+        public bool RequiresControl { get; set; }
+
+        public string? ControlType { get; set; }
+
+        public decimal? ExpectedValue { get; set; }
+
+        public string? ExpectedUnit { get; set; }
+
+        public bool IsCritical { get; set; }
     }
 
     private sealed class MealAllergenRow

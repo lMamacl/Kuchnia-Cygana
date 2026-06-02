@@ -50,8 +50,12 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         return new RecipeComponentDetailDto
         {
             Id = component.Id,
+            CategoryId = component.CategoryId,
+            CategoryName = component.CategoryName,
             Name = component.Name,
             Description = component.Description,
+            ImageUrl = component.ImageUrl,
+            PreparationTimeMinutes = component.PreparationTimeMinutes,
             IsActive = component.IsActive,
             Versions = await this.MapVersionSummariesAsync(versions),
         };
@@ -65,11 +69,12 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             return null;
         }
 
-        var ingredients = await this.repository.GetVersionIngredientsAsync(versionId);
-        var packaging = await this.repository.GetVersionPackagingAsync(versionId);
-        var warnings = BuildValidationWarnings(version, ingredients, packaging);
+        var ingredients = await this.repository.GetVersionIngredientsAsync(versionId) ?? Array.Empty<RecipeComponentIngredientRow>();
+        var packaging = await this.repository.GetVersionPackagingAsync(versionId) ?? Array.Empty<PackagingRequirementRow>();
+        var sections = await this.repository.GetVersionInstructionSectionsAsync(versionId) ?? Array.Empty<RecipeComponentInstructionSectionRow>();
+        var warnings = BuildValidationWarnings(version, ingredients, packaging, sections);
 
-        return MapVersionDetail(version, ingredients, packaging, warnings);
+        return MapVersionDetail(version, ingredients, packaging, sections, warnings);
     }
 
     public async Task<int> CreateComponentAsync(CreateRecipeComponentRequest request)
@@ -82,7 +87,10 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         return await this.repository.CreateComponentAsync(new RecipeComponent
         {
             Name = request.Name.Trim(),
+            CategoryId = request.CategoryId,
             Description = request.Description?.Trim(),
+            ImageUrl = request.ImageUrl?.Trim(),
+            PreparationTimeMinutes = Math.Max(0, request.PreparationTimeMinutes),
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedBy = this.UserName(),
@@ -128,6 +136,12 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             version.FiberPer100g = source.FiberPer100g;
             version.ShelfLifeHours = source.ShelfLifeHours;
             version.UseEarliestIngredientExpiry = source.UseEarliestIngredientExpiry;
+            version.NutritionSource = source.NutritionSource;
+            version.NutritionOverrideReason = source.NutritionOverrideReason;
+            version.AllergensApproved = source.AllergensApproved;
+            version.AllergenOverrideReason = source.AllergenOverrideReason;
+            version.AllergensApprovedAt = source.AllergensApprovedAt;
+            version.AllergensApprovedBy = source.AllergensApprovedBy;
         }
 
         return await this.repository.CreateVersionAsync(version, request.SourceVersionId);
@@ -155,6 +169,12 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
                 FiberPer100g = request.FiberPer100g,
                 ShelfLifeHours = request.ShelfLifeHours,
                 UseEarliestIngredientExpiry = request.UseEarliestIngredientExpiry,
+                NutritionSource = NormalizeNutritionSource(request.NutritionSource),
+                NutritionOverrideReason = request.NutritionOverrideReason?.Trim(),
+                AllergensApproved = request.AllergensApproved,
+                AllergenOverrideReason = request.AllergenOverrideReason?.Trim(),
+                AllergensApprovedAt = request.AllergensApproved ? DateTimeOffset.UtcNow : null,
+                AllergensApprovedBy = request.AllergensApproved ? this.UserName() : null,
                 ChangeSummary = request.ChangeSummary?.Trim(),
                 IsTechnologyChange = request.IsTechnologyChange,
                 NonTechnologyChangeReason = request.NonTechnologyChangeReason?.Trim(),
@@ -279,6 +299,60 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         await this.repository.DeletePackagingAsync(packagingRequirementId, this.UserName());
     }
 
+    public async Task SaveInstructionSectionAsync(SaveInstructionSectionRequest request)
+    {
+        var version = await this.repository.GetVersionAsync(request.RecipeComponentVersionId)
+            ?? throw new InvalidOperationException($"Wersja #{request.RecipeComponentVersionId} nie istnieje.");
+        this.EnsureDraft(version);
+
+        await this.repository.SaveInstructionSectionAsync(new RecipeComponentInstructionSection
+        {
+            Id = request.Id,
+            RecipeComponentVersionId = request.RecipeComponentVersionId,
+            Title = request.Title?.Trim(),
+            SortOrder = request.SortOrder,
+            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedBy = this.UserName(),
+            UpdatedAt = request.Id > 0 ? DateTimeOffset.UtcNow : null,
+            UpdatedBy = request.Id > 0 ? this.UserName() : null,
+        });
+    }
+
+    public async Task SaveInstructionStepAsync(SaveInstructionStepRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.StepText))
+        {
+            throw new InvalidOperationException("Treść kroku jest wymagana.");
+        }
+
+        await this.repository.SaveInstructionStepAsync(new RecipeComponentInstructionStep
+        {
+            Id = request.Id,
+            RecipeComponentInstructionSectionId = request.RecipeComponentInstructionSectionId,
+            StepText = request.StepText.Trim(),
+            SortOrder = request.SortOrder,
+            RequiresControl = request.RequiresControl,
+            ControlType = request.ControlType?.Trim(),
+            ExpectedValue = request.ExpectedValue,
+            ExpectedUnit = request.ExpectedUnit?.Trim(),
+            IsCritical = request.IsCritical,
+            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedBy = this.UserName(),
+            UpdatedAt = request.Id > 0 ? DateTimeOffset.UtcNow : null,
+            UpdatedBy = request.Id > 0 ? this.UserName() : null,
+        });
+    }
+
+    public async Task DeleteInstructionSectionAsync(int sectionId)
+    {
+        await this.repository.DeleteInstructionSectionAsync(sectionId, this.UserName());
+    }
+
+    public async Task DeleteInstructionStepAsync(int stepId)
+    {
+        await this.repository.DeleteInstructionStepAsync(stepId, this.UserName());
+    }
+
     public async Task PublishVersionAsync(int versionId)
     {
         var version = await this.repository.GetVersionAsync(versionId)
@@ -287,7 +361,8 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
 
         var ingredients = await this.repository.GetVersionIngredientsAsync(versionId);
         var packaging = await this.repository.GetVersionPackagingAsync(versionId);
-        var warnings = BuildValidationWarnings(version, ingredients, packaging);
+        var sections = await this.repository.GetVersionInstructionSectionsAsync(versionId);
+        var warnings = BuildValidationWarnings(version, ingredients, packaging, sections);
         if (warnings.Count > 0)
         {
             throw new InvalidOperationException("Nie mozna opublikowac wersji: " + string.Join("; ", warnings));
@@ -334,8 +409,12 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         return new RecipeComponentListItemDto
         {
             Id = row.Id,
+            CategoryId = row.CategoryId,
+            CategoryName = row.CategoryName,
             Name = row.Name,
             Description = row.Description,
+            ImageUrl = row.ImageUrl,
+            PreparationTimeMinutes = row.PreparationTimeMinutes,
             IsActive = row.IsActive,
             VersionCount = row.VersionCount,
             LatestVersionId = row.LatestVersionId,
@@ -352,6 +431,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         {
             var ingredients = await this.repository.GetVersionIngredientsAsync(version.Id);
             var packaging = await this.repository.GetVersionPackagingAsync(version.Id);
+            var sections = await this.repository.GetVersionInstructionSectionsAsync(version.Id);
 
             summaries.Add(new RecipeComponentVersionSummaryDto
             {
@@ -360,7 +440,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
                 Status = version.Status,
                 ChangeSummary = version.ChangeSummary,
                 PublishedAt = version.PublishedAt,
-                IsComplete = BuildValidationWarnings(version, ingredients, packaging).Count == 0,
+                IsComplete = BuildValidationWarnings(version, ingredients, packaging, sections).Count == 0,
             });
         }
 
@@ -371,6 +451,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         RecipeComponentVersionRow version,
         IReadOnlyList<RecipeComponentIngredientRow> ingredients,
         IReadOnlyList<PackagingRequirementRow> packaging,
+        IReadOnlyList<RecipeComponentInstructionSectionRow> sections,
         List<string> warnings)
     {
         return new RecipeComponentVersionDetailDto
@@ -392,6 +473,12 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             FiberPer100g = version.FiberPer100g,
             ShelfLifeHours = version.ShelfLifeHours,
             UseEarliestIngredientExpiry = version.UseEarliestIngredientExpiry,
+            NutritionSource = version.NutritionSource,
+            NutritionOverrideReason = version.NutritionOverrideReason,
+            AllergensApproved = version.AllergensApproved,
+            AllergenOverrideReason = version.AllergenOverrideReason,
+            AllergensApprovedAt = version.AllergensApprovedAt,
+            AllergensApprovedBy = version.AllergensApprovedBy,
             ChangeSummary = version.ChangeSummary,
             IsTechnologyChange = version.IsTechnologyChange,
             NonTechnologyChangeReason = version.NonTechnologyChangeReason,
@@ -399,6 +486,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             PublishedBy = version.PublishedBy,
             Ingredients = ingredients.Select(MapIngredient).ToList(),
             PackagingRequirements = packaging.Select(MapPackaging).ToList(),
+            InstructionSections = sections.Select(MapInstructionSection).ToList(),
             ValidationWarnings = warnings,
         };
     }
@@ -439,10 +527,34 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         };
     }
 
+    private static RecipeComponentInstructionSectionDto MapInstructionSection(RecipeComponentInstructionSectionRow row)
+    {
+        return new RecipeComponentInstructionSectionDto
+        {
+            Id = row.Id,
+            RecipeComponentVersionId = row.RecipeComponentVersionId,
+            Title = row.Title,
+            SortOrder = row.SortOrder,
+            Steps = row.Steps.Select(step => new RecipeComponentInstructionStepDto
+            {
+                Id = step.Id,
+                RecipeComponentInstructionSectionId = step.RecipeComponentInstructionSectionId,
+                StepText = step.StepText,
+                SortOrder = step.SortOrder,
+                RequiresControl = step.RequiresControl,
+                ControlType = step.ControlType,
+                ExpectedValue = step.ExpectedValue,
+                ExpectedUnit = step.ExpectedUnit,
+                IsCritical = step.IsCritical,
+            }).ToList(),
+        };
+    }
+
     private static List<string> BuildValidationWarnings(
         RecipeComponentVersionRow version,
         IReadOnlyList<RecipeComponentIngredientRow> ingredients,
-        IReadOnlyList<PackagingRequirementRow> packaging)
+        IReadOnlyList<PackagingRequirementRow> packaging,
+        IReadOnlyList<RecipeComponentInstructionSectionRow> sections)
     {
         var warnings = new List<string>();
         if (string.IsNullOrWhiteSpace(version.ComponentName))
@@ -495,6 +607,16 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             }
         }
 
+        if (!version.AllergensApproved)
+        {
+            warnings.Add("alergeny nie zostaly zatwierdzone");
+        }
+
+        if (sections.Count == 0 || sections.All(section => section.Steps.Count == 0))
+        {
+            warnings.Add("brak sekcji i krokow instrukcji");
+        }
+
         return warnings.Distinct().ToList();
     }
 
@@ -510,4 +632,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
     {
         return this.currentUser.GetUserName();
     }
+
+    private static string NormalizeNutritionSource(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "Manual" : value.Trim();
 }

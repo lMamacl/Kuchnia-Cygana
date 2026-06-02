@@ -15,6 +15,7 @@
             <thead>
                 <tr>
                     <th>Nazwa</th>
+                    <th>Typ</th>
                     <th>Jednostka</th>
                     <th>Koszt</th>
                     <th>Status</th>
@@ -26,6 +27,7 @@
                 {
                     <tr>
                         <td><strong>@item.Name</strong><div class="text-secondary small">@item.Notes</div></td>
+                        <td>@item.ResourceType</td>
                         <td>@item.Unit</td>
                         <td>@item.CostPerUnit.ToString("F2")</td>
                         <td>@(item.IsActive ? "Aktywny" : "Wstrzymany")</td>

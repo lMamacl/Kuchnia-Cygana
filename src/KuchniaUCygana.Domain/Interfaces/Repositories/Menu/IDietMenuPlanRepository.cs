@@ -64,6 +64,10 @@ public sealed class DietMenuPlanItemRow
 
     public int MealId { get; set; }
 
+    public int? MealVariantId { get; set; }
+
+    public string? MealVariantName { get; set; }
+
     public string MealName { get; set; } = string.Empty;
 
     public string MealStatus { get; set; } = string.Empty;

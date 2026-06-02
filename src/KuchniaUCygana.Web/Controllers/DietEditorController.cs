@@ -12,15 +12,18 @@ public sealed class DietEditorController : Controller
     private readonly IDietManagementService _dietService;
     private readonly IMealManagementService _mealService;
     private readonly IRecipeComponentManagementService _recipeComponentService;
+    private readonly ICategoryService _categoryService;
 
     public DietEditorController(
         IDietManagementService dietService,
         IMealManagementService mealService,
-        IRecipeComponentManagementService recipeComponentService)
+        IRecipeComponentManagementService recipeComponentService,
+        ICategoryService categoryService)
     {
         _dietService = dietService;
         _mealService = mealService;
         _recipeComponentService = recipeComponentService;
+        _categoryService = categoryService;
     }
 
     // GET
@@ -69,6 +72,7 @@ public sealed class DietEditorController : Controller
         ViewData["Section"] = "Diety";
         ViewData["Description"] = "Wersjonowane przepisy-skladowe uzywane przez posilki.";
         ViewBag.Query = query;
+        ViewBag.Categories = await _categoryService.GetAllAsync();
         return View(await _recipeComponentService.SearchAsync(query));
     }
 
