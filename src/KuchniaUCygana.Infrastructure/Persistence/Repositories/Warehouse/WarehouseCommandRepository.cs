@@ -356,10 +356,10 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
             INSERT INTO [Batches]
                 ([StockItemId], [SupplierBatchNumber], [CurrentQuantity], [ExpiryDate], [ReceivedDate], [IsDepleted],
                  [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
-            OUTPUT INSERTED.[Id]
             VALUES
                 (@StockItemId, @SupplierBatchNumber, @CurrentQuantity, @ExpiryDate, @ReceivedDate, @IsDepleted,
                  @CreatedBy, @UpdatedBy, @IsDeleted, @DeletedAt, @DeletedBy, @CreatedAt, @UpdatedAt);
+            SELECT CAST(SCOPE_IDENTITY() AS int);
             """,
             batch,
             tx);
