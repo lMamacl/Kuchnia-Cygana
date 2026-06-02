@@ -1,3 +1,8 @@
+/*
+ * Plik: Interfaces/ITicketRepository.cs
+ * Opis: Kontrakt dla repozytorium ticketów – rozszerza IRepository o specyficzne zapytania: 
+ *       GetByClientIdAsync, GetByStatusAsync, GetOpenTicketsAsync.
+ */
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using KuchniaUCygana.Domain.Entities.Admin;

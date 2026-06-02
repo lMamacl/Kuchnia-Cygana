@@ -1,3 +1,9 @@
+/*
+ * Plik: Entities/Admin/TicketAttachment.cs
+ * Opis: Załączniki do zgłoszeń – pliki (np. screeny, dokumenty) powiązane z konkretnym ticketem.
+ *       Przechowuje nazwę pliku i ścieżkę na serwerze.
+ */
+
 using KuchniaUCygana.Domain.Common;
 
 

@@ -1,3 +1,9 @@
+/*
+ * Plik: Entities/Admin/WorkSchedule.cs
+ * Opis: Grafik pracy pracowników – określa datę, rodzaj zmiany (Morning/Afternoon/Night) oraz opcjonalną rolę.
+ *       Unikalność: jeden użytkownik może mieć tylko jeden wpis na daną datę i zmianę.
+ */
+
 using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
 

@@ -1,3 +1,8 @@
+/*
+ * Plik: Entities/Admin/Ticket.cs
+ * Opis: Encja zgłoszenia (ticket) klienta lub pracownika. Zawiera tytuł, opis, status, priorytet,
+ *       przypisanego pracownika oraz datę zamknięcia. Dziedziczy po AuditableEntity.
+ */
 using System;
 using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;

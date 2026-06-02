@@ -1,3 +1,9 @@
+/*
+ * Plik: Entities/Admin/SystemLog.cs
+ * Opis: Encja rejestrująca audyt zmian w systemie – kto, kiedy, co zmienił (stare i nowe wartości).
+ *       Powiązana z użytkownikiem. Przechowuje również adres IP.
+ */
+
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.Admin;

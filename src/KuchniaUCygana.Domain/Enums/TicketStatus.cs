@@ -1,3 +1,7 @@
+/*
+ * Plik: Enums/TicketStatus.cs
+ * Opis: Enum stanów zgłoszenia: Open, InProgress, Resolved, Closed, Reopened.
+ */
 namespace KuchniaUCygana.Domain.Enums;
 
 public enum TicketStatus
