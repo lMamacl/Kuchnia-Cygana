@@ -116,9 +116,11 @@ public sealed class RoutingService : IDeliveryRouteService
 
         foreach (var batch in batches.Where(b => b.Deliveries.Count > 0))
         {
-            var route = await CreateRouteFromBatchAsync(routeDate, batch, createdRoutes.Count + 1);
+            var route = await BuildRouteFromBatchAsync(routeDate, batch, createdRoutes.Count + 1);
             createdRoutes.Add(route);
         }
+
+        await _routeRepository.InsertManyWithStopsAsync(createdRoutes);
 
         var unassigned = batches.SelectMany(b => b.UnassignedOverflow).ToList();
         var mappedRoutes = (await MapRoutesAsync(createdRoutes)).ToList();
@@ -212,22 +214,11 @@ public sealed class RoutingService : IDeliveryRouteService
         return await _routeRepository.DeleteAsync(route.Id);
     }
 
-    private async Task<DeliveryRoute> CreateRouteFromBatchAsync(
+    private async Task<DeliveryRoute> BuildRouteFromBatchAsync(
         DateTimeOffset routeDate,
         RouteBatch batch,
         int routeNumber)
     {
-        var route = new DeliveryRoute
-        {
-            RouteDate = routeDate,
-            Name = $"Trasa {routeNumber}",
-            Status = RouteStatus.Assigned,
-            VehicleId = batch.Vehicle.Id,
-        };
-
-        var routeId = await _routeRepository.InsertAsync(route);
-        route.Id = routeId;
-
         var optimizedIds = await _routeOptimizer.OptimizeSequenceAsync(
             batch.Deliveries.Select(ToOptimizationPoint).ToList());
 
@@ -236,22 +227,24 @@ public sealed class RoutingService : IDeliveryRouteService
         var pointsById = batch.Deliveries.ToDictionary(d => d.DeliveryCalendarId, ToOptimizationPoint);
         var orderedPoints = optimizedIds.Select(id => pointsById[id]).ToList();
 
-        route.TotalDistanceKm = Math.Round(NearestNeighborRouteOptimizer.CalculateRouteDistanceKm(orderedPoints), 2);
-        await _routeRepository.UpdateAsync(route);
+        var route = new DeliveryRoute
+        {
+            RouteDate = routeDate,
+            Name = $"Trasa {routeNumber}",
+            Status = RouteStatus.Assigned,
+            VehicleId = batch.Vehicle.Id,
+            TotalDistanceKm = Math.Round(NearestNeighborRouteOptimizer.CalculateRouteDistanceKm(orderedPoints), 2),
+        };
 
         var sequence = 1;
         foreach (var delivery in orderedDeliveries)
         {
             var stop = new DeliveryRouteStop
             {
-                RouteId = routeId,
                 DeliveryCalendarId = delivery.DeliveryCalendarId,
                 SequenceNumber = sequence++,
                 Status = StopStatus.Assigned,
             };
-
-            var stopId = await _routeStopRepository.InsertAsync(stop);
-            stop.Id = stopId;
             route.Stops.Add(stop);
         }
 

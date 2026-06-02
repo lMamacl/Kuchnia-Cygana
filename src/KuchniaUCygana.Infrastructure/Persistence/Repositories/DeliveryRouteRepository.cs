@@ -87,4 +87,61 @@ public sealed class DeliveryRouteRepository : BaseRepository<DeliveryRoute>, IDe
 
         return routes;
     }
+
+    public async Task InsertManyWithStopsAsync(IReadOnlyCollection<DeliveryRoute> routes)
+    {
+        if (routes.Count == 0)
+        {
+            return;
+        }
+
+        using var db = Factory.CreateConnection();
+        db.Open();
+        using var transaction = db.BeginTransaction();
+
+        try
+        {
+            const string routeSql = """
+                INSERT INTO [DeliveryRoutes]
+                    ([RouteDate], [Name], [TotalDistanceKm], [Status], [VehicleId], [DriverId],
+                     [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+                OUTPUT INSERTED.[Id]
+                VALUES
+                    (@RouteDate, @Name, @TotalDistanceKm, @Status, @VehicleId, @DriverId,
+                     @CreatedAt, @UpdatedAt, @CreatedBy, @UpdatedBy, @IsDeleted, @DeletedAt, @DeletedBy);
+                """;
+            const string stopSql = """
+                INSERT INTO [DeliveryRouteStops]
+                    ([RouteId], [DeliveryCalendarId], [SequenceNumber], [PlannedArrivalTime],
+                     [ActualArrivalTime], [Status], [CreatedAt], [UpdatedAt], [CreatedBy],
+                     [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+                OUTPUT INSERTED.[Id]
+                VALUES
+                    (@RouteId, @DeliveryCalendarId, @SequenceNumber, @PlannedArrivalTime,
+                     @ActualArrivalTime, @Status, @CreatedAt, @UpdatedAt, @CreatedBy,
+                     @UpdatedBy, @IsDeleted, @DeletedAt, @DeletedBy);
+                """;
+
+            var now = DateTimeOffset.UtcNow;
+            foreach (var route in routes)
+            {
+                route.CreatedAt = now;
+                route.Id = await db.ExecuteScalarAsync<int>(routeSql, route, transaction);
+
+                foreach (var stop in route.Stops)
+                {
+                    stop.RouteId = route.Id;
+                    stop.CreatedAt = now;
+                    stop.Id = await db.ExecuteScalarAsync<int>(stopSql, stop, transaction);
+                }
+            }
+
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+    }
 }
