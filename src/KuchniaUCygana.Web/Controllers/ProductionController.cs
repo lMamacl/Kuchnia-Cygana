@@ -282,7 +282,7 @@ public sealed class ProductionController : Controller
         try
         {
             var label = await packingService.PrintFoilLabelAsync(packingItemId, operatorName);
-            return View(label);
+            return View(nameof(FoilLabel), label);
         }
         catch (Exception ex)
         {

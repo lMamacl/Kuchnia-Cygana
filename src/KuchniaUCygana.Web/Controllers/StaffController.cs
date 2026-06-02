@@ -1,8 +1,11 @@
+using KuchniaUCygana.Domain.Constants;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
 [Route("staff")]
+[Authorize(Roles = AppRoles.StaffAuthorizationRoles)]
 public sealed class StaffController : Controller
 {
     [HttpGet("")]

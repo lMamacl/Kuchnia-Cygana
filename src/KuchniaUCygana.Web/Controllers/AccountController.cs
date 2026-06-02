@@ -1,10 +1,11 @@
+using System.Security.Claims;
+using KuchniaUCygana.Domain.Constants;
+using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Web.Models;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Hosting;
-using KuchniaUCygana.Domain.Interfaces;
+using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
@@ -18,6 +19,7 @@ public sealed class AccountController : Controller
         this.env = env;
         this.userRepository = userRepository;
     }
+
     [HttpGet]
     public IActionResult Index()
     {
@@ -38,6 +40,21 @@ public sealed class AccountController : Controller
     public IActionResult Login(string? returnUrl = null)
     {
         return View(new LoginViewModel { ReturnUrl = returnUrl });
+    }
+
+    [HttpGet]
+    [Route("staff/login")]
+    public IActionResult StaffLogin(string? returnUrl = null)
+    {
+        if (!env.IsDevelopment())
+        {
+            return NotFound();
+        }
+
+        return View(new LoginViewModel
+        {
+            ReturnUrl = returnUrl ?? Url.Action("Index", "Staff"),
+        });
     }
 
     [HttpPost]
@@ -71,9 +88,14 @@ public sealed class AccountController : Controller
             return BadRequest("Logowanie deweloperskie jest wyłączone na tym środowisku.");
         }
 
+        if (string.IsNullOrWhiteSpace(role) || !AppRoles.IsStaffRole(role))
+        {
+            return BadRequest("Nieznana rola pracownicza.");
+        }
+
         var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.Name, $"dev-{role.ToLower()}@kuchniaucygana.pl"),
+            new Claim(ClaimTypes.Name, $"dev-{role.ToLowerInvariant()}@kuchniaucygana.pl"),
             new Claim(ClaimTypes.Role, role)
         };
 
@@ -93,9 +115,9 @@ public sealed class AccountController : Controller
         }
 
         // Admin dostaje dostęp do wszystkiego — dodajemy wszystkie role
-        if (role == "Admin")
+        if (role == AppRoles.Admin)
         {
-            foreach (var r in new[] { "Kitchen", "KitchenManager", "Warehouse", "WarehouseManager", "Packing", "PackingManager", "Dietitian", "Driver" })
+            foreach (var r in AppRoles.StaffRoleNames)
             {
                 claims.Add(new Claim(ClaimTypes.Role, r));
             }
@@ -110,11 +132,12 @@ public sealed class AccountController : Controller
 
         if (string.IsNullOrEmpty(returnUrl))
         {
-            if (role.Contains("Kitchen")) return RedirectToAction("Index", "Production");
-            if (role.Contains("Warehouse")) return RedirectToAction("Index", "Warehouse");
-            if (role.Contains("Packing")) return RedirectToAction("Index", "Packing");
-            if (role.Contains("Dietitian")) return RedirectToAction("Index", "DietEditor");
-            if (role.Contains("Driver")) return RedirectToAction("Index", "DriverMobile");
+            if (role.Contains(AppRoles.Kitchen, StringComparison.Ordinal)) return RedirectToAction("Index", "Production");
+            if (role.Contains(AppRoles.Warehouse, StringComparison.Ordinal)) return RedirectToAction("Index", "Warehouse");
+            if (role.Contains(AppRoles.Packing, StringComparison.Ordinal)) return RedirectToAction("Index", "Packing");
+            if (role.Contains(AppRoles.Dietitian, StringComparison.Ordinal)) return RedirectToAction("Index", "DietEditor");
+            if (role.Contains(AppRoles.Driver, StringComparison.Ordinal)) return RedirectToAction("Index", "DriverMobile");
+            if (role.Contains(AppRoles.Logistics, StringComparison.Ordinal)) return RedirectToAction("Index", "Logistics");
             return RedirectToAction("Index", "Staff");
         }
 
