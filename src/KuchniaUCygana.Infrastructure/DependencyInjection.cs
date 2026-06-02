@@ -112,6 +112,7 @@ public static class DependencyInjection
         services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddScoped<IWorkScheduleRepository, WorkScheduleRepository>();
 
+        services.AddScoped<LogisticsDemoDataSeeder>();
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
 
         if (configuration["OrderProvider"] == "M1")

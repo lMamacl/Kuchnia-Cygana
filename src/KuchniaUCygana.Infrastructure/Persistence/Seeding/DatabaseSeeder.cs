@@ -12,11 +12,16 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Seeding;
 public sealed class DatabaseSeeder : IDatabaseSeeder
 {
     private readonly IDbConnectionFactory connectionFactory;
+    private readonly LogisticsDemoDataSeeder logisticsDemoDataSeeder;
     private readonly ILogger<DatabaseSeeder> logger;
 
-    public DatabaseSeeder(IDbConnectionFactory connectionFactory, ILogger<DatabaseSeeder> logger)
+    public DatabaseSeeder(
+        IDbConnectionFactory connectionFactory,
+        LogisticsDemoDataSeeder logisticsDemoDataSeeder,
+        ILogger<DatabaseSeeder> logger)
     {
         this.connectionFactory = connectionFactory;
+        this.logisticsDemoDataSeeder = logisticsDemoDataSeeder;
         this.logger = logger;
     }
 
@@ -106,6 +111,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await SeedMenuAsync(db, now, auditUser, cancellationToken);
         await SeedProductionPlansAsync(db, now, auditUser, cancellationToken);
         await SeedPackingSessionsAsync(db, now, auditUser, cancellationToken);
+        await this.logisticsDemoDataSeeder.SeedAsync(db, now, auditUser, cancellationToken);
     }
 
     // ── Jednostki miar ────────────────────────────────────────────
