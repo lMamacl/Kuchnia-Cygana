@@ -4,12 +4,14 @@
  *       Przechowuje nazwę pliku i ścieżkę na serwerze.
  */
 
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 
 
 namespace KuchniaUCygana.Domain.Entities.Admin;
 
 
+[Table("TicketAttachments")]
 public sealed class TicketAttachment : BaseEntity
 {
 

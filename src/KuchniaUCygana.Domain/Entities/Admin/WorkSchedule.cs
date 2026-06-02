@@ -4,11 +4,13 @@
  *       Unikalność: jeden użytkownik może mieć tylko jeden wpis na daną datę i zmianę.
  */
 
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 using KuchniaUCygana.Domain.Enums;
 
 namespace KuchniaUCygana.Domain.Entities.Admin;
 
+[Table("WorkSchedules")]
 public sealed class WorkSchedule : AuditableEntity
 {
     public int UserId { get; set; }

@@ -4,11 +4,13 @@
  *       Powiązana z użytkownikiem. Przechowuje również adres IP.
  */
 
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.Admin;
 
 
+[Table("SystemLogs")]
 public sealed class SystemLog : BaseEntity
 {
     public int UserId { get; set; }

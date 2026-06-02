@@ -20,6 +20,8 @@ public static class DependencyInjection
         services.AddScoped<IDeliveryCalendarService, DeliveryCalendarService>();
         services.AddScoped<IDiscountService, DiscountService>();
         services.AddScoped<ICustomerProfileService, CustomerProfileService>();
+        services.AddScoped<IHumanResourcesService, HumanResourcesService>();
+        services.AddScoped<ICustomerSupportService, CustomerSupportService>();
         return services;
     }
 }
