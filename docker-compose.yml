@@ -24,6 +24,35 @@ services:
     restart: unless-stopped
     mem_limit: ${MSSQL_CONTAINER_MEMORY_LIMIT:-1g}
 
+  sqlserver-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: kuchnia_sqlserver_init
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required}
+      - MSSQL_DB_NAME=${MSSQL_DB_NAME:?MSSQL_DB_NAME is required}
+      - MSSQL_ADMIN_PASSWORD=${MSSQL_ADMIN_PASSWORD:?MSSQL_ADMIN_PASSWORD is required}
+      - MSSQL_PRACOWNIK_PASSWORD=${MSSQL_PRACOWNIK_PASSWORD:?MSSQL_PRACOWNIK_PASSWORD is required}
+      - MSSQL_KLIENT_PASSWORD=${MSSQL_KLIENT_PASSWORD:?MSSQL_KLIENT_PASSWORD is required}
+    volumes:
+      - ./docker/sqlserver-init.sql:/init/sqlserver-init.sql:ro
+    command: >
+      /bin/bash -c '
+        SQLCMD="/opt/mssql-tools18/bin/sqlcmd";
+        TRUST_CERT="-C";
+        if [ ! -x "$$SQLCMD" ]; then SQLCMD="/opt/mssql-tools/bin/sqlcmd"; TRUST_CERT=""; fi;
+        "$$SQLCMD" -S sqlserver,1433 -U sa -P "$$MSSQL_SA_PASSWORD" $$TRUST_CERT -d master \
+          -v DbName="$$MSSQL_DB_NAME" \
+             AdminPassword="$$MSSQL_ADMIN_PASSWORD" \
+             PracownikPassword="$$MSSQL_PRACOWNIK_PASSWORD" \
+             KlientPassword="$$MSSQL_KLIENT_PASSWORD" \
+          -i /init/sqlserver-init.sql
+      '
+    restart: "no"
+
   web:
     build:
       context: .
@@ -32,12 +61,15 @@ services:
     depends_on:
       sqlserver:
         condition: service_healthy
+      sqlserver-init:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=${MSSQL_DB_NAME:?MSSQL_DB_NAME is required};User Id=sa;Password=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required};Encrypt=True;TrustServerCertificate=True;
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=${MSSQL_DB_NAME:?MSSQL_DB_NAME is required};User Id=pracownik;Password=${MSSQL_PRACOWNIK_PASSWORD:?MSSQL_PRACOWNIK_PASSWORD is required};Encrypt=True;TrustServerCertificate=True;
+      - ConnectionStrings__MigrationConnection=Server=sqlserver,1433;Database=${MSSQL_DB_NAME:?MSSQL_DB_NAME is required};User Id=admin;Password=${MSSQL_ADMIN_PASSWORD:?MSSQL_ADMIN_PASSWORD is required};Encrypt=True;TrustServerCertificate=True;
       - DatabaseSeeding__Enabled=true
       - DatabaseSeeding__Mode=Both
       - DatabaseSeeding__Profile=DemoData

@@ -39,6 +39,25 @@ public sealed class DependencyInjectionTests
         dbFactory1.Should().BeOfType<SqlServerConnectionFactory>();
     }
 
+    [Fact]
+    public void AddInfrastructure_Allows_Separate_MigrationConnection()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DefaultConnection"] = "Server=localhost,1433;Database=KuchniaUCygana_Test;User Id=pracownik;Password=Runtime123!;Encrypt=True;TrustServerCertificate=True;",
+                ["ConnectionStrings:MigrationConnection"] = "Server=localhost,1433;Database=KuchniaUCygana_Test;User Id=admin;Password=Migration123!;Encrypt=True;TrustServerCertificate=True;",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+
+        services.AddInfrastructure(config);
+        var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IDbConnectionFactory>().Should().BeOfType<SqlServerConnectionFactory>();
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("Mock")]

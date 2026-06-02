@@ -46,7 +46,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-1", DateTimeOffset.UtcNow.AddDays(10), false, false);
         await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-2", DateTimeOffset.UtcNow.AddDays(3), false, false);
         await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-3", null, false, false);
-        await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-4", DateTimeOffset.UtcNow.AddDays(1), true, false);
+        await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-4", DateTimeOffset.UtcNow.AddDays(1), true, false, currentQuantity: 0m);
         await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-5", DateTimeOffset.UtcNow.AddDays(2), false, true);
 
         var repository = new BatchRepository(connectionFactory);
@@ -640,6 +640,15 @@ public sealed class WarehouseRepositoriesSqlServerTests
             NullLogger<LoadingService>.Instance);
     }
 
+    private static PackingSynchronizationService CreatePackingSynchronizationService(IDbConnectionFactory connectionFactory)
+    {
+        return new PackingSynchronizationService(
+            new PackingSessionRepository(connectionFactory),
+            new PackingBagRepository(connectionFactory),
+            new M1OrderDataProvider(connectionFactory),
+            NullLogger<PackingSynchronizationService>.Instance);
+    }
+
     private static async Task<int> CreateStockItemAsync(
         IDbConnectionFactory connectionFactory,
         string nameSuffix,
@@ -878,9 +887,12 @@ public sealed class WarehouseRepositoriesSqlServerTests
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 11);
-        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate);
-        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate);
+        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2);
         var service = CreatePackingService(connectionFactory);
+
+        var syncService = CreatePackingSynchronizationService(connectionFactory);
+        await syncService.EnsureSessionsForDateAsync(deliveryDate, "IntegrationTest");
 
         var firstBoard = await service.GetPackingBoardAsync(deliveryDate);
         var secondBoard = await service.GetPackingBoardAsync(deliveryDate);
@@ -914,9 +926,12 @@ public sealed class WarehouseRepositoriesSqlServerTests
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 12);
-        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate);
-        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate);
+        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2);
         var service = CreatePackingService(connectionFactory);
+
+        var syncService = CreatePackingSynchronizationService(connectionFactory);
+        await syncService.EnsureSessionsForDateAsync(deliveryDate, "IntegrationTest");
 
         var board = await service.GetPackingBoardAsync(deliveryDate);
         var firstBag = board.Routes.SelectMany(r => r.Bags).Single(b => b.OrderId == seededOne.OrderId);
@@ -925,6 +940,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var boxes = (await service.PrepareOrderBoxesAsync(firstBag.PackingSessionId)).ToList();
         foreach (var box in boxes)
         {
+            await service.PrintFoilLabelAsync(box.Id, "IntegrationTest");
             await service.MarkBoxPackedAsync(box.Id, "IntegrationTest");
         }
 
@@ -950,14 +966,19 @@ public sealed class WarehouseRepositoriesSqlServerTests
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 13);
-        var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate);
+        var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
         var service = CreatePackingService(connectionFactory);
+
+        var syncService = CreatePackingSynchronizationService(connectionFactory);
+        await syncService.EnsureSessionsForDateAsync(deliveryDate, "IntegrationTest");
+
         var board = await service.GetPackingBoardAsync(deliveryDate);
         var bag = board.Routes.SelectMany(r => r.Bags).Single(b => b.OrderId == seeded.OrderId);
 
         var boxes = (await service.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
         foreach (var box in boxes)
         {
+            await service.PrintFoilLabelAsync(box.Id, "IntegrationTest");
             await service.MarkBoxPackedAsync(box.Id, "IntegrationTest");
         }
         await service.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
@@ -1004,10 +1025,13 @@ public sealed class WarehouseRepositoriesSqlServerTests
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 14);
-        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate);
-        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate);
+        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2);
         var packingService = CreatePackingService(connectionFactory);
         var loadingService = CreateLoadingService(connectionFactory, packingService);
+
+        var syncService = CreatePackingSynchronizationService(connectionFactory);
+        await syncService.EnsureSessionsForDateAsync(deliveryDate, "IntegrationTest");
 
         var board = await packingService.GetPackingBoardAsync(deliveryDate);
         var route = board.Routes.Single(r => r.Bags.Any(b => b.OrderId == seededOne.OrderId));
@@ -1017,10 +1041,16 @@ public sealed class WarehouseRepositoriesSqlServerTests
             var boxes = (await packingService.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
             foreach (var box in boxes)
             {
+                await packingService.PrintFoilLabelAsync(box.Id, "IntegrationTest");
                 await packingService.MarkBoxPackedAsync(box.Id, "IntegrationTest");
             }
 
             await packingService.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
+            var labels = (await packingService.GenerateTransportLabelsAsync(bag.PackingSessionId)).ToList();
+            foreach (var label in labels)
+            {
+                await packingService.ConfirmTransportLabelAttachedAsync(label.Id);
+            }
         }
 
         var manifest = await loadingService.GenerateManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
@@ -1045,9 +1075,13 @@ public sealed class WarehouseRepositoriesSqlServerTests
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 15);
-        var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate);
+        var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
         var packingService = CreatePackingService(connectionFactory);
         var loadingService = CreateLoadingService(connectionFactory, packingService);
+
+        var syncService = CreatePackingSynchronizationService(connectionFactory);
+        await syncService.EnsureSessionsForDateAsync(deliveryDate, "IntegrationTest");
+
         var board = await packingService.GetPackingBoardAsync(deliveryDate);
         var route = board.Routes.Single(r => r.Bags.Any(b => b.OrderId == seeded.OrderId));
         var bag = route.Bags.Single(b => b.OrderId == seeded.OrderId);
@@ -1055,16 +1089,23 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var boxes = (await packingService.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
         foreach (var box in boxes)
         {
+            await packingService.PrintFoilLabelAsync(box.Id, "IntegrationTest");
             await packingService.MarkBoxPackedAsync(box.Id, "IntegrationTest");
         }
 
         await packingService.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
+        var labels = (await packingService.GenerateTransportLabelsAsync(bag.PackingSessionId)).ToList();
+        foreach (var label in labels)
+        {
+            await packingService.ConfirmTransportLabelAttachedAsync(label.Id);
+        }
 
         var loadBeforeManifest = async () => await loadingService.LoadOrderBagAsync(bag.PackingSessionId);
         await loadBeforeManifest.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*manifestu*");
 
         await loadingService.GenerateManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+        await loadingService.ApproveManifestByWorkerAsync(deliveryDate, route.RouteId, "IntegrationTest");
         await loadingService.VerifyManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
         await loadingService.LoadOrderBagAsync(bag.PackingSessionId);
 
@@ -1146,7 +1187,8 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     private static async Task<SeededM1Order> SeedM1OrderAsync(
         IDbConnectionFactory connectionFactory,
-        DateOnly deliveryDate)
+        DateOnly deliveryDate,
+        int? customDeliveryCalendarId = null)
     {
         using var db = connectionFactory.CreateConnection();
         var unique = Guid.NewGuid().ToString("N")[..8];
@@ -1231,22 +1273,47 @@ public sealed class WarehouseRepositoriesSqlServerTests
                 createdAt = now,
             });
 
-        await db.ExecuteAsync(
-            """
-            INSERT INTO DeliveryCalendar
-                (OrderId, AddressId, DeliveryWindowId, DeliveryDate, Status, IsSkipped, IsDeleted, CreatedAt)
-            VALUES
-                (@orderId, @addressId, @deliveryWindowId, @deliveryDate, @status, 0, 0, @createdAt);
-            """,
-            new
-            {
-                orderId,
-                addressId,
-                deliveryWindowId = 1,
-                deliveryDate = deliveryDate.ToDateTime(new TimeOnly(8, 0)),
-                status = (int)DeliveryStatus.Scheduled,
-                createdAt = now,
-            });
+        if (customDeliveryCalendarId.HasValue)
+        {
+            await db.ExecuteAsync(
+                """
+                SET IDENTITY_INSERT DeliveryCalendar ON;
+                INSERT INTO DeliveryCalendar
+                    (Id, OrderId, AddressId, DeliveryWindowId, DeliveryDate, Status, IsSkipped, IsDeleted, CreatedAt)
+                VALUES
+                    (@id, @orderId, @addressId, @deliveryWindowId, @deliveryDate, @status, 0, 0, @createdAt);
+                SET IDENTITY_INSERT DeliveryCalendar OFF;
+                """,
+                new
+                {
+                    id = customDeliveryCalendarId.Value,
+                    orderId,
+                    addressId,
+                    deliveryWindowId = 1,
+                    deliveryDate = deliveryDate.ToDateTime(new TimeOnly(8, 0)),
+                    status = (int)DeliveryStatus.Scheduled,
+                    createdAt = now,
+                });
+        }
+        else
+        {
+            await db.ExecuteAsync(
+                """
+                INSERT INTO DeliveryCalendar
+                    (OrderId, AddressId, DeliveryWindowId, DeliveryDate, Status, IsSkipped, IsDeleted, CreatedAt)
+                VALUES
+                    (@orderId, @addressId, @deliveryWindowId, @deliveryDate, @status, 0, 0, @createdAt);
+                """,
+                new
+                {
+                    orderId,
+                    addressId,
+                    deliveryWindowId = 1,
+                    deliveryDate = deliveryDate.ToDateTime(new TimeOnly(8, 0)),
+                    status = (int)DeliveryStatus.Scheduled,
+                    createdAt = now,
+                });
+        }
 
         return new SeededM1Order(orderId, userId, $"M1 Client {unique}", dietVariantId);
     }
