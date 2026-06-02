@@ -153,12 +153,36 @@ public sealed class LogisticsController : Controller
 
     [HttpGet("routes/{id:int}/map")]
     [HttpGet("routes/map")]
-    public IActionResult RouteMap(int? id)
+    public async Task<IActionResult> RouteMap(int? id, DateTimeOffset? date)
     {
+        IReadOnlyList<DeliveryRouteDto> routes;
+        DateTimeOffset selectedDate;
+
+        if (id.HasValue)
+        {
+            var route = await _deliveryRouteService.GetRouteDetailsAsync(id.Value);
+            if (route == null) return NotFound();
+
+            routes = new[] { route };
+            selectedDate = route.RouteDate;
+        }
+        else
+        {
+            selectedDate = date ?? DateTimeOffset.Now;
+            routes = await _deliveryRouteService.GetRoutesForDateAsync(selectedDate);
+        }
+
         ViewData["Title"] = "Mapa tras";
         ViewData["Section"] = "Logistyka";
-        ViewData["Description"] = id.HasValue ? $"Placeholder mapy trasy #{id}." : "Placeholder mapy tras.";
-        return View();
+        ViewData["Description"] = id.HasValue
+            ? $"Przebieg trasy #{id.Value} i kolejność przystanków."
+            : $"Trasy zaplanowane na {selectedDate:dd.MM.yyyy}.";
+        return View(new RouteMapViewModel
+        {
+            SelectedDate = selectedDate,
+            SelectedRouteId = id,
+            Routes = routes,
+        });
     }
 
     [HttpGet("vehicles")]

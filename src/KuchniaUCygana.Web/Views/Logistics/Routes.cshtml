@@ -141,6 +141,10 @@
     <div class="card-header d-flex align-items-center justify-content-between">
         <h3 class="card-title">Trasy z dnia @Model.SelectedDate.ToString("dd.MM.yyyy")</h3>
         <div class="card-actions">
+            <a asp-action="RouteMap" asp-route-date="@selectedDate" class="btn btn-outline-secondary">
+                @Html.Raw(StaffIconCatalog.Get("map"))
+                Mapa dnia
+            </a>
             <a asp-action="CreateRoute" class="btn btn-outline-primary">
                 @Html.Raw(StaffIconCatalog.Get("plus"))
                 Kreator
