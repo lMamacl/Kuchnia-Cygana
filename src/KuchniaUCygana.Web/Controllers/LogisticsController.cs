@@ -1,7 +1,9 @@
 using System.Threading.Tasks;
 using KuchniaUCygana.Application.DTOs.Logistics;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Application.Services.Logistics;
 using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 using KuchniaUCygana.Web.Models.Logistics;
@@ -15,27 +17,69 @@ public sealed class LogisticsController : Controller
     private readonly IVehicleService _vehicleService;
     private readonly IDriverService _driverService;
     private readonly IGeocodeService _geocodeService;
+    private readonly GeocodingOrchestrator _geocodingOrchestrator;
+    private readonly ILogisticsDeliveryDataProvider _deliveryDataProvider;
+    private readonly IAddressRepository _addressRepository;
     private readonly IDeliveryRouteService _deliveryRouteService;
 
     public LogisticsController(
         IVehicleService vehicleService,
         IDriverService driverService,
         IGeocodeService geocodeService,
+        GeocodingOrchestrator geocodingOrchestrator,
+        ILogisticsDeliveryDataProvider deliveryDataProvider,
+        IAddressRepository addressRepository,
         IDeliveryRouteService deliveryRouteService)
     {
         _vehicleService = vehicleService;
         _driverService = driverService;
         _geocodeService = geocodeService;
+        _geocodingOrchestrator = geocodingOrchestrator;
+        _deliveryDataProvider = deliveryDataProvider;
+        _addressRepository = addressRepository;
         _deliveryRouteService = deliveryRouteService;
     }
 
     [HttpGet("")]
-    public IActionResult Index()
+    public async Task<IActionResult> Index(DateTimeOffset? date)
     {
+        var selectedDate = date ?? DateTimeOffset.Now;
         ViewData["Title"] = "Logistyka";
         ViewData["Section"] = "Logistyka";
-        ViewData["Description"] = "Dashboard dzisiejszych tras i gotowosci zaladunku.";
-        return View();
+        ViewData["Description"] = $"Gotowosc dostaw na {selectedDate:dd.MM.yyyy}.";
+        return View(await BuildDashboardViewModelAsync(selectedDate));
+    }
+
+    [HttpPost("geocode")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GeocodePendingAddresses(
+        DateTimeOffset? date,
+        CancellationToken cancellationToken)
+    {
+        var selectedDate = date ?? DateTimeOffset.Now;
+        var pendingBefore = (await _addressRepository.GetPendingAddressesAsync()).Count();
+
+        if (pendingBefore == 0)
+        {
+            TempData["Success"] = "Wszystkie adresy maja juz wspolrzedne.";
+            return RedirectToAction(nameof(Index), new { date = selectedDate.ToString("yyyy-MM-dd") });
+        }
+
+        try
+        {
+            var processed = await _geocodingOrchestrator.ProcessPendingAddressesAsync(cancellationToken);
+            var remaining = (await _addressRepository.GetPendingAddressesAsync()).Count();
+
+            TempData[remaining == 0 ? "Success" : "Error"] = remaining == 0
+                ? $"Geokodowanie zakonczone. Uzupelniono {processed} adresow."
+                : $"Uzupelniono {processed} z {pendingBefore} adresow. Nadal oczekuje: {remaining}.";
+        }
+        catch (Exception)
+        {
+            TempData["Error"] = "Nie udalo sie uruchomic geokodowania. Sprobuj ponownie za chwile.";
+        }
+
+        return RedirectToAction(nameof(Index), new { date = selectedDate.ToString("yyyy-MM-dd") });
     }
 
     [HttpGet("routes")]
@@ -468,6 +512,27 @@ public sealed class LogisticsController : Controller
             Stops = route.Stops
                 .OrderBy(stop => stop.SequenceNumber)
                 .ToList(),
+        };
+    }
+
+    private async Task<LogisticsDashboardViewModel> BuildDashboardViewModelAsync(DateTimeOffset selectedDate)
+    {
+        var deliveriesTask = _deliveryDataProvider.GetDeliveriesForDateAsync(selectedDate.Date);
+        var routesTask = _deliveryRouteService.GetRoutesForDateAsync(selectedDate);
+        var vehiclesTask = _vehicleService.GetAllAsync();
+        var driversTask = _driverService.GetAllAsync();
+        var pendingAddressesTask = _addressRepository.GetPendingAddressesAsync();
+
+        await Task.WhenAll(deliveriesTask, routesTask, vehiclesTask, driversTask, pendingAddressesTask);
+
+        return new LogisticsDashboardViewModel
+        {
+            SelectedDate = selectedDate,
+            Deliveries = await deliveriesTask,
+            Routes = await routesTask,
+            Vehicles = (await vehiclesTask).ToList(),
+            Drivers = (await driversTask).ToList(),
+            PendingAddressesCount = (await pendingAddressesTask).Count(),
         };
     }
 

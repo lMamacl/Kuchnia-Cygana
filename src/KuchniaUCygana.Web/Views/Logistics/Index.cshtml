@@ -1,5 +1,277 @@
+@model LogisticsDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+    var selectedDate = Model.SelectedDate.ToString("yyyy-MM-dd");
+    var missingGeocoding = Model.MissingGeocodingDeliveries;
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <form asp-action="Index" method="get" class="d-flex align-items-end gap-2">
+        <div>
+            <label class="form-label">Dzie&nacute; dostaw</label>
+            <input type="date" name="date" value="@selectedDate" class="form-control" />
+        </div>
+        <button type="submit" class="btn btn-outline-primary">
+            @Html.Raw(StaffIconCatalog.Get("search"))
+            Poka&zdot;
+        </button>
+    </form>
+    <div class="btn-list">
+        <a asp-action="Routes" asp-route-date="@selectedDate" class="btn btn-outline-secondary">
+            @Html.Raw(StaffIconCatalog.Get("route"))
+            Lista tras
+        </a>
+        <a asp-action="RouteMap" asp-route-date="@selectedDate" class="btn btn-outline-secondary">
+            @Html.Raw(StaffIconCatalog.Get("map"))
+            Mapa dnia
+        </a>
+    </div>
+</div>
+
+<div class="row row-deck row-cards mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Zaplanowane dostawy</div>
+                <div class="h1 mb-3">@Model.DeliveriesCount</div>
+                <div class="text-secondary">@Model.GeocodedDeliveriesCount ze wsp&oacute;&lstrok;rz&eogon;dnymi</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-indigo">Trasy</div>
+                <div class="h1 mb-3 text-indigo">@Model.RoutesCount</div>
+                <div class="text-secondary">@Model.StopsCount przystank&oacute;w, @Model.TotalDistanceKm.ToString("N1") km</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-success">Aktywne auta</div>
+                <div class="h1 mb-3 text-success">@Model.ActiveVehiclesCount</div>
+                <div class="text-secondary">@Model.ActiveVehiclesCapacityKg.ToString("N0") kg dost&eogon;pnej &lstrok;adowno&sacute;ci</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Kierowcy</div>
+                <div class="h1 mb-3">@Model.ActiveDriversCount</div>
+                <div class="text-secondary">@Model.DriversWithVehicleCount z przypisanym autem</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row row-cards mb-4">
+    <div class="col-lg-7">
+        <div class="card card-premium h-100">
+            <div class="card-header">
+                <h3 class="card-title">Gotowo&sacute;&cacute; operacyjna</h3>
+            </div>
+            <div class="list-group list-group-flush">
+                @if (Model.DeliveriesCount == 0)
+                {
+                    <div class="list-group-item d-flex align-items-center gap-3">
+                        <span class="status-dot-pulse bg-warning"></span>
+                        <div>
+                            <div class="fw-semibold">Brak dostaw na wybrany dzie&nacute;</div>
+                            <div class="text-secondary small">Trasy b&eogon;dzie mo&zdot;na wygenerowa&cacute; po pojawieniu si&eogon; wpis&oacute;w w kalendarzu dostaw.</div>
+                        </div>
+                    </div>
+                }
+                else if (missingGeocoding.Count > 0)
+                {
+                    <div class="list-group-item d-flex align-items-center gap-3">
+                        <span class="status-dot-pulse bg-warning"></span>
+                        <div>
+                            <div class="fw-semibold">@missingGeocoding.Count dostaw wymaga geokodowania</div>
+                            <div class="text-secondary small">Adresy bez kompletnych wsp&oacute;&lstrok;rz&eogon;dnych zostan&aogon; pomini&eogon;te podczas generowania tras.</div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="list-group-item d-flex align-items-center gap-3">
+                        <span class="status-dot-pulse bg-success"></span>
+                        <div>
+                            <div class="fw-semibold">Adresy dostaw s&aogon; gotowe</div>
+                            <div class="text-secondary small">Wszystkie dostawy z wybranego dnia maj&aogon; komplet wsp&oacute;&lstrok;rz&eogon;dnych.</div>
+                        </div>
+                    </div>
+                }
+
+                <div class="list-group-item d-flex align-items-center gap-3">
+                    <span class="status-dot-pulse @(Model.ActiveVehiclesCount > 0 ? "bg-success" : "bg-danger")"></span>
+                    <div>
+                        <div class="fw-semibold">Flota: @Model.ActiveVehiclesCount aktywnych pojazd&oacute;w</div>
+                        <div class="text-secondary small">
+                            @(Model.ActiveVehiclesCount > 0
+                                ? "Aktywne pojazdy moga zostac wykorzystane podczas podzialu dostaw."
+                                : "Dodaj lub aktywuj pojazd przed generowaniem tras.")
+                        </div>
+                    </div>
+                </div>
+
+                <div class="list-group-item d-flex align-items-center gap-3">
+                    <span class="status-dot-pulse @(Model.ActiveDriversCount > 0 ? "bg-success" : "bg-warning")"></span>
+                    <div>
+                        <div class="fw-semibold">Obsada: @Model.ActiveDriversCount aktywnych kierowc&oacute;w</div>
+                        <div class="text-secondary small">@Model.DriversWithVehicleCount kierowc&oacute;w ma obecnie przypisany pojazd.</div>
+                    </div>
+                </div>
+
+                @if (Model.RoutesCount > 0)
+                {
+                    <div class="list-group-item d-flex align-items-center gap-3">
+                        <span class="status-dot-pulse bg-blue"></span>
+                        <div>
+                            <div class="fw-semibold">Plan dnia ju&zdot; istnieje</div>
+                            <div class="text-secondary small">@Model.RoutesCount tras obejmuje @Model.StopsCount przystank&oacute;w.</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card card-premium h-100">
+            <div class="card-header">
+                <h3 class="card-title">Akcje dyspozytora</h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="GeocodePendingAddresses" method="post" class="mb-3">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="date" value="@selectedDate" />
+                    <button type="submit" class="btn btn-primary w-100" @(Model.PendingAddressesCount == 0 ? "disabled" : null)>
+                        @Html.Raw(StaffIconCatalog.Get("map"))
+                        Geokoduj brakuj&aogon;ce adresy
+                    </button>
+                    <div class="text-secondary small mt-2">
+                        Globalna kolejka: @Model.PendingAddressesCount adres&oacute;w. Operacja mo&zdot;e potrwa&cacute; oko&lstrok;o sekundy na adres.
+                    </div>
+                </form>
+                <form asp-action="GenerateDailyRoutes" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="routeDate" value="@selectedDate" />
+                    <input type="hidden" name="defaultDeliveryLoadKg" value="1" />
+                    <button type="submit" class="btn btn-outline-primary w-100"
+                            @(Model.DeliveriesCount == 0 || Model.ActiveVehiclesCount == 0 || Model.RoutesCount > 0 ? "disabled" : null)>
+                        @Html.Raw(StaffIconCatalog.Get("wand"))
+                        Generuj trasy
+                    </button>
+                    <div class="text-secondary small mt-2">
+                        Generator utworzy trasy dla aktywnych aut i pominie dostawy bez wsp&oacute;&lstrok;rz&eogon;dnych.
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (missingGeocoding.Count > 0)
+{
+    <div class="card card-premium mb-4">
+        <div class="card-header">
+            <h3 class="card-title text-warning">Dostawy wymagaj&aogon;ce geokodowania</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-vcenter table-premium card-table">
+                <thead>
+                    <tr>
+                        <th>DeliveryCalendarId</th>
+                        <th>Zam&oacute;wienie</th>
+                        <th>Adres</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var delivery in missingGeocoding)
+                    {
+                        <tr>
+                            <td class="font-monospace">@delivery.DeliveryCalendarId</td>
+                            <td>@delivery.OrderNumber</td>
+                            <td>@delivery.FullAddress</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<div class="card card-premium">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h3 class="card-title">Trasy na @Model.SelectedDate.ToString("dd.MM.yyyy")</h3>
+        <div class="card-actions">
+            <a asp-action="Routes" asp-route-date="@selectedDate" class="btn btn-sm btn-outline-primary">Pe&lstrok;na lista</a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter table-premium card-table table-striped">
+            <thead>
+                <tr>
+                    <th>Nazwa</th>
+                    <th>Status</th>
+                    <th>Pojazd</th>
+                    <th>Przystanki</th>
+                    <th>Dystans</th>
+                    <th class="w-1">Akcje</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.RoutesCount == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="text-center text-secondary py-4">Brak tras dla wybranego dnia.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var route in Model.Routes)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@route.Name</td>
+                            <td><span class="badge bg-blue-lt text-blue">@RouteStatusLabel(route.Status)</span></td>
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(route.VehicleRegistration))
+                                {
+                                    <span class="text-secondary">Nie przypisano</span>
+                                }
+                                else
+                                {
+                                    <span class="font-monospace">@route.VehicleRegistration</span>
+                                }
+                            </td>
+                            <td>@route.Stops.Count</td>
+                            <td>@route.TotalDistanceKm.ToString("N1") km</td>
+                            <td>
+                                <div class="btn-list flex-nowrap">
+                                    <a asp-action="RouteDetails" asp-route-id="@route.Id" class="btn btn-sm btn-outline-primary">Szczeg&oacute;&lstrok;y</a>
+                                    <a asp-action="RouteMap" asp-route-id="@route.Id" class="btn btn-sm btn-outline-secondary">Mapa</a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@functions {
+    private static string RouteStatusLabel(string status)
+    {
+        return status switch
+        {
+            "Assigned" => "Przypisana",
+            "InProgress" => "W trasie",
+            "Completed" => "Zakonczona",
+            "Failed" => "Problem",
+            _ => "Utworzona",
+        };
+    }
+}
