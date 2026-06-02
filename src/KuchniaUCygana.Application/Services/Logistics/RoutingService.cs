@@ -11,6 +11,7 @@ namespace KuchniaUCygana.Application.Services.Logistics;
 /// </summary>
 public sealed class RoutingService : IDeliveryRouteService
 {
+    private const double AdditionalRouteActivationCostKm = 8d;
     private readonly IDeliveryRouteRepository _routeRepository;
     private readonly IDeliveryRouteStopRepository _routeStopRepository;
     private readonly IVehicleRepository _vehicleRepository;
@@ -286,7 +287,180 @@ public sealed class RoutingService : IDeliveryRouteService
             batches[^1].UnassignedOverflow.AddRange(remaining);
         }
 
+        ImproveGeographicDistribution(batches, maxStopsPerRoute);
+
         return batches;
+    }
+
+    private static void ImproveGeographicDistribution(List<RouteBatch> batches, int? maxStopsPerRoute)
+    {
+        foreach (var targetBatch in batches.Where(batch => batch.Deliveries.Count == 0))
+        {
+            var bestSplit = batches
+                .Where(sourceBatch => sourceBatch != targetBatch && sourceBatch.Deliveries.Count > 1)
+                .Select(sourceBatch => TryCreateGeographicSplit(sourceBatch, targetBatch, maxStopsPerRoute))
+                .Where(split => split is not null)
+                .OrderByDescending(split => split!.DistanceSavingKm)
+                .FirstOrDefault();
+
+            if (bestSplit is null || bestSplit.DistanceSavingKm < AdditionalRouteActivationCostKm)
+            {
+                continue;
+            }
+
+            bestSplit.SourceBatch.Deliveries.Clear();
+            bestSplit.SourceBatch.Deliveries.AddRange(bestSplit.SourceDeliveries);
+            targetBatch.Deliveries.AddRange(bestSplit.TargetDeliveries);
+        }
+    }
+
+    private static GeographicSplit? TryCreateGeographicSplit(
+        RouteBatch sourceBatch,
+        RouteBatch targetBatch,
+        int? maxStopsPerRoute)
+    {
+        var farthestPair = sourceBatch.Deliveries
+            .SelectMany(
+                (source, sourceIndex) => sourceBatch.Deliveries
+                    .Skip(sourceIndex + 1)
+                    .Select(target => new
+                    {
+                        Source = source,
+                        Target = target,
+                        DistanceKm = DistanceBetween(source, target),
+                    }))
+            .OrderByDescending(pair => pair.DistanceKm)
+            .FirstOrDefault();
+
+        if (farthestPair is null)
+        {
+            return null;
+        }
+
+        var previousDistanceKm = EstimateRouteDistanceKm(sourceBatch.Deliveries);
+        return new[]
+            {
+                BuildGeographicSplit(
+                    sourceBatch,
+                    targetBatch,
+                    farthestPair.Source,
+                    farthestPair.Target,
+                    maxStopsPerRoute),
+                BuildGeographicSplit(
+                    sourceBatch,
+                    targetBatch,
+                    farthestPair.Target,
+                    farthestPair.Source,
+                    maxStopsPerRoute),
+            }
+            .Where(split => split is not null)
+            .Select(split => split! with
+            {
+                DistanceSavingKm = previousDistanceKm
+                    - EstimateRouteDistanceKm(split!.SourceDeliveries)
+                    - EstimateRouteDistanceKm(split.TargetDeliveries),
+            })
+            .OrderByDescending(split => split.DistanceSavingKm)
+            .FirstOrDefault();
+    }
+
+    private static GeographicSplit? BuildGeographicSplit(
+        RouteBatch sourceBatch,
+        RouteBatch targetBatch,
+        LogisticsDeliveryCandidate sourceSeed,
+        LogisticsDeliveryCandidate targetSeed,
+        int? maxStopsPerRoute)
+    {
+        var sourceDeliveries = new List<LogisticsDeliveryCandidate>();
+        var targetDeliveries = new List<LogisticsDeliveryCandidate>();
+
+        if (!TryAddDelivery(sourceDeliveries, sourceSeed, sourceBatch.Vehicle, maxStopsPerRoute) ||
+            !TryAddDelivery(targetDeliveries, targetSeed, targetBatch.Vehicle, maxStopsPerRoute))
+        {
+            return null;
+        }
+
+        var remaining = sourceBatch.Deliveries
+            .Where(delivery =>
+                delivery.DeliveryCalendarId != sourceSeed.DeliveryCalendarId &&
+                delivery.DeliveryCalendarId != targetSeed.DeliveryCalendarId)
+            .OrderByDescending(delivery =>
+                Math.Abs(DistanceBetween(delivery, sourceSeed) - DistanceBetween(delivery, targetSeed)))
+            .ThenBy(delivery => delivery.DeliveryCalendarId);
+
+        foreach (var delivery in remaining)
+        {
+            var sourceDistanceKm = DistanceToClosest(delivery, sourceDeliveries);
+            var targetDistanceKm = DistanceToClosest(delivery, targetDeliveries);
+            var preferredDeliveries = sourceDistanceKm <= targetDistanceKm ? sourceDeliveries : targetDeliveries;
+            var preferredVehicle = sourceDistanceKm <= targetDistanceKm ? sourceBatch.Vehicle : targetBatch.Vehicle;
+            var fallbackDeliveries = sourceDistanceKm <= targetDistanceKm ? targetDeliveries : sourceDeliveries;
+            var fallbackVehicle = sourceDistanceKm <= targetDistanceKm ? targetBatch.Vehicle : sourceBatch.Vehicle;
+
+            if (!TryAddDelivery(preferredDeliveries, delivery, preferredVehicle, maxStopsPerRoute) &&
+                !TryAddDelivery(fallbackDeliveries, delivery, fallbackVehicle, maxStopsPerRoute))
+            {
+                return null;
+            }
+        }
+
+        return new GeographicSplit(sourceBatch, sourceDeliveries, targetDeliveries, 0d);
+    }
+
+    private static bool TryAddDelivery(
+        ICollection<LogisticsDeliveryCandidate> deliveries,
+        LogisticsDeliveryCandidate delivery,
+        Vehicle vehicle,
+        int? maxStopsPerRoute)
+    {
+        if (maxStopsPerRoute.HasValue && deliveries.Count >= maxStopsPerRoute.Value)
+        {
+            return false;
+        }
+
+        if (deliveries.Sum(item => item.EstimatedLoadKg) + delivery.EstimatedLoadKg > vehicle.MaxLoadKg)
+        {
+            return false;
+        }
+
+        deliveries.Add(delivery);
+        return true;
+    }
+
+    private static double DistanceToClosest(
+        LogisticsDeliveryCandidate delivery,
+        IEnumerable<LogisticsDeliveryCandidate> cluster)
+    {
+        return cluster.Min(clusterDelivery => DistanceBetween(delivery, clusterDelivery));
+    }
+
+    private static double EstimateRouteDistanceKm(IReadOnlyCollection<LogisticsDeliveryCandidate> deliveries)
+    {
+        if (deliveries.Count <= 1)
+        {
+            return 0d;
+        }
+
+        var remaining = deliveries.Select(ToOptimizationPoint).ToList();
+        var ordered = new List<RouteOptimizationPoint>(remaining.Count);
+        var current = new RouteOptimizationPoint(
+            0,
+            remaining.Average(point => point.Latitude),
+            remaining.Average(point => point.Longitude));
+
+        while (remaining.Count > 0)
+        {
+            var next = remaining
+                .OrderBy(point => DistanceBetween(current, point))
+                .ThenBy(point => point.Id)
+                .First();
+
+            ordered.Add(next);
+            remaining.Remove(next);
+            current = next;
+        }
+
+        return NearestNeighborRouteOptimizer.CalculateRouteDistanceKm(ordered);
     }
 
     private static LogisticsDeliveryCandidate? SelectNextDelivery(
@@ -447,9 +621,12 @@ public sealed class RoutingService : IDeliveryRouteService
 
     private static double DistanceBetween(LogisticsDeliveryCandidate source, LogisticsDeliveryCandidate target)
     {
-        var sourcePoint = ToOptimizationPoint(source);
-        var targetPoint = ToOptimizationPoint(target);
-        return NearestNeighborRouteOptimizer.CalculateRouteDistanceKm(new[] { sourcePoint, targetPoint });
+        return DistanceBetween(ToOptimizationPoint(source), ToOptimizationPoint(target));
+    }
+
+    private static double DistanceBetween(RouteOptimizationPoint source, RouteOptimizationPoint target)
+    {
+        return NearestNeighborRouteOptimizer.CalculateRouteDistanceKm(new[] { source, target });
     }
 
     private static DailyRouteGenerationResultDto Failed(string code, string message)
@@ -483,4 +660,10 @@ public sealed class RoutingService : IDeliveryRouteService
 
         public decimal TotalLoadKg => Deliveries.Sum(d => d.EstimatedLoadKg);
     }
+
+    private sealed record GeographicSplit(
+        RouteBatch SourceBatch,
+        List<LogisticsDeliveryCandidate> SourceDeliveries,
+        List<LogisticsDeliveryCandidate> TargetDeliveries,
+        double DistanceSavingKm);
 }
