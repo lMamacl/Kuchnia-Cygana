@@ -1,5 +1,122 @@
+@model DriverRouteStopDto
 @{
     Layout = "_LayoutDriver";
 }
-@await Html.PartialAsync("_DriverPlaceholder")
 
+<section class="driver-stack">
+    <a asp-action="Stop" asp-route-id="@Model.Id" class="btn btn-outline-secondary align-self-start">
+        @Html.Raw(StaffIconCatalog.Get("route"))
+        Wroc do przystanku
+    </a>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="text-secondary small">Przystanek #@Model.SequenceNumber</div>
+            <h2 class="h3 driver-address mb-0">@Model.FullAddress</h2>
+        </div>
+    </div>
+
+    <form asp-action="Confirm" asp-route-id="@Model.Id" method="post" id="driver-confirm-form" class="driver-stack">
+        @Html.AntiForgeryToken()
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Skanowanie toreb</h3>
+            </div>
+            <div class="card-body">
+                <label for="driver-bag-code" class="form-label">Kod torby</label>
+                <input id="driver-bag-code"
+                       class="form-control form-control-lg font-monospace"
+                       type="text"
+                       autocomplete="off"
+                       placeholder="BAG-..."
+                       autofocus />
+                <div id="driver-scan-message" class="small mt-2 text-secondary" aria-live="polite"></div>
+            </div>
+            <div class="list-group list-group-flush">
+                @if (Model.Bags.Count == 0)
+                {
+                    <div class="list-group-item text-secondary">Dostawa nie ma fizycznych toreb do zeskanowania.</div>
+                }
+                else
+                {
+                    @foreach (var bag in Model.Bags)
+                    {
+                        <label class="list-group-item driver-scan-row" data-driver-bag-row data-code="@bag.BagCode">
+                            <span class="d-flex align-items-center gap-3">
+                                <input class="form-check-input m-0"
+                                       type="checkbox"
+                                       name="BagCodes"
+                                       value="@bag.BagCode"
+                                       data-driver-bag-checkbox />
+                                <span>
+                                    <span class="d-block fw-semibold font-monospace">@bag.BagCode</span>
+                                    <span class="text-secondary small">Torba #@bag.BagNumber</span>
+                                </span>
+                            </span>
+                        </label>
+                    }
+                }
+            </div>
+            <div class="card-footer">
+                <div class="d-flex justify-content-between small mb-2">
+                    <span>Zeskanowane</span>
+                    <strong><span id="driver-scanned-count">0</span> / @Model.Bags.Count</strong>
+                </div>
+                <button type="submit" class="btn btn-success btn-lg w-100" id="driver-confirm-submit">
+                    @Html.Raw(StaffIconCatalog.Get("clipboard-check"))
+                    Potwierdz dostawe
+                </button>
+            </div>
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    <script>
+        (() => {
+            const input = document.getElementById("driver-bag-code");
+            const form = document.getElementById("driver-confirm-form");
+            const submit = document.getElementById("driver-confirm-submit");
+            const count = document.getElementById("driver-scanned-count");
+            const message = document.getElementById("driver-scan-message");
+            const checkboxes = [...document.querySelectorAll("[data-driver-bag-checkbox]")];
+            const rows = [...document.querySelectorAll("[data-driver-bag-row]")];
+
+            const update = () => {
+                const checked = checkboxes.filter(checkbox => checkbox.checked).length;
+                count.textContent = checked;
+                submit.disabled = checked !== checkboxes.length;
+                rows.forEach(row => {
+                    const checkbox = row.querySelector("[data-driver-bag-checkbox]");
+                    row.classList.toggle("driver-scan-row-checked", checkbox.checked);
+                });
+            };
+
+            input?.addEventListener("keydown", event => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                const code = input.value.trim().toLowerCase();
+                const row = rows.find(candidate => candidate.dataset.code.toLowerCase() === code);
+                if (!row) {
+                    message.textContent = "Kod nie nalezy do tego przystanku.";
+                    message.className = "small mt-2 text-danger";
+                    return;
+                }
+
+                row.querySelector("[data-driver-bag-checkbox]").checked = true;
+                input.value = "";
+                message.textContent = "Torba zeskanowana.";
+                message.className = "small mt-2 text-success";
+                update();
+            });
+
+            checkboxes.forEach(checkbox => checkbox.addEventListener("change", update));
+            form?.addEventListener("submit", event => {
+                if (checkboxes.some(checkbox => !checkbox.checked)) {
+                    event.preventDefault();
+                }
+            });
+            update();
+        })();
+    </script>
+}

@@ -102,6 +102,7 @@ public static class DependencyInjection
         // Module 4 (Logistics) repositories.
         services.AddScoped<IDeliveryRouteRepository, DeliveryRouteRepository>();
         services.AddScoped<IDeliveryRouteStopRepository, DeliveryRouteStopRepository>();
+        services.AddScoped<IDeliveryIssueRepository, DeliveryIssueRepository>();
         services.AddScoped<IDriverRepository, DriverRepository>();
         services.AddScoped<IDriverVehicleAssignmentRepository, DriverVehicleAssignmentRepository>();
         services.AddScoped<IThermalBagRepository, ThermalBagRepository>();
@@ -183,6 +184,7 @@ public static class DependencyInjection
 
         // Module 4 (Logistics) services.
         services.AddScoped<IDriverService, DriverService>();
+        services.AddScoped<IDriverMobileService, DriverMobileService>();
         services.AddScoped<IVehicleService, VehicleService>();
         services.AddScoped<IDeliveryRouteService, RoutingService>();
         services.AddScoped<GeocodingOrchestrator>();

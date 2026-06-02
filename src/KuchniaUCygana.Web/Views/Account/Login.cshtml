@@ -155,6 +155,10 @@
                                                 <button type="submit" class="btn btn-sm btn-outline-success opacity-75">Packing</button>
                                             </form>
                                             <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                                <input type="hidden" name="role" value="Driver" />
+                                                <button type="submit" class="btn btn-sm btn-outline-primary">Driver</button>
+                                            </form>
+                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
                                                 <input type="hidden" name="role" value="Admin" />
                                                 <button type="submit" class="btn btn-sm btn-outline-danger">Admin</button>
                                             </form>

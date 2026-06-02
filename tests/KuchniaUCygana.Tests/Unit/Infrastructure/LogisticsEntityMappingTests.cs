@@ -12,6 +12,7 @@ public sealed class LogisticsEntityMappingTests
     [InlineData(typeof(Dispatcher), "Dispatchers")]
     [InlineData(typeof(DeliveryRoute), "DeliveryRoutes")]
     [InlineData(typeof(DeliveryRouteStop), "DeliveryRouteStops")]
+    [InlineData(typeof(DeliveryIssue), "DeliveryIssues")]
     [InlineData(typeof(ThermalBag), "ThermalBags")]
     [InlineData(typeof(BagMovementLog), "BagMovementLogs")]
     public void LogisticsEntities_ShouldMapToExistingTables(Type entityType, string expectedTableName)

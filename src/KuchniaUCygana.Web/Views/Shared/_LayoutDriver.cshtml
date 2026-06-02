@@ -5,34 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Kierowca | Kuchnia u Cygana</title>
     <link rel="stylesheet" href="~/lib/tabler/css/tabler.min.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/css/staff.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/driver.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
-<body>
+<body class="driver-layout">
     <div class="page">
-        <div class="page-wrapper">
-            <div class="page-header">
-                <div class="container-tight">
-                    <div class="row align-items-center">
-                        <div class="col">
-                            <h2 class="page-title">@ViewData["Title"]</h2>
-                            <div class="text-secondary">Mobilny podglad trasy</div>
-                        </div>
-                        <div class="col-auto">
-                            <a asp-controller="Staff" asp-action="Index" class="btn btn-outline-secondary btn-sm">Staff</a>
-                        </div>
-                    </div>
+        <header class="navbar navbar-expand-md d-print-none driver-topbar">
+            <div class="container-tight d-flex align-items-center">
+                <a asp-controller="DriverMobile" asp-action="Index" class="navbar-brand driver-brand">
+                    @Html.Raw(StaffIconCatalog.Get("logistics"))
+                    <span>Dostawy</span>
+                </a>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <span class="badge bg-blue-lt text-blue">Kierowca</span>
+                    <form asp-controller="Account" asp-action="Logout" method="post">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-icon btn-outline-secondary btn-sm" title="Wyloguj" aria-label="Wyloguj">
+                            @Html.Raw(StaffIconCatalog.Get("logout"))
+                        </button>
+                    </form>
                 </div>
             </div>
-            <div class="page-body">
+        </header>
+
+        <div class="page-wrapper">
+            <div class="page-header driver-page-header">
                 <div class="container-tight">
+                    <h1 class="page-title">@ViewData["Title"]</h1>
+                </div>
+            </div>
+            <main class="page-body driver-page-body">
+                <div class="container-tight">
+                    @await Html.PartialAsync("_StaffAlertsPartial")
                     @RenderBody()
                 </div>
-            </div>
+            </main>
         </div>
+
+        <nav class="driver-bottom-nav" aria-label="Nawigacja kierowcy">
+            <a asp-controller="DriverMobile" asp-action="Index" class="driver-bottom-nav-link">
+                @Html.Raw(StaffIconCatalog.Get("route"))
+                <span>Trasa</span>
+            </a>
+            <a asp-controller="DriverMobile" asp-action="Summary" class="driver-bottom-nav-link">
+                @Html.Raw(StaffIconCatalog.Get("checklist"))
+                <span>Podsumowanie</span>
+            </a>
+        </nav>
     </div>
     <script src="~/lib/tabler/js/tabler.min.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
-
