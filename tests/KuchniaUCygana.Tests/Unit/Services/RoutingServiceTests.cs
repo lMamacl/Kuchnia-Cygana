@@ -78,6 +78,101 @@ public sealed class RoutingServiceTests
         result.Routes.Should().OnlyContain(r => r.VehicleId == 1 || r.VehicleId == 2);
     }
 
+    [Fact]
+    public async Task UpdateRouteAsync_UpdatesVehicleAndStopSequence()
+    {
+        var route = new DeliveryRoute
+        {
+            Id = 10,
+            Name = "Trasa 1",
+            Status = RouteStatus.Assigned,
+            VehicleId = 1,
+            Stops =
+            {
+                new DeliveryRouteStop { Id = 101, RouteId = 10, DeliveryCalendarId = 1, SequenceNumber = 1 },
+                new DeliveryRouteStop { Id = 102, RouteId = 10, DeliveryCalendarId = 2, SequenceNumber = 2 },
+            },
+        };
+        var routeRepository = new Mock<IDeliveryRouteRepository>();
+        var stopRepository = new Mock<IDeliveryRouteStopRepository>();
+        var vehicleRepository = new Mock<IVehicleRepository>();
+        var deliveryProvider = new Mock<ILogisticsDeliveryDataProvider>();
+        routeRepository.Setup(r => r.GetRouteWithStopsAsync(10)).ReturnsAsync(route);
+        routeRepository.Setup(r => r.UpdateAsync(route)).ReturnsAsync(true);
+        stopRepository.Setup(r => r.UpdateAsync(It.IsAny<DeliveryRouteStop>())).ReturnsAsync(true);
+        vehicleRepository.Setup(r => r.GetByIdAsync(2)).ReturnsAsync(
+            new Vehicle { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active });
+        vehicleRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(
+            new List<Vehicle> { new() { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active } });
+        deliveryProvider
+            .Setup(p => p.GetDeliveriesByCalendarIdsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<decimal>()))
+            .ReturnsAsync(new List<LogisticsDeliveryCandidate>
+            {
+                Delivery(1, "ZAM/1", 53.1325, 23.1688, 1m),
+                Delivery(2, "ZAM/2", 53.1400, 23.1700, 1m),
+            });
+
+        var service = new RoutingService(
+            routeRepository.Object,
+            stopRepository.Object,
+            vehicleRepository.Object,
+            deliveryProvider.Object,
+            new NearestNeighborRouteOptimizer());
+
+        var result = await service.UpdateRouteAsync(new UpdateDeliveryRouteRequest
+        {
+            Id = 10,
+            Name = "Trasa Polnoc",
+            VehicleId = 2,
+            Stops =
+            {
+                new UpdateDeliveryRouteStopRequest { StopId = 101, SequenceNumber = 2 },
+                new UpdateDeliveryRouteStopRequest { StopId = 102, SequenceNumber = 1 },
+            },
+        });
+
+        result.Should().NotBeNull();
+        route.Name.Should().Be("Trasa Polnoc");
+        route.VehicleId.Should().Be(2);
+        route.Stops.Single(stop => stop.Id == 101).SequenceNumber.Should().Be(2);
+        route.Stops.Single(stop => stop.Id == 102).SequenceNumber.Should().Be(1);
+        stopRepository.Verify(r => r.UpdateAsync(It.IsAny<DeliveryRouteStop>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task DeleteRouteAsync_SoftDeletesStopsBeforeRoute()
+    {
+        var route = new DeliveryRoute
+        {
+            Id = 10,
+            Status = RouteStatus.Assigned,
+            Stops =
+            {
+                new DeliveryRouteStop { Id = 101, RouteId = 10, DeliveryCalendarId = 1, SequenceNumber = 1 },
+                new DeliveryRouteStop { Id = 102, RouteId = 10, DeliveryCalendarId = 2, SequenceNumber = 2 },
+            },
+        };
+        var routeRepository = new Mock<IDeliveryRouteRepository>();
+        var stopRepository = new Mock<IDeliveryRouteStopRepository>();
+        routeRepository.Setup(r => r.GetRouteWithStopsAsync(10)).ReturnsAsync(route);
+        routeRepository.Setup(r => r.DeleteAsync(10)).ReturnsAsync(true);
+        stopRepository.Setup(r => r.DeleteAsync(It.IsAny<int>())).ReturnsAsync(true);
+
+        var service = new RoutingService(
+            routeRepository.Object,
+            stopRepository.Object,
+            new Mock<IVehicleRepository>().Object,
+            new Mock<ILogisticsDeliveryDataProvider>().Object,
+            new NearestNeighborRouteOptimizer());
+
+        var deleted = await service.DeleteRouteAsync(10);
+
+        deleted.Should().BeTrue();
+        stopRepository.Verify(r => r.DeleteAsync(101), Times.Once);
+        stopRepository.Verify(r => r.DeleteAsync(102), Times.Once);
+        routeRepository.Verify(r => r.DeleteAsync(10), Times.Once);
+    }
+
     private static LogisticsDeliveryCandidate Delivery(
         int deliveryCalendarId,
         string orderNumber,

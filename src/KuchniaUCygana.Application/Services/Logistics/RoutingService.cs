@@ -154,6 +154,64 @@ public sealed class RoutingService : IDeliveryRouteService
         };
     }
 
+    public async Task<DeliveryRouteDto?> UpdateRouteAsync(UpdateDeliveryRouteRequest request)
+    {
+        var route = await _routeRepository.GetRouteWithStopsAsync(request.Id);
+        if (route is null)
+        {
+            return null;
+        }
+
+        EnsureRouteCanBeModified(route);
+
+        var vehicle = await _vehicleRepository.GetByIdAsync(request.VehicleId);
+        if (vehicle is null || vehicle.Status != VehicleStatus.Active)
+        {
+            throw new InvalidOperationException("Wybrany pojazd nie istnieje albo nie jest aktywny.");
+        }
+
+        var name = request.Name.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new InvalidOperationException("Nazwa trasy jest wymagana.");
+        }
+
+        ValidateStopSequence(route.Stops, request.Stops);
+
+        var requestedStops = request.Stops.ToDictionary(stop => stop.StopId);
+        foreach (var stop in route.Stops)
+        {
+            stop.SequenceNumber = requestedStops[stop.Id].SequenceNumber;
+            await _routeStopRepository.UpdateAsync(stop);
+        }
+
+        route.Name = name;
+        route.VehicleId = vehicle.Id;
+        route.Status = RouteStatus.Assigned;
+        route.TotalDistanceKm = await CalculateRouteDistanceAsync(route.Stops);
+        await _routeRepository.UpdateAsync(route);
+
+        return await GetRouteDetailsAsync(route.Id);
+    }
+
+    public async Task<bool> DeleteRouteAsync(int routeId)
+    {
+        var route = await _routeRepository.GetRouteWithStopsAsync(routeId);
+        if (route is null)
+        {
+            return false;
+        }
+
+        EnsureRouteCanBeModified(route);
+
+        foreach (var stop in route.Stops)
+        {
+            await _routeStopRepository.DeleteAsync(stop.Id);
+        }
+
+        return await _routeRepository.DeleteAsync(route.Id);
+    }
+
     private async Task<DeliveryRoute> CreateRouteFromBatchAsync(
         DateTimeOffset routeDate,
         RouteBatch batch,
@@ -310,6 +368,48 @@ public sealed class RoutingService : IDeliveryRouteService
                     .ToList(),
             })
             .ToList();
+    }
+
+    private async Task<double> CalculateRouteDistanceAsync(IEnumerable<DeliveryRouteStop> stops)
+    {
+        var orderedStops = stops.OrderBy(stop => stop.SequenceNumber).ToList();
+        var deliveryCalendarIds = orderedStops
+            .Select(stop => stop.DeliveryCalendarId)
+            .ToList();
+        var deliveries = (await _deliveryDataProvider.GetDeliveriesByCalendarIdsAsync(deliveryCalendarIds))
+            .ToDictionary(delivery => delivery.DeliveryCalendarId);
+        var points = orderedStops
+            .Where(stop => deliveries.TryGetValue(stop.DeliveryCalendarId, out var delivery) && delivery.HasCoordinates)
+            .Select(stop => ToOptimizationPoint(deliveries[stop.DeliveryCalendarId]))
+            .ToList();
+
+        return Math.Round(NearestNeighborRouteOptimizer.CalculateRouteDistanceKm(points), 2);
+    }
+
+    private static void EnsureRouteCanBeModified(DeliveryRoute route)
+    {
+        if (route.Status is RouteStatus.InProgress or RouteStatus.Completed)
+        {
+            throw new InvalidOperationException("Nie mozna zmienic trasy, ktora jest juz w realizacji albo zostala zakonczona.");
+        }
+    }
+
+    private static void ValidateStopSequence(
+        IReadOnlyCollection<DeliveryRouteStop> existingStops,
+        IReadOnlyCollection<UpdateDeliveryRouteStopRequest> requestedStops)
+    {
+        if (existingStops.Count != requestedStops.Count ||
+            requestedStops.Select(stop => stop.StopId).Distinct().Count() != requestedStops.Count ||
+            existingStops.Select(stop => stop.Id).Except(requestedStops.Select(stop => stop.StopId)).Any())
+        {
+            throw new InvalidOperationException("Lista przystankow trasy jest niekompletna.");
+        }
+
+        var expectedSequence = Enumerable.Range(1, requestedStops.Count);
+        if (!requestedStops.Select(stop => stop.SequenceNumber).OrderBy(number => number).SequenceEqual(expectedSequence))
+        {
+            throw new InvalidOperationException("Kolejnosc przystankow musi zawierac kolejne numery od 1.");
+        }
     }
 
     private static RouteStopDto MapStop(

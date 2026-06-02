@@ -77,7 +77,7 @@
         <div class="row g-3 align-items-end">
             <div class="col-md-4">
                 <form asp-action="Routes" method="get">
-                    <label class="form-label">Dzieñ dostaw</label>
+                    <label class="form-label">DzieÅ„ dostaw</label>
                     <div class="input-group">
                         <input type="date" name="date" value="@selectedDate" class="form-control" />
                         <button type="submit" class="btn btn-outline-primary">
@@ -91,18 +91,11 @@
                 <form asp-action="GenerateDailyRoutes" method="post" class="row g-2 align-items-end">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="routeDate" value="@selectedDate" />
-                    <div class="col-sm-4">
-                        <label class="form-label">Waga dostawy</label>
-                        <div class="input-group">
-                            <input type="number" name="defaultDeliveryLoadKg" value="1" min="0.1" step="0.1" class="form-control" />
-                            <span class="input-group-text">kg</span>
-                        </div>
-                    </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-6">
                         <label class="form-label">Limit stopow</label>
                         <input type="number" name="maxStopsPerRoute" min="1" class="form-control" placeholder="Bez limitu" />
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-6">
                         <button type="submit" class="btn btn-primary w-100">
                             @Html.Raw(StaffIconCatalog.Get("wand"))
                             Generuj trasy
@@ -205,6 +198,13 @@
                                     <a asp-action="RouteMap" asp-route-id="@route.Id" class="btn btn-sm btn-outline-secondary">
                                         Mapa
                                     </a>
+                                    <a asp-action="EditRoute" asp-route-id="@route.Id" class="btn btn-sm btn-outline-secondary">
+                                        Edytuj
+                                    </a>
+                                    <form asp-action="DeleteRoute" asp-route-id="@route.Id" asp-route-date="@selectedDate" method="post" onsubmit="return confirm('Czy na pewno chcesz usunac trase @route.Name?');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Usun</button>
+                                    </form>
                                 </div>
                             </td>
                         </tr>

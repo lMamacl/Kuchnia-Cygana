@@ -13,7 +13,6 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class LogisticsController : Controller
 {
     private readonly IVehicleService _vehicleService;
-    private readonly IDeliveryRouteService _deliveryRouteService;
     private readonly IGeocodeService _geocodeService;
     private readonly IDeliveryRouteService _deliveryRouteService;
 
@@ -23,7 +22,6 @@ public sealed class LogisticsController : Controller
         IDeliveryRouteService deliveryRouteService)
     {
         _vehicleService = vehicleService;
-        _deliveryRouteService = deliveryRouteService;
         _geocodeService = geocodeService;
         _deliveryRouteService = deliveryRouteService;
     }
@@ -44,20 +42,24 @@ public sealed class LogisticsController : Controller
         ViewData["Title"] = "Trasy";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = "Lista tras z filtrem dnia.";
-        ViewBag.SelectedDate = selectedDate;
-        return View(await _deliveryRouteService.GetRoutesForDateAsync(selectedDate));
+        return View(new RoutesViewModel
+        {
+            SelectedDate = selectedDate,
+            Routes = await _deliveryRouteService.GetRoutesForDateAsync(selectedDate),
+        });
     }
 
     [HttpPost("routes/generate")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> GenerateRoutes(GenerateDailyRoutesRequest request)
+    public async Task<IActionResult> GenerateDailyRoutes(GenerateDailyRoutesRequest request)
     {
         var result = await _deliveryRouteService.GenerateDailyRoutesAsync(request);
-        TempData[result.Succeeded ? "Success" : "Error"] = result.Succeeded
-            ? $"Wygenerowano {result.GeneratedRoutesCount} tras i {result.PlannedStopsCount} stopow."
-            : string.Join(" ", result.Issues.Select(i => i.Message));
-
-        return RedirectToAction(nameof(Routes), new { date = request.RouteDate.ToString("yyyy-MM-dd") });
+        return View("Routes", new RoutesViewModel
+        {
+            SelectedDate = request.RouteDate,
+            Routes = await _deliveryRouteService.GetRoutesForDateAsync(request.RouteDate),
+            GenerationResult = result,
+        });
     }
 
     [HttpGet("routes/create")]
@@ -73,17 +75,77 @@ public sealed class LogisticsController : Controller
         });
     }
 
-    [HttpGet("routes/{id:int?}")]
-    public async Task<IActionResult> RouteDetails(int? id)
+    [HttpGet("routes/{id:int}")]
+    public async Task<IActionResult> RouteDetails(int id)
+    {
+        var route = await _deliveryRouteService.GetRouteDetailsAsync(id);
+        if (route == null) return NotFound();
+
+        ViewData["Title"] = "Szczegoly trasy";
+        ViewData["Section"] = "Logistyka";
+        ViewData["Description"] = $"Trasa #{id}: {route.Name}.";
+        return View(route);
+    }
+
+    [HttpGet("routes/edit/{id:int}")]
+    public async Task<IActionResult> EditRoute(int id)
     {
         var route = await _deliveryRouteService.GetRouteDetailsAsync(id);
         if (route == null) return NotFound();
 
         ViewData["Title"] = "Edycja trasy";
         ViewData["Section"] = "Logistyka";
-        ViewData["Description"] = id.HasValue ? $"Placeholder trasy #{id}." : "Placeholder edycji trasy.";
-        var route = id.HasValue ? await _deliveryRouteService.GetRouteDetailsAsync(id.Value) : null;
-        return View(route);
+        ViewData["Description"] = $"Zmiana przypisania i kolejnosci przystankow trasy #{id}.";
+        return View("RoutesEdit", await BuildRouteEditViewModelAsync(route));
+    }
+
+    [HttpPost("routes/edit/{id:int}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EditRoute(int id, RouteEditViewModel model)
+    {
+        if (id != model.Route.Id) return BadRequest();
+
+        if (!ModelState.IsValid)
+        {
+            var existingRoute = await _deliveryRouteService.GetRouteDetailsAsync(id);
+            if (existingRoute == null) return NotFound();
+            return View("RoutesEdit", await BuildRouteEditViewModelAsync(existingRoute, model.Route));
+        }
+
+        try
+        {
+            var updated = await _deliveryRouteService.UpdateRouteAsync(model.Route);
+            if (updated == null) return NotFound();
+
+            TempData["Success"] = "Trasa zostala zaktualizowana.";
+            return RedirectToAction(nameof(RouteDetails), new { id });
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            var existingRoute = await _deliveryRouteService.GetRouteDetailsAsync(id);
+            if (existingRoute == null) return NotFound();
+            return View("RoutesEdit", await BuildRouteEditViewModelAsync(existingRoute, model.Route));
+        }
+    }
+
+    [HttpPost("routes/delete/{id:int}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteRoute(int id, DateTimeOffset? date)
+    {
+        try
+        {
+            var deleted = await _deliveryRouteService.DeleteRouteAsync(id);
+            TempData[deleted ? "Success" : "Error"] = deleted
+                ? "Trasa zostala usunieta. Mozesz ponownie wygenerowac plan dnia."
+                : "Nie znaleziono trasy.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Routes), new { date = date?.ToString("yyyy-MM-dd") });
     }
 
     [HttpGet("routes/{id:int}/map")]
@@ -214,5 +276,39 @@ public sealed class LogisticsController : Controller
             latitude = result.Latitude, 
             longitude = result.Longitude 
         });
+    }
+
+    private async Task<RouteEditViewModel> BuildRouteEditViewModelAsync(
+        DeliveryRouteDto route,
+        UpdateDeliveryRouteRequest? request = null)
+    {
+        request ??= new UpdateDeliveryRouteRequest
+        {
+            Id = route.Id,
+            Name = route.Name,
+            VehicleId = route.VehicleId ?? 0,
+            Stops = route.Stops
+                .OrderBy(stop => stop.SequenceNumber)
+                .Select(stop => new UpdateDeliveryRouteStopRequest
+                {
+                    StopId = stop.Id,
+                    SequenceNumber = stop.SequenceNumber,
+                })
+                .ToList(),
+        };
+
+        var vehicles = (await _vehicleService.GetAllAsync())
+            .Where(vehicle => vehicle.Status == VehicleStatus.Active.ToString())
+            .OrderBy(vehicle => vehicle.RegistrationNumber)
+            .ToList();
+
+        return new RouteEditViewModel
+        {
+            Route = request,
+            Vehicles = vehicles,
+            Stops = route.Stops
+                .OrderBy(stop => stop.SequenceNumber)
+                .ToList(),
+        };
     }
 }

@@ -20,13 +20,6 @@
                             <input type="date" name="routeDate" value="@selectedDate" class="form-control" required />
                         </div>
                         <div class="col-md-6">
-                            <label asp-for="DefaultDeliveryLoadKg" class="form-label required">Szacowana waga jednej dostawy</label>
-                            <div class="input-group">
-                                <input type="number" asp-for="DefaultDeliveryLoadKg" class="form-control" min="0.1" step="0.1" required />
-                                <span class="input-group-text">kg</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
                             <label asp-for="MaxStopsPerRoute" class="form-label">Maksymalna liczba przystankow na trase</label>
                             <input type="number" asp-for="MaxStopsPerRoute" class="form-control" min="1" placeholder="Bez limitu" />
                         </div>

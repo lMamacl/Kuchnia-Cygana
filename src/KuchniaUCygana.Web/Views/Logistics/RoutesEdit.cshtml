@@ -1,0 +1,90 @@
+@model RouteEditViewModel
+@{
+    Layout = "_LayoutStaff";
+    var stopsById = Model.Stops.ToDictionary(stop => stop.Id);
+}
+
+<div class="row justify-content-center">
+    <div class="col-xl-10">
+        <form asp-action="EditRoute" asp-route-id="@Model.Route.Id" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="Route.Id" />
+
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+
+            <div class="card card-premium mb-4">
+                <div class="card-header">
+                    <h3 class="card-title">Ustawienia trasy</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="Route.Name" class="form-label required">Nazwa trasy</label>
+                            <input asp-for="Route.Name" class="form-control" />
+                            <span asp-validation-for="Route.Name" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Route.VehicleId" class="form-label required">Pojazd</label>
+                            <select asp-for="Route.VehicleId" class="form-select">
+                                <option value="">Wybierz aktywny pojazd</option>
+                                @foreach (var vehicle in Model.Vehicles)
+                                {
+                                    <option value="@vehicle.Id">@vehicle.RegistrationNumber - @vehicle.Model (@vehicle.MaxLoadKg.ToString("N0") kg)</option>
+                                }
+                            </select>
+                            <span asp-validation-for="Route.VehicleId" class="text-danger small"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card card-premium">
+                <div class="card-header">
+                    <h3 class="card-title">Kolejnosc przystankow</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-vcenter table-premium card-table">
+                        <thead>
+                            <tr>
+                                <th class="w-1">Lp.</th>
+                                <th>DeliveryCalendarId</th>
+                                <th>Adres</th>
+                                <th style="width: 10rem;">Nowa kolejnosc</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var index = 0; index < Model.Route.Stops.Count; index++)
+                            {
+                                var editableStop = Model.Route.Stops[index];
+                                var stop = stopsById[editableStop.StopId];
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-blue text-blue-fg">@stop.SequenceNumber</span>
+                                    </td>
+                                    <td class="font-monospace">@stop.DeliveryCalendarId</td>
+                                    <td class="fw-semibold">@stop.FullAddress</td>
+                                    <td>
+                                        <input type="hidden" asp-for="Route.Stops[index].StopId" />
+                                        <input asp-for="Route.Stops[index].SequenceNumber" type="number" min="1" max="@Model.Route.Stops.Count" class="form-control" />
+                                        <span asp-validation-for="Route.Stops[index].SequenceNumber" class="text-danger small"></span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer d-flex justify-content-between">
+                    <a asp-action="RouteDetails" asp-route-id="@Model.Route.Id" class="btn btn-link text-secondary">Anuluj</a>
+                    <button type="submit" class="btn btn-primary">
+                        @Html.Raw(StaffIconCatalog.Get("check"))
+                        Zapisz zmiany
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
