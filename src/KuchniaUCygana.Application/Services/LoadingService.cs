@@ -414,6 +414,78 @@ public sealed class LoadingService : ILoadingService, IManifestService
         }
     }
 
+    public async Task<int> ResetLoadingAsync(DateOnly date, int? routeId = null)
+    {
+        var board = await _packingService.GetPackingBoardAsync(date);
+        var routes = board.Routes
+            .Where(route => route.RouteId > 0 && route.TotalBags > 0)
+            .Where(route => !routeId.HasValue || route.RouteId == routeId.Value)
+            .ToList();
+
+        if (routeId.HasValue && routes.Count == 0)
+        {
+            throw new InvalidOperationException($"Dostawa/trasa {routeId.Value} nie istnieje dla dnia {date:dd.MM.yyyy}.");
+        }
+
+        var resetBags = 0;
+        var touchedSessions = new HashSet<int>();
+        foreach (var bagDto in routes.SelectMany(route => route.Bags))
+        {
+            var session = await _sessionRepository.GetWithItemsAsync(bagDto.PackingSessionId);
+            if (session is not null &&
+                touchedSessions.Add(session.Id) &&
+                session.Status is PackingStatus.Loaded or PackingStatus.Dispatched)
+            {
+                var oldStatus = session.Status;
+                session.Status = PackingStatus.Labeled;
+                await _sessionRepository.UpdateAsync(session);
+                await LogStatusChangeAsync(session.Id, oldStatus, session.Status, "Reset zaladunku auta.");
+            }
+
+            var physicalBag = await _bagRepository.GetByIdAsync(bagDto.PackingBagId);
+            if (physicalBag is null)
+            {
+                continue;
+            }
+
+            if (physicalBag.Status is PackingBagStatus.Manifested or PackingBagStatus.Loaded or PackingBagStatus.Dispatched)
+            {
+                physicalBag.Status = PackingBagStatus.Labeled;
+                physicalBag.ManifestedAt = null;
+                physicalBag.LoadedAt = null;
+                physicalBag.LoadedBy = null;
+                physicalBag.DispatchedAt = null;
+                await _bagRepository.UpdateAsync(physicalBag);
+                resetBags++;
+            }
+        }
+
+        var routeIds = routes.Select(route => route.RouteId).ToHashSet();
+        var manifests = (await _packingManifestRepository.GetAllAsync())
+            .Where(manifest => manifest.PackingDate == date &&
+                manifest.RouteId.HasValue &&
+                routeIds.Contains(manifest.RouteId.Value) &&
+                !manifest.IsSuperseded)
+            .ToList();
+        foreach (var manifest in manifests)
+        {
+            manifest.IsSuperseded = true;
+            manifest.RequiresRegeneration = false;
+            manifest.RequiresRegenerationReason = null;
+            manifest.ChangeReason = "Reset zaladunku auta.";
+            await _packingManifestRepository.UpdateAsync(manifest);
+        }
+
+        _logger.LogInformation(
+            "Reset loading for {Date}, route {RouteId}. Reset {BagCount} bags and superseded {ManifestCount} manifests.",
+            date,
+            routeId,
+            resetBags,
+            manifests.Count);
+
+        return resetBags;
+    }
+
     /// <inheritdoc/>
     public async Task<PackingBagDto> LoadBagByCodeAsync(int routeId, string transportCode)
     {

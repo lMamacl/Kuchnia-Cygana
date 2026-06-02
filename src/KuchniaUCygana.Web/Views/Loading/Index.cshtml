@@ -31,6 +31,14 @@
                                aria-label="Filtruj po dacie" />
                         <a asp-controller="Packing" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Kompletacja</a>
                         <a asp-controller="Packing" asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Etykiety</a>
+                        @if (User.IsInRole("PackingManager") || User.IsInRole("Admin"))
+                        {
+                            <form asp-controller="Loading" asp-action="ResetLoading" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                                <button type="submit" class="btn btn-outline-danger">Reset załadunku</button>
+                            </form>
+                        }
                         <a asp-controller="Loading" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-primary">Załadunek aut</a>
                     </div>
                 </div>

@@ -209,6 +209,29 @@ public sealed class LoadingController : Controller
         return RedirectToAction(nameof(Route), new { routeId, date });
     }
 
+    [HttpPost("reset")]
+    [HttpPost("{routeId:int}/reset")]
+    [Authorize(Roles = "PackingManager,Admin")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetLoading(DateOnly date, int? routeId)
+    {
+        try
+        {
+            var resetBags = await _loadingService.ResetLoadingAsync(date, routeId);
+            TempData["Success"] = routeId.HasValue
+                ? $"Reset załadunku trasy #{routeId.Value}: cofnięto {resetBags} toreb."
+                : $"Reset załadunku dla {date:dd.MM.yyyy}: cofnięto {resetBags} toreb.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return routeId.HasValue
+            ? RedirectToAction(nameof(Route), new { routeId = routeId.Value, date })
+            : RedirectToAction(nameof(Index), new { date });
+    }
+
     [HttpGet("{routeId:int}/labels")]
     public IActionResult DeliveryLabels(int routeId, DateOnly date)
     {

@@ -377,6 +377,86 @@ public sealed class PackingServiceRouteAssignmentTests
         latest.AttachedAt.Should().BeNull();
     }
 
+    [Fact]
+    public async Task GenerateTransportLabelsAsync_RefreshesExistingLabelWithCurrentRoute()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            labelRepository);
+        var (session, bag, _) = await CreatePackedSessionAsync(date, sessionRepository, bagRepository, itemRepository);
+        await labelRepository.InsertAsync(new PackingLabel
+        {
+            PackingSessionId = session.Id,
+            PackingBagId = bag.Id,
+            LabelType = LabelType.Shipping,
+            QrCode = "https://test.local/delivery/verify/stale",
+            RouteInfo = "Stara trasa",
+            DeliveryWindow = "00:00-00:00",
+            MealsList = "Stare danie",
+            LabelDataJson = "{}",
+            PrintNumber = 1,
+            PrintedAt = DateTimeOffset.UtcNow,
+        });
+
+        var labels = (await service.GenerateTransportLabelsAsync(session.Id)).ToList();
+
+        labels.Should().ContainSingle();
+        labels.Single().RouteInfo.Should().Be("Trasa testowa, auto WA TEST, stop 2");
+        labels.Single().DeliveryWindow.Should().Be("08:00-09:00");
+        labels.Single().MealsList.Should().Be("1. Test meal");
+        var stored = (await labelRepository.GetAllAsync()).Single();
+        stored.RouteInfo.Should().Be("Trasa testowa, auto WA TEST, stop 2");
+        stored.DeliveryWindow.Should().Be("08:00-09:00");
+        stored.MealsList.Should().Be("1. Test meal");
+        stored.LabelDataJson.Should().Contain("\"RouteName\":\"Trasa testowa\"");
+    }
+
+    [Fact]
+    public async Task PrepareOrderBoxesAsync_UsesOrderedMealNameFromDeliveryItems()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new SingleMealOrderProvider(date),
+            itemRepository,
+            dietProvider: new SingleMealDietDataProvider(date));
+        var session = new PackingSession
+        {
+            PackingDate = date,
+            OrderId = 77,
+            DeliveryCalendarId = 777,
+            ClientName = "Klient demo",
+            ClientPublicId = "DEMO777",
+            Status = PackingStatus.Pending,
+        };
+        session.Id = await sessionRepository.InsertAsync(session);
+
+        var boxes = (await service.PrepareOrderBoxesAsync(session.Id)).ToList();
+
+        boxes.Should().ContainSingle();
+        boxes.Single().MealId.Should().Be(9001);
+        boxes.Single().MealName.Should().Be("Kurczak z ryzem");
+        boxes.Single().DietVariantId.Should().Be(42);
+        var stored = (await itemRepository.GetAllAsync()).Single();
+        stored.PackingBagId.Should().NotBeNull();
+        stored.MealId.Should().Be(9001);
+        stored.MealName.Should().Be("Kurczak z ryzem");
+    }
+
     private static async Task<(PackingSession Session, PackingBag Bag, PackingItem Item)> CreatePackedSessionAsync(
         DateOnly date,
         InMemoryPackingSessionRepository sessionRepository,
@@ -454,7 +534,8 @@ public sealed class PackingServiceRouteAssignmentTests
         IRepository<PackingItem>? itemRepository = null,
         IRepository<PackingLabel>? labelRepository = null,
         IRepository<PackingManifest>? manifestRepository = null,
-        IBoxLabelRepository? boxLabelRepository = null)
+        IBoxLabelRepository? boxLabelRepository = null,
+        IDietDataProvider? dietProvider = null)
     {
         var mapperConfiguration = new MapperConfiguration(
             cfg => cfg.AddProfile<ProductionProfile>(),
@@ -469,7 +550,7 @@ public sealed class PackingServiceRouteAssignmentTests
             boxLabelRepository ?? new InMemoryBoxLabelRepository(),
             new InMemoryPackingStatusLogRepository(),
             orderProvider,
-            new EmptyDietDataProvider(),
+            dietProvider ?? new EmptyDietDataProvider(),
             manifestProvider,
             new TestApplicationUrlProvider(),
             new TestCurrentUserService(),
@@ -574,29 +655,105 @@ public sealed class PackingServiceRouteAssignmentTests
         }
     }
 
-    private sealed class EmptyDietDataProvider : IDietDataProvider
+    private sealed class SingleMealOrderProvider : IOrderDataProvider
     {
-        public Task<IEnumerable<DietPlanEntry>> Get7DayPlanAsync(DateOnly startDate)
+        private readonly DateOnly _date;
+
+        public SingleMealOrderProvider(DateOnly date)
+        {
+            _date = date;
+        }
+
+        public Task<IEnumerable<ActiveOrderEntry>> GetActiveOrdersAsync(DateOnly deliveryDate)
+        {
+            return Task.FromResult(Enumerable.Empty<ActiveOrderEntry>());
+        }
+
+        public Task<ActiveOrderEntry?> GetOrderByIdAsync(int orderId)
+        {
+            return Task.FromResult<ActiveOrderEntry?>(null);
+        }
+
+        public Task<IEnumerable<OrderDeliveryInfo>> GetDeliveriesForDateAsync(DateTime date)
+        {
+            return Task.FromResult<IEnumerable<OrderDeliveryInfo>>(new[]
+            {
+                new OrderDeliveryInfo(
+                    777,
+                    77,
+                    "DEMO-77",
+                    77,
+                    "DEMO777",
+                    "Klient demo",
+                    "Lipowa 1, 15-424 Bialystok",
+                    "Bialystok",
+                    "15-424",
+                    53.132,
+                    23.159,
+                    _date.ToDateTime(TimeOnly.FromTimeSpan(TimeSpan.FromHours(8))),
+                    "08:00-09:00",
+                    new[]
+                    {
+                        new OrderItemInfo(
+                            11,
+                            "Dieta demo: Kurczak z ryzem",
+                            42,
+                            "1800 kcal / Lunch",
+                            1800),
+                    }),
+            });
+        }
+    }
+
+    private sealed class SingleMealDietDataProvider : EmptyDietDataProvider
+    {
+        private readonly DateOnly _date;
+
+        public SingleMealDietDataProvider(DateOnly date)
+        {
+            _date = date;
+        }
+
+        public override Task<IEnumerable<DietPlanEntry>> GetPlanForDateAsync(DateOnly date)
+        {
+            return Task.FromResult<IEnumerable<DietPlanEntry>>(new[]
+            {
+                new DietPlanEntry
+                {
+                    PlanDate = _date,
+                    MealId = 9001,
+                    MealName = "Kurczak z ryzem",
+                    DietVariantId = 42,
+                    MealSlot = "Lunch",
+                    SortOrder = 3,
+                },
+            });
+        }
+    }
+
+    private class EmptyDietDataProvider : IDietDataProvider
+    {
+        public virtual Task<IEnumerable<DietPlanEntry>> Get7DayPlanAsync(DateOnly startDate)
         {
             return Task.FromResult(Enumerable.Empty<DietPlanEntry>());
         }
 
-        public Task<IEnumerable<DietPlanEntry>> GetPlanForDateAsync(DateOnly date)
+        public virtual Task<IEnumerable<DietPlanEntry>> GetPlanForDateAsync(DateOnly date)
         {
             return Task.FromResult(Enumerable.Empty<DietPlanEntry>());
         }
 
-        public Task<PublishedDietPlanSnapshotDto?> GetPublishedPlanSnapshotAsync(DateOnly date)
+        public virtual Task<PublishedDietPlanSnapshotDto?> GetPublishedPlanSnapshotAsync(DateOnly date)
         {
             return Task.FromResult<PublishedDietPlanSnapshotDto?>(null);
         }
 
-        public Task<IEnumerable<RecipeIngredientEntry>> GetRecipeForMealAsync(int mealId)
+        public virtual Task<IEnumerable<RecipeIngredientEntry>> GetRecipeForMealAsync(int mealId)
         {
             return Task.FromResult(Enumerable.Empty<RecipeIngredientEntry>());
         }
 
-        public Task<MealCookingDetailsEntry?> GetMealCookingDetailsAsync(int mealId)
+        public virtual Task<MealCookingDetailsEntry?> GetMealCookingDetailsAsync(int mealId)
         {
             return Task.FromResult<MealCookingDetailsEntry?>(null);
         }

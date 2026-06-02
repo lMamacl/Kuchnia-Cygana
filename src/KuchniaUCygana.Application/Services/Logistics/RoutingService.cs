@@ -2,6 +2,7 @@ using KuchniaUCygana.Application.DTOs.Logistics;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 
 namespace KuchniaUCygana.Application.Services.Logistics;
@@ -14,6 +15,8 @@ public sealed class RoutingService : IDeliveryRouteService
     private readonly IDeliveryRouteRepository _routeRepository;
     private readonly IDeliveryRouteStopRepository _routeStopRepository;
     private readonly IVehicleRepository _vehicleRepository;
+    private readonly IDriverRepository _driverRepository;
+    private readonly IUserRepository _userRepository;
     private readonly ILogisticsDeliveryDataProvider _deliveryDataProvider;
     private readonly IRouteOptimizer _routeOptimizer;
 
@@ -21,12 +24,16 @@ public sealed class RoutingService : IDeliveryRouteService
         IDeliveryRouteRepository routeRepository,
         IDeliveryRouteStopRepository routeStopRepository,
         IVehicleRepository vehicleRepository,
+        IDriverRepository driverRepository,
+        IUserRepository userRepository,
         ILogisticsDeliveryDataProvider deliveryDataProvider,
         IRouteOptimizer routeOptimizer)
     {
         _routeRepository = routeRepository;
         _routeStopRepository = routeStopRepository;
         _vehicleRepository = vehicleRepository;
+        _driverRepository = driverRepository;
+        _userRepository = userRepository;
         _deliveryDataProvider = deliveryDataProvider;
         _routeOptimizer = routeOptimizer;
     }
@@ -176,6 +183,7 @@ public sealed class RoutingService : IDeliveryRouteService
             throw new InvalidOperationException("Nazwa trasy jest wymagana.");
         }
 
+        var driverId = await ValidateOptionalDriverAsync(request.DriverId);
         ValidateStopSequence(route.Stops, request.Stops);
 
         var requestedStops = request.Stops.ToDictionary(stop => stop.StopId);
@@ -187,6 +195,7 @@ public sealed class RoutingService : IDeliveryRouteService
 
         route.Name = name;
         route.VehicleId = vehicle.Id;
+        route.DriverId = driverId;
         route.Status = RouteStatus.Assigned;
         route.TotalDistanceKm = await CalculateRouteDistanceAsync(route.Stops);
         await _routeRepository.UpdateAsync(route);
@@ -347,6 +356,14 @@ public sealed class RoutingService : IDeliveryRouteService
                 .ToDictionary(d => d.DeliveryCalendarId);
 
         var vehicles = (await _vehicleRepository.GetAllAsync()).ToDictionary(v => v.Id);
+        var driverIds = routeList
+            .Where(route => route.DriverId.HasValue)
+            .Select(route => route.DriverId!.Value)
+            .Distinct()
+            .ToHashSet();
+        var drivers = driverIds.Count == 0
+            ? new Dictionary<int, DriverDisplay>()
+            : await BuildDriverDisplayLookupAsync(driverIds);
 
         return routeList
             .OrderBy(r => r.Name)
@@ -358,6 +375,9 @@ public sealed class RoutingService : IDeliveryRouteService
                 TotalDistanceKm = route.TotalDistanceKm,
                 Status = route.Status.ToString(),
                 DriverId = route.DriverId,
+                DriverName = route.DriverId.HasValue && drivers.TryGetValue(route.DriverId.Value, out var driver)
+                    ? driver.FullName
+                    : null,
                 VehicleId = route.VehicleId,
                 VehicleRegistration = route.VehicleId.HasValue && vehicles.TryGetValue(route.VehicleId.Value, out var vehicle)
                     ? vehicle.RegistrationNumber
@@ -368,6 +388,45 @@ public sealed class RoutingService : IDeliveryRouteService
                     .ToList(),
             })
             .ToList();
+    }
+
+    private async Task<int?> ValidateOptionalDriverAsync(int? driverId)
+    {
+        if (!driverId.HasValue || driverId.Value <= 0)
+        {
+            return null;
+        }
+
+        var driver = await _driverRepository.GetByIdAsync(driverId.Value);
+        if (driver is null || !driver.IsActive)
+        {
+            throw new InvalidOperationException("Wybrany kierowca nie istnieje albo nie jest aktywny.");
+        }
+
+        return driver.Id;
+    }
+
+    private async Task<Dictionary<int, DriverDisplay>> BuildDriverDisplayLookupAsync(IReadOnlySet<int> driverIds)
+    {
+        var drivers = (await _driverRepository.GetAllAsync())
+            .Where(driver => driverIds.Contains(driver.Id))
+            .ToDictionary(driver => driver.Id);
+        var users = (await _userRepository.GetAllAsync())
+            .ToDictionary(user => user.Id);
+
+        return drivers
+            .Select(pair =>
+            {
+                users.TryGetValue(pair.Value.UserId, out var user);
+                var fullName = string.Join(
+                    " ",
+                    new[] { user?.FirstName, user?.LastName }
+                        .Where(part => !string.IsNullOrWhiteSpace(part)));
+                return new KeyValuePair<int, DriverDisplay>(
+                    pair.Key,
+                    new DriverDisplay(string.IsNullOrWhiteSpace(fullName) ? $"Kierowca #{pair.Key}" : fullName));
+            })
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
     private async Task<double> CalculateRouteDistanceAsync(IEnumerable<DeliveryRouteStop> stops)
@@ -490,4 +549,6 @@ public sealed class RoutingService : IDeliveryRouteService
 
         public decimal TotalLoadKg => Deliveries.Sum(d => d.EstimatedLoadKg);
     }
+
+    private sealed record DriverDisplay(string FullName);
 }

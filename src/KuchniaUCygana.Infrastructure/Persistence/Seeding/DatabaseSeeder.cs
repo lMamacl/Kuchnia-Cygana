@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using BCrypt.Net;
 using Dapper;
 using KuchniaUCygana.Domain.Entities.Auth;
@@ -107,7 +108,504 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await SeedProductionPlansAsync(db, now, auditUser, cancellationToken);
         await SeedPackingSessionsAsync(db, now, auditUser, cancellationToken);
         await EnsureTodayDemoLifecycleAsync(db, now, auditUser, cancellationToken);
+        await SeedLogisticsDemoAsync(db, now, auditUser, cancellationToken);
     }
+
+    private async Task SeedLogisticsDemoAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var todayDate = today.ToDateTime(TimeOnly.MinValue);
+        var preferredDietVariantId = await EnsureDemoLifecycleMenuFoundationAsync(db, now, auditUser, cancellationToken);
+        var dietMenuPlanId = await EnsureTodayDemoDietMenuPlanAsync(db, todayDate, now, auditUser, cancellationToken);
+        var meals = (await GetTodayDemoMealsAsync(db, dietMenuPlanId, preferredDietVariantId, cancellationToken)).ToList();
+
+        if (meals.Count < 3)
+        {
+            this.logger.LogWarning(
+                "Skipped logistics demo seed because only {MealCount} menu plan items were available for {DemoDate}.",
+                meals.Count,
+                today);
+            return;
+        }
+
+        var productionPlanId = await EnsureTodayDemoProductionPlanAsync(db, todayDate, now, auditUser, cancellationToken);
+        var productionPlanItemIds = await EnsureTodayDemoProductionPlanItemsAsync(
+            db,
+            productionPlanId,
+            meals,
+            now,
+            auditUser,
+            cancellationToken);
+
+        var vehicles = new[]
+        {
+            new LogisticsDemoVehicle("BI 1001A", "Fiat Ducato Chlodnia", 650m, VehicleStatus.Active),
+            new LogisticsDemoVehicle("BI 2042C", "Mercedes Sprinter Long", 900m, VehicleStatus.Active),
+            new LogisticsDemoVehicle("BI 3307E", "Renault Master Izoterma", 1200m, VehicleStatus.Active),
+            new LogisticsDemoVehicle("BI 4040S", "Volkswagen Crafter Serwis", 850m, VehicleStatus.Maintenance),
+        };
+        var vehicleIds = new Dictionary<string, int>();
+        foreach (var vehicle in vehicles)
+        {
+            vehicleIds[vehicle.RegistrationNumber] = await EnsureLogisticsDemoVehicleAsync(
+                db,
+                vehicle,
+                now,
+                auditUser,
+                cancellationToken);
+        }
+
+        var drivers = new[]
+        {
+            new LogisticsDemoDriver("driver@kuchnia.local", "Dostawa", "Kierowca", "M4-BI-001", "BI 1001A"),
+            new LogisticsDemoDriver("driver2@kuchnia.local", "Marek", "Sokolowski", "M4-BI-002", "BI 2042C"),
+            new LogisticsDemoDriver("driver3@kuchnia.local", "Ewa", "Wysocka", "M4-BI-003", "BI 3307E"),
+        };
+        foreach (var driver in drivers)
+        {
+            var userId = await EnsureLogisticsDemoUserAsync(db, driver, now, cancellationToken);
+            var driverId = await EnsureLogisticsDemoDriverAsync(
+                db,
+                userId,
+                driver.LicenseNumber,
+                now,
+                auditUser,
+                cancellationToken);
+            await EnsureLogisticsDemoAssignmentAsync(
+                db,
+                driverId,
+                vehicleIds[driver.VehicleRegistration],
+                now,
+                cancellationToken);
+        }
+
+        var deliveries = GetLogisticsDemoDeliveries();
+        for (var index = 0; index < deliveries.Length; index++)
+        {
+            var delivery = deliveries[index];
+            var customerId = await EnsureLogisticsDemoCustomerAsync(db, index + 1, delivery, now, cancellationToken);
+            var addressId = await EnsureLogisticsDemoAddressAsync(
+                db,
+                customerId,
+                index + 1,
+                delivery,
+                now,
+                auditUser,
+                cancellationToken);
+            var clientPublicId = await EnsureDemoLifecycleCustomerProfileAsync(
+                db,
+                customerId,
+                addressId,
+                now,
+                auditUser,
+                cancellationToken);
+
+            var mealCount = 2 + (index % 3);
+            var orderMeals = meals
+                .OrderBy(meal => meal.SortOrder)
+                .Take(mealCount)
+                .ToList();
+            var orderNumber = $"DEMO-M4-{today:yyyyMMdd}-{index + 1:D2}";
+            var totalPrice = orderMeals.Sum(meal => meal.PricePerDay);
+            var orderId = await EnsureTodayDemoOrderAsync(
+                db,
+                customerId,
+                orderNumber,
+                todayDate,
+                totalPrice,
+                now,
+                auditUser,
+                cancellationToken);
+
+            await EnsureTodayDemoOrderItemsAsync(db, orderId, orderMeals, now, auditUser, cancellationToken);
+            var deliveryCalendarId = await EnsureTodayDemoDeliveryCalendarAsync(
+                db,
+                orderId,
+                addressId,
+                today.ToDateTime(new TimeOnly(6 + ((index * 35) / 60), (index * 35) % 60)),
+                now,
+                auditUser,
+                cancellationToken);
+            await EnsureTodayDemoPackingAsync(
+                db,
+                today,
+                todayDate,
+                orderId,
+                deliveryCalendarId,
+                $"{delivery.FirstName} {delivery.LastName}",
+                clientPublicId,
+                orderMeals,
+                productionPlanItemIds,
+                now,
+                auditUser,
+                cancellationToken);
+        }
+
+        this.logger.LogInformation(
+            "Seeded logistics demo data for {DemoDate}: {VehicleCount} vehicles, {DriverCount} drivers, {DeliveryCount} delivery candidates.",
+            today,
+            vehicles.Length,
+            drivers.Length,
+            deliveries.Length);
+    }
+
+    private static async Task<int> EnsureLogisticsDemoVehicleAsync(
+        IDbConnection db,
+        LogisticsDemoVehicle vehicle,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var vehicleId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            "SELECT [Id] FROM [Vehicles] WHERE [RegistrationNumber] = @registrationNumber;",
+            new { registrationNumber = vehicle.RegistrationNumber },
+            cancellationToken: cancellationToken));
+
+        if (vehicleId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [Vehicles]
+                SET [Model] = @model,
+                    [MaxLoadKg] = @maxLoadKg,
+                    [Status] = @status,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser,
+                    [IsDeleted] = 0
+                WHERE [Id] = @vehicleId;
+                """,
+                new
+                {
+                    vehicleId = vehicleId.Value,
+                    model = vehicle.Model,
+                    maxLoadKg = vehicle.MaxLoadKg,
+                    status = (int)vehicle.Status,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+            return vehicleId.Value;
+        }
+
+        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [Vehicles]
+                ([RegistrationNumber], [Model], [MaxLoadKg], [Status], [CreatedAt], [CreatedBy], [IsDeleted])
+            VALUES
+                (@registrationNumber, @model, @maxLoadKg, @status, @now, @auditUser, 0);
+            SELECT CAST(SCOPE_IDENTITY() as int);
+            """,
+            new
+            {
+                registrationNumber = vehicle.RegistrationNumber,
+                model = vehicle.Model,
+                maxLoadKg = vehicle.MaxLoadKg,
+                status = (int)vehicle.Status,
+                now,
+                auditUser,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task<int> EnsureLogisticsDemoUserAsync(
+        IDbConnection db,
+        LogisticsDemoDriver driver,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var userId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            "SELECT [Id] FROM [Users] WHERE [Email] = @email;",
+            new { email = driver.Email },
+            cancellationToken: cancellationToken));
+
+        if (userId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [Users]
+                SET [FirstName] = @firstName,
+                    [LastName] = @lastName,
+                    [Role] = @role,
+                    [UpdatedAt] = @now
+                WHERE [Id] = @userId;
+                """,
+                new
+                {
+                    userId = userId.Value,
+                    firstName = driver.FirstName,
+                    lastName = driver.LastName,
+                    role = UserRoles.Driver,
+                    now,
+                },
+                cancellationToken: cancellationToken));
+            return userId.Value;
+        }
+
+        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [Users] ([Email], [PasswordHash], [FirstName], [LastName], [Role], [CreatedAt], [UpdatedAt])
+            VALUES (@email, @passwordHash, @firstName, @lastName, @role, @now, NULL);
+            SELECT CAST(SCOPE_IDENTITY() as int);
+            """,
+            new
+            {
+                email = driver.Email,
+                passwordHash = BCrypt.Net.BCrypt.HashPassword("Driver123!"),
+                firstName = driver.FirstName,
+                lastName = driver.LastName,
+                role = UserRoles.Driver,
+                now,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task<int> EnsureLogisticsDemoDriverAsync(
+        IDbConnection db,
+        int userId,
+        string licenseNumber,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var driverId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            """
+            SELECT TOP 1 [Id]
+            FROM [Drivers]
+            WHERE ([UserId] = @userId OR [LicenseNumber] = @licenseNumber)
+              AND [IsDeleted] = 0
+            ORDER BY CASE WHEN [UserId] = @userId THEN 0 ELSE 1 END, [Id];
+            """,
+            new { userId, licenseNumber },
+            cancellationToken: cancellationToken));
+
+        if (driverId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [Drivers]
+                SET [UserId] = @userId,
+                    [LicenseNumber] = @licenseNumber,
+                    [IsActive] = 1,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser,
+                    [IsDeleted] = 0
+                WHERE [Id] = @driverId;
+                """,
+                new { driverId = driverId.Value, userId, licenseNumber, now, auditUser },
+                cancellationToken: cancellationToken));
+            return driverId.Value;
+        }
+
+        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [Drivers]
+                ([UserId], [LicenseNumber], [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
+            VALUES
+                (@userId, @licenseNumber, 1, @now, @auditUser, 0);
+            SELECT CAST(SCOPE_IDENTITY() as int);
+            """,
+            new { userId, licenseNumber, now, auditUser },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task EnsureLogisticsDemoAssignmentAsync(
+        IDbConnection db,
+        int driverId,
+        int vehicleId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var existing = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            """
+            SELECT [Id]
+            FROM [DriverVehicleAssignments]
+            WHERE [DriverId] = @driverId
+              AND [VehicleId] = @vehicleId
+              AND [UnassignedAt] IS NULL;
+            """,
+            new { driverId, vehicleId },
+            cancellationToken: cancellationToken));
+
+        if (existing.HasValue)
+        {
+            return;
+        }
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE [DriverVehicleAssignments]
+            SET [UnassignedAt] = @now,
+                [UpdatedAt] = @now
+            WHERE ([DriverId] = @driverId OR [VehicleId] = @vehicleId)
+              AND [UnassignedAt] IS NULL;
+
+            INSERT INTO [DriverVehicleAssignments]
+                ([DriverId], [VehicleId], [AssignedAt], [UnassignedAt], [CreatedAt], [UpdatedAt])
+            VALUES
+                (@driverId, @vehicleId, @now, NULL, @now, NULL);
+            """,
+            new { driverId, vehicleId, now },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task<int> EnsureLogisticsDemoCustomerAsync(
+        IDbConnection db,
+        int sequence,
+        LogisticsDemoDelivery delivery,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var email = $"demo-m4-klient-{sequence:D2}@kuchnia.local";
+        var userId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            "SELECT [Id] FROM [Users] WHERE [Email] = @email;",
+            new { email },
+            cancellationToken: cancellationToken));
+
+        if (userId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [Users]
+                SET [FirstName] = @firstName,
+                    [LastName] = @lastName,
+                    [Role] = @role,
+                    [UpdatedAt] = @now
+                WHERE [Id] = @userId;
+                """,
+                new
+                {
+                    userId = userId.Value,
+                    delivery.FirstName,
+                    delivery.LastName,
+                    role = UserRoles.Client,
+                    now,
+                },
+                cancellationToken: cancellationToken));
+            return userId.Value;
+        }
+
+        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [Users] ([Email], [PasswordHash], [FirstName], [LastName], [Role], [CreatedAt], [UpdatedAt])
+            VALUES (@email, @passwordHash, @firstName, @lastName, @role, @now, NULL);
+            SELECT CAST(SCOPE_IDENTITY() as int);
+            """,
+            new
+            {
+                email,
+                passwordHash = BCrypt.Net.BCrypt.HashPassword("Demo123!"),
+                delivery.FirstName,
+                delivery.LastName,
+                role = UserRoles.Client,
+                now,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task<int> EnsureLogisticsDemoAddressAsync(
+        IDbConnection db,
+        int customerId,
+        int sequence,
+        LogisticsDemoDelivery delivery,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var label = $"Demo M4 {sequence:D2}";
+        var addressId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            """
+            SELECT TOP 1 [Id]
+            FROM [Addresses]
+            WHERE [UserId] = @customerId
+              AND [Label] = @label
+            ORDER BY [Id];
+            """,
+            new { customerId, label },
+            cancellationToken: cancellationToken));
+
+        if (addressId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [Addresses]
+                SET [Street] = @street,
+                    [BuildingNumber] = @buildingNumber,
+                    [ApartmentNumber] = @apartmentNumber,
+                    [City] = N'Bialystok',
+                    [PostalCode] = @postalCode,
+                    [IsDefault] = 1,
+                    [DeliveryNotes] = N'Demo M4: punkt do generowania tras logistycznych.',
+                    [Latitude] = @latitude,
+                    [Longitude] = @longitude,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser,
+                    [IsDeleted] = 0
+                WHERE [Id] = @addressId;
+                """,
+                new
+                {
+                    addressId = addressId.Value,
+                    delivery.Street,
+                    delivery.BuildingNumber,
+                    delivery.ApartmentNumber,
+                    delivery.PostalCode,
+                    delivery.Latitude,
+                    delivery.Longitude,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+            return addressId.Value;
+        }
+
+        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [Addresses]
+                ([UserId], [Label], [Street], [BuildingNumber], [ApartmentNumber], [City], [PostalCode],
+                 [IsDefault], [DeliveryNotes], [CreatedAt], [CreatedBy], [IsDeleted], [Latitude], [Longitude])
+            VALUES
+                (@customerId, @label, @street, @buildingNumber, @apartmentNumber, N'Bialystok', @postalCode,
+                 1, N'Demo M4: punkt do generowania tras logistycznych.', @now, @auditUser, 0, @latitude, @longitude);
+            SELECT CAST(SCOPE_IDENTITY() as int);
+            """,
+            new
+            {
+                customerId,
+                label,
+                delivery.Street,
+                delivery.BuildingNumber,
+                delivery.ApartmentNumber,
+                delivery.PostalCode,
+                delivery.Latitude,
+                delivery.Longitude,
+                now,
+                auditUser,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    private static LogisticsDemoDelivery[] GetLogisticsDemoDeliveries() =>
+    [
+        new("Katarzyna", "Nowak", "Lipowa", "12", "4", "15-427", 53.13218, 23.15841),
+        new("Piotr", "Kaminski", "Warszawska", "8", null, "15-062", 53.13073, 23.17442),
+        new("Magdalena", "Krol", "Mickiewicza", "31", "9", "15-213", 53.12464, 23.17085),
+        new("Tomasz", "Zielinski", "Sienkiewicza", "44", null, "15-092", 53.13547, 23.16512),
+        new("Alicja", "Grabowska", "Zwierzyniecka", "19", "2", "15-312", 53.11794, 23.16128),
+        new("Robert", "Wisniewski", "Antoniuk Fabryczny", "7", null, "15-762", 53.14785, 23.13264),
+        new("Monika", "Lewandowska", "Hetmanska", "22", "11", "15-727", 53.12721, 23.12876),
+        new("Pawel", "Mazur", "Wasilkowska", "71", null, "15-137", 53.15819, 23.16933),
+        new("Natalia", "Wojcik", "Piastowska", "4", "6", "15-207", 53.12271, 23.18745),
+        new("Michal", "Kaczmarek", "Branickiego", "10", null, "15-085", 53.12784, 23.17359),
+        new("Joanna", "Dabrowska", "Swietojanska", "17", "3", "15-082", 53.12939, 23.15426),
+        new("Kamil", "Pawlak", "Kawaleryjska", "38", null, "15-325", 53.10985, 23.15154),
+        new("Ewelina", "Sikora", "Zwyciestwa", "6", "18", "15-703", 53.14398, 23.11941),
+        new("Adam", "Baran", "Transportowa", "2", null, "15-399", 53.11091, 23.20368),
+        new("Patrycja", "Lis", "Produkcyjna", "54", "7", "15-680", 53.15324, 23.10196),
+    ];
 
     // ── Jednostki miar ────────────────────────────────────────────
 
@@ -1159,15 +1657,15 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             await db.ExecuteAsync(new CommandDefinition(
                 """
                 UPDATE [Addresses]
-                SET [Street] = N'Pokazowa',
-                    [BuildingNumber] = N'7',
-                    [ApartmentNumber] = N'12',
-                    [City] = N'Poznan',
-                    [PostalCode] = N'60-001',
+                SET [Street] = N'Lipowa',
+                    [BuildingNumber] = N'1',
+                    [ApartmentNumber] = N'2',
+                    [City] = N'Bialystok',
+                    [PostalCode] = N'15-424',
                     [IsDefault] = 1,
                     [DeliveryNotes] = N'Dane demo na dzisiejsza sciezke zycia zamowienia.',
-                    [Latitude] = 52.4064,
-                    [Longitude] = 16.9252,
+                    [Latitude] = 53.1322,
+                    [Longitude] = 23.1584,
                     [UpdatedAt] = @now,
                     [UpdatedBy] = @auditUser,
                     [IsDeleted] = 0
@@ -1185,8 +1683,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 ([UserId], [Label], [Street], [BuildingNumber], [ApartmentNumber], [City], [PostalCode],
                  [IsDefault], [DeliveryNotes], [CreatedAt], [CreatedBy], [IsDeleted], [Latitude], [Longitude])
             VALUES
-                (@customerId, N'Demo lifecycle', N'Pokazowa', N'7', N'12', N'Poznan', N'60-001',
-                 1, N'Dane demo na dzisiejsza sciezke zycia zamowienia.', @now, @auditUser, 0, 52.4064, 16.9252);
+                (@customerId, N'Demo lifecycle', N'Lipowa', N'1', N'2', N'Bialystok', N'15-424',
+                 1, N'Dane demo na dzisiejsza sciezke zycia zamowienia.', @now, @auditUser, 0, 53.1322, 23.1584);
             SELECT CAST(SCOPE_IDENTITY() as int);
             """,
             new { customerId, now, auditUser },
@@ -1874,8 +2372,24 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 cancellationToken: cancellationToken));
         }
 
+        var packingBagId = await EnsureTodayDemoPackingBagAsync(
+            db,
+            sessionId.Value,
+            today,
+            now,
+            auditUser,
+            cancellationToken);
+
         await db.ExecuteAsync(new CommandDefinition(
             """
+            DELETE FROM [BoxLabels]
+            WHERE [PackingItemId] IN
+            (
+                SELECT [Id]
+                FROM [PackingItems]
+                WHERE [PackingSessionId] = @sessionId
+            );
+
             DELETE FROM [PackingLabels]
             WHERE [PackingSessionId] = @sessionId
                OR [PackingItemId] IN
@@ -1905,7 +2419,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                      [BoxCode], [Status], [ExpiryDate], [FoilPrintedAt], [PackedAt], [PackedBy],
                      [CreatedBy], [CreatedAt], [IsDeleted])
                 VALUES
-                    (@sessionId, NULL, @productionPlanItemId, @mealId, @mealName, @dietVariantId,
+                    (@sessionId, @packingBagId, @productionPlanItemId, @mealId, @mealName, @dietVariantId,
                      @boxCode, @status, @expiryDate, @foilPrintedAt, @packedAt, @packedBy,
                      @auditUser, @now, 0);
                 SELECT CAST(SCOPE_IDENTITY() as int);
@@ -1913,6 +2427,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 new
                 {
                     sessionId = sessionId.Value,
+                    packingBagId,
                     productionPlanItemId = productionPlanItemId == 0 ? (int?)null : productionPlanItemId,
                     mealId = meal.MealId,
                     mealName = meal.MealName,
@@ -1927,6 +2442,14 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                     now,
                 },
                 cancellationToken: cancellationToken));
+
+            var productLabelDataJson = CreateDemoProductLabelData(
+                today,
+                orderId,
+                deliveryCalendarId,
+                packingItemId,
+                packingBagId,
+                meal);
 
             await db.ExecuteAsync(new CommandDefinition(
                 """
@@ -1946,7 +2469,24 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                     allergens = GetDemoAllergens(meal.MealId),
                     kcal = Math.Max(1, meal.CaloriesPerDay / 5),
                     clientName,
-                    labelDataJson = CreateDemoLabelData(today, orderId, meal),
+                    labelDataJson = productLabelDataJson,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO [BoxLabels]
+                    ([PackingItemId], [QrCode], [LabelDataJson], [PrintNumber], [PrintedAt], [PrintedBy], [CreatedAt])
+                VALUES
+                    (@packingItemId, @qrCode, @labelDataJson, 1, @now, @auditUser, @now);
+                """,
+                new
+                {
+                    packingItemId,
+                    qrCode = boxCode,
+                    labelDataJson = productLabelDataJson,
                     now,
                     auditUser,
                 },
@@ -1954,24 +2494,105 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         }
 
         var shippingCode = $"DEMO-BAG-{today:yyyyMMdd}-{sessionId.Value:D3}";
+        var routeInfo = $"Oczekuje na trase M4 (DeliveryCalendar #{deliveryCalendarId})";
         await db.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO [PackingLabels]
-                ([PackingItemId], [PackingSessionId], [LabelType], [QrCode], [ClientName], [RouteInfo],
-                 [DeliveryWindow], [MealsList], [PrintNumber], [LabelDataJson], [PrintedAt], [PrintedBy], [CreatedAt])
+                ([PackingItemId], [PackingSessionId], [PackingBagId], [LabelType], [QrCode], [ClientName], [RouteInfo],
+                 [DeliveryWindow], [MealsList], [PrintNumber], [LabelDataJson], [PrintedAt], [PrintedBy],
+                 [AttachedAt], [AttachedBy], [CreatedAt])
             VALUES
-                (NULL, @sessionId, @labelType, @qrCode, @clientName, @routeInfo,
-                 N'06:00-10:00', @mealsList, 1, @labelDataJson, @now, @auditUser, @now);
+                (NULL, @sessionId, @packingBagId, @labelType, @qrCode, @clientName, @routeInfo,
+                 N'06:00-10:00', @mealsList, 1, @labelDataJson, @now, @auditUser,
+                 @now, @auditUser, @now);
             """,
             new
             {
                 sessionId = sessionId.Value,
+                packingBagId,
                 labelType = 1,
                 qrCode = shippingCode,
                 clientName,
-                routeInfo = $"DeliveryCalendar #{deliveryCalendarId}",
+                routeInfo,
                 mealsList = string.Join(", ", meals.Select(meal => meal.MealName)),
-                labelDataJson = $"{{\"source\":\"DemoLifecycle\",\"date\":\"{today:yyyy-MM-dd}\",\"orderId\":{orderId},\"deliveryCalendarId\":{deliveryCalendarId}}}",
+                labelDataJson = CreateDemoTransportLabelData(
+                    today,
+                    orderId,
+                    deliveryCalendarId,
+                    packingBagId,
+                    shippingCode,
+                    routeInfo,
+                    meals),
+                now,
+                auditUser,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task<int> EnsureTodayDemoPackingBagAsync(
+        IDbConnection db,
+        int sessionId,
+        DateOnly today,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var bagCode = $"DEMO-BAG-{today:yyyyMMdd}-{sessionId:D3}";
+        var bagId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            """
+            SELECT TOP 1 [Id]
+            FROM [PackingBags]
+            WHERE [PackingSessionId] = @sessionId
+              AND [BagNumber] = 1
+              AND [IsDeleted] = 0
+            ORDER BY [Id];
+            """,
+            new { sessionId },
+            cancellationToken: cancellationToken));
+
+        if (bagId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [PackingBags]
+                SET [BagCode] = @bagCode,
+                    [Status] = @status,
+                    [PackedAt] = @now,
+                    [PackedBy] = @auditUser,
+                    [LabeledAt] = @now,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser,
+                    [IsDeleted] = 0
+                WHERE [Id] = @bagId;
+                """,
+                new
+                {
+                    bagId = bagId.Value,
+                    bagCode,
+                    status = (int)PackingBagStatus.Labeled,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+
+            return bagId.Value;
+        }
+
+        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [PackingBags]
+                ([PackingSessionId], [BagNumber], [BagCode], [Status], [PackedAt], [PackedBy],
+                 [LabeledAt], [CreatedBy], [CreatedAt], [IsDeleted])
+            VALUES
+                (@sessionId, 1, @bagCode, @status, @now, @auditUser,
+                 @now, @auditUser, @now, 0);
+            SELECT CAST(SCOPE_IDENTITY() as int);
+            """,
+            new
+            {
+                sessionId,
+                bagCode,
+                status = (int)PackingBagStatus.Labeled,
                 now,
                 auditUser,
             },
@@ -1988,8 +2609,62 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             _ => "Brak",
         };
 
-    private static string CreateDemoLabelData(DateOnly today, int orderId, DemoLifecycleMeal meal)
-        => $"{{\"source\":\"DemoLifecycle\",\"date\":\"{today:yyyy-MM-dd}\",\"orderId\":{orderId},\"mealId\":{meal.MealId},\"dietVariantId\":{meal.DietVariantId}}}";
+    private static string CreateDemoProductLabelData(
+        DateOnly today,
+        int orderId,
+        int deliveryCalendarId,
+        int packingItemId,
+        int packingBagId,
+        DemoLifecycleMeal meal)
+        => JsonSerializer.Serialize(new
+        {
+            source = "DemoLifecycle",
+            type = "FoilLabel",
+            date = today.ToString("yyyy-MM-dd"),
+            orderId,
+            deliveryCalendarId,
+            packingItemId,
+            packingBagId,
+            meal.MealId,
+            meal.MealName,
+            meal.DietVariantId,
+            meal.DietName,
+            meal.VariantName,
+            meal.MealSlot,
+            allergens = GetDemoAllergens(meal.MealId),
+            kcal = Math.Max(1, meal.CaloriesPerDay / 5),
+        });
+
+    private static string CreateDemoTransportLabelData(
+        DateOnly today,
+        int orderId,
+        int deliveryCalendarId,
+        int packingBagId,
+        string shippingCode,
+        string routeInfo,
+        IReadOnlyList<DemoLifecycleMeal> meals)
+        => JsonSerializer.Serialize(new
+        {
+            source = "DemoLifecycle",
+            type = "TransportLabel",
+            date = today.ToString("yyyy-MM-dd"),
+            orderId,
+            deliveryCalendarId,
+            packingBagId,
+            qrCode = shippingCode,
+            routeInfo,
+            meals = meals
+                .OrderBy(meal => meal.SortOrder)
+                .Select(meal => new
+                {
+                    meal.MealId,
+                    meal.MealName,
+                    meal.DietVariantId,
+                    meal.DietName,
+                    meal.VariantName,
+                    meal.MealSlot,
+                }),
+        });
 
     private sealed class DemoLifecycleMeal
     {
@@ -2015,6 +2690,29 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
         public decimal PricePerDay { get; set; }
     }
+
+    private sealed record LogisticsDemoVehicle(
+        string RegistrationNumber,
+        string Model,
+        decimal MaxLoadKg,
+        VehicleStatus Status);
+
+    private sealed record LogisticsDemoDriver(
+        string Email,
+        string FirstName,
+        string LastName,
+        string LicenseNumber,
+        string VehicleRegistration);
+
+    private sealed record LogisticsDemoDelivery(
+        string FirstName,
+        string LastName,
+        string Street,
+        string BuildingNumber,
+        string? ApartmentNumber,
+        string PostalCode,
+        double Latitude,
+        double Longitude);
 
     private static Task<int> CountRowsAsync(IDbConnection db, string tableName, CancellationToken cancellationToken)
         => db.ExecuteScalarAsync<int>(new CommandDefinition(

@@ -8,5 +8,7 @@ public sealed class RouteEditViewModel
 
     public IReadOnlyList<VehicleDto> Vehicles { get; init; } = [];
 
+    public IReadOnlyList<DriverDto> Drivers { get; init; } = [];
+
     public IReadOnlyList<RouteStopDto> Stops { get; init; } = [];
 }

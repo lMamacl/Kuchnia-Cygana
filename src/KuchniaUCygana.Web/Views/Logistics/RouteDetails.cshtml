@@ -27,7 +27,9 @@
             <div class="card-body">
                 <div class="subheader">Pojazd</div>
                 <div class="h2 mb-3">@(Model.VehicleRegistration ?? "Brak")</div>
-                <div class="text-secondary">Auto przypisane do trasy</div>
+                <div class="text-secondary">
+                    Kierowca: @(string.IsNullOrWhiteSpace(Model.DriverName) ? "nie dopisano" : Model.DriverName)
+                </div>
             </div>
         </div>
     </div>

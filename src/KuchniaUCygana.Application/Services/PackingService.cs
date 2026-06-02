@@ -531,7 +531,7 @@ public sealed class PackingService : IPackingService
                 LabelType = LabelType.Shipping,
                 QrCode = BuildTransportQrCode(physicalBag.BagCode),
                 ClientName = null,
-                RouteInfo = $"{routeBag.RouteName}, auto {routeBag.VehicleRegistration}, stop {routeBag.StopNumber}",
+                RouteInfo = BuildRouteInfo(routeBag),
                 DeliveryWindow = routeBag.DeliveryWindow,
                 MealsList = BuildMealsList(session),
                 PrintNumber = printNumber,
@@ -544,6 +544,8 @@ public sealed class PackingService : IPackingService
             var id = await labelRepository.InsertAsync(shippingLabel);
             shippingLabel.Id = id;
         }
+
+        await SynchronizeTransportLabelWithRouteAsync(shippingLabel, physicalBag, routeBag, BuildMealsList(session));
 
         if (session.Status == PackingStatus.Packed)
         {
@@ -613,7 +615,7 @@ public sealed class PackingService : IPackingService
                 LabelType = LabelType.Shipping,
                 QrCode = BuildTransportQrCode(physicalBag.BagCode),
                 ClientName = null,
-                RouteInfo = $"{routeBag.RouteName}, auto {routeBag.VehicleRegistration}, stop {routeBag.StopNumber}",
+                RouteInfo = BuildRouteInfo(routeBag),
                 DeliveryWindow = routeBag.DeliveryWindow,
                 MealsList = BuildMealsList(session),
                 PrintNumber = printNumber,
@@ -625,6 +627,8 @@ public sealed class PackingService : IPackingService
 
             shippingLabel.Id = await labelRepository.InsertAsync(shippingLabel);
         }
+
+        await SynchronizeTransportLabelWithRouteAsync(shippingLabel, physicalBag, routeBag, BuildMealsList(session));
 
         if (session.Status == PackingStatus.Packed)
         {
@@ -1145,10 +1149,7 @@ public sealed class PackingService : IPackingService
 
         if (delivery is not null && delivery.Items.Count > 0)
         {
-            return delivery.Items.Select(item => new BoxDefinition(
-                item.DietVariantId,
-                $"{item.DietName} {item.VariantName}".Trim(),
-                item.DietVariantId));
+            return await ResolveOrderItemBoxDefinitionsAsync(delivery.Items, session.PackingDate);
         }
 
         var order = await orderProvider.GetOrderByIdAsync(orderId)
@@ -1166,6 +1167,47 @@ public sealed class PackingService : IPackingService
 
         throw new InvalidOperationException(
             $"Brak pozycji dostawy lub planu M2 dla wariantu diety {order.DietVariantId} na {session.PackingDate:dd.MM.yyyy}. Nie można utworzyć pudełek z danych zastępczych.");
+    }
+
+    private async Task<IEnumerable<BoxDefinition>> ResolveOrderItemBoxDefinitionsAsync(
+        IReadOnlyList<OrderItemInfo> items,
+        DateOnly packingDate)
+    {
+        var dietPlan = (await dietProvider.GetPlanForDateAsync(packingDate)).ToList();
+        return items.Select(item =>
+        {
+            var mealName = ExtractMealNameFromOrderItem(item);
+            var mealSlot = ExtractMealSlotFromOrderItem(item);
+            var matchedPlanItem = dietPlan.FirstOrDefault(planItem =>
+                    planItem.DietVariantId == item.DietVariantId &&
+                    string.Equals(planItem.MealName, mealName, StringComparison.OrdinalIgnoreCase))
+                ?? dietPlan.FirstOrDefault(planItem =>
+                    planItem.DietVariantId == item.DietVariantId &&
+                    string.Equals(planItem.MealSlot, mealSlot, StringComparison.OrdinalIgnoreCase));
+
+            return new BoxDefinition(
+                matchedPlanItem?.MealId ?? item.DietVariantId,
+                matchedPlanItem?.MealName ?? mealName,
+                item.DietVariantId);
+        });
+    }
+
+    private static string ExtractMealNameFromOrderItem(OrderItemInfo item)
+    {
+        var dietName = item.DietName.Trim();
+        var separatorIndex = dietName.LastIndexOf(':');
+        if (separatorIndex >= 0 && separatorIndex < dietName.Length - 1)
+        {
+            return dietName[(separatorIndex + 1)..].Trim();
+        }
+
+        return $"{item.DietName} {item.VariantName}".Trim();
+    }
+
+    private static string ExtractMealSlotFromOrderItem(OrderItemInfo item)
+    {
+        var parts = item.VariantName.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 0 ? string.Empty : parts[^1];
     }
 
     private static List<RouteAssignment> AssignOrdersToRoutes(
@@ -1355,6 +1397,8 @@ public sealed class PackingService : IPackingService
             .FirstOrDefault(bag => bag.PackingBagId == physicalBag.Id || bag.PackingSessionId == session.Id)
             ?? throw new InvalidOperationException("Nie znaleziono trasy dla etykiety transportowej.");
 
+        await SynchronizeTransportLabelWithRouteAsync(label, physicalBag, routeBag, BuildMealsList(session));
+
         return CreateTransportLabelDto(label, physicalBag, routeBag);
     }
 
@@ -1421,6 +1465,57 @@ public sealed class PackingService : IPackingService
         return $"{baseUrl}/delivery/verify/{Uri.EscapeDataString(bagCode)}";
     }
 
+    private async Task SynchronizeTransportLabelWithRouteAsync(
+        PackingLabel label,
+        PackingBag physicalBag,
+        PackingBagDto routeBag,
+        string? mealsList)
+    {
+        var routeInfo = BuildRouteInfo(routeBag);
+        var deliveryWindow = string.IsNullOrWhiteSpace(routeBag.DeliveryWindow)
+            ? label.DeliveryWindow
+            : routeBag.DeliveryWindow;
+        var effectiveMealsList = string.IsNullOrWhiteSpace(mealsList)
+            ? label.MealsList
+            : mealsList;
+        var changed = false;
+
+        if (!string.Equals(label.RouteInfo, routeInfo, StringComparison.Ordinal))
+        {
+            label.RouteInfo = routeInfo;
+            changed = true;
+        }
+
+        if (!string.Equals(label.DeliveryWindow, deliveryWindow, StringComparison.Ordinal))
+        {
+            label.DeliveryWindow = deliveryWindow;
+            changed = true;
+        }
+
+        if (!string.Equals(label.MealsList, effectiveMealsList, StringComparison.Ordinal))
+        {
+            label.MealsList = effectiveMealsList;
+            changed = true;
+        }
+
+        var snapshot = BuildTransportLabelSnapshot(label, physicalBag, routeBag);
+        if (!string.Equals(label.LabelDataJson, snapshot, StringComparison.Ordinal))
+        {
+            label.LabelDataJson = snapshot;
+            changed = true;
+        }
+
+        if (changed && label.Id > 0)
+        {
+            await labelRepository.UpdateAsync(label);
+        }
+    }
+
+    private static string BuildRouteInfo(PackingBagDto routeBag)
+    {
+        return $"{routeBag.RouteName}, auto {routeBag.VehicleRegistration}, stop {routeBag.StopNumber}";
+    }
+
     private static string BuildMealsList(PackingSession session)
     {
         return string.Join(
@@ -1450,8 +1545,8 @@ public sealed class PackingService : IPackingService
             VehicleRegistration = routeBag.VehicleRegistration,
             TotalBoxes = routeBag.TotalBoxes,
             PackedBoxes = routeBag.PackedBoxes,
-            RouteInfo = label.RouteInfo,
-            DeliveryWindow = label.DeliveryWindow,
+            RouteInfo = BuildRouteInfo(routeBag),
+            DeliveryWindow = string.IsNullOrWhiteSpace(routeBag.DeliveryWindow) ? label.DeliveryWindow : routeBag.DeliveryWindow,
             MealsList = label.MealsList,
             ReprintReason = label.ReprintReason,
             PrintNumber = label.PrintNumber,

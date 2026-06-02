@@ -217,6 +217,7 @@
                     <th>Nazwa</th>
                     <th>Status</th>
                     <th>Pojazd</th>
+                    <th>Kierowca</th>
                     <th>Przystanki</th>
                     <th>Dystans</th>
                     <th class="w-1">Akcje</th>
@@ -226,7 +227,7 @@
                 @if (Model.RoutesCount == 0)
                 {
                     <tr>
-                        <td colspan="6" class="text-center text-secondary py-4">Brak tras dla wybranego dnia.</td>
+                        <td colspan="7" class="text-center text-secondary py-4">Brak tras dla wybranego dnia.</td>
                     </tr>
                 }
                 else
@@ -244,6 +245,16 @@
                                 else
                                 {
                                     <span class="font-monospace">@route.VehicleRegistration</span>
+                                }
+                            </td>
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(route.DriverName))
+                                {
+                                    <span class="text-secondary">Nie dopisano</span>
+                                }
+                                else
+                                {
+                                    <span>@route.DriverName</span>
                                 }
                             </td>
                             <td>@route.Stops.Count</td>

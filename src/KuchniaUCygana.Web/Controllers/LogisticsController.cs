@@ -46,7 +46,7 @@ public sealed class LogisticsController : Controller
         var selectedDate = date ?? DateTimeOffset.Now;
         ViewData["Title"] = "Logistyka";
         ViewData["Section"] = "Logistyka";
-        ViewData["Description"] = $"Gotowosc dostaw na {selectedDate:dd.MM.yyyy}.";
+        ViewData["Description"] = $"Gotowość dostaw na {selectedDate:dd.MM.yyyy}.";
         return View(await BuildDashboardViewModelAsync(selectedDate));
     }
 
@@ -61,7 +61,7 @@ public sealed class LogisticsController : Controller
 
         if (pendingBefore == 0)
         {
-            TempData["Success"] = "Wszystkie adresy maja juz wspolrzedne.";
+            TempData["Success"] = "Wszystkie adresy mają już współrzędne.";
             return RedirectToAction(nameof(Index), new { date = selectedDate.ToString("yyyy-MM-dd") });
         }
 
@@ -71,12 +71,12 @@ public sealed class LogisticsController : Controller
             var remaining = (await _addressRepository.GetPendingAddressesAsync()).Count();
 
             TempData[remaining == 0 ? "Success" : "Error"] = remaining == 0
-                ? $"Geokodowanie zakonczone. Uzupelniono {processed} adresow."
-                : $"Uzupelniono {processed} z {pendingBefore} adresow. Nadal oczekuje: {remaining}.";
+                ? $"Geokodowanie zakończone. Uzupełniono {processed} adresów."
+                : $"Uzupełniono {processed} z {pendingBefore} adresów. Nadal oczekuje: {remaining}.";
         }
         catch (Exception)
         {
-            TempData["Error"] = "Nie udalo sie uruchomic geokodowania. Sprobuj ponownie za chwile.";
+            TempData["Error"] = "Nie udało się uruchomić geokodowania. Spróbuj ponownie za chwilę.";
         }
 
         return RedirectToAction(nameof(Index), new { date = selectedDate.ToString("yyyy-MM-dd") });
@@ -128,7 +128,7 @@ public sealed class LogisticsController : Controller
         var route = await _deliveryRouteService.GetRouteDetailsAsync(id);
         if (route == null) return NotFound();
 
-        ViewData["Title"] = "Szczegoly trasy";
+        ViewData["Title"] = "Szczegóły trasy";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = $"Trasa #{id}: {route.Name}.";
         return View(route);
@@ -142,7 +142,7 @@ public sealed class LogisticsController : Controller
 
         ViewData["Title"] = "Edycja trasy";
         ViewData["Section"] = "Logistyka";
-        ViewData["Description"] = $"Zmiana przypisania i kolejnosci przystankow trasy #{id}.";
+        ViewData["Description"] = $"Zmiana przypisania i kolejności przystanków trasy #{id}.";
         return View("RoutesEdit", await BuildRouteEditViewModelAsync(route));
     }
 
@@ -164,7 +164,7 @@ public sealed class LogisticsController : Controller
             var updated = await _deliveryRouteService.UpdateRouteAsync(model.Route);
             if (updated == null) return NotFound();
 
-            TempData["Success"] = "Trasa zostala zaktualizowana.";
+            TempData["Success"] = "Trasa została zaktualizowana.";
             return RedirectToAction(nameof(RouteDetails), new { id });
         }
         catch (InvalidOperationException ex)
@@ -184,7 +184,7 @@ public sealed class LogisticsController : Controller
         {
             var deleted = await _deliveryRouteService.DeleteRouteAsync(id);
             TempData[deleted ? "Success" : "Error"] = deleted
-                ? "Trasa zostala usunieta. Mozesz ponownie wygenerowac plan dnia."
+                ? "Trasa została usunięta. Możesz ponownie wygenerować plan dnia."
                 : "Nie znaleziono trasy.";
         }
         catch (InvalidOperationException ex)
@@ -490,6 +490,7 @@ public sealed class LogisticsController : Controller
             Id = route.Id,
             Name = route.Name,
             VehicleId = route.VehicleId ?? 0,
+            DriverId = route.DriverId,
             Stops = route.Stops
                 .OrderBy(stop => stop.SequenceNumber)
                 .Select(stop => new UpdateDeliveryRouteStopRequest
@@ -504,11 +505,18 @@ public sealed class LogisticsController : Controller
             .Where(vehicle => vehicle.Status == VehicleStatus.Active.ToString())
             .OrderBy(vehicle => vehicle.RegistrationNumber)
             .ToList();
+        var drivers = (await _driverService.GetAllAsync())
+            .Where(driver => driver.IsActive)
+            .OrderByDescending(driver => request.VehicleId > 0 && driver.CurrentVehicleId == request.VehicleId)
+            .ThenBy(driver => driver.LastName)
+            .ThenBy(driver => driver.FirstName)
+            .ToList();
 
         return new RouteEditViewModel
         {
             Route = request,
             Vehicles = vehicles,
+            Drivers = drivers,
             Stops = route.Stops
                 .OrderBy(stop => stop.SequenceNumber)
                 .ToList(),

@@ -40,6 +40,11 @@ public interface ILoadingService
     Task DispatchAsync(DateOnly date, int routeId);
 
     /// <summary>
+    /// Cofa stan zaladunku dla dnia albo trasy, bez usuwania tras M4 ani etykiet transportowych.
+    /// </summary>
+    Task<int> ResetLoadingAsync(DateOnly date, int? routeId = null);
+
+    /// <summary>
     /// Skanuje i ładuje torbę po jej kodzie transportowym.
     /// </summary>
     Task<PackingBagDto> LoadBagByCodeAsync(int routeId, string transportCode);

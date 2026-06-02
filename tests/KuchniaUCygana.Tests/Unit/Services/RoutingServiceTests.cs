@@ -1,8 +1,10 @@
 using FluentAssertions;
 using KuchniaUCygana.Application.DTOs.Logistics;
 using KuchniaUCygana.Application.Services.Logistics;
+using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using Moq;
 
@@ -59,6 +61,8 @@ public sealed class RoutingServiceTests
             routeRepository.Object,
             stopRepository.Object,
             vehicleRepository.Object,
+            new Mock<IDriverRepository>().Object,
+            new Mock<IUserRepository>().Object,
             deliveryProvider.Object,
             optimizer);
 
@@ -116,6 +120,8 @@ public sealed class RoutingServiceTests
             routeRepository.Object,
             stopRepository.Object,
             vehicleRepository.Object,
+            new Mock<IDriverRepository>().Object,
+            new Mock<IUserRepository>().Object,
             deliveryProvider.Object,
             new NearestNeighborRouteOptimizer());
 
@@ -137,6 +143,112 @@ public sealed class RoutingServiceTests
         route.Stops.Single(stop => stop.Id == 101).SequenceNumber.Should().Be(2);
         route.Stops.Single(stop => stop.Id == 102).SequenceNumber.Should().Be(1);
         stopRepository.Verify(r => r.UpdateAsync(It.IsAny<DeliveryRouteStop>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task UpdateRouteAsync_AssignsActiveDriverAndMapsDriverName()
+    {
+        var route = new DeliveryRoute
+        {
+            Id = 10,
+            Name = "Trasa 1",
+            Status = RouteStatus.Assigned,
+            VehicleId = 1,
+            Stops =
+            {
+                new DeliveryRouteStop { Id = 101, RouteId = 10, DeliveryCalendarId = 1, SequenceNumber = 1 },
+            },
+        };
+        var routeRepository = new Mock<IDeliveryRouteRepository>();
+        var stopRepository = new Mock<IDeliveryRouteStopRepository>();
+        var vehicleRepository = new Mock<IVehicleRepository>();
+        var driverRepository = new Mock<IDriverRepository>();
+        var userRepository = new Mock<IUserRepository>();
+        var deliveryProvider = new Mock<ILogisticsDeliveryDataProvider>();
+        routeRepository.Setup(r => r.GetRouteWithStopsAsync(10)).ReturnsAsync(route);
+        routeRepository.Setup(r => r.UpdateAsync(route)).ReturnsAsync(true);
+        stopRepository.Setup(r => r.UpdateAsync(It.IsAny<DeliveryRouteStop>())).ReturnsAsync(true);
+        vehicleRepository.Setup(r => r.GetByIdAsync(2)).ReturnsAsync(
+            new Vehicle { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active });
+        vehicleRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(
+            new List<Vehicle> { new() { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active } });
+        driverRepository.Setup(r => r.GetByIdAsync(7)).ReturnsAsync(
+            new Driver { Id = 7, UserId = 70, LicenseNumber = "M4-001", IsActive = true });
+        driverRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(
+            new List<Driver> { new() { Id = 7, UserId = 70, LicenseNumber = "M4-001", IsActive = true } });
+        userRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(
+            new List<User> { new() { Id = 70, FirstName = "Jan", LastName = "Kierowca" } });
+        deliveryProvider
+            .Setup(p => p.GetDeliveriesByCalendarIdsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<decimal>()))
+            .ReturnsAsync(new List<LogisticsDeliveryCandidate>
+            {
+                Delivery(1, "ZAM/1", 53.1325, 23.1688, 1m),
+            });
+
+        var service = new RoutingService(
+            routeRepository.Object,
+            stopRepository.Object,
+            vehicleRepository.Object,
+            driverRepository.Object,
+            userRepository.Object,
+            deliveryProvider.Object,
+            new NearestNeighborRouteOptimizer());
+
+        var result = await service.UpdateRouteAsync(new UpdateDeliveryRouteRequest
+        {
+            Id = 10,
+            Name = "Trasa Polnoc",
+            VehicleId = 2,
+            DriverId = 7,
+            Stops = { new UpdateDeliveryRouteStopRequest { StopId = 101, SequenceNumber = 1 } },
+        });
+
+        route.DriverId.Should().Be(7);
+        result!.DriverName.Should().Be("Jan Kierowca");
+    }
+
+    [Fact]
+    public async Task UpdateRouteAsync_RejectsInactiveDriver()
+    {
+        var route = new DeliveryRoute
+        {
+            Id = 10,
+            Name = "Trasa 1",
+            Status = RouteStatus.Assigned,
+            VehicleId = 1,
+            Stops =
+            {
+                new DeliveryRouteStop { Id = 101, RouteId = 10, DeliveryCalendarId = 1, SequenceNumber = 1 },
+            },
+        };
+        var routeRepository = new Mock<IDeliveryRouteRepository>();
+        var vehicleRepository = new Mock<IVehicleRepository>();
+        var driverRepository = new Mock<IDriverRepository>();
+        routeRepository.Setup(r => r.GetRouteWithStopsAsync(10)).ReturnsAsync(route);
+        vehicleRepository.Setup(r => r.GetByIdAsync(2)).ReturnsAsync(
+            new Vehicle { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active });
+        driverRepository.Setup(r => r.GetByIdAsync(7)).ReturnsAsync(
+            new Driver { Id = 7, UserId = 70, LicenseNumber = "M4-001", IsActive = false });
+
+        var service = new RoutingService(
+            routeRepository.Object,
+            new Mock<IDeliveryRouteStopRepository>().Object,
+            vehicleRepository.Object,
+            driverRepository.Object,
+            new Mock<IUserRepository>().Object,
+            new Mock<ILogisticsDeliveryDataProvider>().Object,
+            new NearestNeighborRouteOptimizer());
+
+        var action = () => service.UpdateRouteAsync(new UpdateDeliveryRouteRequest
+        {
+            Id = 10,
+            Name = "Trasa Polnoc",
+            VehicleId = 2,
+            DriverId = 7,
+            Stops = { new UpdateDeliveryRouteStopRequest { StopId = 101, SequenceNumber = 1 } },
+        });
+
+        await action.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]
@@ -162,6 +274,8 @@ public sealed class RoutingServiceTests
             routeRepository.Object,
             stopRepository.Object,
             new Mock<IVehicleRepository>().Object,
+            new Mock<IDriverRepository>().Object,
+            new Mock<IUserRepository>().Object,
             new Mock<ILogisticsDeliveryDataProvider>().Object,
             new NearestNeighborRouteOptimizer());
 

@@ -13,6 +13,8 @@ public sealed class UpdateDeliveryRouteRequest
     [Range(1, int.MaxValue)]
     public int VehicleId { get; set; }
 
+    public int? DriverId { get; set; }
+
     public List<UpdateDeliveryRouteStopRequest> Stops { get; set; } = new();
 }
 
