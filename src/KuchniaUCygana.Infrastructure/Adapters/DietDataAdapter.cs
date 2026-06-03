@@ -188,12 +188,13 @@ public sealed class DietDataAdapter : IDietDataProvider
             SELECT
                 p.[PlanDate],
                 p.[Status] AS [PlanStatus],
+                i.[Id] AS [DietMenuPlanItemId],
                 i.[MealId],
                 m.[Name] AS [MealName],
                 m.[CategoryId],
                 c.[Name] AS [CategoryName],
                 i.[DietVariantId],
-                NULL AS [MealVariantId],
+                i.[MealVariantId],
                 NULL AS [MealVariantName],
                 i.[MealSlot],
                 i.[SortOrder],
@@ -231,12 +232,13 @@ public sealed class DietDataAdapter : IDietDataProvider
             SELECT
                 p.[PlanDate],
                 p.[Status] AS [PlanStatus],
+                i.[Id] AS [DietMenuPlanItemId],
                 i.[MealId],
                 m.[Name] AS [MealName],
                 m.[CategoryId],
                 c.[Name] AS [CategoryName],
                 i.[DietVariantId],
-                NULL AS [MealVariantId],
+                i.[MealVariantId],
                 NULL AS [MealVariantName],
                 i.[MealSlot],
                 i.[SortOrder],
@@ -950,7 +952,9 @@ public sealed class DietDataAdapter : IDietDataProvider
         {
             PlanDate = row.PlanDate,
             PlanStatus = row.PlanStatus,
+            DietMenuPlanItemId = row.DietMenuPlanItemId,
             MealId = row.MealId,
+            MealVariantId = row.MealVariantId,
             MealName = row.MealName,
             CategoryId = row.CategoryId,
             CategoryName = row.CategoryName,
@@ -1171,6 +1175,8 @@ public sealed class DietDataAdapter : IDietDataProvider
 
         public string PlanStatus { get; set; } = string.Empty;
 
+        public int? DietMenuPlanItemId { get; set; }
+
         public int MealId { get; set; }
 
         public string MealName { get; set; } = string.Empty;
@@ -1180,6 +1186,8 @@ public sealed class DietDataAdapter : IDietDataProvider
         public string? CategoryName { get; set; }
 
         public int DietVariantId { get; set; }
+
+        public int? MealVariantId { get; set; }
 
         public string MealSlot { get; set; } = string.Empty;
 

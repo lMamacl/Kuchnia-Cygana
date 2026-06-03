@@ -5,5 +5,5 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Seeding;
 
 public interface IDatabaseSeeder
 {
-    Task SeedAsync(DatabaseSeedingProfile profile, CancellationToken cancellationToken = default);
+    Task SeedAsync(DatabaseSeedingProfile profile, bool resetDemoData = false, CancellationToken cancellationToken = default);
 }

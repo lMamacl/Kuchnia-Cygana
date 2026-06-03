@@ -128,14 +128,18 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
                     item.DietName,
                     item.DietVariantId,
                     item.VariantName,
-                    item.CaloriesPerDay)).ToList()));
+                    item.CaloriesPerDay,
+                    item.MealId,
+                    item.MealVariantId,
+                    item.DietMenuPlanItemId,
+                    item.MealSlot)).ToList()));
         }
 
         return result;
     }
 
     private const string ActiveOrdersSql = """
-        SELECT
+        SELECT DISTINCT
             o.Id AS OrderId,
             dc.Id AS DeliveryCalendarId,
             u.Id AS ClientId,
@@ -156,11 +160,11 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
           AND o.IsDeleted = 0
           AND oi.IsDeleted = 0
           AND dc.IsDeleted = 0
-        ORDER BY o.Id, oi.Id;
+        ORDER BY o.Id, oi.DietVariantId;
         """;
 
     private const string ActiveOrderByIdSql = """
-        SELECT TOP 1
+        SELECT DISTINCT TOP 1
             o.Id AS OrderId,
             dc.Id AS DeliveryCalendarId,
             u.Id AS ClientId,
@@ -180,7 +184,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
           AND o.IsDeleted = 0
           AND oi.IsDeleted = 0
           AND dc.IsDeleted = 0
-        ORDER BY dc.DeliveryDate, oi.Id;
+        ORDER BY dc.DeliveryDate, oi.DietVariantId;
         """;
 
     private const string DeliveriesForDateSql = """
@@ -226,7 +230,11 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
             DietName,
             DietVariantId,
             VariantName,
-            CaloriesPerDay
+            CaloriesPerDay,
+            MealId,
+            MealVariantId,
+            DietMenuPlanItemId,
+            MealSlot
         FROM OrderItems
         WHERE OrderId = @orderId
           AND IsDeleted = 0
@@ -240,7 +248,11 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
             DietName,
             DietVariantId,
             VariantName,
-            CaloriesPerDay
+            CaloriesPerDay,
+            MealId,
+            MealVariantId,
+            DietMenuPlanItemId,
+            MealSlot
         FROM OrderItems
         WHERE OrderId IN @orderIds
           AND IsDeleted = 0
@@ -306,5 +318,13 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         public string VariantName { get; set; } = string.Empty;
 
         public int CaloriesPerDay { get; set; }
+
+        public int? MealId { get; set; }
+
+        public int? MealVariantId { get; set; }
+
+        public int? DietMenuPlanItemId { get; set; }
+
+        public string? MealSlot { get; set; }
     }
 }

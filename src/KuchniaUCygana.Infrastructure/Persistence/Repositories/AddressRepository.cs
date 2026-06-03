@@ -26,9 +26,9 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
     {
         using var db = Factory.CreateConnection();
         var sql = @"
-            SELECT * FROM [Addresses] 
-            WHERE [UserId] = @UserId 
-            AND [IsDefault] = 1 
+            SELECT * FROM [Addresses]
+            WHERE [UserId] = @UserId
+            AND [IsDefault] = 1
             AND [IsDeleted] = 0";
 
         return await db.QueryFirstOrDefaultAsync<Address>(sql, new { UserId = userId });
@@ -43,16 +43,16 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
         {
             // 1. Resetuj wszystkie obecne domyślne adresy użytkownika
             var resetSql = @"
-                UPDATE [Addresses] 
-                SET [IsDefault] = 0, [UpdatedAt] = @UpdatedAt 
+                UPDATE [Addresses]
+                SET [IsDefault] = 0, [UpdatedAt] = @UpdatedAt
                 WHERE [UserId] = @UserId AND [IsDefault] = 1 AND [IsDeleted] = 0";
 
             await db.ExecuteAsync(resetSql, new { UserId = userId, UpdatedAt = DateTimeOffset.UtcNow }, transaction);
 
             // 2. Ustaw nowy adres jako domyślny
             var setDefaultSql = @"
-                UPDATE [Addresses] 
-                SET [IsDefault] = 1, [UpdatedAt] = @UpdatedAt 
+                UPDATE [Addresses]
+                SET [IsDefault] = 1, [UpdatedAt] = @UpdatedAt
                 WHERE [Id] = @AddressId AND [UserId] = @UserId AND [IsDeleted] = 0";
 
             var rowsAffected = await db.ExecuteAsync(setDefaultSql, new { AddressId = addressId, UserId = userId, UpdatedAt = DateTimeOffset.UtcNow }, transaction);

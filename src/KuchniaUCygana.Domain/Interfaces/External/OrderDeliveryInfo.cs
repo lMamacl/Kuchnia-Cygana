@@ -24,4 +24,8 @@ public sealed record OrderItemInfo(
     string DietName,
     int DietVariantId,
     string VariantName,
-    int CaloriesPerDay);
+    int CaloriesPerDay,
+    int? MealId = null,
+    int? MealVariantId = null,
+    int? DietMenuPlanItemId = null,
+    string? MealSlot = null);

@@ -1,17 +1,23 @@
-using System.Data;
-using System.Text.Json;
+﻿using System.Data;
 using BCrypt.Net;
 using Dapper;
+using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Domain.Services;
+using KuchniaUCygana.Infrastructure.Adapters;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Infrastructure.Persistence.Repositories;
+using KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
 using Microsoft.Extensions.Logging;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Seeding;
 
 public sealed class DatabaseSeeder : IDatabaseSeeder
 {
+    private const int PackagingWarehouseCategoryId = 5;
+
     private readonly IDbConnectionFactory connectionFactory;
     private readonly ILogger<DatabaseSeeder> logger;
 
@@ -21,7 +27,10 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         this.logger = logger;
     }
 
-    public async Task SeedAsync(DatabaseSeedingProfile profile, CancellationToken cancellationToken = default)
+    public async Task SeedAsync(
+        DatabaseSeedingProfile profile,
+        bool resetDemoData = false,
+        CancellationToken cancellationToken = default)
     {
         switch (profile)
         {
@@ -30,6 +39,11 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 return;
             case DatabaseSeedingProfile.DemoData:
                 await SeedMinimalRealisticAsync(cancellationToken);
+                if (resetDemoData)
+                {
+                    await ResetDemoDataAsync(cancellationToken);
+                }
+
                 await SeedDemoDataAsync(cancellationToken);
                 return;
             default:
@@ -103,15 +117,240 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await SeedUnitsOfMeasureAsync(db, now, cancellationToken);
         await SeedStockItemsAsync(db, now, auditUser, cancellationToken);
         await SeedBatchesAsync(db, now, auditUser, cancellationToken);
+        await EnsureDemoPackagingInventoryAsync(db, now, auditUser, cancellationToken);
         await SeedTemperatureLogsAsync(db, now, auditUser, cancellationToken);
         await SeedMenuAsync(db, now, auditUser, cancellationToken);
-        await SeedProductionPlansAsync(db, now, auditUser, cancellationToken);
-        await SeedPackingSessionsAsync(db, now, auditUser, cancellationToken);
-        await EnsureTodayDemoLifecycleAsync(db, now, auditUser, cancellationToken);
-        await SeedLogisticsDemoAsync(db, now, auditUser, cancellationToken);
+        await EnsureIngredientWarehouseMappingsAsync(db, cancellationToken);
+        await EnsureDemoPackagingRequirementsAsync(db, now, auditUser, cancellationToken);
+        await SeedUnifiedDemoScenarioAsync(db, now, auditUser, cancellationToken);
     }
 
-    private async Task SeedLogisticsDemoAsync(
+    private async Task ResetDemoDataAsync(CancellationToken cancellationToken)
+    {
+        using var db = connectionFactory.CreateConnection();
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            DECLARE @DemoOrders TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @DemoOrders ([Id])
+            SELECT [Id]
+            FROM [Orders]
+            WHERE [OrderNumber] LIKE N'DEMO-%';
+
+            DECLARE @DemoDeliveryCalendar TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @DemoDeliveryCalendar ([Id])
+            SELECT [Id]
+            FROM [DeliveryCalendar]
+            WHERE [OrderId] IN (SELECT [Id] FROM @DemoOrders);
+
+            DECLARE @DemoSessions TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @DemoSessions ([Id])
+            SELECT [Id]
+            FROM [PackingSessions]
+            WHERE [OrderId] IN (SELECT [Id] FROM @DemoOrders)
+               OR [DeliveryCalendarId] IN (SELECT [Id] FROM @DemoDeliveryCalendar)
+               OR [CreatedBy] = N'DemoSeeder';
+
+            DECLARE @DemoBags TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @DemoBags ([Id])
+            SELECT [Id]
+            FROM [PackingBags]
+            WHERE [PackingSessionId] IN (SELECT [Id] FROM @DemoSessions);
+
+            DECLARE @DemoItems TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @DemoItems ([Id])
+            SELECT [Id]
+            FROM [PackingItems]
+            WHERE [PackingSessionId] IN (SELECT [Id] FROM @DemoSessions);
+
+            DECLARE @DemoRoutes TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @DemoRoutes ([Id])
+            SELECT DISTINCT [RouteId]
+            FROM [DeliveryRouteStops]
+            WHERE [DeliveryCalendarId] IN (SELECT [Id] FROM @DemoDeliveryCalendar);
+
+            DECLARE @DemoRouteStops TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @DemoRouteStops ([Id])
+            SELECT [Id]
+            FROM [DeliveryRouteStops]
+            WHERE [RouteId] IN (SELECT [Id] FROM @DemoRoutes)
+               OR [DeliveryCalendarId] IN (SELECT [Id] FROM @DemoDeliveryCalendar);
+
+            DECLARE @DemoProductionPlans TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @DemoProductionPlans ([Id])
+            SELECT [Id]
+            FROM [ProductionPlans]
+            WHERE [CreatedBy] = N'DemoSeeder'
+               OR [Notes] LIKE N'%Demo lifecycle%'
+               OR [Notes] LIKE N'%Wspolny demo seed%';
+
+            DELETE FROM [BoxLabels]
+            WHERE [PackingItemId] IN (SELECT [Id] FROM @DemoItems);
+
+            DELETE FROM [PackingLabels]
+            WHERE [PackingSessionId] IN (SELECT [Id] FROM @DemoSessions)
+               OR [PackingBagId] IN (SELECT [Id] FROM @DemoBags)
+               OR [PackingItemId] IN (SELECT [Id] FROM @DemoItems);
+
+            DELETE FROM [PackingManifestIssues]
+            WHERE [PackingDate] IS NOT NULL
+              AND [RouteId] IN (SELECT [Id] FROM @DemoRoutes);
+
+            DELETE FROM [PackingManifests]
+            WHERE [RouteId] IN (SELECT [Id] FROM @DemoRoutes);
+
+            DELETE FROM [DeliveryIssues]
+            WHERE [RouteStopId] IN (SELECT [Id] FROM @DemoRouteStops)
+               OR [CreatedBy] = N'DemoSeeder';
+
+            DELETE FROM [PackingIncidents]
+            WHERE [PackingSessionId] IN (SELECT [Id] FROM @DemoSessions)
+               OR [PackingBagId] IN (SELECT [Id] FROM @DemoBags)
+               OR [PackingItemId] IN (SELECT [Id] FROM @DemoItems)
+               OR [DeliveryCalendarId] IN (SELECT [Id] FROM @DemoDeliveryCalendar);
+
+            DELETE FROM [PackingStatusLogs]
+            WHERE [PackingSessionId] IN (SELECT [Id] FROM @DemoSessions);
+
+            DELETE FROM [PackingItems]
+            WHERE [Id] IN (SELECT [Id] FROM @DemoItems);
+
+            DELETE FROM [PackingBags]
+            WHERE [Id] IN (SELECT [Id] FROM @DemoBags);
+
+            DELETE FROM [PackingSessions]
+            WHERE [Id] IN (SELECT [Id] FROM @DemoSessions);
+
+            DELETE FROM [BagMovementLogs]
+            WHERE [RouteStopId] IN (SELECT [Id] FROM @DemoRouteStops)
+               OR [ThermalBagId] IN
+               (
+                   SELECT [Id]
+                   FROM [ThermalBags]
+                   WHERE [SerialNumber] LIKE N'THERM-DEMO-%'
+               );
+
+            DELETE FROM [DeliveryRouteStops]
+            WHERE [RouteId] IN (SELECT [Id] FROM @DemoRoutes)
+               OR [DeliveryCalendarId] IN (SELECT [Id] FROM @DemoDeliveryCalendar);
+
+            DELETE FROM [DeliveryRoutes]
+            WHERE [Id] IN (SELECT [Id] FROM @DemoRoutes);
+
+            DELETE FROM [ThermalBags]
+            WHERE [SerialNumber] LIKE N'THERM-DEMO-%';
+
+            DELETE FROM [ProductionBatches]
+            WHERE [ProductionPlanId] IN (SELECT [Id] FROM @DemoProductionPlans);
+
+            DELETE FROM [ProductionPlanItems]
+            WHERE [ProductionPlanId] IN (SELECT [Id] FROM @DemoProductionPlans);
+
+            DELETE FROM [ProductionPlans]
+            WHERE [Id] IN (SELECT [Id] FROM @DemoProductionPlans);
+
+            DELETE FROM [Payments]
+            WHERE [OrderId] IN (SELECT [Id] FROM @DemoOrders)
+               OR [StripePaymentIntentId] LIKE N'pi_demo%';
+
+            DELETE FROM [DeliveryCalendar]
+            WHERE [Id] IN (SELECT [Id] FROM @DemoDeliveryCalendar);
+
+            DELETE FROM [OrderItems]
+            WHERE [OrderId] IN (SELECT [Id] FROM @DemoOrders);
+
+            DELETE FROM [Orders]
+            WHERE [Id] IN (SELECT [Id] FROM @DemoOrders);
+
+            DELETE FROM [Addresses]
+            WHERE [Label] LIKE N'Demo M4%'
+               OR [Label] = N'Demo lifecycle';
+
+            DELETE FROM [CustomerProfiles]
+            WHERE [UserId] IN
+            (
+                SELECT [Id]
+                FROM [Users]
+                WHERE [Email] LIKE N'demo-m4-klient-%@kuchnia.local'
+                   OR [Email] = N'demo-klient@kuchnia.local'
+            );
+
+            DELETE FROM [DriverVehicleAssignments]
+            WHERE [DriverId] IN
+            (
+                SELECT [Id]
+                FROM [Drivers]
+                WHERE [LicenseNumber] LIKE N'M4-BI-%'
+            )
+               OR [VehicleId] IN
+            (
+                SELECT [Id]
+                FROM [Vehicles]
+                WHERE [RegistrationNumber] IN (N'BI 1001A', N'BI 2042C', N'BI 3307E', N'BI 4040S')
+            );
+
+            DELETE FROM [Drivers]
+            WHERE [LicenseNumber] LIKE N'M4-BI-%';
+
+            DELETE FROM [Vehicles]
+            WHERE [RegistrationNumber] IN (N'BI 1001A', N'BI 2042C', N'BI 3307E', N'BI 4040S');
+
+            DELETE FROM [Users]
+            WHERE [Email] LIKE N'demo-m4-klient-%@kuchnia.local'
+               OR [Email] = N'demo-klient@kuchnia.local'
+               OR [Email] IN (N'driver2@kuchnia.local', N'driver3@kuchnia.local');
+
+            DELETE FROM [DietMenuPlanItems]
+            WHERE [DietMenuPlanId] IN
+            (
+                SELECT [Id]
+                FROM [DietMenuPlans]
+                WHERE [CreatedBy] = N'DemoSeeder'
+                   OR [Notes] LIKE N'%demo%'
+            );
+
+            DELETE FROM [DietMenuPlans]
+            WHERE [CreatedBy] = N'DemoSeeder'
+               OR [Notes] LIKE N'%demo%';
+
+            DELETE FROM [DietVariantMeals]
+            WHERE [DietVariantId] IN
+            (
+                SELECT dv.[Id]
+                FROM [DietVariants] dv
+                INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
+                WHERE d.[Name] = N'Demo Lifecycle'
+            );
+
+            DELETE FROM [DietVariants]
+            WHERE [DietId] IN (SELECT [Id] FROM [Diets] WHERE [Name] = N'Demo Lifecycle');
+
+            DELETE FROM [Diets]
+            WHERE [Name] = N'Demo Lifecycle';
+
+            DELETE FROM [MealVariants]
+            WHERE [MealId] IN (SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'Demo %');
+
+            DELETE FROM [MealAllergens]
+            WHERE [MealId] IN (SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'Demo %');
+
+            DELETE FROM [NutritionFacts]
+            WHERE [MealId] IN (SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'Demo %');
+
+            DELETE FROM [Recipes]
+            WHERE [MealId] IN (SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'Demo %');
+
+            DELETE FROM [PackagingRequirements]
+            WHERE [MealId] IN (SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'Demo %');
+
+            DELETE FROM [Meals]
+            WHERE [Name] LIKE N'Demo %';
+            """,
+            cancellationToken: cancellationToken));
+
+        this.logger.LogInformation("Reset demo data completed for unified M1/M2/M3/M4 seed.");
+    }
+
+    private async Task SeedUnifiedDemoScenarioAsync(
         IDbConnection db,
         DateTimeOffset now,
         string auditUser,
@@ -120,6 +359,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         var today = DateOnly.FromDateTime(DateTime.Today);
         var todayDate = today.ToDateTime(TimeOnly.MinValue);
         var preferredDietVariantId = await EnsureDemoLifecycleMenuFoundationAsync(db, now, auditUser, cancellationToken);
+        await EnsureDemoPackagingRequirementsAsync(db, now, auditUser, cancellationToken);
         var dietMenuPlanId = await EnsureTodayDemoDietMenuPlanAsync(db, todayDate, now, auditUser, cancellationToken);
         var meals = (await GetTodayDemoMealsAsync(db, dietMenuPlanId, preferredDietVariantId, cancellationToken)).ToList();
 
@@ -131,15 +371,6 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 today);
             return;
         }
-
-        var productionPlanId = await EnsureTodayDemoProductionPlanAsync(db, todayDate, now, auditUser, cancellationToken);
-        var productionPlanItemIds = await EnsureTodayDemoProductionPlanItemsAsync(
-            db,
-            productionPlanId,
-            meals,
-            now,
-            auditUser,
-            cancellationToken);
 
         var vehicles = new[]
         {
@@ -196,7 +427,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 now,
                 auditUser,
                 cancellationToken);
-            var clientPublicId = await EnsureDemoLifecycleCustomerProfileAsync(
+            await EnsureDemoLifecycleCustomerProfileAsync(
                 db,
                 customerId,
                 addressId,
@@ -230,27 +461,70 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 now,
                 auditUser,
                 cancellationToken);
-            await EnsureTodayDemoPackingAsync(
+            await EnsureTodayDemoPaymentAsync(
                 db,
-                today,
-                todayDate,
                 orderId,
-                deliveryCalendarId,
-                $"{delivery.FirstName} {delivery.LastName}",
-                clientPublicId,
-                orderMeals,
-                productionPlanItemIds,
+                orderNumber,
+                totalPrice,
                 now,
                 auditUser,
                 cancellationToken);
         }
 
+        await EnsureUnifiedDemoProductionPlanAsync(today, auditUser, cancellationToken);
+
         this.logger.LogInformation(
-            "Seeded logistics demo data for {DemoDate}: {VehicleCount} vehicles, {DriverCount} drivers, {DeliveryCount} delivery candidates.",
+            "Seeded unified M1/M2/M3/M4 demo data for {DemoDate}: {VehicleCount} vehicles, {DriverCount} drivers, {DeliveryCount} delivery candidates.",
             today,
             vehicles.Length,
             drivers.Length,
             deliveries.Length);
+    }
+
+    private async Task EnsureUnifiedDemoProductionPlanAsync(
+        DateOnly productionDate,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var dietProvider = new DietDataAdapter(connectionFactory);
+        var planRepository = new ProductionPlanRepository(connectionFactory);
+        var existingPlan = await planRepository.GetByDateAsync(productionDate);
+        if (existingPlan is not null)
+        {
+            this.logger.LogInformation(
+                "Production plan for unified demo date {ProductionDate} already exists as #{PlanId}.",
+                productionDate,
+                existingPlan.Id);
+            return;
+        }
+
+        var generator = new ProductionPlanGenerator(
+            new M1OrderDataProvider(connectionFactory),
+            dietProvider,
+            new FoodCostCalculator(dietProvider),
+            planRepository);
+        var result = await generator.GeneratePlanAsync(productionDate, auditUser);
+        var itemRepository = new BaseRepository<ProductionPlanItem>(connectionFactory);
+        foreach (var item in result.Items)
+        {
+            await itemRepository.InsertAsync(item);
+        }
+
+        result.Plan.Status = ProductionPlanStatus.InProgress;
+        result.Plan.Notes = "Wspolny demo seed: plan wygenerowany z zamowien M1 i planu M2.";
+        result.Plan.IsSharedWithLogistics = true;
+        result.Plan.SharedAt = DateTimeOffset.UtcNow;
+        result.Plan.UpdatedAt = DateTimeOffset.UtcNow;
+        result.Plan.UpdatedBy = auditUser;
+        await planRepository.UpdateAsync(result.Plan);
+
+        this.logger.LogInformation(
+            "Generated unified demo production plan #{PlanId} for {ProductionDate} with {ItemCount} items.",
+            result.Plan.Id,
+            productionDate,
+            result.Items.Count);
+
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static async Task<int> EnsureLogisticsDemoVehicleAsync(
@@ -783,6 +1057,272 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         this.logger.LogInformation("Seeded {Count} batches (FEFO demo data).", batches.Count);
     }
 
+    private async Task EnsureDemoPackagingInventoryAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var sztUnitId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT [Id] FROM [UnitsOfMeasure] WHERE [Symbol] = N'szt';",
+            cancellationToken: cancellationToken));
+
+        var packagingItems = new[]
+        {
+            new DemoPackagingStockItem("Pudełko cateringowe 500ml", 100m, 500m, 2),
+            new DemoPackagingStockItem("Pudełko cateringowe 250ml", 100m, 500m, 2),
+            new DemoPackagingStockItem("Torba papierowa u Cygana", 50m, 250m, 2),
+        };
+
+        foreach (var item in packagingItems)
+        {
+            var stockItemId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+                """
+                SELECT TOP 1 [Id]
+                FROM [StockItems]
+                WHERE [Name] = @Name
+                  AND [IsDeleted] = 0
+                ORDER BY [Id];
+                """,
+                new { item.Name },
+                cancellationToken: cancellationToken));
+
+            if (!stockItemId.HasValue)
+            {
+                stockItemId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+                    """
+                    INSERT INTO [StockItems]
+                        ([Name], [BaseIngredientId], [DefaultUnitOfMeasureId], [WarehouseCategoryId],
+                         [MinimumLevel], [LeadTimeDays], [CreatedBy], [UpdatedBy], [IsDeleted],
+                         [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+                    OUTPUT INSERTED.[Id]
+                    VALUES
+                        (@Name, NULL, @DefaultUnitOfMeasureId, @WarehouseCategoryId,
+                         @MinimumLevel, @LeadTimeDays, @CreatedBy, NULL, 0,
+                         NULL, NULL, @CreatedAt, NULL);
+                    """,
+                    new
+                    {
+                        item.Name,
+                        DefaultUnitOfMeasureId = sztUnitId,
+                        WarehouseCategoryId = PackagingWarehouseCategoryId,
+                        item.MinimumLevel,
+                        item.LeadTimeDays,
+                        CreatedBy = auditUser,
+                        CreatedAt = now,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+            else
+            {
+                await db.ExecuteAsync(new CommandDefinition(
+                    """
+                    UPDATE [StockItems]
+                    SET [DefaultUnitOfMeasureId] = @DefaultUnitOfMeasureId,
+                        [WarehouseCategoryId] = @WarehouseCategoryId,
+                        [MinimumLevel] = CASE WHEN [MinimumLevel] < @MinimumLevel THEN @MinimumLevel ELSE [MinimumLevel] END,
+                        [UpdatedBy] = @UpdatedBy,
+                        [UpdatedAt] = @UpdatedAt
+                    WHERE [Id] = @StockItemId
+                      AND ([DefaultUnitOfMeasureId] <> @DefaultUnitOfMeasureId
+                           OR [WarehouseCategoryId] <> @WarehouseCategoryId
+                           OR [MinimumLevel] < @MinimumLevel);
+                    """,
+                    new
+                    {
+                        StockItemId = stockItemId.Value,
+                        DefaultUnitOfMeasureId = sztUnitId,
+                        WarehouseCategoryId = PackagingWarehouseCategoryId,
+                        item.MinimumLevel,
+                        UpdatedBy = auditUser,
+                        UpdatedAt = now,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+
+            var available = await db.ExecuteScalarAsync<decimal>(new CommandDefinition(
+                """
+                SELECT COALESCE(SUM([CurrentQuantity]), 0)
+                FROM [Batches]
+                WHERE [StockItemId] = @StockItemId
+                  AND [IsDeleted] = 0
+                  AND [IsDepleted] = 0
+                  AND [CurrentQuantity] > 0;
+                """,
+                new { StockItemId = stockItemId.Value },
+                cancellationToken: cancellationToken));
+
+            var missingQuantity = item.TargetQuantity - available;
+            if (missingQuantity <= 0)
+            {
+                continue;
+            }
+
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO [Batches]
+                    ([StockItemId], [SupplierBatchNumber], [CurrentQuantity], [ExpiryDate], [ReceivedDate], [IsDepleted],
+                     [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+                VALUES
+                    (@StockItemId, @SupplierBatchNumber, @CurrentQuantity, @ExpiryDate, @ReceivedDate, 0,
+                     @CreatedBy, NULL, 0, NULL, NULL, @CreatedAt, NULL);
+                """,
+                new
+                {
+                    StockItemId = stockItemId.Value,
+                    SupplierBatchNumber = $"DEMO-PACK-{stockItemId.Value}-{now:yyyyMMddHHmmss}",
+                    CurrentQuantity = missingQuantity,
+                    ExpiryDate = now.AddDays(180),
+                    ReceivedDate = now,
+                    CreatedBy = auditUser,
+                    CreatedAt = now,
+                },
+                cancellationToken: cancellationToken));
+
+            this.logger.LogInformation(
+                "Restocked demo packaging item {StockItemId} ({Name}) by {Quantity}.",
+                stockItemId.Value,
+                item.Name,
+                missingQuantity);
+        }
+    }
+
+    private async Task EnsureIngredientWarehouseMappingsAsync(IDbConnection db, CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE si
+            SET si.[BaseIngredientId] = i.[Id]
+            FROM [StockItems] si
+            INNER JOIN [Ingredients] i
+                ON i.[Name] COLLATE Latin1_General_100_CI_AI = si.[Name] COLLATE Latin1_General_100_CI_AI
+            WHERE si.[BaseIngredientId] IS NULL
+              AND si.[IsDeleted] = 0
+              AND i.[IsDeleted] = 0;
+
+            UPDATE i
+            SET
+                i.[StockItemId] = si.[Id],
+                i.[WarehouseCategoryId] = si.[WarehouseCategoryId],
+                i.[RequiresCoreTemperatureCheck] = CASE WHEN si.[WarehouseCategoryId] = 1 THEN 1 ELSE 0 END,
+                i.[MinimumCoreTemperatureCelsius] = CASE WHEN si.[WarehouseCategoryId] = 1 THEN 75 ELSE NULL END
+            FROM [Ingredients] i
+            INNER JOIN [StockItems] si ON si.[BaseIngredientId] = i.[Id]
+                OR si.[Name] COLLATE Latin1_General_100_CI_AI = i.[Name] COLLATE Latin1_General_100_CI_AI
+            WHERE i.[IsDeleted] = 0
+              AND si.[IsDeleted] = 0
+              AND (i.[StockItemId] IS NULL OR i.[WarehouseCategoryId] IS NULL);
+
+            UPDATE rci
+            SET
+                rci.[StockItemId] = COALESCE(rci.[StockItemId], i.[StockItemId], si.[Id]),
+                rci.[WarehouseCategoryId] = COALESCE(rci.[WarehouseCategoryId], i.[WarehouseCategoryId], si.[WarehouseCategoryId])
+            FROM [RecipeComponentIngredients] rci
+            INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+            LEFT JOIN [StockItems] si ON si.[BaseIngredientId] = i.[Id]
+                OR si.[Name] COLLATE Latin1_General_100_CI_AI = i.[Name] COLLATE Latin1_General_100_CI_AI
+            WHERE rci.[IsDeleted] = 0
+              AND i.[IsDeleted] = 0
+              AND (rci.[StockItemId] IS NULL OR rci.[WarehouseCategoryId] IS NULL)
+              AND (i.[StockItemId] IS NOT NULL OR i.[WarehouseCategoryId] IS NOT NULL OR si.[Id] IS NOT NULL);
+            """,
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task EnsureDemoPackagingRequirementsAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            DECLARE @packagingCategoryId int =
+            (
+                SELECT TOP 1 [Id]
+                FROM [WarehouseCategories]
+                WHERE [Code] = N'PACKAGING'
+                   OR [Name] COLLATE Latin1_General_100_CI_AI = N'Opakowania'
+                ORDER BY [Id]
+            );
+
+            DECLARE @box500Id int =
+            (
+                SELECT TOP 1 [Id]
+                FROM [StockItems]
+                WHERE [Name] = N'Pudełko cateringowe 500ml'
+                  AND [IsDeleted] = 0
+                ORDER BY [Id]
+            );
+
+            DECLARE @box250Id int =
+            (
+                SELECT TOP 1 [Id]
+                FROM [StockItems]
+                WHERE [Name] = N'Pudełko cateringowe 250ml'
+                  AND [IsDeleted] = 0
+                ORDER BY [Id]
+            );
+
+            INSERT INTO [PackagingRequirements]
+                ([OwnerType], [MealId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
+                 [ResourceName], [Quantity], [Unit], [ContainerRole], [IsCustomerFacing],
+                 [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                N'Meal',
+                m.[Id],
+                NULL,
+                CASE
+                    WHEN m.[Name] IN
+                    (
+                        N'Pudding chia z jagodami i śmietanką',
+                        N'Demo przekaska owocowa',
+                        N'Demo podwieczorek fit'
+                    )
+                    THEN @box250Id
+                    ELSE @box500Id
+                END,
+                @packagingCategoryId,
+                CASE
+                    WHEN m.[Name] IN
+                    (
+                        N'Pudding chia z jagodami i śmietanką',
+                        N'Demo przekaska owocowa',
+                        N'Demo podwieczorek fit'
+                    )
+                    THEN N'Pudełko cateringowe 250ml'
+                    ELSE N'Pudełko cateringowe 500ml'
+                END,
+                1.000,
+                N'szt',
+                N'MealBox',
+                1,
+                @now,
+                @auditUser,
+                0
+            FROM [Meals] m
+            WHERE m.[IsDeleted] = 0
+              AND m.[IsActive] = 1
+              AND m.[Status] IN (N'Published', N'Active')
+              AND @packagingCategoryId IS NOT NULL
+              AND
+              (
+                  @box500Id IS NOT NULL
+                  OR @box250Id IS NOT NULL
+              )
+              AND NOT EXISTS
+              (
+                  SELECT 1
+                  FROM [PackagingRequirements] existing
+                  WHERE existing.[MealId] = m.[Id]
+                    AND existing.[OwnerType] = N'Meal'
+                    AND existing.[IsDeleted] = 0
+              );
+            """,
+            new { now, auditUser },
+            cancellationToken: cancellationToken));
+    }
+
     // ── Rejestry temperatur (TemperatureLog) ─────────────────────
 
     private async Task SeedTemperatureLogsAsync(IDbConnection db, DateTimeOffset now, string auditUser, CancellationToken cancellationToken)
@@ -1102,299 +1642,53 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         this.logger.LogInformation("Seeded published M2 diet menu plans for the next 7 days.");
     }
 
-    private async Task SeedProductionPlansAsync(IDbConnection db, DateTimeOffset now, string auditUser, CancellationToken cancellationToken)
+    private static async Task EnsureDefaultMealVariantsAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
     {
-        if (await CountRowsAsync(db, "ProductionPlans", cancellationToken) > 0)
-        {
-            return;
-        }
-
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var yesterday = today.AddDays(-1);
-
-        // Plan 1: wczoraj
-        var yesterdayPlanId = await db.ExecuteScalarAsync<int>(
+        await db.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO [ProductionPlans] ([ProductionDate], [Status], [Notes], [IsSharedWithLogistics], [CreatedBy], [CreatedAt])
-            VALUES (@yesterday, 3, 'Wczorajsza produkcja ukończona.', 1, @auditUser, @yesterdayTime);
-            SELECT CAST(SCOPE_IDENTITY() as int);
+            INSERT INTO [MealVariants]
+                ([MealId], [Name], [VariantType], [Status], [Description], [IsDefault],
+                 [RawWeightGrams], [CookedWeightGrams], [CaloriesPer100g], [ProteinPer100g],
+                 [CarbohydratesPer100g], [FatPer100g], [FiberPer100g], [NutritionSource],
+                 [AllergensApproved], [PublishedAt], [PublishedBy], [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                m.[Id],
+                CONCAT(m.[Name], N' - standard'),
+                N'Standard',
+                N'Published',
+                N'Domyślny wariant dania używany przez wspólny scenariusz demo.',
+                1,
+                m.[RawWeightGrams],
+                m.[CookedWeightGrams],
+                nf.[CaloriesPer100g],
+                nf.[ProteinPer100g],
+                nf.[CarbohydratesPer100g],
+                nf.[FatPer100g],
+                nf.[FiberPer100g],
+                N'Meal',
+                1,
+                @now,
+                @auditUser,
+                @now,
+                @auditUser,
+                0
+            FROM [Meals] m
+            LEFT JOIN [NutritionFacts] nf ON nf.[MealId] = m.[Id]
+            WHERE m.[IsDeleted] = 0
+              AND NOT EXISTS
+              (
+                  SELECT 1
+                  FROM [MealVariants] mv
+                  WHERE mv.[MealId] = m.[Id]
+                    AND mv.[IsDeleted] = 0
+              );
             """,
-            new { yesterday = yesterday.ToDateTime(TimeOnly.MinValue), auditUser, yesterdayTime = now.AddDays(-1) });
-
-        // Plan 2: dzisiaj (InProgress)
-        var todayPlanId = await db.ExecuteScalarAsync<int>(
-            """
-            INSERT INTO [ProductionPlans] ([ProductionDate], [Status], [Notes], [IsSharedWithLogistics], [CreatedBy], [CreatedAt])
-            VALUES (@today, 2, 'Uwagi Szefa Kuchni: Zupa pomidorowa ma mieć łagodny smak. Priorytet gotowania!', 1, @auditUser, @now);
-            SELECT CAST(SCOPE_IDENTITY() as int);
-            """,
-            new { today = today.ToDateTime(TimeOnly.MinValue), auditUser, now });
-
-        // Pozycje planu
-        await db.ExecuteAsync(
-            """
-            INSERT INTO [ProductionPlanItems] 
-                ([ProductionPlanId], [MealId], [MealName], [DietVariantId], [PlannedQuantity], [CookedQuantity], [Status], [ProductionGroup], [EstimatedReadyTime], [ActualReadyTime], [CreatedBy], [CreatedAt])
-            VALUES
-                (@yesterdayPlanId, 1, 'Jajecznica z szczypiorkiem na maśle', 2, 20, 20, 2, 1, '06:30:00', '06:25:00', @auditUser, @yesterdayTime),
-                (@yesterdayPlanId, 3, 'Pikantna zupa pomidorowa z makaronem', 2, 20, 20, 2, 2, '07:30:00', '07:35:00', @auditUser, @yesterdayTime),
-                (@yesterdayPlanId, 4, 'Pieczony filet z łososia z ryżem i brokułami', 2, 20, 21, 2, 3, '08:30:00', '08:28:00', @auditUser, @yesterdayTime),
-                (@yesterdayPlanId, 5, 'Bowl z wołowiną, dynią i batatami', 2, 20, 20, 2, 4, '09:00:00', '08:55:00', @auditUser, @yesterdayTime),
-
-                (@todayPlanId, 1, 'Jajecznica z szczypiorkiem na maśle', 2, 15, 15, 2, 1, '06:30:00', '06:28:00', @auditUser, @now),
-                (@todayPlanId, 2, 'Pudding chia z jagodami i śmietanką', 2, 15, 15, 2, 1, '06:30:00', '06:32:00', @auditUser, @now),
-                (@todayPlanId, 3, 'Pikantna zupa pomidorowa z makaronem', 2, 15, 0, 0, 2, '07:30:00', null, @auditUser, @now),
-                (@todayPlanId, 4, 'Pieczony filet z łososia z ryżem i brokułami', 2, 15, 0, 0, 3, '08:30:00', null, @auditUser, @now),
-                (@todayPlanId, 5, 'Bowl z wołowiną, dynią i batatami', 2, 15, 0, 0, 4, '09:00:00', null, @auditUser, @now);
-            """,
-            new { yesterdayPlanId, todayPlanId, auditUser, yesterdayTime = now.AddDays(-1), now });
-
-        // Partie produkcyjne (półprodukty) dla dzisiejszego planu
-        await db.ExecuteAsync(
-            """
-            INSERT INTO [ProductionBatches] ([ProductionPlanId], [MealId], [Name], [PlannedQuantity], [ProducedQuantity], [CreatedBy], [CreatedAt])
-            VALUES
-                (@todayPlanId, 3, 'Baza zupy pomidorowej', 10.0, 10.0, @auditUser, @now),
-                (@todayPlanId, 4, 'Ugotowany ryż jaśminowy', 5.0, 0.0, @auditUser, @now);
-            """,
-            new { todayPlanId, auditUser, now });
-
-        this.logger.LogInformation("Seeded ProductionPlans, ProductionPlanItems and ProductionBatches.");
-    }
-
-    private async Task SeedPackingSessionsAsync(IDbConnection db, DateTimeOffset now, string auditUser, CancellationToken cancellationToken)
-    {
-        if (await CountRowsAsync(db, "PackingSessions", cancellationToken) > 0)
-        {
-            return;
-        }
-
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var seed = today.DayNumber;
-        var rng = new Random(seed);
-        var orderCount = rng.Next(12, 25);
-
-        var clientNames = new[]
-        {
-            "Jan Kowalski", "Anna Nowak", "Piotr Wiśniewski", "Maria Wójcik",
-            "Tomasz Kamiński", "Katarzyna Lewandowska", "Michał Zieliński",
-            "Agnieszka Szymańska", "Krzysztof Woźniak", "Magdalena Dąbrowska",
-            "Robert Kozłowski", "Joanna Jankowska", "Andrzej Mazur",
-            "Ewa Krawczyk", "Marcin Piotrowski", "Monika Grabowska",
-        };
-
-        var dietVariantIds = new[] { 1, 2, 3, 4, 5 };
-
-        // Wstawiamy 3 przykładowe sesje z pudełkami w różnych statusach
-        for (var i = 0; i < Math.Min(3, orderCount); i++)
-        {
-            var orderId = seed * 100 + i + 1;
-            var clientName = clientNames[i % clientNames.Length];
-            var dietVariantId = dietVariantIds[rng.Next(dietVariantIds.Length)];
-            
-            // Statusy: Pending (0), Packed (1), Labeled (2)
-            var sessionStatus = i switch
-            {
-                0 => PackingStatus.Pending,
-                1 => PackingStatus.Packed,
-                _ => PackingStatus.Labeled
-            };
-
-            var sessionId = await db.ExecuteScalarAsync<int>(
-                """
-                INSERT INTO [PackingSessions] ([PackingDate], [OrderId], [ClientName], [PackedBy], [Status], [DeliveryCalendarId], [CreatedBy], [CreatedAt])
-                VALUES (@packingDate, @orderId, @clientName, @packedBy, @status, @deliveryCalendarId, @auditUser, @now);
-                SELECT CAST(SCOPE_IDENTITY() as int);
-                """,
-                new
-                {
-                    packingDate = today.ToDateTime(TimeOnly.MinValue),
-                    orderId,
-                    clientName,
-                    packedBy = sessionStatus == PackingStatus.Pending ? null : "DemoPacker",
-                    status = (int)sessionStatus,
-                    deliveryCalendarId = (int?)null, // Demo: brak przypisanego DeliveryCalendarId
-                    auditUser,
-                    now
-                });
-
-            var mealNames = new[]
-            {
-                "Jajecznica z szczypiorkiem na maśle",
-                "Pudding chia z jagodami i śmietanką",
-                "Pikantna zupa pomidorowa z makaronem",
-                "Pieczony filet z łososia z ryżem i brokułami",
-                "Bowl z wołowiną, dynią i batatami"
-            };
-
-            for (var m = 0; m < 5; m++)
-            {
-                // Statusy pudełek w zależności od statusu sesji
-                var boxStatus = sessionStatus switch
-                {
-                    PackingStatus.Pending => m < 2 ? PackingItemStatus.FoilPrinted : PackingItemStatus.Pending,
-                    _ => PackingItemStatus.Packed
-                };
-
-                var boxCode = $"BOX-{today:yyyyMMdd}-{sessionId:D3}-{m + 1}";
-
-                var itemId = await db.ExecuteScalarAsync<int>(
-                    """
-                    INSERT INTO [PackingItems] ([PackingSessionId], [MealId], [MealName], [DietVariantId], [BoxCode], [Status], [FoilPrintedAt], [PackedAt], [PackedBy], [CreatedBy], [CreatedAt])
-                    VALUES (@sessionId, @mealId, @mealName, @dietVariantId, @boxCode, @status, @foilPrintedAt, @packedAt, @packedBy, @auditUser, @now);
-                    SELECT CAST(SCOPE_IDENTITY() as int);
-                    """,
-                    new
-                    {
-                        sessionId,
-                        mealId = m + 1,
-                        mealName = mealNames[m],
-                        dietVariantId,
-                        boxCode,
-                        status = (int)boxStatus,
-                        foilPrintedAt = boxStatus >= PackingItemStatus.FoilPrinted ? now.AddMinutes(-30) : (DateTimeOffset?)null,
-                        packedAt = boxStatus == PackingItemStatus.Packed ? now.AddMinutes(-10) : (DateTimeOffset?)null,
-                        packedBy = boxStatus == PackingItemStatus.Packed ? "DemoPacker" : null,
-                        auditUser,
-                        now
-                    });
-
-                // Etykieta produktowa, jeśli zafoliowano
-                if (boxStatus >= PackingItemStatus.FoilPrinted)
-                {
-                    await db.ExecuteAsync(
-                        """
-                        INSERT INTO [PackingLabels] ([PackingItemId], [LabelType], [QrCode], [DishName], [Allergens], [Kcal], [ClientName], [CreatedAt])
-                        VALUES (@itemId, 0, @qrCode, @dishName, @allergens, @kcal, @clientName, @now);
-                        """,
-                        new
-                        {
-                            itemId,
-                            qrCode = boxCode,
-                            dishName = mealNames[m],
-                            allergens = m switch
-                            {
-                                0 => "Jaja",
-                                1 => "Laktoza",
-                                2 => "Gluten, Laktoza",
-                                3 => "Ryby",
-                                _ => "Brak"
-                            },
-                            kcal = m switch
-                            {
-                                0 => 270,
-                                1 => 315,
-                                2 => 140,
-                                3 => 450,
-                                _ => 330
-                            },
-                            clientName,
-                            now
-                        });
-                }
-            }
-
-            // Etykieta wysyłkowa na torbę
-            if (sessionStatus == PackingStatus.Labeled)
-            {
-                var shippingCode = $"BAG-{today:yyyyMMdd}-{sessionId:D3}";
-                await db.ExecuteAsync(
-                    """
-                    INSERT INTO [PackingLabels] ([PackingSessionId], [LabelType], [QrCode], [ClientName], [RouteInfo], [DeliveryWindow], [CreatedAt])
-                    VALUES (@sessionId, 1, @qrCode, @clientName, @routeInfo, @deliveryWindow, @now);
-                    """,
-                    new
-                    {
-                        sessionId,
-                        qrCode = shippingCode,
-                        clientName,
-                        routeInfo = "Trasa 1, auto PO 12345, stop " + (i + 1),
-                        deliveryWindow = "06:00-08:00",
-                        now
-                    });
-            }
-        }
-
-        this.logger.LogInformation("Seeded packing sessions, boxes and labels for today.");
-    }
-
-    private async Task EnsureTodayDemoLifecycleAsync(IDbConnection db, DateTimeOffset now, string auditUser, CancellationToken cancellationToken)
-    {
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var todayDate = today.ToDateTime(TimeOnly.MinValue);
-        var deliveryDateTime = today.ToDateTime(new TimeOnly(8, 0));
-
-        var customerId = await EnsureDemoLifecycleCustomerAsync(db, now, cancellationToken);
-        var addressId = await EnsureDemoLifecycleAddressAsync(db, customerId, now, auditUser, cancellationToken);
-        var clientPublicId = await EnsureDemoLifecycleCustomerProfileAsync(db, customerId, addressId, now, auditUser, cancellationToken);
-        var preferredDietVariantId = await EnsureDemoLifecycleMenuFoundationAsync(db, now, auditUser, cancellationToken);
-        var dietMenuPlanId = await EnsureTodayDemoDietMenuPlanAsync(db, todayDate, now, auditUser, cancellationToken);
-        var meals = (await GetTodayDemoMealsAsync(db, dietMenuPlanId, preferredDietVariantId, cancellationToken)).Take(5).ToList();
-
-        if (meals.Count < 3)
-        {
-            this.logger.LogWarning(
-                "Skipped today demo lifecycle seed because only {MealCount} menu plan items were available for {DemoDate}.",
-                meals.Count,
-                today);
-            return;
-        }
-
-        var orderNumber = $"DEMO-LIFE-{today:yyyyMMdd}";
-        var clientName = "Demo Klient";
-        var totalPrice = meals.Sum(meal => meal.PricePerDay);
-        var orderId = await EnsureTodayDemoOrderAsync(
-            db,
-            customerId,
-            orderNumber,
-            todayDate,
-            totalPrice,
-            now,
-            auditUser,
-            cancellationToken);
-
-        await EnsureTodayDemoOrderItemsAsync(db, orderId, meals, now, auditUser, cancellationToken);
-
-        var deliveryCalendarId = await EnsureTodayDemoDeliveryCalendarAsync(
-            db,
-            orderId,
-            addressId,
-            deliveryDateTime,
-            now,
-            auditUser,
-            cancellationToken);
-
-        await EnsureTodayDemoPaymentAsync(db, orderId, today, totalPrice, now, auditUser, cancellationToken);
-
-        var productionPlanId = await EnsureTodayDemoProductionPlanAsync(db, todayDate, now, auditUser, cancellationToken);
-        var productionPlanItemIds = await EnsureTodayDemoProductionPlanItemsAsync(
-            db,
-            productionPlanId,
-            meals,
-            now,
-            auditUser,
-            cancellationToken);
-
-        await EnsureTodayDemoPackingAsync(
-            db,
-            today,
-            todayDate,
-            orderId,
-            deliveryCalendarId,
-            clientName,
-            clientPublicId,
-            meals,
-            productionPlanItemIds,
-            now,
-            auditUser,
-            cancellationToken);
-
-        this.logger.LogInformation(
-            "Ensured today demo lifecycle for {DemoDate}: order {OrderNumber}, {MealCount} meals, delivery calendar {DeliveryCalendarId}.",
-            today,
-            orderNumber,
-            meals.Count,
-            deliveryCalendarId);
+            new { now, auditUser },
+            cancellationToken: cancellationToken));
     }
 
     private static async Task<int> EnsureDemoLifecycleMenuFoundationAsync(
@@ -1403,6 +1697,25 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         string auditUser,
         CancellationToken cancellationToken)
     {
+        await EnsureDefaultMealVariantsAsync(db, now, auditUser, cancellationToken);
+
+        var preferredDietVariantId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            """
+            SELECT TOP 1 dv.[Id]
+            FROM [DietVariants] dv
+            INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
+            WHERE dv.[Name] = N'Standard 1800'
+              AND dv.[IsDeleted] = 0
+              AND d.[IsDeleted] = 0
+            ORDER BY dv.[IsDefault] DESC, dv.[Id];
+            """,
+            cancellationToken: cancellationToken));
+
+        if (preferredDietVariantId.HasValue)
+        {
+            return preferredDietVariantId.Value;
+        }
+
         var categoryId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
             "SELECT TOP 1 [Id] FROM [Categories] WHERE [Name] = N'Demo lifecycle menu' ORDER BY [Id];",
             cancellationToken: cancellationToken));
@@ -1791,12 +2104,13 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await db.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO [DietMenuPlanItems]
-                ([DietMenuPlanId], [DietVariantId], [MealId], [MealSlot], [ServingSizeMultiplier], [SortOrder],
+                ([DietMenuPlanId], [DietVariantId], [MealId], [MealVariantId], [MealSlot], [ServingSizeMultiplier], [SortOrder],
                  [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
             SELECT
                 @planId,
                 dvm.[DietVariantId],
                 dvm.[MealId],
+                mv.[Id],
                 CASE dvm.[SortOrder]
                     WHEN 1 THEN N'Breakfast'
                     WHEN 2 THEN N'Snack1'
@@ -1812,6 +2126,14 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 @auditUser,
                 0
             FROM [DietVariantMeals] dvm
+            OUTER APPLY
+            (
+                SELECT TOP 1 [Id]
+                FROM [MealVariants]
+                WHERE [MealId] = dvm.[MealId]
+                  AND [IsDeleted] = 0
+                ORDER BY [IsDefault] DESC, [Id]
+            ) mv
             WHERE NOT EXISTS
             (
                 SELECT 1
@@ -1822,6 +2144,28 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                   AND existing.[SortOrder] = dvm.[SortOrder]
                   AND existing.[IsDeleted] = 0
             );
+            """,
+            new { planId = planId.Value, now, auditUser },
+            cancellationToken: cancellationToken));
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE dpi
+            SET [MealVariantId] = mv.[Id],
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [DietMenuPlanItems] dpi
+            OUTER APPLY
+            (
+                SELECT TOP 1 [Id]
+                FROM [MealVariants]
+                WHERE [MealId] = dpi.[MealId]
+                  AND [IsDeleted] = 0
+                ORDER BY [IsDefault] DESC, [Id]
+            ) mv
+            WHERE dpi.[DietMenuPlanId] = @planId
+              AND dpi.[MealVariantId] IS NULL
+              AND mv.[Id] IS NOT NULL;
             """,
             new { planId = planId.Value, now, auditUser },
             cancellationToken: cancellationToken));
@@ -1839,6 +2183,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             SELECT TOP (5)
                 dpi.[Id] AS DietMenuPlanItemId,
                 dpi.[MealId],
+                dpi.[MealVariantId],
                 m.[Name] AS MealName,
                 dpi.[DietVariantId],
                 dv.[Name] AS VariantName,
@@ -1955,10 +2300,12 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             await db.ExecuteAsync(new CommandDefinition(
                 """
                 INSERT INTO [OrderItems]
-                    ([OrderId], [DietId], [DietVariantId], [DietName], [VariantName], [CaloriesPerDay],
+                    ([OrderId], [DietId], [DietVariantId], [MealId], [MealVariantId], [DietMenuPlanItemId],
+                     [DietName], [VariantName], [MealSlot], [CaloriesPerDay],
                      [PricePerDay], [TotalDays], [TotalPrice], [CreatedAt], [CreatedBy], [IsDeleted])
                 VALUES
-                    (@orderId, @dietId, @dietVariantId, @dietName, @variantName, @caloriesPerDay,
+                    (@orderId, @dietId, @dietVariantId, @mealId, @mealVariantId, @dietMenuPlanItemId,
+                     @dietName, @variantName, @mealSlot, @caloriesPerDay,
                      @pricePerDay, 1, @pricePerDay, @now, @auditUser, 0);
                 """,
                 new
@@ -1966,8 +2313,12 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                     orderId,
                     dietId = meal.DietId,
                     dietVariantId = meal.DietVariantId,
+                    mealId = meal.MealId,
+                    mealVariantId = meal.MealVariantId,
+                    dietMenuPlanItemId = meal.DietMenuPlanItemId,
                     dietName = $"{meal.DietName}: {meal.MealName}",
                     variantName = $"{meal.VariantName} / {meal.MealSlot}",
+                    mealSlot = meal.MealSlot,
                     caloriesPerDay = meal.CaloriesPerDay,
                     pricePerDay = meal.PricePerDay,
                     now,
@@ -2059,13 +2410,13 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
     private static async Task EnsureTodayDemoPaymentAsync(
         IDbConnection db,
         int orderId,
-        DateOnly today,
+        string orderNumber,
         decimal amount,
         DateTimeOffset now,
         string auditUser,
         CancellationToken cancellationToken)
     {
-        var paymentIntentId = $"pi_demo_lifecycle_{today:yyyyMMdd}";
+        var paymentIntentId = $"pi_{orderNumber.ToLowerInvariant().Replace("-", "_")}";
         var paymentId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
             "SELECT [Id] FROM [Payments] WHERE [StripePaymentIntentId] = @paymentIntentId;",
             new { paymentIntentId },
@@ -2124,553 +2475,13 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             cancellationToken: cancellationToken));
     }
 
-    private static async Task<int> EnsureTodayDemoProductionPlanAsync(
-        IDbConnection db,
-        DateTime todayDate,
-        DateTimeOffset now,
-        string auditUser,
-        CancellationToken cancellationToken)
-    {
-        var productionPlanId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
-            """
-            SELECT TOP 1 [Id]
-            FROM [ProductionPlans]
-            WHERE [ProductionDate] = @todayDate
-              AND [IsDeleted] = 0
-            ORDER BY [Id];
-            """,
-            new { todayDate },
-            cancellationToken: cancellationToken));
-
-        if (productionPlanId.HasValue)
-        {
-            await db.ExecuteAsync(new CommandDefinition(
-                """
-                UPDATE [ProductionPlans]
-                SET [Status] = @status,
-                    [Notes] = N'Demo lifecycle: produkcja dzisiejszego zamowienia pokazowego.',
-                    [IsSharedWithLogistics] = 1,
-                    [UpdatedAt] = @now,
-                    [UpdatedBy] = @auditUser,
-                    [IsDeleted] = 0
-                WHERE [Id] = @productionPlanId;
-                """,
-                new
-                {
-                    productionPlanId = productionPlanId.Value,
-                    status = (int)ProductionPlanStatus.InProgress,
-                    now,
-                    auditUser,
-                },
-                cancellationToken: cancellationToken));
-
-            return productionPlanId.Value;
-        }
-
-        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
-            """
-            INSERT INTO [ProductionPlans]
-                ([ProductionDate], [Status], [Notes], [IsSharedWithLogistics], [CreatedBy], [CreatedAt], [IsDeleted])
-            VALUES
-                (@todayDate, @status, N'Demo lifecycle: produkcja dzisiejszego zamowienia pokazowego.', 1, @auditUser, @now, 0);
-            SELECT CAST(SCOPE_IDENTITY() as int);
-            """,
-            new
-            {
-                todayDate,
-                status = (int)ProductionPlanStatus.InProgress,
-                auditUser,
-                now,
-            },
-            cancellationToken: cancellationToken));
-    }
-
-    private static async Task<Dictionary<int, int>> EnsureTodayDemoProductionPlanItemsAsync(
-        IDbConnection db,
-        int productionPlanId,
-        IReadOnlyList<DemoLifecycleMeal> meals,
-        DateTimeOffset now,
-        string auditUser,
-        CancellationToken cancellationToken)
-    {
-        var result = new Dictionary<int, int>();
-
-        foreach (var meal in meals)
-        {
-            var existingItemId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
-                """
-                SELECT TOP 1 [Id]
-                FROM [ProductionPlanItems]
-                WHERE [ProductionPlanId] = @productionPlanId
-                  AND [MealId] = @mealId
-                  AND [DietVariantId] = @dietVariantId
-                  AND [IsDeleted] = 0
-                ORDER BY [Id];
-                """,
-                new { productionPlanId, mealId = meal.MealId, dietVariantId = meal.DietVariantId },
-                cancellationToken: cancellationToken));
-
-            var plannedQuantity = meal.SortOrder <= 2 ? 18 : 12;
-            var cookedQuantity = meal.SortOrder <= 2 ? plannedQuantity : 0;
-            var itemStatus = meal.SortOrder <= 2 ? ProductionItemStatus.Cooked : ProductionItemStatus.Planned;
-            var productionGroup = meal.SortOrder <= 2 ? 1 : meal.SortOrder <= 4 ? 2 : 3;
-            var estimatedReadyTime = TimeSpan.FromHours(6 + meal.SortOrder);
-            var actualReadyTime = itemStatus == ProductionItemStatus.Cooked
-                ? estimatedReadyTime.Add(TimeSpan.FromMinutes(5))
-                : (TimeSpan?)null;
-
-            if (existingItemId.HasValue)
-            {
-                await db.ExecuteAsync(new CommandDefinition(
-                    """
-                    UPDATE [ProductionPlanItems]
-                    SET [MealName] = @mealName,
-                        [PlannedQuantity] = @plannedQuantity,
-                        [CookedQuantity] = @cookedQuantity,
-                        [Status] = @status,
-                        [ProductionGroup] = @productionGroup,
-                        [EstimatedReadyTime] = @estimatedReadyTime,
-                        [ActualReadyTime] = @actualReadyTime,
-                        [DietMenuPlanItemId] = @dietMenuPlanItemId,
-                        [UpdatedAt] = @now,
-                        [UpdatedBy] = @auditUser,
-                        [IsDeleted] = 0
-                    WHERE [Id] = @itemId;
-                    """,
-                    new
-                    {
-                        itemId = existingItemId.Value,
-                        mealName = meal.MealName,
-                        plannedQuantity,
-                        cookedQuantity,
-                        status = (int)itemStatus,
-                        productionGroup,
-                        estimatedReadyTime,
-                        actualReadyTime,
-                        dietMenuPlanItemId = meal.DietMenuPlanItemId,
-                        now,
-                        auditUser,
-                    },
-                    cancellationToken: cancellationToken));
-
-                result[meal.MealId] = existingItemId.Value;
-                continue;
-            }
-
-            var insertedItemId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
-                """
-                INSERT INTO [ProductionPlanItems]
-                    ([ProductionPlanId], [MealId], [MealName], [DietVariantId], [PlannedQuantity], [CookedQuantity],
-                     [Status], [ProductionGroup], [EstimatedReadyTime], [ActualReadyTime], [DietMenuPlanItemId],
-                     [CreatedBy], [CreatedAt], [IsDeleted])
-                VALUES
-                    (@productionPlanId, @mealId, @mealName, @dietVariantId, @plannedQuantity, @cookedQuantity,
-                     @status, @productionGroup, @estimatedReadyTime, @actualReadyTime, @dietMenuPlanItemId,
-                     @auditUser, @now, 0);
-                SELECT CAST(SCOPE_IDENTITY() as int);
-                """,
-                new
-                {
-                    productionPlanId,
-                    mealId = meal.MealId,
-                    mealName = meal.MealName,
-                    dietVariantId = meal.DietVariantId,
-                    plannedQuantity,
-                    cookedQuantity,
-                    status = (int)itemStatus,
-                    productionGroup,
-                    estimatedReadyTime,
-                    actualReadyTime,
-                    dietMenuPlanItemId = meal.DietMenuPlanItemId,
-                    auditUser,
-                    now,
-                },
-                cancellationToken: cancellationToken));
-
-            result[meal.MealId] = insertedItemId;
-        }
-
-        return result;
-    }
-
-    private static async Task EnsureTodayDemoPackingAsync(
-        IDbConnection db,
-        DateOnly today,
-        DateTime todayDate,
-        int orderId,
-        int deliveryCalendarId,
-        string clientName,
-        string clientPublicId,
-        IReadOnlyList<DemoLifecycleMeal> meals,
-        IReadOnlyDictionary<int, int> productionPlanItemIds,
-        DateTimeOffset now,
-        string auditUser,
-        CancellationToken cancellationToken)
-    {
-        var sessionId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
-            """
-            SELECT TOP 1 [Id]
-            FROM [PackingSessions]
-            WHERE [PackingDate] = @todayDate
-              AND [OrderId] = @orderId
-              AND [IsDeleted] = 0
-            ORDER BY [Id];
-            """,
-            new { todayDate, orderId },
-            cancellationToken: cancellationToken));
-
-        if (sessionId.HasValue)
-        {
-            await db.ExecuteAsync(new CommandDefinition(
-                """
-                UPDATE [PackingSessions]
-                SET [ClientName] = @clientName,
-                    [ClientPublicId] = @clientPublicId,
-                    [PackedBy] = N'DemoPacker',
-                    [Status] = @status,
-                    [DeliveryCalendarId] = @deliveryCalendarId,
-                    [UpdatedAt] = @now,
-                    [UpdatedBy] = @auditUser,
-                    [IsDeleted] = 0
-                WHERE [Id] = @sessionId;
-                """,
-                new
-                {
-                    sessionId = sessionId.Value,
-                    clientName,
-                    clientPublicId,
-                    status = (int)PackingStatus.Labeled,
-                    deliveryCalendarId,
-                    now,
-                    auditUser,
-                },
-                cancellationToken: cancellationToken));
-        }
-        else
-        {
-            sessionId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
-                """
-                INSERT INTO [PackingSessions]
-                    ([PackingDate], [OrderId], [ClientName], [ClientPublicId], [PackedBy], [Status],
-                     [DeliveryCalendarId], [CreatedBy], [CreatedAt], [IsDeleted])
-                VALUES
-                    (@todayDate, @orderId, @clientName, @clientPublicId, N'DemoPacker', @status,
-                     @deliveryCalendarId, @auditUser, @now, 0);
-                SELECT CAST(SCOPE_IDENTITY() as int);
-                """,
-                new
-                {
-                    todayDate,
-                    orderId,
-                    clientName,
-                    clientPublicId,
-                    status = (int)PackingStatus.Labeled,
-                    deliveryCalendarId,
-                    auditUser,
-                    now,
-                },
-                cancellationToken: cancellationToken));
-        }
-
-        var packingBagId = await EnsureTodayDemoPackingBagAsync(
-            db,
-            sessionId.Value,
-            today,
-            now,
-            auditUser,
-            cancellationToken);
-
-        await db.ExecuteAsync(new CommandDefinition(
-            """
-            DELETE FROM [BoxLabels]
-            WHERE [PackingItemId] IN
-            (
-                SELECT [Id]
-                FROM [PackingItems]
-                WHERE [PackingSessionId] = @sessionId
-            );
-
-            DELETE FROM [PackingLabels]
-            WHERE [PackingSessionId] = @sessionId
-               OR [PackingItemId] IN
-               (
-                   SELECT [Id]
-                   FROM [PackingItems]
-                   WHERE [PackingSessionId] = @sessionId
-               );
-
-            DELETE FROM [PackingItems]
-            WHERE [PackingSessionId] = @sessionId;
-            """,
-            new { sessionId = sessionId.Value },
-            cancellationToken: cancellationToken));
-
-        foreach (var meal in meals)
-        {
-            productionPlanItemIds.TryGetValue(meal.MealId, out var productionPlanItemId);
-            var boxCode = $"DEMO-BOX-{today:yyyyMMdd}-{orderId}-{meal.SortOrder:D2}";
-            var itemStatus = meal.SortOrder <= 2 ? PackingItemStatus.Packed : PackingItemStatus.FoilPrinted;
-            var packedAt = itemStatus == PackingItemStatus.Packed ? now.AddMinutes(-10) : (DateTimeOffset?)null;
-
-            var packingItemId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
-                """
-                INSERT INTO [PackingItems]
-                    ([PackingSessionId], [PackingBagId], [ProductionPlanItemId], [MealId], [MealName], [DietVariantId],
-                     [BoxCode], [Status], [ExpiryDate], [FoilPrintedAt], [PackedAt], [PackedBy],
-                     [CreatedBy], [CreatedAt], [IsDeleted])
-                VALUES
-                    (@sessionId, @packingBagId, @productionPlanItemId, @mealId, @mealName, @dietVariantId,
-                     @boxCode, @status, @expiryDate, @foilPrintedAt, @packedAt, @packedBy,
-                     @auditUser, @now, 0);
-                SELECT CAST(SCOPE_IDENTITY() as int);
-                """,
-                new
-                {
-                    sessionId = sessionId.Value,
-                    packingBagId,
-                    productionPlanItemId = productionPlanItemId == 0 ? (int?)null : productionPlanItemId,
-                    mealId = meal.MealId,
-                    mealName = meal.MealName,
-                    dietVariantId = meal.DietVariantId,
-                    boxCode,
-                    status = (int)itemStatus,
-                    expiryDate = now.AddDays(1),
-                    foilPrintedAt = now.AddMinutes(-30),
-                    packedAt,
-                    packedBy = itemStatus == PackingItemStatus.Packed ? "DemoPacker" : null,
-                    auditUser,
-                    now,
-                },
-                cancellationToken: cancellationToken));
-
-            var productLabelDataJson = CreateDemoProductLabelData(
-                today,
-                orderId,
-                deliveryCalendarId,
-                packingItemId,
-                packingBagId,
-                meal);
-
-            await db.ExecuteAsync(new CommandDefinition(
-                """
-                INSERT INTO [PackingLabels]
-                    ([PackingItemId], [PackingSessionId], [LabelType], [QrCode], [DishName], [Allergens], [Kcal],
-                     [ClientName], [PrintNumber], [LabelDataJson], [PrintedAt], [PrintedBy], [CreatedAt])
-                VALUES
-                    (@packingItemId, NULL, @labelType, @qrCode, @dishName, @allergens, @kcal,
-                     @clientName, 1, @labelDataJson, @now, @auditUser, @now);
-                """,
-                new
-                {
-                    packingItemId,
-                    labelType = 0,
-                    qrCode = boxCode,
-                    dishName = meal.MealName,
-                    allergens = GetDemoAllergens(meal.MealId),
-                    kcal = Math.Max(1, meal.CaloriesPerDay / 5),
-                    clientName,
-                    labelDataJson = productLabelDataJson,
-                    now,
-                    auditUser,
-                },
-                cancellationToken: cancellationToken));
-
-            await db.ExecuteAsync(new CommandDefinition(
-                """
-                INSERT INTO [BoxLabels]
-                    ([PackingItemId], [QrCode], [LabelDataJson], [PrintNumber], [PrintedAt], [PrintedBy], [CreatedAt])
-                VALUES
-                    (@packingItemId, @qrCode, @labelDataJson, 1, @now, @auditUser, @now);
-                """,
-                new
-                {
-                    packingItemId,
-                    qrCode = boxCode,
-                    labelDataJson = productLabelDataJson,
-                    now,
-                    auditUser,
-                },
-                cancellationToken: cancellationToken));
-        }
-
-        var shippingCode = $"DEMO-BAG-{today:yyyyMMdd}-{sessionId.Value:D3}";
-        var routeInfo = $"Oczekuje na trase M4 (DeliveryCalendar #{deliveryCalendarId})";
-        await db.ExecuteAsync(new CommandDefinition(
-            """
-            INSERT INTO [PackingLabels]
-                ([PackingItemId], [PackingSessionId], [PackingBagId], [LabelType], [QrCode], [ClientName], [RouteInfo],
-                 [DeliveryWindow], [MealsList], [PrintNumber], [LabelDataJson], [PrintedAt], [PrintedBy],
-                 [AttachedAt], [AttachedBy], [CreatedAt])
-            VALUES
-                (NULL, @sessionId, @packingBagId, @labelType, @qrCode, @clientName, @routeInfo,
-                 N'06:00-10:00', @mealsList, 1, @labelDataJson, @now, @auditUser,
-                 @now, @auditUser, @now);
-            """,
-            new
-            {
-                sessionId = sessionId.Value,
-                packingBagId,
-                labelType = 1,
-                qrCode = shippingCode,
-                clientName,
-                routeInfo,
-                mealsList = string.Join(", ", meals.Select(meal => meal.MealName)),
-                labelDataJson = CreateDemoTransportLabelData(
-                    today,
-                    orderId,
-                    deliveryCalendarId,
-                    packingBagId,
-                    shippingCode,
-                    routeInfo,
-                    meals),
-                now,
-                auditUser,
-            },
-            cancellationToken: cancellationToken));
-    }
-
-    private static async Task<int> EnsureTodayDemoPackingBagAsync(
-        IDbConnection db,
-        int sessionId,
-        DateOnly today,
-        DateTimeOffset now,
-        string auditUser,
-        CancellationToken cancellationToken)
-    {
-        var bagCode = $"DEMO-BAG-{today:yyyyMMdd}-{sessionId:D3}";
-        var bagId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
-            """
-            SELECT TOP 1 [Id]
-            FROM [PackingBags]
-            WHERE [PackingSessionId] = @sessionId
-              AND [BagNumber] = 1
-              AND [IsDeleted] = 0
-            ORDER BY [Id];
-            """,
-            new { sessionId },
-            cancellationToken: cancellationToken));
-
-        if (bagId.HasValue)
-        {
-            await db.ExecuteAsync(new CommandDefinition(
-                """
-                UPDATE [PackingBags]
-                SET [BagCode] = @bagCode,
-                    [Status] = @status,
-                    [PackedAt] = @now,
-                    [PackedBy] = @auditUser,
-                    [LabeledAt] = @now,
-                    [UpdatedAt] = @now,
-                    [UpdatedBy] = @auditUser,
-                    [IsDeleted] = 0
-                WHERE [Id] = @bagId;
-                """,
-                new
-                {
-                    bagId = bagId.Value,
-                    bagCode,
-                    status = (int)PackingBagStatus.Labeled,
-                    now,
-                    auditUser,
-                },
-                cancellationToken: cancellationToken));
-
-            return bagId.Value;
-        }
-
-        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
-            """
-            INSERT INTO [PackingBags]
-                ([PackingSessionId], [BagNumber], [BagCode], [Status], [PackedAt], [PackedBy],
-                 [LabeledAt], [CreatedBy], [CreatedAt], [IsDeleted])
-            VALUES
-                (@sessionId, 1, @bagCode, @status, @now, @auditUser,
-                 @now, @auditUser, @now, 0);
-            SELECT CAST(SCOPE_IDENTITY() as int);
-            """,
-            new
-            {
-                sessionId,
-                bagCode,
-                status = (int)PackingBagStatus.Labeled,
-                now,
-                auditUser,
-            },
-            cancellationToken: cancellationToken));
-    }
-
-    private static string GetDemoAllergens(int mealId)
-        => mealId switch
-        {
-            1 => "Jaja",
-            2 => "Laktoza",
-            3 => "Gluten, Laktoza",
-            4 => "Ryby",
-            _ => "Brak",
-        };
-
-    private static string CreateDemoProductLabelData(
-        DateOnly today,
-        int orderId,
-        int deliveryCalendarId,
-        int packingItemId,
-        int packingBagId,
-        DemoLifecycleMeal meal)
-        => JsonSerializer.Serialize(new
-        {
-            source = "DemoLifecycle",
-            type = "FoilLabel",
-            date = today.ToString("yyyy-MM-dd"),
-            orderId,
-            deliveryCalendarId,
-            packingItemId,
-            packingBagId,
-            meal.MealId,
-            meal.MealName,
-            meal.DietVariantId,
-            meal.DietName,
-            meal.VariantName,
-            meal.MealSlot,
-            allergens = GetDemoAllergens(meal.MealId),
-            kcal = Math.Max(1, meal.CaloriesPerDay / 5),
-        });
-
-    private static string CreateDemoTransportLabelData(
-        DateOnly today,
-        int orderId,
-        int deliveryCalendarId,
-        int packingBagId,
-        string shippingCode,
-        string routeInfo,
-        IReadOnlyList<DemoLifecycleMeal> meals)
-        => JsonSerializer.Serialize(new
-        {
-            source = "DemoLifecycle",
-            type = "TransportLabel",
-            date = today.ToString("yyyy-MM-dd"),
-            orderId,
-            deliveryCalendarId,
-            packingBagId,
-            qrCode = shippingCode,
-            routeInfo,
-            meals = meals
-                .OrderBy(meal => meal.SortOrder)
-                .Select(meal => new
-                {
-                    meal.MealId,
-                    meal.MealName,
-                    meal.DietVariantId,
-                    meal.DietName,
-                    meal.VariantName,
-                    meal.MealSlot,
-                }),
-        });
-
     private sealed class DemoLifecycleMeal
     {
         public int DietMenuPlanItemId { get; set; }
 
         public int MealId { get; set; }
+
+        public int? MealVariantId { get; set; }
 
         public string MealName { get; set; } = string.Empty;
 
@@ -2713,6 +2524,12 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         string PostalCode,
         double Latitude,
         double Longitude);
+
+    private sealed record DemoPackagingStockItem(
+        string Name,
+        decimal MinimumLevel,
+        decimal TargetQuantity,
+        int LeadTimeDays);
 
     private static Task<int> CountRowsAsync(IDbConnection db, string tableName, CancellationToken cancellationToken)
         => db.ExecuteScalarAsync<int>(new CommandDefinition(

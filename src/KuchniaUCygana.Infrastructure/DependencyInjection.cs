@@ -1,17 +1,23 @@
 using FluentMigrator.Runner;
 using KuchniaUCygana.Application.Configuration;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Application.Services.Logistics;
 using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Entities.Customers;
 using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.External;
+using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Domain.Interfaces.Orders;
 using KuchniaUCygana.Domain.Interfaces.Packing;
 using KuchniaUCygana.Domain.Interfaces.Production;
+using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
+using KuchniaUCygana.Domain.Interfaces.Services.Menu;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Adapters;
+using KuchniaUCygana.Infrastructure.Auth;
+using KuchniaUCygana.Infrastructure.BackgroundJobs;
 using KuchniaUCygana.Infrastructure.Cache;
 using KuchniaUCygana.Infrastructure.Configuration;
 using KuchniaUCygana.Infrastructure.ExternalServices.AI;
@@ -23,21 +29,16 @@ using KuchniaUCygana.Infrastructure.Pdf;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using KuchniaUCygana.Infrastructure.Persistence.Providers;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
+using KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
-using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
-using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
-using KuchniaUCygana.Domain.Interfaces.Services.Menu;
-using KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.Services.Menu;
-using KuchniaUCygana.Domain.Interfaces.Logistics;
-using KuchniaUCygana.Infrastructure.Auth;
-using KuchniaUCygana.Infrastructure.BackgroundJobs;
-using KuchniaUCygana.Application.Services.Logistics;
+using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using MenuAppInterfaces = KuchniaUCygana.Application.Interfaces.Menu;
 using MenuAppServices = KuchniaUCygana.Application.Services.Menu;
 
@@ -114,7 +115,9 @@ public static class DependencyInjection
         services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddScoped<IWorkScheduleRepository, WorkScheduleRepository>();
 
-        services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
+        services.AddScoped<IDatabaseSeeder>(sp => new DatabaseSeeder(
+            new SqlServerConnectionFactory(migrationConnectionString),
+            sp.GetRequiredService<ILogger<DatabaseSeeder>>()));
 
         if (configuration["OrderProvider"] == "M1")
         {

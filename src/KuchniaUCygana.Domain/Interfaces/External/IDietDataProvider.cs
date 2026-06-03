@@ -257,6 +257,10 @@ public sealed class DietPlanEntry
 
     public int MealId { get; set; }
 
+    public int? MealVariantId { get; set; }
+
+    public int? DietMenuPlanItemId { get; set; }
+
     public string MealName { get; set; } = string.Empty;
 
     public int? CategoryId { get; set; }

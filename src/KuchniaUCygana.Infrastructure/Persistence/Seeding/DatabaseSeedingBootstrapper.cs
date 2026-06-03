@@ -27,7 +27,7 @@ public static class DatabaseSeedingBootstrapper
         var profile = ResolveProfile(options.Profile);
         using var scope = services.CreateScope();
         var seeder = scope.ServiceProvider.GetRequiredService<IDatabaseSeeder>();
-        await seeder.SeedAsync(profile, cancellationToken);
+        await seeder.SeedAsync(profile, options.ResetDemoData, cancellationToken);
         logger.LogInformation("Database seeding finished with profile {Profile}.", profile);
     }
 

@@ -88,7 +88,7 @@ public sealed class ProductionPlanGenerator
         }
 
         // 4. Oblicz ilości per posiłek — agregacja zamówień × diety
-        var mealQuantities = CalculateMealQuantities(orders, dietPlan);
+        var mealQuantities = await CalculateMealQuantitiesAsync(productionDate, orders, dietPlan);
         if (mealQuantities.Count == 0)
         {
             throw new InvalidOperationException(
@@ -162,7 +162,9 @@ public sealed class ProductionPlanGenerator
         {
             PlanDate = item.PlanDate,
             PlanStatus = "Published",
+            DietMenuPlanItemId = item.DietMenuPlanItemId,
             MealId = item.MealId,
+            MealVariantId = item.MealVariantId,
             MealName = item.MealName,
             CategoryId = item.CategoryId,
             CategoryName = item.CategoryName,
@@ -176,7 +178,58 @@ public sealed class ProductionPlanGenerator
     /// <summary>
     /// Agreguje: ile porcji każdego posiłku (MealId+DietVariantId) potrzeba.
     /// </summary>
-    private static Dictionary<(int MealId, int DietVariantId), int> CalculateMealQuantities(
+    private async Task<Dictionary<(int MealId, int DietVariantId), int>> CalculateMealQuantitiesAsync(
+        DateOnly productionDate,
+        List<ActiveOrderEntry> orders,
+        List<DietPlanEntry> dietPlan)
+    {
+        var explicitQuantities = await CalculateExplicitOrderItemQuantitiesAsync(productionDate, dietPlan);
+        return explicitQuantities.Count > 0
+            ? explicitQuantities
+            : CalculateLegacyDietVariantQuantities(orders, dietPlan);
+    }
+
+    private async Task<Dictionary<(int MealId, int DietVariantId), int>> CalculateExplicitOrderItemQuantitiesAsync(
+        DateOnly productionDate,
+        List<DietPlanEntry> dietPlan)
+    {
+        var deliveries = await _orderDataProvider.GetDeliveriesForDateAsync(productionDate.ToDateTime(TimeOnly.MinValue));
+        var quantities = new Dictionary<(int, int), int>();
+
+        foreach (var item in deliveries.SelectMany(delivery => delivery.Items))
+        {
+            if (!item.MealId.HasValue || item.MealId.Value <= 0)
+            {
+                continue;
+            }
+
+            var matchedPlanItem = item.DietMenuPlanItemId.HasValue
+                ? dietPlan.FirstOrDefault(planItem =>
+                    planItem.DietMenuPlanItemId == item.DietMenuPlanItemId.Value)
+                : null;
+
+            if (matchedPlanItem is null && item.MealVariantId.HasValue)
+            {
+                matchedPlanItem = dietPlan.FirstOrDefault(planItem =>
+                    planItem.MealId == item.MealId.Value &&
+                    planItem.DietVariantId == item.DietVariantId &&
+                    planItem.MealVariantId == item.MealVariantId.Value);
+            }
+
+            matchedPlanItem ??= dietPlan.FirstOrDefault(planItem =>
+                planItem.MealId == item.MealId.Value &&
+                planItem.DietVariantId == item.DietVariantId);
+
+            var key = (
+                item.MealId.Value,
+                matchedPlanItem?.DietVariantId ?? item.DietVariantId);
+            quantities[key] = quantities.GetValueOrDefault(key) + 1;
+        }
+
+        return quantities;
+    }
+
+    private static Dictionary<(int MealId, int DietVariantId), int> CalculateLegacyDietVariantQuantities(
         List<ActiveOrderEntry> orders,
         List<DietPlanEntry> dietPlan)
     {

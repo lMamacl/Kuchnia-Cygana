@@ -73,6 +73,7 @@ services:
       - DatabaseSeeding__Enabled=true
       - DatabaseSeeding__Mode=Both
       - DatabaseSeeding__Profile=DemoData
+      - DatabaseSeeding__ResetDemoData=true
       - Stripe__SecretKey=${STRIPE_SECRET}
       - Stripe__PublishableKey=${STRIPE_PUBLISHABLE}
       - OpenAI__ApiKey=${OPENAI_KEY}

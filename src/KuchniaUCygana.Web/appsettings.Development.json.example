@@ -6,7 +6,8 @@
   "DatabaseSeeding": {
     "Enabled": true,
     "Mode": "Both",
-    "Profile": "MinimalRealistic"
+    "Profile": "MinimalRealistic",
+    "ResetDemoData": false
   },
   "Stripe": {
     "SecretKey": ""
@@ -23,6 +24,6 @@
     "BoxContainerStockItemId": null,
     "BoxContainerWasteQuantity": 1
   },
-  "OrderProvider": "Mock",
-  "DeliveryManifestProvider": "Mock"
+  "OrderProvider": "M1",
+  "DeliveryManifestProvider": "M4"
 }
