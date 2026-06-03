@@ -23,6 +23,12 @@ public sealed class LogisticsDemoDataSeeder
             new EventId(2, nameof(DemoRouteSeeded)),
             "Seeded logistics demo route {RouteName} with {StopCount} ready stops.");
 
+    private static readonly Action<ILogger, int, Exception?> DemoWarehouseSeeded =
+        LoggerMessage.Define<int>(
+            LogLevel.Information,
+            new EventId(3, nameof(DemoWarehouseSeeded)),
+            "Seeded ready warehouse demo manifests for {RouteCount} existing logistics routes.");
+
     private readonly ILogger<LogisticsDemoDataSeeder> logger;
 
     public LogisticsDemoDataSeeder(ILogger<LogisticsDemoDataSeeder> logger)
@@ -42,7 +48,178 @@ public sealed class LogisticsDemoDataSeeder
         if (await RouteExistsAsync(db, routeName, cancellationToken))
         {
             DemoRouteAlreadyExists(this.logger, routeName, null);
-            return;
+        }
+        else
+        {
+            if (db.State != ConnectionState.Open)
+            {
+                db.Open();
+            }
+
+            using var transaction = db.BeginTransaction();
+            try
+            {
+                var driverUserId = await EnsureDriverUserAsync(db, transaction, now, cancellationToken);
+                var driverId = await EnsureDriverAsync(db, transaction, driverUserId, now, auditUser, cancellationToken);
+                var vehicle = await EnsureAssignedVehicleAsync(db, transaction, driverId, now, auditUser, cancellationToken);
+                var routeId = await InsertRouteAsync(db, transaction, routeName, vehicle.Id, now, auditUser, cancellationToken);
+                var deliveries = GenerateDeliveries(today);
+                var packages = new List<DemoManifestPackage>();
+
+                foreach (var delivery in deliveries)
+                {
+                    var customerId = await EnsureCustomerAsync(db, transaction, delivery, now, cancellationToken);
+                    var addressId = await EnsureAddressAsync(db, transaction, customerId, delivery, now, auditUser, cancellationToken);
+                    var orderId = await EnsureOrderAsync(db, transaction, customerId, delivery, today, now, auditUser, cancellationToken);
+                    await EnsureOrderItemAsync(db, transaction, orderId, delivery, now, auditUser, cancellationToken);
+                    var deliveryCalendarId = await EnsureDeliveryCalendarAsync(
+                        db,
+                        transaction,
+                        orderId,
+                        addressId,
+                        delivery,
+                        today,
+                        now,
+                        auditUser,
+                        cancellationToken);
+                    await InsertStopAsync(
+                        db,
+                        transaction,
+                        routeId,
+                        deliveryCalendarId,
+                        delivery,
+                        today,
+                        now,
+                        auditUser,
+                        cancellationToken);
+                    var sessionId = await EnsurePackingSessionAsync(
+                        db,
+                        transaction,
+                        orderId,
+                        deliveryCalendarId,
+                        delivery,
+                        today,
+                        now,
+                        auditUser,
+                        cancellationToken);
+                    var bag = await EnsurePackingBagAsync(
+                        db,
+                        transaction,
+                        sessionId,
+                        delivery,
+                        today,
+                        now,
+                        auditUser,
+                        cancellationToken);
+
+                    await EnsurePackingItemsAsync(
+                        db,
+                        transaction,
+                        sessionId,
+                        bag.Id,
+                        delivery,
+                        today,
+                        now,
+                        auditUser,
+                        cancellationToken);
+                    var labelId = await EnsureShippingLabelAsync(
+                        db,
+                        transaction,
+                        sessionId,
+                        bag.Id,
+                        delivery,
+                        routeName,
+                        today,
+                        now,
+                        cancellationToken);
+
+                    packages.Add(new DemoManifestPackage(
+                        sessionId,
+                        bag.Id,
+                        bag.Code,
+                        deliveryCalendarId,
+                        labelId,
+                        $"DEMO-LABEL-{today:yyyyMMdd}-{delivery.SequenceNumber:D2}"));
+                }
+
+                await InsertReadyManifestAsync(
+                    db,
+                    transaction,
+                    routeId,
+                    routeName,
+                    vehicle,
+                    driverUserId,
+                    packages,
+                    today,
+                    now,
+                    auditUser,
+                    cancellationToken);
+                await EnsureThermalBagsAsync(db, transaction, now, auditUser, cancellationToken);
+
+                transaction.Commit();
+                DemoRouteSeeded(this.logger, routeName, deliveries.Count, null);
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        var preparedRoutes = await SeedReadyWarehouseForExistingRoutesAsync(db, today, now, auditUser, cancellationToken);
+        if (preparedRoutes > 0)
+        {
+            DemoWarehouseSeeded(this.logger, preparedRoutes, null);
+        }
+    }
+
+    private static async Task<int> SeedReadyWarehouseForExistingRoutesAsync(
+        IDbConnection db,
+        DateOnly today,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var stops = (await db.QueryAsync<ExistingRouteStop>(new CommandDefinition(
+            """
+            SELECT
+                r.[Id] AS [RouteId],
+                r.[Name] AS [RouteName],
+                r.[VehicleId],
+                v.[RegistrationNumber] AS [VehicleRegistration],
+                s.[DeliveryCalendarId],
+                s.[SequenceNumber],
+                dc.[OrderId],
+                CONCAT(u.[FirstName], ' ', u.[LastName]) AS [ClientName]
+            FROM [DeliveryRoutes] r
+            INNER JOIN [Vehicles] v ON v.[Id] = r.[VehicleId]
+            INNER JOIN [DeliveryRouteStops] s ON s.[RouteId] = r.[Id] AND s.[IsDeleted] = 0
+            INNER JOIN [DeliveryCalendar] dc ON dc.[Id] = s.[DeliveryCalendarId] AND dc.[IsDeleted] = 0
+            INNER JOIN [Orders] o ON o.[Id] = dc.[OrderId] AND o.[IsDeleted] = 0
+            INNER JOIN [Users] u ON u.[Id] = o.[CustomerId]
+            WHERE CONVERT(date, r.[RouteDate]) = @routeDate
+              AND r.[IsDeleted] = 0
+              AND r.[VehicleId] IS NOT NULL
+              AND NOT EXISTS
+              (
+                  SELECT 1
+                  FROM [PackingManifests] m
+                  WHERE m.[RouteId] = r.[Id]
+                    AND m.[PackingDate] = @packingDate
+                    AND m.[IsSuperseded] = 0
+              )
+            ORDER BY r.[Id], s.[SequenceNumber];
+            """,
+            new
+            {
+                routeDate = today.ToDateTime(TimeOnly.MinValue),
+                packingDate = today.ToDateTime(TimeOnly.MinValue),
+            },
+            cancellationToken: cancellationToken))).ToList();
+
+        if (stops.Count == 0)
+        {
+            return 0;
         }
 
         if (db.State != ConnectionState.Open)
@@ -53,105 +230,86 @@ public sealed class LogisticsDemoDataSeeder
         using var transaction = db.BeginTransaction();
         try
         {
-            var driverUserId = await EnsureDriverUserAsync(db, transaction, now, cancellationToken);
-            var driverId = await EnsureDriverAsync(db, transaction, driverUserId, now, auditUser, cancellationToken);
-            var vehicle = await EnsureAssignedVehicleAsync(db, transaction, driverId, now, auditUser, cancellationToken);
-            var routeId = await InsertRouteAsync(db, transaction, routeName, vehicle.Id, now, auditUser, cancellationToken);
-            var deliveries = GenerateDeliveries(today);
-            var packages = new List<DemoManifestPackage>();
-
-            foreach (var delivery in deliveries)
+            var preparedRoutes = 0;
+            foreach (var routeStops in stops.GroupBy(stop => stop.RouteId))
             {
-                var customerId = await EnsureCustomerAsync(db, transaction, delivery, now, cancellationToken);
-                var addressId = await EnsureAddressAsync(db, transaction, customerId, delivery, now, auditUser, cancellationToken);
-                var orderId = await EnsureOrderAsync(db, transaction, customerId, delivery, today, now, auditUser, cancellationToken);
-                await EnsureOrderItemAsync(db, transaction, orderId, delivery, now, auditUser, cancellationToken);
-                var deliveryCalendarId = await EnsureDeliveryCalendarAsync(
+                var firstStop = routeStops.First();
+                var vehicle = new DemoVehicle(firstStop.VehicleId, firstStop.VehicleRegistration);
+                var driverUserId = await GetDriverUserIdForVehicleAsync(
                     db,
                     transaction,
-                    orderId,
-                    addressId,
-                    delivery,
-                    today,
+                    firstStop.VehicleId,
                     now,
-                    auditUser,
                     cancellationToken);
-                await InsertStopAsync(
-                    db,
-                    transaction,
-                    routeId,
-                    deliveryCalendarId,
-                    delivery,
-                    today,
-                    now,
-                    auditUser,
-                    cancellationToken);
-                var sessionId = await EnsurePackingSessionAsync(
-                    db,
-                    transaction,
-                    orderId,
-                    deliveryCalendarId,
-                    delivery,
-                    today,
-                    now,
-                    auditUser,
-                    cancellationToken);
-                var bag = await EnsurePackingBagAsync(
-                    db,
-                    transaction,
-                    sessionId,
-                    delivery,
-                    today,
-                    now,
-                    auditUser,
-                    cancellationToken);
+                var packages = new List<DemoManifestPackage>();
 
-                await EnsurePackingItemsAsync(
+                foreach (var stop in routeStops)
+                {
+                    var sessionId = await EnsurePackingSessionForRouteStopAsync(
+                        db,
+                        transaction,
+                        stop,
+                        today,
+                        now,
+                        auditUser,
+                        cancellationToken);
+                    var bag = await EnsurePackingBagForRouteStopAsync(
+                        db,
+                        transaction,
+                        sessionId,
+                        stop,
+                        today,
+                        now,
+                        auditUser,
+                        cancellationToken);
+                    await EnsurePackingItemsForRouteStopAsync(
+                        db,
+                        transaction,
+                        sessionId,
+                        bag.Id,
+                        stop,
+                        today,
+                        now,
+                        auditUser,
+                        cancellationToken);
+                    var label = await EnsureShippingLabelForRouteStopAsync(
+                        db,
+                        transaction,
+                        sessionId,
+                        bag.Id,
+                        stop,
+                        today,
+                        now,
+                        cancellationToken);
+
+                    packages.Add(new DemoManifestPackage(
+                        sessionId,
+                        bag.Id,
+                        bag.Code,
+                        stop.DeliveryCalendarId,
+                        label.Id,
+                        label.Code));
+                }
+
+                await InsertReadyManifestAsync(
                     db,
                     transaction,
-                    sessionId,
-                    bag.Id,
-                    delivery,
+                    firstStop.RouteId,
+                    firstStop.RouteName,
+                    vehicle,
+                    driverUserId,
+                    packages,
                     today,
                     now,
                     auditUser,
                     cancellationToken);
-                var labelId = await EnsureShippingLabelAsync(
-                    db,
-                    transaction,
-                    sessionId,
-                    bag.Id,
-                    delivery,
-                    routeName,
-                    today,
-                    now,
-                    cancellationToken);
-
-                packages.Add(new DemoManifestPackage(
-                    sessionId,
-                    bag.Id,
-                    bag.Code,
-                    deliveryCalendarId,
-                    labelId,
-                    $"DEMO-LABEL-{today:yyyyMMdd}-{delivery.SequenceNumber:D2}"));
+                preparedRoutes++;
             }
 
-            await InsertReadyManifestAsync(
-                db,
-                transaction,
-                routeId,
-                routeName,
-                vehicle,
-                driverUserId,
-                packages,
-                today,
-                now,
-                auditUser,
-                cancellationToken);
             await EnsureThermalBagsAsync(db, transaction, now, auditUser, cancellationToken);
 
             transaction.Commit();
-            DemoRouteSeeded(this.logger, routeName, deliveries.Count, null);
+            return preparedRoutes;
         }
         catch
         {
@@ -267,6 +425,47 @@ public sealed class LogisticsDemoDataSeeder
             },
             transaction,
             cancellationToken: cancellationToken));
+    }
+
+    private static async Task<int> GetDriverUserIdForVehicleAsync(
+        IDbConnection db,
+        IDbTransaction transaction,
+        int vehicleId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var assignedUserId = await db.QuerySingleOrDefaultAsync<int?>(new CommandDefinition(
+            """
+            SELECT TOP 1 d.[UserId]
+            FROM [DriverVehicleAssignments] a
+            INNER JOIN [Drivers] d ON d.[Id] = a.[DriverId]
+            WHERE a.[VehicleId] = @vehicleId
+              AND a.[UnassignedAt] IS NULL
+              AND d.[IsActive] = 1
+              AND d.[IsDeleted] = 0
+            ORDER BY a.[AssignedAt] DESC, a.[Id] DESC;
+            """,
+            new { vehicleId },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        if (assignedUserId.HasValue)
+        {
+            return assignedUserId.Value;
+        }
+
+        var anyDriverUserId = await db.QuerySingleOrDefaultAsync<int?>(new CommandDefinition(
+            """
+            SELECT TOP 1 [UserId]
+            FROM [Drivers]
+            WHERE [IsActive] = 1
+              AND [IsDeleted] = 0
+            ORDER BY [Id];
+            """,
+            transaction: transaction,
+            cancellationToken: cancellationToken));
+
+        return anyDriverUserId ?? await EnsureDriverUserAsync(db, transaction, now, cancellationToken);
     }
 
     private static async Task<DemoVehicle> EnsureAssignedVehicleAsync(
@@ -760,6 +959,80 @@ public sealed class LogisticsDemoDataSeeder
             cancellationToken: cancellationToken));
     }
 
+    private static async Task<int> EnsurePackingSessionForRouteStopAsync(
+        IDbConnection db,
+        IDbTransaction transaction,
+        ExistingRouteStop stop,
+        DateOnly today,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var existingId = await db.QuerySingleOrDefaultAsync<int?>(new CommandDefinition(
+            """
+            SELECT TOP 1 [Id]
+            FROM [PackingSessions]
+            WHERE [DeliveryCalendarId] = @deliveryCalendarId
+              AND [PackingDate] = @packingDate
+              AND [IsDeleted] = 0;
+            """,
+            new
+            {
+                stop.DeliveryCalendarId,
+                packingDate = today.ToDateTime(TimeOnly.MinValue),
+            },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        if (existingId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [PackingSessions]
+                SET [Status] = @status,
+                    [PackedBy] = COALESCE([PackedBy], @packedBy),
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser
+                WHERE [Id] = @sessionId;
+                """,
+                new
+                {
+                    sessionId = existingId.Value,
+                    status = (int)PackingStatus.Dispatched,
+                    packedBy = "DemoPacker",
+                    auditUser,
+                    now,
+                },
+                transaction,
+                cancellationToken: cancellationToken));
+            return existingId.Value;
+        }
+
+        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [PackingSessions]
+                ([PackingDate], [OrderId], [ClientName], [PackedBy], [Status], [DeliveryCalendarId],
+                 [CreatedBy], [CreatedAt], [IsDeleted])
+            VALUES
+                (@packingDate, @orderId, @clientName, @packedBy, @status, @deliveryCalendarId,
+                 @auditUser, @now, 0);
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """,
+            new
+            {
+                packingDate = today.ToDateTime(TimeOnly.MinValue),
+                stop.OrderId,
+                stop.ClientName,
+                packedBy = "DemoPacker",
+                status = (int)PackingStatus.Dispatched,
+                stop.DeliveryCalendarId,
+                auditUser,
+                now,
+            },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
     private static async Task<DemoPackingBag> EnsurePackingBagAsync(
         IDbConnection db,
         IDbTransaction transaction,
@@ -788,6 +1061,98 @@ public sealed class LogisticsDemoDataSeeder
         }
 
         var code = $"DEMO-BAG-{today:yyyyMMdd}-{delivery.SequenceNumber:D2}";
+        var id = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [PackingBags]
+                ([PackingSessionId], [BagNumber], [BagCode], [Status], [PackedAt], [PackedBy],
+                 [LabeledAt], [ManifestedAt], [LoadedAt], [LoadedBy], [DispatchedAt],
+                 [CreatedBy], [CreatedAt], [IsDeleted])
+            VALUES
+                (@sessionId, 1, @code, @status, @packedAt, @packedBy,
+                 @labeledAt, @manifestedAt, @loadedAt, @loadedBy, @dispatchedAt,
+                 @auditUser, @now, 0);
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """,
+            new
+            {
+                sessionId,
+                code,
+                status = (int)PackingBagStatus.Dispatched,
+                packedAt = now.AddMinutes(-50),
+                packedBy = "DemoPacker",
+                labeledAt = now.AddMinutes(-45),
+                manifestedAt = now.AddMinutes(-30),
+                loadedAt = now.AddMinutes(-20),
+                loadedBy = "DemoLoader",
+                dispatchedAt = now.AddMinutes(-10),
+                auditUser,
+                now,
+            },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        return new DemoPackingBag(id, code);
+    }
+
+    private static async Task<DemoPackingBag> EnsurePackingBagForRouteStopAsync(
+        IDbConnection db,
+        IDbTransaction transaction,
+        int sessionId,
+        ExistingRouteStop stop,
+        DateOnly today,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var existing = await db.QuerySingleOrDefaultAsync<DemoPackingBag>(new CommandDefinition(
+            """
+            SELECT TOP 1 [Id], [BagCode] AS [Code]
+            FROM [PackingBags]
+            WHERE [PackingSessionId] = @sessionId
+              AND [BagNumber] = 1
+              AND [IsDeleted] = 0;
+            """,
+            new { sessionId },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        if (existing is not null)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [PackingBags]
+                SET [Status] = @status,
+                    [PackedAt] = COALESCE([PackedAt], @packedAt),
+                    [PackedBy] = COALESCE([PackedBy], @packedBy),
+                    [LabeledAt] = COALESCE([LabeledAt], @labeledAt),
+                    [ManifestedAt] = COALESCE([ManifestedAt], @manifestedAt),
+                    [LoadedAt] = COALESCE([LoadedAt], @loadedAt),
+                    [LoadedBy] = COALESCE([LoadedBy], @loadedBy),
+                    [DispatchedAt] = COALESCE([DispatchedAt], @dispatchedAt),
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser
+                WHERE [Id] = @bagId;
+                """,
+                new
+                {
+                    bagId = existing.Id,
+                    status = (int)PackingBagStatus.Dispatched,
+                    packedAt = now.AddMinutes(-50),
+                    packedBy = "DemoPacker",
+                    labeledAt = now.AddMinutes(-45),
+                    manifestedAt = now.AddMinutes(-30),
+                    loadedAt = now.AddMinutes(-20),
+                    loadedBy = "DemoLoader",
+                    dispatchedAt = now.AddMinutes(-10),
+                    auditUser,
+                    now,
+                },
+                transaction,
+                cancellationToken: cancellationToken));
+            return existing;
+        }
+
+        var code = $"DEMO-BAG-{today:yyyyMMdd}-{stop.DeliveryCalendarId:D4}";
         var id = await db.ExecuteScalarAsync<int>(new CommandDefinition(
             """
             INSERT INTO [PackingBags]
@@ -883,6 +1248,62 @@ public sealed class LogisticsDemoDataSeeder
         }
     }
 
+    private static async Task EnsurePackingItemsForRouteStopAsync(
+        IDbConnection db,
+        IDbTransaction transaction,
+        int sessionId,
+        int bagId,
+        ExistingRouteStop stop,
+        DateOnly today,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var count = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT COUNT(1) FROM [PackingItems] WHERE [PackingSessionId] = @sessionId AND [IsDeleted] = 0;",
+            new { sessionId },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        if (count > 0)
+        {
+            return;
+        }
+
+        var items = new[] { "Sniadanie demo", "Obiad demo" };
+        for (var index = 0; index < items.Length; index++)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO [PackingItems]
+                    ([PackingSessionId], [MealId], [MealName], [DietVariantId], [PackingBagId],
+                     [BoxCode], [Status], [FoilPrintedAt], [PackedAt], [PackedBy],
+                     [CreatedBy], [CreatedAt], [IsDeleted])
+                VALUES
+                    (@sessionId, @mealId, @mealName, @dietVariantId, @bagId,
+                     @boxCode, @status, @foilPrintedAt, @packedAt, @packedBy,
+                     @auditUser, @now, 0);
+                """,
+                new
+                {
+                    sessionId,
+                    mealId = index + 1,
+                    mealName = items[index],
+                    dietVariantId = 1,
+                    bagId,
+                    boxCode = $"DEMO-BOX-{today:yyyyMMdd}-{stop.DeliveryCalendarId:D4}-{index + 1:D2}",
+                    status = (int)PackingItemStatus.Packed,
+                    foilPrintedAt = now.AddMinutes(-70),
+                    packedAt = now.AddMinutes(-55),
+                    packedBy = "DemoPacker",
+                    auditUser,
+                    now,
+                },
+                transaction,
+                cancellationToken: cancellationToken));
+        }
+    }
+
     private static async Task<int> EnsureShippingLabelAsync(
         IDbConnection db,
         IDbTransaction transaction,
@@ -935,6 +1356,61 @@ public sealed class LogisticsDemoDataSeeder
             },
             transaction,
             cancellationToken: cancellationToken));
+    }
+
+    private static async Task<DemoShippingLabel> EnsureShippingLabelForRouteStopAsync(
+        IDbConnection db,
+        IDbTransaction transaction,
+        int sessionId,
+        int bagId,
+        ExistingRouteStop stop,
+        DateOnly today,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var code = $"DEMO-LABEL-{today:yyyyMMdd}-{stop.DeliveryCalendarId:D4}";
+        var existingId = await db.QuerySingleOrDefaultAsync<int?>(new CommandDefinition(
+            "SELECT TOP 1 [Id] FROM [PackingLabels] WHERE [QrCode] = @code;",
+            new { code },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        if (existingId.HasValue)
+        {
+            return new DemoShippingLabel(existingId.Value, code);
+        }
+
+        var id = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [PackingLabels]
+                ([PackingSessionId], [PackingBagId], [LabelType], [QrCode], [ClientName],
+                 [RouteInfo], [DeliveryWindow], [PrintNumber], [PrintedAt], [PrintedBy],
+                 [AttachedAt], [AttachedBy], [CreatedAt])
+            VALUES
+                (@sessionId, @bagId, @labelType, @code, @clientName,
+                 @routeInfo, @deliveryWindow, 1, @printedAt, @printedBy,
+                 @attachedAt, @attachedBy, @now);
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """,
+            new
+            {
+                sessionId,
+                bagId,
+                labelType = 1,
+                code,
+                stop.ClientName,
+                routeInfo = $"{stop.RouteName}, stop {stop.SequenceNumber}",
+                deliveryWindow = "06:00-10:00",
+                printedAt = now.AddMinutes(-45),
+                printedBy = "DemoPacker",
+                attachedAt = now.AddMinutes(-40),
+                attachedBy = "DemoPacker",
+                now,
+            },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        return new DemoShippingLabel(id, code);
     }
 
     private static Task<int> InsertReadyManifestAsync(
@@ -1069,6 +1545,18 @@ public sealed class LogisticsDemoDataSeeder
     private sealed record DemoVehicle(int Id, string RegistrationNumber);
 
     private sealed record DemoPackingBag(int Id, string Code);
+
+    private sealed record DemoShippingLabel(int Id, string Code);
+
+    private sealed record ExistingRouteStop(
+        int RouteId,
+        string RouteName,
+        int VehicleId,
+        string VehicleRegistration,
+        int DeliveryCalendarId,
+        int SequenceNumber,
+        int OrderId,
+        string ClientName);
 
     private sealed record DemoManifestPackage(
         int SessionId,
