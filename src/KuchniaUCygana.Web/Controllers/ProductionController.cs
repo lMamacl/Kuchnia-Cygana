@@ -165,8 +165,16 @@ public sealed class ProductionController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ApproveCooking(int planItemId, decimal actualQuantity)
     {
-        await productionService.ApproveCookingAsync(planItemId, actualQuantity);
-        TempData["Success"] = "Gotowanie zatwierdzone.";
+        try
+        {
+            await productionService.ApproveCookingAsync(planItemId, actualQuantity);
+            TempData["Success"] = "Gotowanie zatwierdzone.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
         return RedirectToAction(nameof(CookingCard), new { planItemId });
     }
 
