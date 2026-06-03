@@ -21,6 +21,7 @@ public sealed class LogisticsController : Controller
     private readonly ILogisticsDeliveryDataProvider _deliveryDataProvider;
     private readonly IAddressRepository _addressRepository;
     private readonly IDeliveryRouteService _deliveryRouteService;
+    private readonly IPackingSynchronizationService _packingSynchronizationService;
 
     public LogisticsController(
         IVehicleService vehicleService,
@@ -29,7 +30,8 @@ public sealed class LogisticsController : Controller
         GeocodingOrchestrator geocodingOrchestrator,
         ILogisticsDeliveryDataProvider deliveryDataProvider,
         IAddressRepository addressRepository,
-        IDeliveryRouteService deliveryRouteService)
+        IDeliveryRouteService deliveryRouteService,
+        IPackingSynchronizationService packingSynchronizationService)
     {
         _vehicleService = vehicleService;
         _driverService = driverService;
@@ -38,6 +40,7 @@ public sealed class LogisticsController : Controller
         _deliveryDataProvider = deliveryDataProvider;
         _addressRepository = addressRepository;
         _deliveryRouteService = deliveryRouteService;
+        _packingSynchronizationService = packingSynchronizationService;
     }
 
     [HttpGet("")]
@@ -101,6 +104,15 @@ public sealed class LogisticsController : Controller
     public async Task<IActionResult> GenerateDailyRoutes(GenerateDailyRoutesRequest request)
     {
         var result = await _deliveryRouteService.GenerateDailyRoutesAsync(request);
+        if (result.Succeeded)
+        {
+            var sync = await _packingSynchronizationService.RefreshFromRoutesAsync(
+                DateOnly.FromDateTime(request.RouteDate.Date),
+                User.Identity?.Name ?? "Logistics");
+            TempData["Success"] =
+                $"Wygenerowano trasy i odświeżono kompletację: sesje +{sync.CreatedSessions}, torby +{sync.CreatedBags}, pudełka +{sync.CreatedItems}.";
+        }
+
         return View("Routes", new RoutesViewModel
         {
             SelectedDate = request.RouteDate,

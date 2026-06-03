@@ -107,12 +107,14 @@ public sealed class LoadingService : ILoadingService, IManifestService
             CanGenerateManifest = route.CanGenerateManifest && !hasOpenPackingIncident,
             CanWorkerApprove = dto is not null &&
                 !dto.IsVerified &&
+                !dto.WorkerApprovedAt.HasValue &&
                 !dto.RequiresRegeneration &&
                 !checklist.Any(item => item.IsBlocking && !item.IsComplete) &&
                 !issues.Any(issue => issue.IsBlocking && !issue.IsResolved),
             CanSupervisorApprove = dto?.WorkerApprovedAt.HasValue == true &&
                 !dto.IsVerified &&
                 !dto.RequiresRegeneration &&
+                route.AllBagsLoaded &&
                 !checklist.Any(item => item.IsBlocking && !item.IsComplete) &&
                 !issues.Any(issue => issue.IsBlocking && !issue.IsResolved),
         };
@@ -132,7 +134,8 @@ public sealed class LoadingService : ILoadingService, IManifestService
         }
 
         var manifest = await GetManifestAsync(session.PackingDate, resolvedRouteId.Value);
-        if (manifest is null || !manifest.IsVerified)
+        EnsureManifestAllowsLoading(manifest);
+        if (manifest is null)
         {
             throw new InvalidOperationException("Torbę można załadować dopiero po wygenerowaniu i weryfikacji manifestu dostawy.");
         }
@@ -559,7 +562,8 @@ public sealed class LoadingService : ILoadingService, IManifestService
         }
 
         var manifest = await GetManifestAsync(session.PackingDate, routeId);
-        if (manifest is null || !manifest.IsVerified)
+        EnsureManifestAllowsLoading(manifest);
+        if (manifest is null)
         {
             throw new InvalidOperationException("Torbę można załadować dopiero po wygenerowaniu i weryfikacji manifestu dostawy.");
         }
@@ -617,6 +621,11 @@ public sealed class LoadingService : ILoadingService, IManifestService
         if (requireWorkerApproval && !control.Manifest.WorkerApprovedAt.HasValue)
         {
             throw new InvalidOperationException("Manifest musi najpierw zatwierdzić pracownik kompletacji.");
+        }
+
+        if (requireWorkerApproval && !control.Route.AllBagsLoaded)
+        {
+            throw new InvalidOperationException("Manifest finalny mozna zatwierdzic dopiero po zaladowaniu wszystkich toreb do auta.");
         }
 
         var incomplete = control.Checklist.FirstOrDefault(item => item.IsBlocking && !item.IsComplete);
@@ -691,11 +700,29 @@ public sealed class LoadingService : ILoadingService, IManifestService
             {
                 Key = "loading",
                 Label = "Status załadunku",
-                IsComplete = route.LoadedBags == 0 || route.AllBagsLoaded,
+                IsComplete = route.AllBagsLoaded,
                 IsBlocking = false,
                 Details = $"{route.LoadedBags}/{route.TotalBags} toreb załadowanych.",
             },
         };
+    }
+
+    private static void EnsureManifestAllowsLoading(PackingManifestDto? manifest)
+    {
+        if (manifest is null)
+        {
+            throw new InvalidOperationException("Torby mozna zaladowac dopiero po wygenerowaniu manifestu dostawy.");
+        }
+
+        if (manifest.RequiresRegeneration)
+        {
+            throw new InvalidOperationException(manifest.RequiresRegenerationReason ?? "Manifest wymaga regeneracji przed zaladunkiem.");
+        }
+
+        if (!manifest.WorkerApprovedAt.HasValue && !manifest.IsVerified)
+        {
+            throw new InvalidOperationException("Torby mozna zaladowac po zatwierdzeniu manifestu przez pracownika kompletacji.");
+        }
     }
 
     private async Task<List<PackingManifestIssueDto>> BuildManifestIssuesAsync(
@@ -803,9 +830,7 @@ public sealed class LoadingService : ILoadingService, IManifestService
         foreach (var issue in calculatedIssues)
         {
             var existing = persisted.FirstOrDefault(candidate =>
-                string.Equals(candidate.IssueType, issue.IssueType, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(candidate.SourceType, issue.SourceType, StringComparison.OrdinalIgnoreCase) &&
-                candidate.SourceId == issue.SourceId &&
+                IsSameManifestIssue(candidate, issue) &&
                 candidate.Status is not PackingManifestIssueStatus.Resolved and not PackingManifestIssueStatus.AcceptedWithReason);
 
             if (existing is null)
@@ -844,14 +869,31 @@ public sealed class LoadingService : ILoadingService, IManifestService
             }
         }
 
+        var staleOpenIssues = persisted
+            .Where(issue => issue.Status is not PackingManifestIssueStatus.Resolved and not PackingManifestIssueStatus.AcceptedWithReason)
+            .Where(issue => !calculatedIssues.Any(calculated => IsSameManifestIssue(issue, calculated)))
+            .ToList();
+        foreach (var issue in staleOpenIssues)
+        {
+            issue.Status = PackingManifestIssueStatus.Resolved;
+            issue.ResolvedAt = DateTimeOffset.UtcNow;
+            issue.ResolvedByUserId = _currentUserService?.GetUserId();
+            issue.ResolutionNotes = "Problem automatyczny nie wystepuje juz w aktualnej kontroli manifestu.";
+            await _manifestIssueRepository.UpdateAsync(issue);
+        }
+
         return persisted
             .Where(issue => issue.Status is not PackingManifestIssueStatus.Resolved and not PackingManifestIssueStatus.AcceptedWithReason ||
-                calculatedIssues.Any(calculated =>
-                    string.Equals(calculated.IssueType, issue.IssueType, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(calculated.SourceType, issue.SourceType, StringComparison.OrdinalIgnoreCase) &&
-                    calculated.SourceId == issue.SourceId))
+                calculatedIssues.Any(calculated => IsSameManifestIssue(issue, calculated)))
             .Select(MapManifestIssue)
             .ToList();
+    }
+
+    private static bool IsSameManifestIssue(PackingManifestIssue issue, PackingManifestIssueDto calculated)
+    {
+        return string.Equals(issue.IssueType, calculated.IssueType, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(issue.SourceType, calculated.SourceType, StringComparison.OrdinalIgnoreCase) &&
+            issue.SourceId == calculated.SourceId;
     }
 
     private static string MapIncidentStatus(PackingIncidentStatus status)

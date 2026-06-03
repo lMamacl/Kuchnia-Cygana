@@ -1,4 +1,4 @@
-@model KuchniaUCygana.Application.DTOs.Packing.PackingBoardDto
+﻿@model KuchniaUCygana.Application.DTOs.Packing.PackingBoardDto
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Załadunek aut";
@@ -31,6 +31,11 @@
                                aria-label="Filtruj po dacie" />
                         <a asp-controller="Packing" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Kompletacja</a>
                         <a asp-controller="Packing" asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Etykiety</a>
+                        <form asp-controller="Loading" asp-action="RefreshFromLogistics" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                            <button type="submit" class="btn btn-outline-primary">Odśwież z logistyki</button>
+                        </form>
                         @if (User.IsInRole("PackingManager") || User.IsInRole("Admin"))
                         {
                             <form asp-controller="Loading" asp-action="ResetLoading" method="post" class="d-inline">

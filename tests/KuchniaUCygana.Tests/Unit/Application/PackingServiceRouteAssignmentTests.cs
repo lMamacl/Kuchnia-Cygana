@@ -457,6 +457,53 @@ public sealed class PackingServiceRouteAssignmentTests
         stored.MealName.Should().Be("Kurczak z ryzem");
     }
 
+    [Fact]
+    public async Task RefreshFromRoutesAsync_CreatesSessionsOnlyForRouteStops_AndDoesNotDuplicateOnRefresh()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var manifestRepository = new InMemoryRepository<PackingManifest>();
+        var packingService = new RouteRefreshPackingService(sessionRepository, itemRepository);
+        var service = new PackingSynchronizationService(
+            sessionRepository,
+            bagRepository,
+            new RouteRefreshOrderProvider(date),
+            NullLogger<PackingSynchronizationService>.Instance,
+            manifestRepository,
+            new ReorderedRouteManifestProvider(),
+            packingService);
+        var manifestId = await manifestRepository.InsertAsync(new PackingManifest
+        {
+            PackingDate = date,
+            ManifestNumber = "M-TEST-1",
+            RouteId = 7,
+            RouteName = "Trasa testowa",
+            GeneratedAt = DateTimeOffset.UtcNow,
+            PayloadJson = "{}",
+        });
+
+        var first = await service.RefreshFromRoutesAsync(date, "tester");
+        var second = await service.RefreshFromRoutesAsync(date, "tester");
+
+        first.CreatedSessions.Should().Be(2);
+        first.CreatedBags.Should().Be(2);
+        first.CreatedItems.Should().Be(2);
+        first.RefreshedRoutes.Should().Be(1);
+        first.SupersededManifests.Should().Be(1);
+        second.CreatedSessions.Should().Be(0);
+        second.CreatedBags.Should().Be(0);
+        second.CreatedItems.Should().Be(0);
+        var sessions = (await sessionRepository.GetByDateWithItemsAsync(date)).ToList();
+        sessions.Select(s => s.DeliveryCalendarId).Should().BeEquivalentTo(new int?[] { 100, 200 });
+        sessions.Should().NotContain(s => s.DeliveryCalendarId == 300);
+        (await bagRepository.GetAllAsync()).Should().HaveCount(2);
+        (await itemRepository.GetAllAsync()).Should().HaveCount(2);
+        var manifest = await manifestRepository.GetByIdAsync(manifestId);
+        manifest!.RequiresRegeneration.Should().BeTrue();
+    }
+
     private static async Task<(PackingSession Session, PackingBag Bag, PackingItem Item)> CreatePackedSessionAsync(
         DateOnly date,
         InMemoryPackingSessionRepository sessionRepository,
@@ -702,6 +749,237 @@ public sealed class PackingServiceRouteAssignmentTests
                             1800),
                     }),
             });
+        }
+    }
+
+    private sealed class RouteRefreshOrderProvider : IOrderDataProvider
+    {
+        private readonly DateOnly _date;
+
+        public RouteRefreshOrderProvider(DateOnly date)
+        {
+            _date = date;
+        }
+
+        public Task<IEnumerable<ActiveOrderEntry>> GetActiveOrdersAsync(DateOnly deliveryDate)
+        {
+            return Task.FromResult<IEnumerable<ActiveOrderEntry>>(new[]
+            {
+                CreateActive(100, 1, "Klient 1"),
+                CreateActive(200, 2, "Klient 2"),
+                CreateActive(300, 3, "Klient poza trasa"),
+            });
+        }
+
+        public Task<ActiveOrderEntry?> GetOrderByIdAsync(int orderId)
+        {
+            return Task.FromResult<ActiveOrderEntry?>(null);
+        }
+
+        public Task<IEnumerable<OrderDeliveryInfo>> GetDeliveriesForDateAsync(DateTime date)
+        {
+            return Task.FromResult<IEnumerable<OrderDeliveryInfo>>(new[]
+            {
+                CreateDelivery(100, 1, "Klient 1"),
+                CreateDelivery(200, 2, "Klient 2"),
+                CreateDelivery(300, 3, "Klient poza trasa"),
+            });
+        }
+
+        private ActiveOrderEntry CreateActive(int deliveryCalendarId, int orderId, string clientName)
+        {
+            return new ActiveOrderEntry
+            {
+                DeliveryCalendarId = deliveryCalendarId,
+                OrderId = orderId,
+                ClientId = orderId,
+                ClientPublicId = $"TEST{orderId:D4}",
+                ClientName = clientName,
+                DietVariantId = orderId,
+                DeliveryDate = _date,
+            };
+        }
+
+        private OrderDeliveryInfo CreateDelivery(int deliveryCalendarId, int orderId, string clientName)
+        {
+            return new OrderDeliveryInfo(
+                deliveryCalendarId,
+                orderId,
+                $"ORD-{orderId}",
+                orderId,
+                $"TEST{orderId:D4}",
+                clientName,
+                $"Adres {orderId}",
+                "Bialystok",
+                "15-001",
+                53.132,
+                23.159,
+                _date.ToDateTime(TimeOnly.FromTimeSpan(TimeSpan.FromHours(8))),
+                "08:00-09:00",
+                Array.Empty<OrderItemInfo>());
+        }
+    }
+
+    private sealed class RouteRefreshPackingService : IPackingService
+    {
+        private readonly InMemoryPackingSessionRepository sessionRepository;
+        private readonly InMemoryRepository<PackingItem> itemRepository;
+
+        public RouteRefreshPackingService(
+            InMemoryPackingSessionRepository sessionRepository,
+            InMemoryRepository<PackingItem> itemRepository)
+        {
+            this.sessionRepository = sessionRepository;
+            this.itemRepository = itemRepository;
+        }
+
+        public async Task<IEnumerable<PackingItemDto>> PrepareOrderBoxesAsync(int packingSessionId)
+        {
+            var session = await this.sessionRepository.GetWithItemsAsync(packingSessionId)
+                ?? throw new InvalidOperationException("Missing test session.");
+            var item = new PackingItem
+            {
+                PackingSessionId = packingSessionId,
+                MealId = 501,
+                MealName = "Test meal",
+                DietVariantId = 1,
+                BoxCode = $"BOX-{packingSessionId:D6}-01",
+                Status = PackingItemStatus.Pending,
+            };
+            item.Id = await this.itemRepository.InsertAsync(item);
+            session.Items.Add(item);
+
+            return new[]
+            {
+                new PackingItemDto
+                {
+                    Id = item.Id,
+                    PackingSessionId = item.PackingSessionId,
+                    MealId = item.MealId,
+                    MealName = item.MealName,
+                    DietVariantId = item.DietVariantId,
+                    BoxCode = item.BoxCode,
+                    Status = item.Status.ToString(),
+                },
+            };
+        }
+
+        public Task<PackingBoardDto> GetPackingBoardAsync(DateOnly date)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<PackingSessionDto> StartPackingSessionAsync(DateOnly date, string packedBy)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task MarkBoxPackedAsync(int packingItemId, string packedBy)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task PackOrderBagAsync(int packingSessionId, string packedBy)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<ScanBoxResponse> ScanBoxAsync(int sessionId, string barcode, string packedBy)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<PackingItemDto> ReportPackingItemIssueAsync(ReportPackingItemIssueRequest request)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<PackingBagDto> ReportPackingBagDamageAsync(ReportPackingBagDamageRequest request)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<IEnumerable<PackingLabelDto>> GenerateTransportLabelsAsync(
+            int sessionId,
+            string? reprintReason = null,
+            bool forceNewPrint = false)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<IEnumerable<PackingLabelDto>> GenerateTransportLabelsForBagAsync(
+            int packingBagId,
+            string? reprintReason = null,
+            bool forceNewPrint = false)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<IEnumerable<PackingLabelDto>> GenerateLabelsAsync(int sessionId)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<IEnumerable<PackingLabelDto>> GetTransportLabelsForSessionAsync(int sessionId)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<IEnumerable<PackingLabelDto>> GetTransportLabelsForRouteAsync(DateOnly date, int routeId)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<IEnumerable<PackingLabelDto>> GetTransportLabelsForDeliveryAsync(
+            DateOnly date,
+            int routeId,
+            string? reprintReason = null,
+            bool forceNewPrint = false)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<IReadOnlyList<PackingLabelDto>> GenerateMissingTransportLabelsForRouteAsync(DateOnly date, int routeId)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<PackingLabelDto> ConfirmTransportLabelAttachedAsync(int labelId)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<int> ConfirmTransportLabelsAttachedAsync(IReadOnlyCollection<int> labelIds)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<IEnumerable<PackingSessionDto>> GetSessionsByDateAsync(DateOnly date)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<PackingSessionDto?> GetSessionByIdAsync(int sessionId)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task PackBoxByCodeAsync(int sessionId, string barcode, string packedBy)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<PackingLabelDto> PrintFoilLabelAsync(
+            int packingItemId,
+            string operatorName,
+            string? reprintReason = null)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<PackingLabelDto?> GetLatestFoilLabelAsync(int packingItemId)
+        {
+            throw new NotSupportedException();
         }
     }
 

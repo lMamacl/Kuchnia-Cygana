@@ -1,4 +1,4 @@
-using KuchniaUCygana.Application.Interfaces;
+﻿using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,15 +12,18 @@ public sealed class LoadingController : Controller
     private readonly IPackingService _packingService;
     private readonly ILoadingService _loadingService;
     private readonly IManifestService _manifestService;
+    private readonly IPackingSynchronizationService _packingSynchronizationService;
 
     public LoadingController(
         IPackingService packingService,
         ILoadingService loadingService,
-        IManifestService manifestService)
+        IManifestService manifestService,
+        IPackingSynchronizationService packingSynchronizationService)
     {
         _packingService = packingService;
         _loadingService = loadingService;
         _manifestService = manifestService;
+        _packingSynchronizationService = packingSynchronizationService;
     }
 
     [HttpGet("")]
@@ -230,6 +233,26 @@ public sealed class LoadingController : Controller
         return routeId.HasValue
             ? RedirectToAction(nameof(Route), new { routeId = routeId.Value, date })
             : RedirectToAction(nameof(Index), new { date });
+    }
+
+    [HttpPost("refresh-logistics")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RefreshFromLogistics(DateOnly date)
+    {
+        try
+        {
+            var result = await _packingSynchronizationService.RefreshFromRoutesAsync(
+                date,
+                User.Identity?.Name ?? "Loading");
+            TempData["Success"] =
+                $"Odświeżono kompletację z logistyki: trasy {result.RefreshedRoutes}, sesje +{result.CreatedSessions}, torby +{result.CreatedBags}, pudełka +{result.CreatedItems}.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Index), new { date });
     }
 
     [HttpGet("{routeId:int}/labels")]

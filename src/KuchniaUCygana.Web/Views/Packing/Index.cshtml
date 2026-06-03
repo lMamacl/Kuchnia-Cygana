@@ -1,4 +1,4 @@
-@model KuchniaUCygana.Web.Models.PackingIndexViewModel
+﻿@model KuchniaUCygana.Web.Models.PackingIndexViewModel
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Kompletacja toreb";
@@ -47,6 +47,11 @@
                             <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
                             <input type="hidden" name="packedBy" value="@(User.Identity?.Name ?? "Packing")" />
                             <button type="submit" class="btn btn-outline-secondary">Synchronizuj zamówienia</button>
+                        </form>
+                        <form asp-action="RefreshFromLogistics" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                            <button type="submit" class="btn btn-outline-secondary">Odśwież z logistyki</button>
                         </form>
                         <a asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-primary">Kompletacja</a>
                         <a asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-search="@Model.Search" asp-route-routeId="@Model.RouteId" asp-route-bagStatus="@Model.BagStatus" class="btn btn-outline-primary">Etykiety</a>

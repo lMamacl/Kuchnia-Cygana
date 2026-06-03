@@ -10,5 +10,11 @@ public sealed class PackingSynchronizationResultDto
 
     public int CreatedBags { get; set; }
 
+    public int CreatedItems { get; set; }
+
+    public int RefreshedRoutes { get; set; }
+
+    public int SupersededManifests { get; set; }
+
     public int TotalSessions { get; set; }
 }

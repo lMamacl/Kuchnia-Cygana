@@ -637,7 +637,11 @@ public sealed class WarehouseRepositoriesSqlServerTests
             new PackingStatusLogRepository(connectionFactory),
             packingService,
             mapper,
-            NullLogger<LoadingService>.Instance);
+            NullLogger<LoadingService>.Instance,
+            currentUserService: new TestCurrentUserService(),
+            packingLabelRepository: new PackingLabelRepository(connectionFactory),
+            packingManifestQueryRepository: new PackingManifestRepository(connectionFactory),
+            manifestIssueRepository: new PackingManifestIssueRepository(connectionFactory));
     }
 
     private static PackingSynchronizationService CreatePackingSynchronizationService(IDbConnectionFactory connectionFactory)
@@ -1035,6 +1039,11 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
         var board = await packingService.GetPackingBoardAsync(deliveryDate);
         var route = board.Routes.Single(r => r.Bags.Any(b => b.OrderId == seededOne.OrderId));
+        var initialControl = await loadingService.GetManifestControlAsync(deliveryDate, route.RouteId);
+
+        initialControl.Issues.Should().Contain(issue =>
+            issue.IssueType == "manifest" &&
+            issue.Details.Contains("Brak zapisanego manifestu", StringComparison.OrdinalIgnoreCase));
 
         foreach (var bag in route.Bags)
         {
@@ -1055,6 +1064,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
         var manifest = await loadingService.GenerateManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
         var latest = await loadingService.GetManifestAsync(deliveryDate, route.RouteId);
+        var refreshedControl = await loadingService.GetManifestControlAsync(deliveryDate, route.RouteId);
 
         latest.Should().NotBeNull();
         latest!.Id.Should().Be(manifest.Id);
@@ -1063,6 +1073,9 @@ public sealed class WarehouseRepositoriesSqlServerTests
         latest.BagCount.Should().Be(route.TotalBags);
         latest.PayloadJson.Should().Contain(seededOne.OrderId.ToString());
         latest.PayloadJson.Should().Contain(seededTwo.OrderId.ToString());
+        refreshedControl.Issues.Should().NotContain(issue =>
+            issue.IssueType == "manifest" &&
+            issue.Details.Contains("Brak zapisanego manifestu", StringComparison.OrdinalIgnoreCase));
 
         using var document = JsonDocument.Parse(latest.PayloadJson);
         document.RootElement.GetProperty("manifestNumber").GetString().Should().Be(manifest.ManifestNumber);
@@ -1071,7 +1084,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task LoadingService_LoadOrderBagAsync_ShouldRequireVerifiedRouteManifest()
+    public async Task LoadingService_LoadOrderBagAsync_ShouldAllowLoadingAfterWorkerApproval_AndVerifyAfterLoading()
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 15);
@@ -1105,12 +1118,24 @@ public sealed class WarehouseRepositoriesSqlServerTests
             .WithMessage("*manifestu*");
 
         await loadingService.GenerateManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+
+        var loadBeforeWorkerApproval = async () => await loadingService.LoadOrderBagAsync(bag.PackingSessionId);
+        await loadBeforeWorkerApproval.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*pracownika*");
+
         await loadingService.ApproveManifestByWorkerAsync(deliveryDate, route.RouteId, "IntegrationTest");
-        await loadingService.VerifyManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+
+        var verifyBeforeLoading = async () => await loadingService.VerifyManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+        await verifyBeforeLoading.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*zaladowaniu wszystkich toreb*");
+
         await loadingService.LoadOrderBagAsync(bag.PackingSessionId);
 
         var refreshed = await packingService.GetSessionByIdAsync(bag.PackingSessionId);
         refreshed!.Status.Should().Be(PackingStatus.Loaded.ToString());
+
+        var verified = await loadingService.VerifyManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+        verified.IsVerified.Should().BeTrue();
     }
 
     private static async Task InsertTemperatureLogAsync(

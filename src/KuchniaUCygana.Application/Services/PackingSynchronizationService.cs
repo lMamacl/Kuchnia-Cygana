@@ -1,7 +1,8 @@
-using KuchniaUCygana.Application.DTOs.Packing;
+﻿using KuchniaUCygana.Application.DTOs.Packing;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces.Packing;
 using Microsoft.Extensions.Logging;
@@ -13,17 +14,26 @@ public sealed class PackingSynchronizationService : IPackingSynchronizationServi
     private readonly IPackingSessionRepository sessionRepository;
     private readonly IPackingBagRepository bagRepository;
     private readonly IOrderDataProvider orderProvider;
+    private readonly IRepository<PackingManifest>? manifestRepository;
+    private readonly IDeliveryManifestProvider? manifestProvider;
+    private readonly IPackingService? packingService;
     private readonly ILogger<PackingSynchronizationService> logger;
 
     public PackingSynchronizationService(
         IPackingSessionRepository sessionRepository,
         IPackingBagRepository bagRepository,
         IOrderDataProvider orderProvider,
-        ILogger<PackingSynchronizationService> logger)
+        ILogger<PackingSynchronizationService> logger,
+        IRepository<PackingManifest>? manifestRepository = null,
+        IDeliveryManifestProvider? manifestProvider = null,
+        IPackingService? packingService = null)
     {
         this.sessionRepository = sessionRepository;
         this.bagRepository = bagRepository;
         this.orderProvider = orderProvider;
+        this.manifestRepository = manifestRepository;
+        this.manifestProvider = manifestProvider;
+        this.packingService = packingService;
         this.logger = logger;
     }
 
@@ -121,7 +131,7 @@ public sealed class PackingSynchronizationService : IPackingSynchronizationServi
 
         var totalSessions = existingSessions.Count;
         logger.LogInformation(
-            "Zsynchronizowano kompletacje na {Date}: utworzono {CreatedSessions}, zaktualizowano {UpdatedSessions}, torby {CreatedBags}.",
+            "Zsynchronizowano kompletację na {Date}: utworzono {CreatedSessions}, zaktualizowano {UpdatedSessions}, torby {CreatedBags}.",
             date,
             createdSessions,
             updatedSessions,
@@ -134,6 +144,175 @@ public sealed class PackingSynchronizationService : IPackingSynchronizationServi
             UpdatedSessions = updatedSessions,
             CreatedBags = createdBags,
             TotalSessions = totalSessions,
+        };
+    }
+
+    public async Task<PackingSynchronizationResultDto> RefreshFromRoutesAsync(DateOnly date, string requestedBy)
+    {
+        if (manifestProvider is null || packingService is null)
+        {
+            throw new InvalidOperationException("Synchronizacja kompletacji z trasami wymaga providerów M4 i serwisu kompletacji.");
+        }
+
+        var routes = (await manifestProvider.GetRoutesForDateAsync(date))
+            .Where(route => route.RouteId > 0)
+            .OrderBy(route => route.RouteId)
+            .ToList();
+        var routeStops = routes
+            .SelectMany(route => route.Stops
+                .Where(stop => stop.DeliveryCalendarId > 0)
+                .OrderBy(stop => stop.SequenceNumber)
+                .Select(stop => new RouteStopAssignment(route.RouteId, stop.DeliveryCalendarId)))
+            .GroupBy(stop => stop.DeliveryCalendarId)
+            .Select(group => group.First())
+            .ToList();
+
+        if (routeStops.Count == 0)
+        {
+            return new PackingSynchronizationResultDto
+            {
+                Date = date,
+                RefreshedRoutes = routes.Count,
+                TotalSessions = (await sessionRepository.GetByDateWithItemsAsync(date)).Count(),
+            };
+        }
+
+        var activeOrders = (await orderProvider.GetActiveOrdersAsync(date))
+            .GroupBy(o => o.DeliveryCalendarId > 0 ? o.DeliveryCalendarId : o.OrderId)
+            .Select(g => g.First())
+            .ToDictionary(o => o.DeliveryCalendarId > 0 ? o.DeliveryCalendarId : o.OrderId);
+
+        var deliveries = (await orderProvider.GetDeliveriesForDateAsync(date.ToDateTime(TimeOnly.MinValue)))
+            .GroupBy(d => d.DeliveryCalendarId > 0 ? d.DeliveryCalendarId : d.OrderId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var existingSessions = (await sessionRepository.GetByDateWithItemsAsync(date))
+            .Where(s => s.DeliveryCalendarId.HasValue || s.OrderId.HasValue)
+            .GroupBy(s => s.DeliveryCalendarId ?? s.OrderId!.Value)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var createdSessions = 0;
+        var updatedSessions = 0;
+        var createdBags = 0;
+        var createdItems = 0;
+
+        foreach (var routeStop in routeStops)
+        {
+            if (!activeOrders.TryGetValue(routeStop.DeliveryCalendarId, out var order))
+            {
+                if (!deliveries.TryGetValue(routeStop.DeliveryCalendarId, out var routeDelivery))
+                {
+                    continue;
+                }
+
+                order = new ActiveOrderEntry
+                {
+                    DeliveryCalendarId = routeDelivery.DeliveryCalendarId,
+                    OrderId = routeDelivery.OrderId,
+                    ClientId = routeDelivery.CustomerId,
+                    ClientPublicId = routeDelivery.ClientPublicId,
+                    ClientName = routeDelivery.CustomerFullName,
+                    DietVariantId = routeDelivery.Items.FirstOrDefault()?.DietVariantId ?? 0,
+                    DeliveryDate = DateOnly.FromDateTime(routeDelivery.DeliveryDate),
+                };
+            }
+
+            deliveries.TryGetValue(routeStop.DeliveryCalendarId, out var delivery);
+            var sessionKey = routeStop.DeliveryCalendarId;
+            var clientPublicId = delivery?.ClientPublicId ?? order.ClientPublicId;
+            if (string.IsNullOrWhiteSpace(clientPublicId))
+            {
+                clientPublicId = $"DC-{routeStop.DeliveryCalendarId}";
+            }
+
+            PackingSession session;
+            if (existingSessions.TryGetValue(sessionKey, out var existing))
+            {
+                session = existing;
+                var changed = false;
+                if (session.DeliveryCalendarId != routeStop.DeliveryCalendarId)
+                {
+                    session.DeliveryCalendarId = routeStop.DeliveryCalendarId;
+                    changed = true;
+                }
+
+                if (session.OrderId != order.OrderId)
+                {
+                    session.OrderId = order.OrderId;
+                    changed = true;
+                }
+
+                if (!string.Equals(session.ClientName, order.ClientName, StringComparison.Ordinal))
+                {
+                    session.ClientName = order.ClientName;
+                    changed = true;
+                }
+
+                if (!string.Equals(session.ClientPublicId, clientPublicId, StringComparison.Ordinal))
+                {
+                    session.ClientPublicId = clientPublicId;
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    await sessionRepository.UpdateAsync(session);
+                    updatedSessions++;
+                }
+            }
+            else
+            {
+                session = new PackingSession
+                {
+                    PackingDate = date,
+                    OrderId = order.OrderId,
+                    ClientName = order.ClientName,
+                    ClientPublicId = clientPublicId,
+                    DeliveryCalendarId = routeStop.DeliveryCalendarId,
+                    Status = PackingStatus.Pending,
+                    PackedBy = string.IsNullOrWhiteSpace(requestedBy) ? null : requestedBy,
+                };
+
+                session.Id = await sessionRepository.InsertAsync(session);
+                existingSessions[sessionKey] = session;
+                createdSessions++;
+            }
+
+            createdBags += await EnsureDefaultBagAsync(session.Id);
+            if (session.Items.Count == 0)
+            {
+                createdItems += (await packingService.PrepareOrderBoxesAsync(session.Id)).Count();
+                var refreshed = await sessionRepository.GetWithItemsAsync(session.Id);
+                if (refreshed is not null)
+                {
+                    existingSessions[sessionKey] = refreshed;
+                }
+            }
+        }
+
+        var supersededManifests = await MarkRouteManifestsForRegenerationAsync(
+            date,
+            routes.Select(route => route.RouteId));
+
+        logger.LogInformation(
+            "Odświeżono kompletację z M4 na {Date}: trasy {Routes}, sesje +{CreatedSessions}/{UpdatedSessions}, torby +{CreatedBags}, pudełka +{CreatedItems}.",
+            date,
+            routes.Count,
+            createdSessions,
+            updatedSessions,
+            createdBags,
+            createdItems);
+
+        return new PackingSynchronizationResultDto
+        {
+            Date = date,
+            CreatedSessions = createdSessions,
+            UpdatedSessions = updatedSessions,
+            CreatedBags = createdBags,
+            CreatedItems = createdItems,
+            RefreshedRoutes = routes.Count,
+            SupersededManifests = supersededManifests,
+            TotalSessions = existingSessions.Count,
         };
     }
 
@@ -155,4 +334,37 @@ public sealed class PackingSynchronizationService : IPackingSynchronizationServi
         await bagRepository.InsertAsync(bag);
         return 1;
     }
+
+    private async Task<int> MarkRouteManifestsForRegenerationAsync(DateOnly date, IEnumerable<int> routeIds)
+    {
+        if (manifestRepository is null)
+        {
+            return 0;
+        }
+
+        var ids = routeIds.Where(id => id > 0).Distinct().ToHashSet();
+        if (ids.Count == 0)
+        {
+            return 0;
+        }
+
+        var manifests = (await manifestRepository.GetAllAsync())
+            .Where(manifest => manifest.PackingDate == date &&
+                manifest.RouteId.HasValue &&
+                ids.Contains(manifest.RouteId.Value) &&
+                !manifest.IsSuperseded)
+            .ToList();
+
+        foreach (var manifest in manifests)
+        {
+            manifest.RequiresRegeneration = true;
+            manifest.RequiresRegenerationReason = "Kompletacja została odświeżona po zmianie danych logistycznych M4.";
+            manifest.ChangeReason = "Odświeżenie kompletacji z logistyki.";
+            await manifestRepository.UpdateAsync(manifest);
+        }
+
+        return manifests.Count;
+    }
+
+    private sealed record RouteStopAssignment(int RouteId, int DeliveryCalendarId);
 }

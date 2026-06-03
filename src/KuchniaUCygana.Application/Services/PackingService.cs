@@ -172,13 +172,21 @@ public sealed class PackingService : IPackingService
             routeDto.CanGenerateManifest = route.RouteId > 0 && routeDto.AllBagsPacked && allBagsReadyForManifest;
             routeDto.CanWorkerApproveManifest = routeDto.HasManifest &&
                 !routeDto.IsManifestVerified &&
+                !routeDto.ManifestWorkerApprovedAt.HasValue &&
                 !routeDto.ManifestRequiresRegeneration &&
                 routeDto.AllBagsPacked &&
                 allBagsReadyForManifest;
-            routeDto.CanSupervisorApproveManifest = routeDto.CanWorkerApproveManifest &&
-                routeDto.ManifestWorkerApprovedAt.HasValue;
+            routeDto.CanSupervisorApproveManifest = routeDto.HasManifest &&
+                !routeDto.IsManifestVerified &&
+                !routeDto.ManifestRequiresRegeneration &&
+                routeDto.ManifestWorkerApprovedAt.HasValue &&
+                routeDto.AllBagsLoaded &&
+                allBagsReadyForManifest;
             routeDto.CanVerifyManifest = routeDto.CanSupervisorApproveManifest;
-            routeDto.CanLoadBags = routeDto.IsManifestVerified && allBagsReadyForManifest;
+            routeDto.CanLoadBags = routeDto.HasManifest &&
+                !routeDto.ManifestRequiresRegeneration &&
+                (routeDto.ManifestWorkerApprovedAt.HasValue || routeDto.IsManifestVerified) &&
+                allBagsReadyForManifest;
             routeDto.CanDispatchDelivery = routeDto.IsManifestVerified && routeDto.AllBagsLoaded;
 
             board.Routes.Add(routeDto);
@@ -1176,6 +1184,31 @@ public sealed class PackingService : IPackingService
         var dietPlan = (await dietProvider.GetPlanForDateAsync(packingDate)).ToList();
         return items.Select(item =>
         {
+            if (item.MealId.HasValue && item.MealId.Value > 0)
+            {
+                var explicitPlanItem = item.DietMenuPlanItemId.HasValue
+                    ? dietPlan.FirstOrDefault(planItem =>
+                        planItem.DietMenuPlanItemId == item.DietMenuPlanItemId.Value)
+                    : null;
+
+                if (explicitPlanItem is null && item.MealVariantId.HasValue)
+                {
+                    explicitPlanItem = dietPlan.FirstOrDefault(planItem =>
+                        planItem.MealId == item.MealId.Value &&
+                        planItem.DietVariantId == item.DietVariantId &&
+                        planItem.MealVariantId == item.MealVariantId.Value);
+                }
+
+                explicitPlanItem ??= dietPlan.FirstOrDefault(planItem =>
+                    planItem.MealId == item.MealId.Value &&
+                    planItem.DietVariantId == item.DietVariantId);
+
+                return new BoxDefinition(
+                    item.MealId.Value,
+                    explicitPlanItem?.MealName ?? ExtractMealNameFromOrderItem(item),
+                    explicitPlanItem?.DietVariantId ?? item.DietVariantId);
+            }
+
             var mealName = ExtractMealNameFromOrderItem(item);
             var mealSlot = ExtractMealSlotFromOrderItem(item);
             var matchedPlanItem = dietPlan.FirstOrDefault(planItem =>

@@ -138,7 +138,7 @@
                     <tbody>
                         @foreach (var bag in route.Bags)
                         {
-                            var canLoad = route.CanLoadBags && bag.Status == "Labeled";
+                            var canLoad = route.CanLoadBags && bag.CanLoad;
                             <tr>
                                 <td class="fw-bold text-dark">#@bag.StopNumber</td>
                                 <td>
