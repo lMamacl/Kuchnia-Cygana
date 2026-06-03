@@ -1,4 +1,4 @@
-@model KuchniaUCygana.Web.Models.PackingIndexViewModel
+﻿@model KuchniaUCygana.Web.Models.PackingIndexViewModel
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Etykiety transportowe";
@@ -132,6 +132,12 @@
         <form asp-action="ConfirmSelectedLabelsAttached" method="post" id="packing-labels-form">
             @Html.AntiForgeryToken()
             <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+            @if (Model.RouteId.HasValue)
+            {
+                <input type="hidden" name="routeId" value="@Model.RouteId.Value" />
+            }
+            <input type="hidden" name="selectedLabelIds" id="selected-label-ids" />
+            <input type="hidden" name="selectedBagIds" id="selected-bag-ids" />
             <input type="hidden" name="returnUrl" value="@returnUrl" />
 
             <div class="card">
@@ -139,8 +145,22 @@
                     <div class="me-auto">
                         <strong>@Model.FirstItem-@Model.LastItem</strong> z <strong>@Model.TotalBags</strong> toreb
                     </div>
-                    <button type="submit" class="btn btn-outline-success btn-sm" data-confirm="Potwierdzić przyklejenie zaznaczonych etykiet?">
-                        Potwierdź wybrane jako przyklejone
+                    <button type="submit"
+                            class="btn btn-primary btn-sm"
+                            formaction="@Url.Action("PrintSelectedLabels")"
+                            formtarget="_blank"
+                            data-label-action="print"
+                            data-empty-message="Zaznacz co najmniej jedna torbe do wygenerowania albo wydruku etykiety."
+                            disabled>
+                        Generuj/drukuj zaznaczone (<span id="selected-label-count">0</span>)
+                    </button>
+                    <button type="submit"
+                            class="btn btn-outline-success btn-sm"
+                            data-confirm="Potwierdzić przyklejenie zaznaczonych etykiet?"
+                            data-label-action="confirm"
+                            data-empty-message="Zaznacz co najmniej jedna nieprzyklejona etykiete do potwierdzenia."
+                            disabled>
+                        Potwierdź wybrane jako przyklejone (<span id="selected-attachable-count">0</span>)
                     </button>
                 </div>
 
@@ -162,11 +182,12 @@
                                 <button type="submit"
                                         class="btn btn-sm btn-outline-primary"
                                         formaction="@Url.Action("GenerateMissingRouteLabels", new { routeId = route.RouteId })"
+                                        formtarget="_blank"
                                         @(!route.AllBagsPacked ? "disabled" : null)
                                         data-confirm="Wygenerować brakujące etykiety dla tej trasy?">
                                     Generuj brakujące etykiety
                                 </button>
-                                <a asp-action="RouteLabels" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-primary">Drukuj etykiety trasy</a>
+                                <a asp-action="RouteLabels" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" target="_blank" class="btn btn-sm btn-primary">Drukuj etykiety trasy</a>
                                 <a asp-controller="Loading" asp-action="Manifest" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-success">Manifest</a>
                             </div>
                         </div>
@@ -191,15 +212,18 @@
                                 <tbody>
                                     @foreach (var bag in route.Bags)
                                     {
-                                        var canSelectLabel = bag.TransportLabelId.HasValue && !bag.IsTransportLabelAttached;
+                                        var canSelectForPrint = bag.TransportLabelId.HasValue || bag.CanGenerateTransportLabel;
                                         <tr>
                                             <td>
                                                 <input class="form-check-input js-label-select"
                                                        type="checkbox"
-                                                       name="labelIds"
-                                                       value="@bag.TransportLabelId"
-                                                       disabled="@(!canSelectLabel)"
-                                                       aria-label="Zaznacz etykietę torby" />
+                                                       value="@(bag.TransportLabelId?.ToString() ?? bag.PackingBagId.ToString())"
+                                                       data-label-id="@(bag.TransportLabelId?.ToString() ?? string.Empty)"
+                                                       data-bag-id="@bag.PackingBagId"
+                                                       data-can-confirm="@(bag.CanConfirmTransportLabelAttached ? "true" : "false")"
+                                                       data-can-generate="@(bag.CanGenerateTransportLabel ? "true" : "false")"
+                                                       disabled="@(!canSelectForPrint)"
+                                                       aria-label="Zaznacz torbę do etykiety" />
                                             </td>
                                             <td class="fw-bold text-dark">#@bag.StopNumber</td>
                                             <td>
@@ -235,13 +259,14 @@
                                                 <div class="btn-list flex-nowrap justify-content-end">
                                                     @if (bag.HasLabels)
                                                     {
-                                                        <a asp-action="Labels" asp-route-sessionId="@bag.PackingSessionId" class="btn btn-sm btn-outline-primary">Drukuj</a>
+                                                        <a asp-action="Labels" asp-route-sessionId="@bag.PackingSessionId" target="_blank" class="btn btn-sm btn-outline-primary">Drukuj</a>
                                                     }
                                                     else if (bag.CanGenerateTransportLabel)
                                                     {
                                                         <button type="submit"
                                                                 class="btn btn-sm btn-outline-primary"
                                                                 formaction="@Url.Action("GenerateBagLabel", new { packingBagId = bag.PackingBagId })"
+                                                                formtarget="_blank"
                                                                 data-confirm="Wygenerować etykietę transportową dla tej torby?">
                                                             Drukuj
                                                         </button>
@@ -297,23 +322,112 @@
 @section Scripts {
     <script>
         (() => {
+            const form = document.getElementById("packing-labels-form");
+            const selectedIdsInput = document.getElementById("selected-label-ids");
+            const selectedBagIdsInput = document.getElementById("selected-bag-ids");
+            const selectedCount = document.getElementById("selected-label-count");
+            const selectedAttachableCount = document.getElementById("selected-attachable-count");
+            const actionButtons = [...document.querySelectorAll("[data-label-action]")];
+            const getSelectedCheckboxes = () => [...document.querySelectorAll(".js-label-select:checked")];
+            const getActionCheckboxes = action => {
+                const selected = getSelectedCheckboxes();
+                return action === "confirm"
+                    ? selected.filter(checkbox => checkbox.dataset.canConfirm === "true")
+                    : selected;
+            };
+
+            const updateActionButtons = () => {
+                const selected = getSelectedCheckboxes();
+                const attachable = selected.filter(checkbox => checkbox.dataset.canConfirm === "true");
+                if (selectedCount) {
+                    selectedCount.textContent = selected.length;
+                }
+
+                if (selectedAttachableCount) {
+                    selectedAttachableCount.textContent = attachable.length;
+                }
+
+                actionButtons.forEach(button => {
+                    const action = button.dataset.labelAction;
+                    const count = action === "confirm" ? attachable.length : selected.length;
+                    button.disabled = count === 0;
+                });
+            };
+
             document.querySelectorAll(".js-route-select").forEach(routeCheckbox => {
                 const table = routeCheckbox.closest("table");
                 const checkboxes = [...table.querySelectorAll(".js-label-select:not(:disabled)")];
+
+                const updateRouteCheckbox = () => {
+                    const checked = checkboxes.filter(checkbox => checkbox.checked).length;
+                    routeCheckbox.checked = checkboxes.length > 0 && checked === checkboxes.length;
+                    routeCheckbox.indeterminate = checked > 0 && checked < checkboxes.length;
+                    routeCheckbox.disabled = checkboxes.length === 0;
+                };
+
                 routeCheckbox.addEventListener("change", () => {
                     checkboxes.forEach(checkbox => {
                         checkbox.checked = routeCheckbox.checked;
                     });
+                    updateRouteCheckbox();
+                    updateActionButtons();
                 });
+
+                checkboxes.forEach(checkbox => {
+                    checkbox.addEventListener("change", () => {
+                        updateRouteCheckbox();
+                        updateActionButtons();
+                    });
+                });
+
+                updateRouteCheckbox();
             });
 
-            const form = document.getElementById("packing-labels-form");
             form?.addEventListener("submit", event => {
-                const confirmation = event.submitter?.getAttribute("data-confirm");
+                const submitter = event.submitter;
+                const action = submitter?.getAttribute("data-label-action");
+                if (action) {
+                    const selected = getActionCheckboxes(action);
+                    if (selected.length === 0) {
+                        event.preventDefault();
+                        window.alert(submitter?.getAttribute("data-empty-message") ?? "Zaznacz co najmniej jedna etykiete.");
+                        return;
+                    }
+
+                    if (selectedIdsInput) {
+                        selectedIdsInput.value = selected
+                            .map(checkbox => checkbox.dataset.labelId)
+                            .filter(Boolean)
+                            .join(",");
+                    }
+
+                    if (selectedBagIdsInput) {
+                        selectedBagIdsInput.value = action === "print"
+                            ? selected
+                                .filter(checkbox => !checkbox.dataset.labelId && checkbox.dataset.canGenerate === "true")
+                                .map(checkbox => checkbox.dataset.bagId)
+                                .filter(Boolean)
+                                .join(",")
+                            : "";
+                    }
+                }
+                else {
+                    if (selectedIdsInput) {
+                        selectedIdsInput.value = "";
+                    }
+
+                    if (selectedBagIdsInput) {
+                        selectedBagIdsInput.value = "";
+                    }
+                }
+
+                const confirmation = submitter?.getAttribute("data-confirm");
                 if (confirmation && !window.confirm(confirmation)) {
                     event.preventDefault();
                 }
             });
+
+            updateActionButtons();
         })();
     </script>
 }

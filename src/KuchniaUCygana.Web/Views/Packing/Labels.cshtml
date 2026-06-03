@@ -8,9 +8,11 @@
     object sessionIdValue = ViewBag.SessionId;
     object routeIdValue = ViewBag.RouteId;
     object selectedDateValue = ViewBag.SelectedDate;
+    object autoPrintValue = ViewBag.AutoPrint;
     int sessionId = sessionIdValue is int sessionValue ? sessionValue : 0;
     int routeId = routeIdValue is int routeValue ? routeValue : 0;
     DateOnly? selectedDate = selectedDateValue is DateOnly dateValue ? dateValue : null;
+    var autoPrint = autoPrintValue is bool shouldAutoPrint && shouldAutoPrint;
     var labels = Model.ToList();
     var returnUrl = ViewContext.HttpContext.Request.Path + ViewContext.HttpContext.Request.QueryString;
 }
@@ -210,3 +212,16 @@
         }
     </div>
 </div>
+
+@section Scripts {
+    @if (autoPrint)
+    {
+        <script>
+            window.addEventListener('load', function () {
+                setTimeout(function () {
+                    window.print();
+                }, 300);
+            });
+        </script>
+    }
+}
