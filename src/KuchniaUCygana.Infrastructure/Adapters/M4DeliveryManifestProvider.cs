@@ -34,11 +34,10 @@ public sealed class M4DeliveryManifestProvider : IDeliveryManifestProvider
                 v.[RegistrationNumber] AS VehicleRegistration
             FROM [DeliveryRoutes] r
             LEFT JOIN [Vehicles] v ON r.[VehicleId] = v.[Id]
-            WHERE r.[RouteDate] >= @From AND r.[RouteDate] < @To AND r.[IsDeleted] = 0;";
+            WHERE CAST(r.[RouteDate] AS date) = @RouteDate AND r.[IsDeleted] = 0;";
 
-        var from = date.ToDateTime(TimeOnly.MinValue);
-        var to = from.AddDays(1);
-        var routes = (await db.QueryAsync<RouteEntry>(routesSql, new { From = from, To = to })).ToList();
+        var routeDate = date.ToDateTime(TimeOnly.MinValue);
+        var routes = (await db.QueryAsync<RouteEntry>(routesSql, new { RouteDate = routeDate })).ToList();
 
         if (routes.Count == 0)
         {
@@ -60,9 +59,9 @@ public sealed class M4DeliveryManifestProvider : IDeliveryManifestProvider
             WHERE s.[RouteId] IN @RouteIds AND s.[IsDeleted] = 0
             ORDER BY s.[RouteId], s.[SequenceNumber];";
 
-        var rawStops = (await db.QueryAsync<dynamic>(stopsSql, new { RouteIds = routes.Select(route => route.RouteId).ToArray() })).ToList();
+        var rawStops = (await db.QueryAsync<RouteStopRecord>(stopsSql, new { RouteIds = routes.Select(route => route.RouteId).ToArray() })).ToList();
         var stopsByRoute = rawStops
-            .GroupBy(row => (int)row.RouteId)
+            .GroupBy(row => row.RouteId)
             .ToDictionary(group => group.Key, group => group.Select(MapStop).ToList());
 
         foreach (var route in routes)
@@ -112,7 +111,7 @@ public sealed class M4DeliveryManifestProvider : IDeliveryManifestProvider
             WHERE s.[RouteId] = @RouteId AND s.[IsDeleted] = 0
             ORDER BY s.[SequenceNumber];";
 
-        var rawStops = (await db.QueryAsync<dynamic>(stopsSql, new { RouteId = routeId })).ToList();
+        var rawStops = (await db.QueryAsync<RouteStopRecord>(stopsSql, new { RouteId = routeId })).ToList();
         var stops = new List<RouteStopEntry>();
 
         foreach (var row in rawStops)
@@ -133,9 +132,9 @@ public sealed class M4DeliveryManifestProvider : IDeliveryManifestProvider
 
             stops.Add(new RouteStopEntry
             {
-                StopId = (int)row.StopId,
-                SequenceNumber = (int)row.SequenceNumber,
-                DeliveryCalendarId = (int)row.DeliveryCalendarId,
+                StopId = row.StopId,
+                SequenceNumber = row.SequenceNumber,
+                DeliveryCalendarId = row.DeliveryCalendarId,
                 DeliveryWindowFrom = from,
                 DeliveryWindowTo = to
             });
@@ -144,7 +143,7 @@ public sealed class M4DeliveryManifestProvider : IDeliveryManifestProvider
         return stops;
     }
 
-    private static RouteStopEntry MapStop(dynamic row)
+    private static RouteStopEntry MapStop(RouteStopRecord row)
     {
         string from = row.DeliveryWindowFrom ?? string.Empty;
         string to = row.DeliveryWindowTo ?? string.Empty;
@@ -162,11 +161,28 @@ public sealed class M4DeliveryManifestProvider : IDeliveryManifestProvider
 
         return new RouteStopEntry
         {
-            StopId = (int)row.StopId,
-            SequenceNumber = (int)row.SequenceNumber,
-            DeliveryCalendarId = (int)row.DeliveryCalendarId,
+            StopId = row.StopId,
+            SequenceNumber = row.SequenceNumber,
+            DeliveryCalendarId = row.DeliveryCalendarId,
             DeliveryWindowFrom = from,
             DeliveryWindowTo = to
         };
+    }
+
+    private sealed class RouteStopRecord
+    {
+        public int RouteId { get; set; }
+
+        public int StopId { get; set; }
+
+        public int SequenceNumber { get; set; }
+
+        public int DeliveryCalendarId { get; set; }
+
+        public DateTimeOffset? PlannedArrivalTime { get; set; }
+
+        public string? DeliveryWindowFrom { get; set; }
+
+        public string? DeliveryWindowTo { get; set; }
     }
 }

@@ -11,5 +11,6 @@ public interface IDeliveryRouteRepository : IRepository<DeliveryRoute>
 {
     Task<DeliveryRoute?> GetRouteWithStopsAsync(int routeId);
     Task<List<DeliveryRoute>> GetRoutesWithStopsAsync(DateTimeOffset date);
+    Task InsertManyWithStopsAsync(IReadOnlyCollection<DeliveryRoute> routes);
 }
 
