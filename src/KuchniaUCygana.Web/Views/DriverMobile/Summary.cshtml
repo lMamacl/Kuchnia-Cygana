@@ -1,5 +1,107 @@
+@model DriverRouteSummaryDto
 @{
     Layout = "_LayoutDriver";
+    var route = Model.Route;
 }
-@await Html.PartialAsync("_DriverPlaceholder")
 
+<section class="driver-stack">
+    <div class="driver-date-row">
+        <div>
+            <div class="text-secondary small">Dzien dostaw</div>
+            <div class="fw-bold">@Model.DeliveryDate.ToString("dd.MM.yyyy")</div>
+        </div>
+        <div class="text-end">
+            <div class="text-secondary small">Kierowca</div>
+            <div class="fw-bold">@Model.DriverName</div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SetupMessage))
+    {
+        <div class="alert alert-info mb-0">@Model.SetupMessage</div>
+    }
+
+    @if (route is not null)
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                    <div>
+                        <div class="text-secondary small">Trasa</div>
+                        <h2 class="h2 mb-1">@route.Name</h2>
+                    </div>
+                    @RouteBadge(route.Status)
+                </div>
+
+                <div class="row g-3 text-center">
+                    <div class="col-4">
+                        <div class="driver-summary-value">@route.TotalStops</div>
+                        <div class="text-secondary small">Wszystkie</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="driver-summary-value text-success">@route.CompletedStops</div>
+                        <div class="text-secondary small">Dostarczone</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="driver-summary-value text-danger">@route.FailedStops</div>
+                        <div class="text-secondary small">Problemy</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="driver-stop-list">
+            @foreach (var stop in route.Stops)
+            {
+                <a asp-action="Stop" asp-route-id="@stop.Id" class="card driver-stop-card text-reset text-decoration-none">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="driver-stop-number">@stop.SequenceNumber</div>
+                            <div class="flex-fill min-w-0">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div class="fw-semibold driver-address">@stop.FullAddress</div>
+                                    @StopBadge(stop.Status)
+                                </div>
+                                @if (stop.ActualArrivalTime.HasValue)
+                                {
+                                    <div class="text-secondary small mt-2">@stop.ActualArrivalTime.Value.ToLocalTime().ToString("HH:mm")</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            }
+        </div>
+    }
+
+    <a asp-action="Index" class="btn btn-primary btn-lg w-100">
+        @Html.Raw(StaffIconCatalog.Get("route"))
+        Wroc do trasy
+    </a>
+</section>
+
+@functions {
+    private static Microsoft.AspNetCore.Html.IHtmlContent RouteBadge(string status)
+    {
+        var (css, label) = status switch
+        {
+            "InProgress" => ("bg-yellow-lt text-yellow", "W trasie"),
+            "Completed" => ("bg-success-lt text-success", "Zakonczona"),
+            "Failed" => ("bg-danger-lt text-danger", "Z problemami"),
+            _ => ("bg-blue-lt text-blue", "Gotowa"),
+        };
+        return new Microsoft.AspNetCore.Html.HtmlString($"<span class=\"badge {css}\">{label}</span>");
+    }
+
+    private static Microsoft.AspNetCore.Html.IHtmlContent StopBadge(string status)
+    {
+        var (css, label) = status switch
+        {
+            "InProgress" => ("bg-yellow-lt text-yellow", "W toku"),
+            "Completed" => ("bg-success-lt text-success", "Dostarczono"),
+            "Failed" => ("bg-danger-lt text-danger", "Problem"),
+            _ => ("bg-secondary-lt text-secondary", "Oczekuje"),
+        };
+        return new Microsoft.AspNetCore.Html.HtmlString($"<span class=\"badge {css}\">{label}</span>");
+    }
+}

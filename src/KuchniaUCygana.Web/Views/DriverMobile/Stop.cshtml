@@ -1,5 +1,133 @@
+@model DriverRouteStopDto
 @{
     Layout = "_LayoutDriver";
 }
-@await Html.PartialAsync("_DriverPlaceholder")
 
+<section class="driver-stack">
+    <a asp-action="Index" class="btn btn-outline-secondary align-self-start">
+        @Html.Raw(StaffIconCatalog.Get("route"))
+        Wroc do trasy
+    </a>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                <div>
+                    <div class="text-secondary small">Przystanek #@Model.SequenceNumber</div>
+                    <h2 class="h2 driver-address mb-1">@Model.FullAddress</h2>
+                    @if (!string.IsNullOrWhiteSpace(Model.OrderNumber))
+                    {
+                        <div class="text-secondary">@Model.OrderNumber</div>
+                    }
+                </div>
+                @StopBadge(Model.Status)
+            </div>
+
+            <div class="driver-detail-grid">
+                <div>
+                    <div class="text-secondary small">Planowany przyjazd</div>
+                    <div class="fw-semibold">@(Model.PlannedArrivalTime?.ToLocalTime().ToString("HH:mm") ?? "Bez okna")</div>
+                </div>
+                <div>
+                    <div class="text-secondary small">Torby</div>
+                    <div class="fw-semibold">@Model.Bags.Count</div>
+                </div>
+            </div>
+
+            @if (Model.Latitude.HasValue && Model.Longitude.HasValue)
+            {
+                <a href="https://www.google.com/maps/dir/?api=1&destination=@Model.Latitude.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),@Model.Longitude.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                   target="_blank"
+                   rel="noopener"
+                   class="btn btn-outline-primary btn-lg w-100 mt-3">
+                    @Html.Raw(StaffIconCatalog.Get("map"))
+                    Nawiguj
+                </a>
+            }
+        </div>
+    </div>
+
+    @if (Model.CanStart)
+    {
+        <form asp-action="StartStop" asp-route-id="@Model.Id" method="post">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-primary btn-lg w-100">
+                @Html.Raw(StaffIconCatalog.Get("route"))
+                Rozpocznij obsluge przystanku
+            </button>
+        </form>
+    }
+
+    @if (Model.CanConfirm)
+    {
+        <div class="driver-action-grid">
+            <a asp-action="Confirm" asp-route-id="@Model.Id" class="btn btn-success btn-lg">
+                @Html.Raw(StaffIconCatalog.Get("clipboard-check"))
+                Potwierdz
+            </a>
+            <a asp-action="Problem" asp-route-id="@Model.Id" class="btn btn-outline-danger btn-lg">
+                @Html.Raw(StaffIconCatalog.Get("alert"))
+                Problem
+            </a>
+        </div>
+    }
+
+    @if (Model.LatestIssue is not null)
+    {
+        <div class="alert alert-danger mb-0" role="alert">
+            <div class="fw-semibold">@Model.LatestIssue.Reason</div>
+            @if (!string.IsNullOrWhiteSpace(Model.LatestIssue.Notes))
+            {
+                <div class="small mt-1">@Model.LatestIssue.Notes</div>
+            }
+        </div>
+    }
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Torby do wydania</h3>
+        </div>
+        <div class="list-group list-group-flush">
+            @if (Model.Bags.Count == 0)
+            {
+                <div class="list-group-item text-secondary">Brak fizycznych toreb przypisanych do dostawy.</div>
+            }
+            else
+            {
+                @foreach (var bag in Model.Bags)
+                {
+                    <div class="list-group-item">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="driver-icon-box bg-blue-lt text-blue">@Html.Raw(StaffIconCatalog.Get("packing"))</div>
+                            <div>
+                                <div class="fw-semibold font-monospace">@bag.BagCode</div>
+                                <div class="text-secondary small">Torba #@bag.BagNumber · @bag.Status</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Torby zwrotne</h3>
+        </div>
+        <div class="card-body text-secondary">Brak zarejestrowanych zwrotow.</div>
+    </div>
+</section>
+
+@functions {
+    private static Microsoft.AspNetCore.Html.IHtmlContent StopBadge(string status)
+    {
+        var (css, label) = status switch
+        {
+            "InProgress" => ("bg-yellow-lt text-yellow", "W toku"),
+            "Completed" => ("bg-success-lt text-success", "Dostarczono"),
+            "Failed" => ("bg-danger-lt text-danger", "Problem"),
+            _ => ("bg-secondary-lt text-secondary", "Oczekuje"),
+        };
+        return new Microsoft.AspNetCore.Html.HtmlString($"<span class=\"badge {css}\">{label}</span>");
+    }
+}

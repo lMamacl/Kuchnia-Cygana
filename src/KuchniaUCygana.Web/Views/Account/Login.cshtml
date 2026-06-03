@@ -1,3 +1,4 @@
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 @model KuchniaUCygana.Web.Models.LoginViewModel
 @{
     ViewData["Title"] = "Zaloguj się";
@@ -112,6 +113,52 @@
                                     Nie masz konta?
                                     <a asp-action="Register" class="fw-semibold text-success">Zarejestruj się</a>
                                 </p>
+
+                                @if (Env.IsDevelopment())
+                                {
+                                    <div class="dev-panel p-3 mt-4">
+                                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                            <span class="badge text-bg-warning">DEV</span>
+                                            <strong>Panel programisty</strong>
+                                        </div>
+                                        <p class="text-muted small mb-3">Role testowe zostają na teraz bez zmian; dopracujemy je później.</p>
+
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                                <input type="hidden" name="role" value="KitchenManager" />
+                                                <button type="submit" class="btn btn-sm btn-outline-warning">KitchenManager</button>
+                                            </form>
+                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                                <input type="hidden" name="role" value="Kitchen" />
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary">Kitchen</button>
+                                            </form>
+                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                                <input type="hidden" name="role" value="WarehouseManager" />
+                                                <button type="submit" class="btn btn-sm btn-outline-primary">WarehouseManager</button>
+                                            </form>
+                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                                <input type="hidden" name="role" value="Warehouse" />
+                                                <button type="submit" class="btn btn-sm btn-outline-info">Warehouse</button>
+                                            </form>
+                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                                <input type="hidden" name="role" value="PackingManager" />
+                                                <button type="submit" class="btn btn-sm btn-outline-success">PackingManager</button>
+                                            </form>
+                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                                <input type="hidden" name="role" value="Packing" />
+                                                <button type="submit" class="btn btn-sm btn-outline-success opacity-75">Packing</button>
+                                            </form>
+                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                                <input type="hidden" name="role" value="Driver" />
+                                                <button type="submit" class="btn btn-sm btn-outline-primary">Driver</button>
+                                            </form>
+                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                                <input type="hidden" name="role" value="Admin" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Admin</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                }
                             </div>
                         </div>
                     </div>
