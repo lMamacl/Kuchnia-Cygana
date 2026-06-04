@@ -15,9 +15,6 @@
   "OpenAI": {
     "ApiKey": ""
   },
-  "servicestack": {
-    "license": ""
-  },
   "Application": {
     "BaseUrl": "https://localhost:5001"
   },
