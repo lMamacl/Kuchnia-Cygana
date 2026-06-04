@@ -254,7 +254,6 @@ quadrantChart
     *   `Recipes`, `RecipeComponentVersions`, `MealVariants` oraz `Meals`: Odczytywane przy każdym wyświetleniu menu przez klienta oraz podczas nocnego generowania planu produkcji i wyliczania kosztów surowców. Wymagają indeksowania i keszowania.
     *   `Orders` & `DeliveryRouteStops`: Informacje o zamówieniach i punktach dostaw są masowo czytane przez system logistyki przy generowaniu tras oraz przez kurierów na urządzeniach mobilnych podczas dostaw.
     *   `Users`: Tabele kont użytkowników, czytana przy każdym zapytaniu autoryzowanym (RBAC) w celu pobrania ról i danych sesyjnych. Rzadko aktualizowana.
-```
 
 ---
 
@@ -262,6 +261,8 @@ quadrantChart
 Poniższy diagram ERD przedstawia główne encje systemu oraz kluczowe relacje między nimi (pominięto atrybuty niekluczowe dla czytelności). Diagram ten w zupełności wystarcza na etapie analizy wymagań – szczegółowa specyfikacja typów pól, indeksów i kluczy obcych zostanie zamieszczona w odrębnym dokumencie „Projekt bazy danych”.
 
 Uwaga: Diagram wygenerowano na podstawie rzeczywistych encji z projektu (Entities.cs). Relacje oznaczono zgodnie z konwencją crow's foot (np. jeden-do-jednego, jeden-do-wielu, wiele-do-jednego).
+
+---
 
 ```mermaid
 erDiagram
@@ -1155,7 +1156,6 @@ erDiagram
     PackingManifest ||--|| Vehicle : references_vehicle
     PackingManifest ||--o{ PackingManifestIssue : logs_manifest_issue
 ```
-
 ---
 
 ## 9. Logiczny Model Danych i Wymagania dotyczące przechowywania
