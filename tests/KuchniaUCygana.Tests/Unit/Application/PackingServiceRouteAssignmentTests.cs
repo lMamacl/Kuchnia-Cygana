@@ -964,6 +964,16 @@ public sealed class PackingServiceRouteAssignmentTests
             throw new NotSupportedException();
         }
 
+        public Task<FoilLabelPreparationResultDto> EnsureFoilBoxesForDateAsync(DateOnly date)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<FoilLabelDashboardDto> GetFoilLabelDashboardAsync(FoilLabelFilterDto filter)
+        {
+            throw new NotSupportedException();
+        }
+
         public Task PackBoxByCodeAsync(int sessionId, string barcode, string packedBy)
         {
             throw new NotSupportedException();
@@ -1112,6 +1122,18 @@ public sealed class PackingServiceRouteAssignmentTests
         public Task<int?> GetMealCaloriesAsync(int mealId)
         {
             return Task.FromResult<int?>(null);
+        }
+
+        public Task<(IReadOnlyList<PackingItemSearchRow> Items, int TotalCount)> SearchPackingItemsAsync(
+            PackingItemQuery query)
+        {
+            return Task.FromResult<(IReadOnlyList<PackingItemSearchRow>, int)>(
+                (Array.Empty<PackingItemSearchRow>(), 0));
+        }
+
+        public Task<FoilLabelSummary> GetFoilLabelSummaryAsync(DateOnly date)
+        {
+            return Task.FromResult(new FoilLabelSummary());
         }
     }
 

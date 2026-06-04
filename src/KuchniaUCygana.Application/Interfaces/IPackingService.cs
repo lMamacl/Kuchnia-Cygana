@@ -55,6 +55,10 @@ public interface IPackingService
 
     Task<PackingSessionDto?> GetSessionByIdAsync(int sessionId);
 
+    Task<FoilLabelPreparationResultDto> EnsureFoilBoxesForDateAsync(DateOnly date);
+
+    Task<FoilLabelDashboardDto> GetFoilLabelDashboardAsync(FoilLabelFilterDto filter);
+
     Task PackBoxByCodeAsync(int sessionId, string barcode, string packedBy);
 
     Task<PackingLabelDto> PrintFoilLabelAsync(

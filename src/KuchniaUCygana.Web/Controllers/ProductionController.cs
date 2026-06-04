@@ -22,15 +22,18 @@ public sealed class ProductionController : Controller
     private readonly IProductionService productionService;
     private readonly IPackingService packingService;
     private readonly IPackingIncidentService packingIncidentService;
+    private readonly IPackingSynchronizationService packingSynchronizationService;
 
     public ProductionController(
         IProductionService productionService,
         IPackingService packingService,
-        IPackingIncidentService packingIncidentService)
+        IPackingIncidentService packingIncidentService,
+        IPackingSynchronizationService packingSynchronizationService)
     {
         this.productionService = productionService;
         this.packingService = packingService;
         this.packingIncidentService = packingIncidentService;
+        this.packingSynchronizationService = packingSynchronizationService;
     }
 
     // ── Plan dnia ─────────────────────────────────────────────
@@ -40,15 +43,20 @@ public sealed class ProductionController : Controller
     /// GET /production
     /// </summary>
     [HttpGet("")]
-    public async Task<IActionResult> Index(DateOnly? date)
+    public async Task<IActionResult> Index([FromQuery] KitchenDashboardFilterDto filter)
     {
-        var targetDate = date ?? DateOnly.FromDateTime(DateTime.Today);
-        var plan = await productionService.GetDailyPlanByDateAsync(targetDate);
+        if (filter.Date == default)
+        {
+            filter.Date = DateOnly.FromDateTime(DateTime.Today);
+        }
+
+        var dashboard = await productionService.GetKitchenDashboardAsync(filter);
 
         var viewModel = new ProductionDashboardViewModel
         {
-            SelectedDate = targetDate,
-            DailyPlan = plan
+            SelectedDate = dashboard.Filter.Date,
+            DailyPlan = dashboard.Plan,
+            Dashboard = dashboard,
         };
 
         return View(viewModel);
@@ -209,13 +217,31 @@ public sealed class ProductionController : Controller
     /// GET /production/foil-printing
     /// </summary>
     [HttpGet("foil-printing")]
-    public async Task<IActionResult> FoilPrinting(DateOnly? date)
+    public async Task<IActionResult> FoilPrinting([FromQuery] FoilLabelFilterDto filter)
     {
-        var targetDate = date ?? DateOnly.FromDateTime(DateTime.Today);
-        var sessions = (await packingService.GetSessionsByDateAsync(targetDate)).ToList();
+        if (filter.Date == default)
+        {
+            filter.Date = DateOnly.FromDateTime(DateTime.Today);
+        }
 
-        ViewBag.SelectedDate = targetDate;
-        return View(sessions);
+        try
+        {
+            var requestedBy = User.Identity?.Name ?? "Kuchnia";
+            await packingSynchronizationService.EnsureSessionsForDateAsync(filter.Date, requestedBy);
+            var preparation = await packingService.EnsureFoilBoxesForDateAsync(filter.Date);
+            if (preparation.Errors.Count > 0)
+            {
+                TempData["Error"] = "Nie wszystkie pudełka do foliowania zostały przygotowane: "
+                    + string.Join(" | ", preparation.Errors.Take(3));
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        var dashboard = await packingService.GetFoilLabelDashboardAsync(filter);
+        return View(dashboard);
     }
 
     [HttpGet("rework")]
@@ -284,18 +310,18 @@ public sealed class ProductionController : Controller
 
     [HttpPost("foil-label/{packingItemId:int}/print")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> PrintFoilLabel(int packingItemId)
+    public async Task<IActionResult> PrintFoilLabel(int packingItemId, string? reprintReason, DateOnly? returnDate)
     {
         var operatorName = User.Identity?.Name ?? "Kuchnia";
         try
         {
-            var label = await packingService.PrintFoilLabelAsync(packingItemId, operatorName);
+            var label = await packingService.PrintFoilLabelAsync(packingItemId, operatorName, reprintReason);
             return View(nameof(FoilLabel), label);
         }
         catch (Exception ex)
         {
             TempData["Error"] = ex.Message;
-            return RedirectToAction(nameof(FoilPrinting));
+            return RedirectToAction(nameof(FoilPrinting), new { date = returnDate });
         }
     }
 
@@ -305,13 +331,13 @@ public sealed class ProductionController : Controller
     /// </summary>
     [HttpPost("foil-labels-bulk")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> FoilLabelsBulk(string ids)
+    public async Task<IActionResult> FoilLabelsBulk(string ids, DateOnly? returnDate)
     {
         var operatorName = User.Identity?.Name ?? "Kuchnia";
         if (string.IsNullOrWhiteSpace(ids))
         {
             TempData["Error"] = "Nie wybrano żadnych etykiet do druku.";
-            return RedirectToAction(nameof(FoilPrinting));
+            return RedirectToAction(nameof(FoilPrinting), new { date = returnDate });
         }
 
         var idList = ids.Split(',', StringSplitOptions.RemoveEmptyEntries)

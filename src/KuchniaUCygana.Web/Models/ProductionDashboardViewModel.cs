@@ -17,4 +17,6 @@ public sealed class ProductionDashboardViewModel
     /// Dane planu produkcji na wybrany dzień (lub null, jeśli nie wygenerowano).
     /// </summary>
     public ProductionPlanDto? DailyPlan { get; set; }
+
+    public KitchenDashboardDto Dashboard { get; set; } = new();
 }

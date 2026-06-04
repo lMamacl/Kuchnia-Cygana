@@ -13,6 +13,8 @@ public interface IProductionService
 
     Task<ProductionPlanDto?> GetPlanByIdAsync(int planId);
 
+    Task<KitchenDashboardDto> GetKitchenDashboardAsync(KitchenDashboardFilterDto filter);
+
     Task<CookingCardDto> GetCookingCardAsync(int planItemId);
 
     Task ApproveCookingAsync(int planItemId, decimal actualQuantity);

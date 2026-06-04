@@ -1,6 +1,7 @@
 using AutoMapper;
 using System.Text.Json;
 using KuchniaUCygana.Application.DTOs.Production;
+using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Enums;
@@ -89,6 +90,59 @@ public sealed class ProductionService : IProductionService
         dto.Items = _mapper.Map<List<ProductionPlanItemDto>>(items);
 
         return dto;
+    }
+
+    public async Task<KitchenDashboardDto> GetKitchenDashboardAsync(KitchenDashboardFilterDto filter)
+    {
+        var normalized = NormalizeKitchenDashboardFilter(filter);
+        var dashboard = new KitchenDashboardDto
+        {
+            Filter = normalized,
+            Items = new PagedResultDto<KitchenDashboardItemDto>
+            {
+                Page = normalized.Page,
+                PageSize = normalized.PageSize,
+                TotalCount = 0,
+            },
+        };
+
+        var plan = await _planRepository.GetByDateAsync(normalized.Date);
+        if (plan is null)
+        {
+            return dashboard;
+        }
+
+        dashboard.Plan = _mapper.Map<ProductionPlanDto>(plan);
+        dashboard.Plan.Items = new List<ProductionPlanItemDto>();
+
+        var itemQuery = new ProductionPlanItemQuery
+        {
+            PlanId = plan.Id,
+            Search = normalized.Search,
+            Status = ParseProductionStatus(normalized.Status),
+            ProductionGroup = normalized.ProductionGroup,
+            FefoDeducted = ParseStateFilter(normalized.Fefo),
+            PackagingDeducted = ParseStateFilter(normalized.Packaging),
+            HasSnapshot = ParseSnapshotFilter(normalized.Snapshot),
+            Page = normalized.Page,
+            PageSize = normalized.PageSize,
+            SortBy = normalized.SortBy,
+            SortDescending = string.Equals(normalized.SortDirection, "desc", StringComparison.OrdinalIgnoreCase),
+        };
+
+        var (items, totalCount) = await _planRepository.SearchPlanItemsAsync(itemQuery);
+        var summary = await _planRepository.GetPlanItemSummaryAsync(plan.Id);
+
+        dashboard.Items = new PagedResultDto<KitchenDashboardItemDto>
+        {
+            Items = items.Select(MapKitchenDashboardItem).ToList(),
+            Page = normalized.Page,
+            PageSize = normalized.PageSize,
+            TotalCount = totalCount,
+        };
+        dashboard.Summary = MapKitchenSummary(summary);
+
+        return dashboard;
     }
 
     public async Task<CookingCardDto> GetCookingCardAsync(int planItemId)
@@ -768,6 +822,216 @@ public sealed class ProductionService : IProductionService
         => requirement.StockItemId.HasValue
             ? $"S:{requirement.StockItemId.Value}"
             : $"C:{requirement.WarehouseCategoryId!.Value}";
+
+    private static KitchenDashboardFilterDto NormalizeKitchenDashboardFilter(KitchenDashboardFilterDto filter)
+    {
+        var normalized = new KitchenDashboardFilterDto
+        {
+            Date = filter.Date == default ? DateOnly.FromDateTime(DateTime.Today) : filter.Date,
+            Search = NormalizeSearch(filter.Search),
+            Status = ParseProductionStatus(filter.Status)?.ToString(),
+            ProductionGroup = filter.ProductionGroup,
+            Fefo = NormalizeStateFilter(filter.Fefo),
+            Packaging = NormalizeStateFilter(filter.Packaging),
+            Snapshot = NormalizeSnapshotFilter(filter.Snapshot),
+            SortBy = NormalizeSortBy(filter.SortBy),
+            SortDirection = string.Equals(filter.SortDirection, "desc", StringComparison.OrdinalIgnoreCase)
+                ? "desc"
+                : "asc",
+            Page = Math.Max(filter.Page, 1),
+            PageSize = Math.Clamp(filter.PageSize <= 0 ? 25 : filter.PageSize, 10, 100),
+        };
+
+        return normalized;
+    }
+
+    private static string? NormalizeSearch(string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return null;
+        }
+
+        var trimmed = search.Trim();
+        return trimmed.Length > 120 ? trimmed[..120] : trimmed;
+    }
+
+    private static string? NormalizeSortBy(string? sortBy)
+    {
+        return sortBy?.Trim().ToLowerInvariant() switch
+        {
+            "meal" or "mealname" => "meal",
+            "planned" or "plannedquantity" => "planned",
+            "cooked" or "cookedquantity" => "cooked",
+            "status" => "status",
+            "group" or "productiongroup" => "group",
+            "ready" or "estimatedreadytime" => "ready",
+            _ => "id",
+        };
+    }
+
+    private static ProductionItemStatus? ParseProductionStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status) || status.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return Enum.TryParse<ProductionItemStatus>(status.Trim(), ignoreCase: true, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    private static string? NormalizeStateFilter(string? value)
+    {
+        return ParseStateFilter(value) switch
+        {
+            true => "done",
+            false => "pending",
+            _ => null,
+        };
+    }
+
+    private static bool? ParseStateFilter(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized is "done" or "deducted" or "yes" or "true")
+        {
+            return true;
+        }
+
+        if (normalized is "pending" or "missing" or "no" or "false")
+        {
+            return false;
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeSnapshotFilter(string? value)
+    {
+        return ParseSnapshotFilter(value) switch
+        {
+            true => "present",
+            false => "missing",
+            _ => null,
+        };
+    }
+
+    private static bool? ParseSnapshotFilter(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized is "present" or "has" or "yes" or "true")
+        {
+            return true;
+        }
+
+        if (normalized is "missing" or "none" or "no" or "false")
+        {
+            return false;
+        }
+
+        return null;
+    }
+
+    private static KitchenDashboardSummaryDto MapKitchenSummary(ProductionPlanItemSummary summary)
+        => new()
+        {
+            TotalItems = summary.TotalItems,
+            TotalPlannedQuantity = summary.TotalPlannedQuantity,
+            TotalCookedQuantity = summary.TotalCookedQuantity,
+            PlannedItems = summary.PlannedItems,
+            CookingItems = summary.CookingItems,
+            CookedItems = summary.CookedItems,
+            FailedItems = summary.FailedItems,
+            PendingFefoItems = summary.PendingFefoItems,
+            FefoDeductedItems = summary.FefoDeductedItems,
+            PendingPackagingItems = summary.PendingPackagingItems,
+            PackagingDeductedItems = summary.PackagingDeductedItems,
+            SnapshotItems = summary.SnapshotItems,
+        };
+
+    private static KitchenDashboardItemDto MapKitchenDashboardItem(ProductionPlanItem item)
+    {
+        var snapshot = TryReadSnapshotForDashboard(item, out var snapshotWarning);
+        var packagingCount = snapshot is null
+            ? 0
+            : snapshot.PackagingRequirements.Count
+                + snapshot.Components.Sum(component => component.PackagingRequirements.Count);
+        var validationWarningCount = snapshot is null
+            ? 0
+            : snapshot.ValidationWarnings.Count
+                + snapshot.Components.Sum(component => component.ValidationWarnings.Count);
+
+        return new KitchenDashboardItemDto
+        {
+            Id = item.Id,
+            ProductionPlanId = item.ProductionPlanId,
+            MealId = item.MealId,
+            MealName = snapshot?.MealName ?? item.MealName,
+            DietVariantId = item.DietVariantId,
+            DietMenuPlanItemId = item.DietMenuPlanItemId,
+            MealVariantId = snapshot?.MealVariantId,
+            MealVariantName = snapshot?.MealVariantName,
+            CategoryName = snapshot?.CategoryName,
+            MealSlot = snapshot?.MealSlot,
+            PlannedQuantity = item.PlannedQuantity,
+            CookedQuantity = item.CookedQuantity,
+            Status = item.Status.ToString(),
+            ProductionGroup = item.ProductionGroup,
+            EstimatedReadyTime = item.EstimatedReadyTime?.ToString("HH:mm"),
+            ActualReadyTime = item.ActualReadyTime?.ToString("HH:mm"),
+            FefoDeductedAt = item.FefoDeductedAt,
+            PackagingDeductedAt = item.PackagingDeductedAt,
+            M2SnapshotHash = item.M2SnapshotHash,
+            HasM2Snapshot = !string.IsNullOrWhiteSpace(item.M2SnapshotJson),
+            ComponentCount = snapshot?.Components.Count ?? CountComponentIds(item.RecipeComponentVersionIds),
+            PackagingRequirementCount = packagingCount,
+            ValidationWarningCount = validationWarningCount,
+            HasMissingWarehouseMappings = snapshot?.Components
+                .SelectMany(component => component.Ingredients)
+                .Any(ingredient => !ingredient.StockItemId.HasValue && !ingredient.WarehouseCategoryId.HasValue) == true,
+            SnapshotWarning = snapshotWarning,
+        };
+    }
+
+    private static PublishedDietPlanItemDto? TryReadSnapshotForDashboard(
+        ProductionPlanItem item,
+        out string? warning)
+    {
+        warning = null;
+        if (string.IsNullOrWhiteSpace(item.M2SnapshotJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<PublishedDietPlanItemDto>(item.M2SnapshotJson);
+        }
+        catch (JsonException)
+        {
+            warning = "Snapshot M2 jest uszkodzony.";
+            return null;
+        }
+    }
+
+    private static int CountComponentIds(string? recipeComponentVersionIds)
+        => string.IsNullOrWhiteSpace(recipeComponentVersionIds)
+            ? 0
+            : recipeComponentVersionIds
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Length;
 
     private sealed record SnapshotIngredientRequirement(
         int RecipeComponentVersionId,

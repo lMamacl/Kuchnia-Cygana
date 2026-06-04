@@ -229,4 +229,188 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
             new { mealId });
         return cal.HasValue ? (int)Math.Round(cal.Value) : null;
     }
+
+    public async Task<(IReadOnlyList<PackingItemSearchRow> Items, int TotalCount)> SearchPackingItemsAsync(
+        PackingItemQuery query)
+    {
+        using var db = Factory.CreateConnection();
+        var parameters = new DynamicParameters();
+        var where = BuildPackingItemsWhereClause(query, parameters);
+        var orderBy = ResolvePackingItemsOrderBy(query.SortBy, query.SortDescending);
+        var page = Math.Max(query.Page, 1);
+        var pageSize = Math.Clamp(query.PageSize, 1, 200);
+
+        parameters.Add("Offset", (page - 1) * pageSize);
+        parameters.Add("PageSize", pageSize);
+
+        var sql = $"""
+        WITH LabelCounts AS (
+            SELECT
+                PackingItemId,
+                COUNT(1) AS ProductLabelPrintCount,
+                MAX(PrintedAt) AS LatestProductLabelPrintedAt
+            FROM BoxLabels
+            GROUP BY PackingItemId
+        )
+        SELECT COUNT(1)
+        FROM PackingItems pi
+        INNER JOIN PackingSessions ps ON ps.Id = pi.PackingSessionId
+        LEFT JOIN DeliveryRouteStops drs ON ps.DeliveryCalendarId = drs.DeliveryCalendarId AND drs.IsDeleted = 0
+        LEFT JOIN LabelCounts labels ON labels.PackingItemId = pi.Id
+        WHERE {where};
+
+        WITH LabelCounts AS (
+            SELECT
+                PackingItemId,
+                COUNT(1) AS ProductLabelPrintCount,
+                MAX(PrintedAt) AS LatestProductLabelPrintedAt
+            FROM BoxLabels
+            GROUP BY PackingItemId
+        )
+        SELECT
+            pi.Id,
+            pi.PackingSessionId,
+            pi.PackingBagId,
+            pi.ProductionPlanItemId,
+            pi.MealId,
+            pi.MealName,
+            pi.DietVariantId,
+            pi.BoxCode,
+            pi.Status,
+            pi.FoilPrintedAt,
+            pi.PackedAt,
+            pi.IsDamaged,
+            pi.Remarks,
+            ps.OrderId,
+            ps.DeliveryCalendarId,
+            ps.ClientName,
+            ps.ClientPublicId,
+            drs.RouteId,
+            drs.SequenceNumber AS StopNumber,
+            COALESCE(labels.ProductLabelPrintCount, 0) AS ProductLabelPrintCount,
+            labels.LatestProductLabelPrintedAt
+        FROM PackingItems pi
+        INNER JOIN PackingSessions ps ON ps.Id = pi.PackingSessionId
+        LEFT JOIN DeliveryRouteStops drs ON ps.DeliveryCalendarId = drs.DeliveryCalendarId AND drs.IsDeleted = 0
+        LEFT JOIN LabelCounts labels ON labels.PackingItemId = pi.Id
+        WHERE {where}
+        ORDER BY {orderBy}
+        OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+        """;
+
+        using var multi = await db.QueryMultipleAsync(sql, parameters);
+        var totalCount = await multi.ReadSingleAsync<int>();
+        var items = (await multi.ReadAsync<PackingItemSearchRow>()).ToList();
+        return (items, totalCount);
+    }
+
+    public async Task<FoilLabelSummary> GetFoilLabelSummaryAsync(DateOnly date)
+    {
+        using var db = Factory.CreateConnection();
+        return await db.QuerySingleAsync<FoilLabelSummary>(
+            """
+            WITH LabelCounts AS (
+                SELECT
+                    PackingItemId,
+                    COUNT(1) AS ProductLabelPrintCount
+                FROM BoxLabels
+                GROUP BY PackingItemId
+            )
+            SELECT
+                COUNT(1) AS TotalBoxes,
+                COALESCE(SUM(CASE WHEN pi.Status = 0 THEN 1 ELSE 0 END), 0) AS PendingCount,
+                COALESCE(SUM(CASE WHEN pi.Status IN (1, 2) OR pi.FoilPrintedAt IS NOT NULL OR COALESCE(labels.ProductLabelPrintCount, 0) > 0 THEN 1 ELSE 0 END), 0) AS PrintedCount,
+                COALESCE(SUM(CASE WHEN COALESCE(labels.ProductLabelPrintCount, 0) > 1 THEN 1 ELSE 0 END), 0) AS ReprintCount,
+                COALESCE(SUM(CASE WHEN pi.Status IN (3, 4) OR pi.IsDamaged = 1 THEN 1 ELSE 0 END), 0) AS BlockedCount,
+                COALESCE(SUM(CASE WHEN pi.Status = 2 THEN 1 ELSE 0 END), 0) AS PackedCount
+            FROM PackingItems pi
+            INNER JOIN PackingSessions ps ON ps.Id = pi.PackingSessionId
+            LEFT JOIN LabelCounts labels ON labels.PackingItemId = pi.Id
+            WHERE ps.PackingDate = @date
+              AND ps.IsDeleted = 0
+              AND pi.IsDeleted = 0;
+            """,
+            new { date = date.ToDateTime(TimeOnly.MinValue) });
+    }
+
+    private static string BuildPackingItemsWhereClause(PackingItemQuery query, DynamicParameters parameters)
+    {
+        var clauses = new List<string>
+        {
+            "ps.PackingDate = @PackingDate",
+            "ps.IsDeleted = 0",
+            "pi.IsDeleted = 0",
+        };
+        parameters.Add("PackingDate", query.PackingDate.ToDateTime(TimeOnly.MinValue));
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            clauses.Add(
+                "(pi.MealName LIKE @SearchLike OR pi.BoxCode LIKE @SearchLike OR ps.ClientName LIKE @SearchLike OR ps.ClientPublicId LIKE @SearchLike OR CONVERT(varchar(20), pi.Id) = @SearchExact OR CONVERT(varchar(20), ps.OrderId) = @SearchExact)");
+            parameters.Add("SearchLike", $"%{search}%");
+            parameters.Add("SearchExact", search);
+        }
+
+        if (query.Status.HasValue)
+        {
+            clauses.Add("pi.Status = @Status");
+            parameters.Add("Status", (int)query.Status.Value);
+        }
+
+        switch (NormalizeLabelState(query.LabelState))
+        {
+            case "missing":
+                clauses.Add("pi.Status = 0 AND pi.FoilPrintedAt IS NULL AND COALESCE(labels.ProductLabelPrintCount, 0) = 0");
+                break;
+            case "printed":
+                clauses.Add("(pi.FoilPrintedAt IS NOT NULL OR COALESCE(labels.ProductLabelPrintCount, 0) > 0)");
+                break;
+            case "reprint":
+                clauses.Add("COALESCE(labels.ProductLabelPrintCount, 0) > 1");
+                break;
+            case "blocked":
+                clauses.Add("(pi.Status IN (3, 4) OR pi.IsDamaged = 1)");
+                break;
+        }
+
+        return string.Join(" AND ", clauses);
+    }
+
+    private static string? NormalizeLabelState(string? labelState)
+    {
+        if (string.IsNullOrWhiteSpace(labelState) || labelState.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return labelState.Trim().ToLowerInvariant() switch
+        {
+            "missing" or "pending" => "missing",
+            "printed" or "done" => "printed",
+            "reprint" or "reprinted" => "reprint",
+            "blocked" or "problem" => "blocked",
+            _ => null,
+        };
+    }
+
+    private static string ResolvePackingItemsOrderBy(string? sortBy, bool descending)
+    {
+        var column = sortBy?.Trim().ToLowerInvariant() switch
+        {
+            "meal" or "mealname" => "pi.MealName",
+            "box" or "boxcode" => "pi.BoxCode",
+            "status" => "pi.Status",
+            "client" => "ps.ClientName",
+            "order" => "ps.OrderId",
+            "printed" => "pi.FoilPrintedAt",
+            "route" => "COALESCE(drs.RouteId, 2147483647), COALESCE(drs.SequenceNumber, 2147483647)",
+            _ => "pi.Id",
+        };
+
+        var direction = descending ? "DESC" : "ASC";
+        return column == "pi.Id"
+            ? $"{column} {direction}"
+            : $"{column} {direction}, pi.Id ASC";
+    }
 }

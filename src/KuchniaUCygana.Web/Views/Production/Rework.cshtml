@@ -65,6 +65,10 @@
                                 </td>
                                 <td>
                                     <div class="fw-bold">@incident.MealName</div>
+                                    @if (incident.ReplacementPackingItemStatus.HasValue)
+                                    {
+                                        <div class="text-secondary small">Status zamiennika: @incident.ReplacementPackingItemStatus</div>
+                                    }
                                     <div class="text-secondary small">Zamiennik pudełka: #@(incident.ReplacementPackingItemId?.ToString() ?? "-")</div>
                                     <div class="text-secondary small">Oryginał: @(incident.BoxCode ?? "-")</div>
                                 </td>
@@ -104,9 +108,21 @@
                                                 <button type="submit" class="btn btn-sm btn-outline-success">Oznacz jako przygotowane</button>
                                             </form>
                                         }
-                                        @if (incident.ReplacementPackingItemId.HasValue)
+                                        @if (incident.ReplacementPackingItemId.HasValue && incident.KitchenPreparedAt.HasValue && incident.ReplacementPackingItemStatus == PackingItemStatus.Pending)
                                         {
-                                            <a asp-action="FoilLabel" asp-route-packingItemId="@incident.ReplacementPackingItemId.Value" class="btn btn-sm btn-indigo">Drukuj etykietę</a>
+                                            <form asp-action="PrintFoilLabel" asp-route-packingItemId="@incident.ReplacementPackingItemId.Value" method="post" target="_blank">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="returnDate" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
+                                                <button type="submit" class="btn btn-sm btn-indigo">Drukuj etykietę</button>
+                                            </form>
+                                        }
+                                        else if (incident.ReplacementPackingItemId.HasValue && incident.ReplacementPackingItemStatus is PackingItemStatus.FoilPrinted or PackingItemStatus.Packed)
+                                        {
+                                            <a asp-action="FoilLabel" asp-route-packingItemId="@incident.ReplacementPackingItemId.Value" target="_blank" class="btn btn-sm btn-outline-secondary">Podgląd etykiety</a>
+                                        }
+                                        else if (incident.ReplacementPackingItemId.HasValue)
+                                        {
+                                            <span class="badge bg-secondary-lt text-secondary">Etykieta po przygotowaniu</span>
                                         }
                                     </div>
                                 </td>

@@ -26,6 +26,10 @@ public sealed class PackingIncidentDto
 
     public int? ReplacementPackingBagId { get; set; }
 
+    public PackingItemStatus? ReplacementPackingItemStatus { get; set; }
+
+    public DateTimeOffset? ReplacementFoilPrintedAt { get; set; }
+
     public string? ClientPublicId { get; set; }
 
     public int? DeliveryCalendarId { get; set; }

@@ -808,6 +808,71 @@ public sealed class PackingService : IPackingService
         return session is null ? null : MapSession(session);
     }
 
+    public async Task<FoilLabelPreparationResultDto> EnsureFoilBoxesForDateAsync(DateOnly date)
+    {
+        var result = new FoilLabelPreparationResultDto();
+        var sessions = (await sessionRepository.GetByDateWithItemsAsync(date))
+            .Where(session => session.OrderId.HasValue)
+            .ToList();
+
+        foreach (var session in sessions.Where(session => session.Items.Count == 0))
+        {
+            try
+            {
+                result.CreatedBoxes += (await PrepareOrderBoxesAsync(session.Id)).Count();
+            }
+            catch (InvalidOperationException ex)
+            {
+                result.SkippedSessions++;
+                result.Errors.Add($"Torba #{session.Id}, zamowienie #{session.OrderId}: {ex.Message}");
+                logger.LogWarning(
+                    ex,
+                    "Nie mozna przygotowac pudelek do foliowania dla torby {SessionId} zamowienia {OrderId}.",
+                    session.Id,
+                    session.OrderId);
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<FoilLabelDashboardDto> GetFoilLabelDashboardAsync(FoilLabelFilterDto filter)
+    {
+        var normalized = NormalizeFoilLabelFilter(filter);
+        var query = new PackingItemQuery
+        {
+            PackingDate = normalized.Date,
+            Search = normalized.Search,
+            Status = ParsePackingItemStatus(normalized.Status),
+            LabelState = normalized.LabelState,
+            Page = normalized.Page,
+            PageSize = normalized.PageSize,
+            SortBy = normalized.SortBy,
+            SortDescending = string.Equals(normalized.SortDirection, "desc", StringComparison.OrdinalIgnoreCase),
+        };
+
+        var (rows, totalCount) = await sessionRepository.SearchPackingItemsAsync(query);
+        var summary = await sessionRepository.GetFoilLabelSummaryAsync(normalized.Date);
+
+        return new FoilLabelDashboardDto
+        {
+            Filter = normalized,
+            Items = new KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<FoilLabelItemDto>
+            {
+                Items = rows.Select(MapFoilLabelItem).ToList(),
+                Page = normalized.Page,
+                PageSize = normalized.PageSize,
+                TotalCount = totalCount,
+            },
+            TotalBoxes = summary.TotalBoxes,
+            PendingCount = summary.PendingCount,
+            PrintedCount = summary.PrintedCount,
+            ReprintCount = summary.ReprintCount,
+            BlockedCount = summary.BlockedCount,
+            PackedCount = summary.PackedCount,
+        };
+    }
+
     public async Task<PackingLabelDto> PrintFoilLabelAsync(
         int packingItemId,
         string operatorName,
@@ -1094,6 +1159,117 @@ public sealed class PackingService : IPackingService
 
         return session.OrderId.HasValue ? $"ORD-{session.OrderId.Value}" : $"SESSION-{session.Id}";
     }
+
+    private static string GetClientPublicIdDisplay(PackingItemSearchRow row)
+    {
+        if (!string.IsNullOrWhiteSpace(row.ClientPublicId))
+        {
+            return row.ClientPublicId;
+        }
+
+        if (row.DeliveryCalendarId.HasValue)
+        {
+            return $"DC-{row.DeliveryCalendarId.Value}";
+        }
+
+        return row.OrderId.HasValue ? $"ORD-{row.OrderId.Value}" : $"SESSION-{row.PackingSessionId}";
+    }
+
+    private static FoilLabelFilterDto NormalizeFoilLabelFilter(FoilLabelFilterDto filter)
+        => new()
+        {
+            Date = filter.Date == default ? DateOnly.FromDateTime(DateTime.Today) : filter.Date,
+            Search = NormalizeFoilSearch(filter.Search),
+            Status = ParsePackingItemStatus(filter.Status)?.ToString(),
+            LabelState = NormalizeLabelState(filter.LabelState),
+            SortBy = NormalizeFoilSortBy(filter.SortBy),
+            SortDirection = string.Equals(filter.SortDirection, "desc", StringComparison.OrdinalIgnoreCase)
+                ? "desc"
+                : "asc",
+            Page = Math.Max(filter.Page, 1),
+            PageSize = Math.Clamp(filter.PageSize <= 0 ? 25 : filter.PageSize, 10, 100),
+        };
+
+    private static string? NormalizeFoilSearch(string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return null;
+        }
+
+        var trimmed = search.Trim();
+        return trimmed.Length > 120 ? trimmed[..120] : trimmed;
+    }
+
+    private static PackingItemStatus? ParsePackingItemStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status) || status.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return Enum.TryParse<PackingItemStatus>(status.Trim(), ignoreCase: true, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    private static string? NormalizeLabelState(string? labelState)
+    {
+        if (string.IsNullOrWhiteSpace(labelState) || labelState.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return labelState.Trim().ToLowerInvariant() switch
+        {
+            "missing" or "pending" => "missing",
+            "printed" or "done" => "printed",
+            "reprint" or "reprinted" => "reprint",
+            "blocked" or "problem" => "blocked",
+            _ => null,
+        };
+    }
+
+    private static string NormalizeFoilSortBy(string? sortBy)
+    {
+        return sortBy?.Trim().ToLowerInvariant() switch
+        {
+            "meal" or "mealname" => "meal",
+            "box" or "boxcode" => "box",
+            "status" => "status",
+            "client" => "client",
+            "order" => "order",
+            "printed" => "printed",
+            "route" => "route",
+            _ => "id",
+        };
+    }
+
+    private static FoilLabelItemDto MapFoilLabelItem(PackingItemSearchRow row)
+        => new()
+        {
+            Id = row.Id,
+            PackingSessionId = row.PackingSessionId,
+            PackingBagId = row.PackingBagId,
+            ProductionPlanItemId = row.ProductionPlanItemId,
+            MealId = row.MealId,
+            MealName = row.MealName,
+            DietVariantId = row.DietVariantId,
+            BoxCode = string.IsNullOrWhiteSpace(row.BoxCode) ? $"BOX-{row.Id:D6}" : row.BoxCode,
+            Status = row.Status.ToString(),
+            FoilPrintedAt = row.FoilPrintedAt,
+            PackedAt = row.PackedAt,
+            IsDamaged = row.IsDamaged,
+            Remarks = row.Remarks,
+            OrderId = row.OrderId,
+            DeliveryCalendarId = row.DeliveryCalendarId,
+            ClientName = row.ClientName,
+            ClientPublicIdDisplay = GetClientPublicIdDisplay(row),
+            RouteId = row.RouteId,
+            StopNumber = row.StopNumber,
+            ProductLabelPrintCount = row.ProductLabelPrintCount,
+            LatestProductLabelPrintedAt = row.LatestProductLabelPrintedAt,
+        };
 
     private static string? GetSessionBlockReason(PackingSession session, IReadOnlyCollection<PackingItem> activeItems)
     {

@@ -162,7 +162,24 @@ public sealed class PackingIncidentService : IPackingIncidentService
     public async Task<IReadOnlyList<PackingIncidentDto>> GetKitchenReworkAsync(DateOnly? date)
     {
         var incidents = await incidentRepository.GetKitchenReworkAsync(date);
-        return incidents.Select(Map).ToList();
+        var result = new List<PackingIncidentDto>();
+        foreach (var incident in incidents)
+        {
+            var dto = Map(incident);
+            if (incident.ReplacementPackingItemId.HasValue)
+            {
+                var replacement = await itemRepository.GetByIdAsync(incident.ReplacementPackingItemId.Value);
+                if (replacement is not null)
+                {
+                    dto.ReplacementPackingItemStatus = replacement.Status;
+                    dto.ReplacementFoilPrintedAt = replacement.FoilPrintedAt;
+                }
+            }
+
+            result.Add(dto);
+        }
+
+        return result;
     }
 
     public async Task AssignToCurrentUserAsync(int incidentId)
@@ -227,6 +244,7 @@ public sealed class PackingIncidentService : IPackingIncidentService
         }
 
         incident.KitchenPreparedAt = DateTimeOffset.UtcNow;
+        incident.KitchenStartedAt ??= incident.KitchenPreparedAt;
         if (incident.Status == PackingIncidentStatus.KitchenReworkRequested)
         {
             incident.Status = PackingIncidentStatus.InProgress;

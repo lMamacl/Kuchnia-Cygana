@@ -1,101 +1,160 @@
 @model KuchniaUCygana.Web.Models.ProductionDashboardViewModel
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Pulpit Produkcji Kuchennej";
+    ViewData["Title"] = "Pulpit kuchni";
     ViewData["Section"] = "Kuchnia";
-    ViewData["Description"] = "Zarządzanie dziennym planem gotowania, wskaźniki wydajności oraz interaktywne karty produkcyjne kucharzy.";
+    ViewData["Description"] = "Operacyjny plan gotowania z wyszukiwaniem, filtrami i paginacja.";
 
-    var hasPlan = Model.DailyPlan != null;
-    var totalPlanned = hasPlan ? Model.DailyPlan!.Items.Sum(i => i.PlannedQuantity) : 0;
-    var totalCooked = hasPlan ? Model.DailyPlan!.Items.Sum(i => i.CookedQuantity) : 0;
-    var percentComplete = totalPlanned > 0 ? (totalCooked * 100 / totalPlanned) : 0;
+    var dashboard = Model.Dashboard;
+    var filter = dashboard.Filter;
+    var itemsPage = dashboard.Items;
+    var summary = dashboard.Summary;
+    var hasPlan = dashboard.Plan != null;
 }
 
 @functions {
-    string GetMealImage(string mealName)
-    {
-        if (mealName.Contains("Kurczak", StringComparison.OrdinalIgnoreCase)) return "/img/chicken_teriyaki.png";
-        if (mealName.Contains("dyni", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Zupa", StringComparison.OrdinalIgnoreCase)) return "/img/pumpkin_soup.png";
-        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Deser", StringComparison.OrdinalIgnoreCase)) return "/img/blueberry_cheesecake.png";
-        if (mealName.Contains("Łosoś", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Ryba", StringComparison.OrdinalIgnoreCase)) return "/img/baked_salmon.png";
-        return "/img/chicken_teriyaki.png"; // fallback
-    }
-
-    string GetMealCategory(string mealName)
-    {
-        if (mealName.Contains("zup", StringComparison.OrdinalIgnoreCase)) return "Zupa";
-        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase) || mealName.Contains("deser", StringComparison.OrdinalIgnoreCase) || mealName.Contains("ciast", StringComparison.OrdinalIgnoreCase)) return "Deser";
-        if (mealName.Contains("śniadan", StringComparison.OrdinalIgnoreCase) || mealName.Contains("owsian", StringComparison.OrdinalIgnoreCase)) return "Śniadanie";
-        return "Danie Główne";
-    }
-
-    string GetStatusColor(string status)
+    string StatusColor(string status)
     {
         return status switch
         {
             "Cooked" => "success",
             "Cooking" => "warning",
-            "Pending" => "secondary",
+            "Failed" => "danger",
+            "Planned" => "secondary",
             _ => "secondary"
         };
     }
 
-    string TranslateStatus(string status)
+    string StatusText(string status)
     {
         return status switch
         {
-            "Cooked" => "Zakończone",
-            "Cooking" => "W toku",
-            "Pending" => "Oczekuje",
+            "Cooked" => "Ugotowane",
+            "Cooking" => "W gotowaniu",
+            "Failed" => "Problem",
+            "Planned" => "Zaplanowane",
             _ => status
         };
     }
 
-    string TranslatePlanStatus(string status)
+    string PlanStatusText(string status)
     {
         return status switch
         {
             "New" => "Nowy",
             "InProgress" => "W toku",
-            "Completed" => "Zakończony",
+            "Completed" => "Zakonczony",
             _ => status
         };
     }
 
-    string GetPlanStatusColor(string status)
+    string PlanStatusColor(string status)
     {
         return status switch
         {
-            "New" => "secondary",
             "InProgress" => "warning",
             "Completed" => "success",
             _ => "secondary"
         };
     }
+
+    string FlagText(bool value, string yes, string no) => value ? yes : no;
+
+    IDictionary<string, string> RouteValues(
+        int page,
+        string? status = null,
+        bool replaceStatus = false,
+        string? fefo = null,
+        bool replaceFefo = false,
+        string? packaging = null,
+        bool replacePackaging = false,
+        string? snapshot = null,
+        bool replaceSnapshot = false,
+        string? sortBy = null,
+        bool replaceSort = false)
+    {
+        var filter = Model.Dashboard.Filter;
+        var values = new Dictionary<string, string>
+        {
+            ["date"] = filter.Date.ToString("yyyy-MM-dd"),
+            ["page"] = page.ToString(),
+            ["pageSize"] = filter.PageSize.ToString(),
+        };
+
+        Add(values, "search", filter.Search);
+        Add(values, "productionGroup", filter.ProductionGroup?.ToString());
+        Add(values, "status", replaceStatus ? status : filter.Status);
+        Add(values, "fefo", replaceFefo ? fefo : filter.Fefo);
+        Add(values, "packaging", replacePackaging ? packaging : filter.Packaging);
+        Add(values, "snapshot", replaceSnapshot ? snapshot : filter.Snapshot);
+        Add(values, "sortBy", replaceSort ? sortBy : filter.SortBy);
+        Add(values, "sortDirection", filter.SortDirection);
+
+        return values;
+    }
+
+    void Add(IDictionary<string, string> values, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            values[key] = value;
+        }
+    }
 }
 
-<!-- Pasek nawigacji datą -->
 <div class="card card-premium mb-4">
     <div class="card-body py-3">
-        <form method="get" class="row align-items-center g-3">
-            <div class="col-auto">
-                <label class="form-label mb-0 fw-bold">Dzień produkcji:</label>
+        <form method="get" class="row align-items-end g-3">
+            <input type="hidden" name="page" value="1" />
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Dzien produkcji</label>
+                <input type="date" name="date" class="form-control" value="@filter.Date.ToString("yyyy-MM-dd")" />
             </div>
-            <div class="col-auto">
-                <input type="date" name="date" class="form-control" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" onchange="this.form.submit()" />
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label fw-bold">Szukaj</label>
+                <input type="search" name="search" class="form-control" value="@filter.Search" placeholder="Danie, ID, hash snapshotu" />
             </div>
-            <div class="col-auto ms-auto">
-                <div class="btn-list">
-                    <a asp-action="Index" asp-route-date="@Model.SelectedDate.AddDays(-1)" class="btn btn-outline-secondary">
-                        &laquo; Poprzedni dzień
-                    </a>
-                    <a asp-action="Index" asp-route-date="@DateOnly.FromDateTime(DateTime.Today)" class="btn btn-outline-secondary">
-                        Dzisiaj
-                    </a>
-                    <a asp-action="Index" asp-route-date="@Model.SelectedDate.AddDays(1)" class="btn btn-outline-secondary">
-                        Następny dzień &raquo;
-                    </a>
-                </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="Planned" selected="@(filter.Status == "Planned")">Zaplanowane</option>
+                    <option value="Cooking" selected="@(filter.Status == "Cooking")">W gotowaniu</option>
+                    <option value="Cooked" selected="@(filter.Status == "Cooked")">Ugotowane</option>
+                    <option value="Failed" selected="@(filter.Status == "Failed")">Problem</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">FEFO</label>
+                <select name="fefo" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="pending" selected="@(filter.Fefo == "pending")">Do zdjecia</option>
+                    <option value="done" selected="@(filter.Fefo == "done")">Wykonane</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Opakowania</label>
+                <select name="packaging" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="pending" selected="@(filter.Packaging == "pending")">Do zdjecia</option>
+                    <option value="done" selected="@(filter.Packaging == "done")">Wykonane</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-1">
+                <label class="form-label fw-bold">Strona</label>
+                <select name="pageSize" class="form-select">
+                    <option value="10" selected="@(filter.PageSize == 10)">10</option>
+                    <option value="25" selected="@(filter.PageSize == 25)">25</option>
+                    <option value="50" selected="@(filter.PageSize == 50)">50</option>
+                    <option value="100" selected="@(filter.PageSize == 100)">100</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary">Filtruj</button>
+                <a asp-action="Index" asp-route-date="@filter.Date.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wyczysc</a>
+                <a asp-action="Index" asp-route-date="@filter.Date.AddDays(-1).ToString("yyyy-MM-dd")" class="btn btn-outline-secondary ms-auto">Poprzedni dzien</a>
+                <a asp-action="Index" asp-route-date="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Dzisiaj</a>
+                <a asp-action="Index" asp-route-date="@filter.Date.AddDays(1).ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Nastepny dzien</a>
             </div>
         </form>
     </div>
@@ -106,24 +165,13 @@
     <div class="row justify-content-center my-5">
         <div class="col-md-8 text-center">
             <div class="empty py-5">
-                <div class="empty-icon mb-4 text-secondary">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-calendar-off" width="64" height="64" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                        <path d="M9 5h9a2 2 0 0 1 2 2v9m-.18 3.84a2 2 0 0 1 -1.82 1.16h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 1.158 -1.815" />
-                        <path d="M16 3v4" />
-                        <path d="M8 3v1" />
-                        <path d="M4 11h7m4 0h5" />
-                        <path d="M3 3l18 18" />
-                    </svg>
-                </div>
                 <p class="empty-title h2 text-dark">Brak planu produkcji</p>
                 <p class="empty-subtitle text-secondary">
-                    Nie wygenerowano jeszcze planu produkcji na dzień <strong>@Model.SelectedDate.ToString("dd.MM.yyyy")</strong>.
+                    Nie wygenerowano jeszcze planu produkcji na <strong>@filter.Date.ToString("dd.MM.yyyy")</strong>.
                 </p>
                 <div class="empty-action mt-4">
-                    <a asp-action="Generate" asp-route-date="@Model.SelectedDate" class="btn btn-primary btn-lg">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
-                        Generuj Plan dla tej daty
+                    <a asp-action="Generate" asp-route-date="@filter.Date.ToString("yyyy-MM-dd")" class="btn btn-primary btn-lg">
+                        Generuj plan dla tej daty
                     </a>
                 </div>
             </div>
@@ -132,156 +180,203 @@
 }
 else
 {
-    <div class="row row-cards">
-        <!-- Statystyki produkcji -->
-        <div class="col-sm-6 col-lg-3">
-            <div class="card card-premium card-premium-hoverable">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="subheader">Status Planu</div>
-                        <div class="ms-auto lh-1">
-                            <span class="status-dot-pulse bg-@GetPlanStatusColor(Model.DailyPlan!.Status)"></span>
-                        </div>
-                    </div>
-                    <div class="h1 mb-2 mt-1">@TranslatePlanStatus(Model.DailyPlan!.Status)</div>
-                    <div class="text-secondary small">ID Planu: #@Model.DailyPlan!.Id</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card card-premium card-premium-hoverable">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="subheader">Zaplanowane Dania</div>
-                        <div class="ms-auto">
-                            <span class="text-blue">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 21l8 4.5l-8 4.5l-8 -4.5z" /><path d="M12 12v9" /><path d="M20 7.5v9" /><path d="M4 7.5v9" /></svg>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="h1 mb-2 mt-1">@Model.DailyPlan!.Items.Count</div>
-                    <div class="text-secondary small">Na dzień: @Model.SelectedDate.ToString("dd.MM.yyyy")</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card card-premium card-premium-hoverable">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="subheader">Ugotowane Porcje</div>
-                        <div class="ms-auto">
-                            <span class="text-indigo">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z" /><path d="M13 13h4" /><path d="M13 9h4" /><path d="M9 9h.01" /><path d="M9 13h.01" /><path d="M3 5h2v14h-2z" /></svg>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="h1 mb-2 mt-1">@totalCooked / @totalPlanned</div>
-                    <div class="text-secondary small">Postęp całkowity: @percentComplete%</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card card-premium card-premium-hoverable">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="subheader">Notatki</div>
-                        <div class="ms-auto">
-                            <span class="text-green">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 9h8" /><path d="M8 13h6" /><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z" /></svg>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="h3 mb-2 mt-1 text-truncate" title="@(Model.DailyPlan!.Notes ?? "Brak uwag")">
-                        @(Model.DailyPlan!.Notes ?? "Brak uwag")
-                    </div>
-                    <div class="text-secondary small">Instrukcje dla personelu</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Pasek postępu globalnego -->
-        <div class="col-12">
+    <div class="row row-cards mb-3">
+        <div class="col-sm-6 col-xl-3">
             <div class="card card-premium">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h4 class="card-title mb-0">Postęp produkcji planu #@Model.DailyPlan!.Id</h4>
-                        <span class="badge bg-green-lt text-green fw-bold">@percentComplete% Ukończono</span>
-                    </div>
-                    <div class="progress progress-xl">
-                        <div class="progress-bar bg-green" style="width: @percentComplete%" role="progressbar" aria-valuenow="@percentComplete" aria-valuemin="0" aria-valuemax="100" aria-label="@percentComplete% Complete"></div>
-                    </div>
+                    <div class="subheader">Status planu</div>
+                    <div class="h2 mt-1 mb-1 text-@PlanStatusColor(dashboard.Plan!.Status)">@PlanStatusText(dashboard.Plan!.Status)</div>
+                    <div class="text-secondary small">Plan #@dashboard.Plan!.Id, @filter.Date.ToString("dd.MM.yyyy")</div>
                 </div>
             </div>
         </div>
-
-        <!-- Tabela Produkcyjna -->
-        <div class="col-12">
+        <div class="col-sm-6 col-xl-3">
             <div class="card card-premium">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h3 class="card-title">Dania do przygotowania</h3>
-                    <div class="btn-list">
-                        <a asp-action="Plan" asp-route-planId="@Model.DailyPlan!.Id" class="btn btn-outline-primary">
-                            Szczegóły i FEFO
-                        </a>
-                        <a asp-action="Generate" asp-route-date="@Model.SelectedDate" class="btn btn-primary">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
-                            Nowy Plan
-                        </a>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-vcenter card-table table-premium">
-                        <thead>
-                            <tr>
-                                <th class="w-1">ID</th>
-                                <th>Nazwa Dania</th>
-                                <th>Kategoria</th>
-                                <th class="text-center">Zaplanowane Porcje</th>
-                                <th class="text-center">Przygotowano</th>
-                                <th>Status</th>
-                                <th class="w-1 text-center">Receptura</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in Model.DailyPlan!.Items)
-                            {
-                                var portionProgress = item.PlannedQuantity > 0 ? (item.CookedQuantity * 100 / item.PlannedQuantity) : 0;
-                                <tr>
-                                    <td class="text-secondary">#@item.Id</td>
-                                    <td>
-                                        <div class="d-flex align-items-center gap-3">
-                                            <span class="avatar avatar-md rounded-3" style="background-image: url(@GetMealImage(item.MealName)); width: 48px; height: 48px; background-size: cover; background-position: center; border: 1px solid rgba(0, 0, 0, 0.08);"></span>
-                                            <div class="font-weight-medium fw-bold text-dark">@item.MealName</div>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge bg-secondary-lt">@GetMealCategory(item.MealName)</span></td>
-                                    <td class="text-center fw-bold">@item.PlannedQuantity szt.</td>
-                                    <td class="text-center">
-                                        <div class="d-flex align-items-center justify-content-center gap-2">
-                                            <span class="fw-bold text-dark">@item.CookedQuantity</span>
-                                            <span class="text-secondary small">/ @item.PlannedQuantity</span>
-                                            <div class="progress progress-xs w-50 ms-2 d-none d-md-flex">
-                                                <div class="progress-bar bg-@GetStatusColor(item.Status)" style="width: @portionProgress%"></div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-@GetStatusColor(item.Status)-lt text-@GetStatusColor(item.Status) d-inline-flex align-items-center gap-1">
-                                            <span class="status-dot bg-@GetStatusColor(item.Status) @(item.Status == "Cooking" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
-                                            @TranslateStatus(item.Status)
-                                        </span>
-                                    </td>
-                                    <td class="text-center">
-                                        <a asp-action="CookingCard" asp-route-planItemId="@item.Id" class="btn btn-sm btn-outline-primary">
-                                            Zobacz Kartę
-                                        </a>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
+                <div class="card-body">
+                    <div class="subheader">Pozycje produkcji</div>
+                    <div class="h2 mt-1 mb-1">@summary.TotalItems</div>
+                    <div class="text-secondary small">Snapshot M2: @summary.SnapshotItems / @summary.TotalItems</div>
                 </div>
             </div>
         </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card card-premium">
+                <div class="card-body">
+                    <div class="subheader">Porcje</div>
+                    <div class="h2 mt-1 mb-1">@summary.TotalCookedQuantity / @summary.TotalPlannedQuantity</div>
+                    <div class="progress progress-xs">
+                        <div class="progress-bar bg-success" style="width: @summary.PercentComplete%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card card-premium">
+                <div class="card-body">
+                    <div class="subheader">Operacje</div>
+                    <div class="h2 mt-1 mb-1">@summary.PendingFefoItems FEFO / @summary.PendingPackagingItems opak.</div>
+                    <div class="text-secondary small">Pozycje wymagajace operacji</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-premium mb-3">
+        <div class="card-body py-2">
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <a asp-action="Index" asp-all-route-data="@RouteValues(1, null, true)" class="btn btn-sm @(string.IsNullOrWhiteSpace(filter.Status) ? "btn-primary" : "btn-outline-primary")">
+                    Wszystkie (@summary.TotalItems)
+                </a>
+                <a asp-action="Index" asp-all-route-data="@RouteValues(1, "Planned", true)" class="btn btn-sm @(filter.Status == "Planned" ? "btn-primary" : "btn-outline-primary")">
+                    Zaplanowane (@summary.PlannedItems)
+                </a>
+                <a asp-action="Index" asp-all-route-data="@RouteValues(1, "Cooking", true)" class="btn btn-sm @(filter.Status == "Cooking" ? "btn-warning" : "btn-outline-warning")">
+                    W gotowaniu (@summary.CookingItems)
+                </a>
+                <a asp-action="Index" asp-all-route-data="@RouteValues(1, "Cooked", true)" class="btn btn-sm @(filter.Status == "Cooked" ? "btn-success" : "btn-outline-success")">
+                    Ugotowane (@summary.CookedItems)
+                </a>
+                <a asp-action="Index" asp-all-route-data="@RouteValues(1, "Failed", true)" class="btn btn-sm @(filter.Status == "Failed" ? "btn-danger" : "btn-outline-danger")">
+                    Problem (@summary.FailedItems)
+                </a>
+                <span class="vr mx-1"></span>
+                <a asp-action="Index" asp-all-route-data="@RouteValues(1, fefo: "pending", replaceFefo: true)" class="btn btn-sm @(filter.Fefo == "pending" ? "btn-secondary" : "btn-outline-secondary")">
+                    FEFO do zdjecia
+                </a>
+                <a asp-action="Index" asp-all-route-data="@RouteValues(1, snapshot: "missing", replaceSnapshot: true)" class="btn btn-sm @(filter.Snapshot == "missing" ? "btn-secondary" : "btn-outline-secondary")">
+                    Bez snapshotu
+                </a>
+                <a asp-action="Plan" asp-route-planId="@dashboard.Plan!.Id" class="btn btn-sm btn-outline-primary ms-auto">Szczegoly i FEFO</a>
+                <a asp-action="FoilPrinting" asp-route-date="@filter.Date.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-indigo">Foliowanie</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-premium">
+        <div class="card-header">
+            <div>
+                <h3 class="card-title mb-0">Dania do przygotowania</h3>
+                <div class="text-secondary small">
+                    Wyniki @((itemsPage.TotalCount == 0 ? 0 : ((itemsPage.Page - 1) * itemsPage.PageSize) + 1)) - @Math.Min(itemsPage.Page * itemsPage.PageSize, itemsPage.TotalCount) z @itemsPage.TotalCount
+                </div>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-vcenter card-table table-premium">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Danie</th>
+                        <th>Snapshot M2</th>
+                        <th class="text-center">Ilosc</th>
+                        <th>Status</th>
+                        <th>Operacje</th>
+                        <th class="text-end">Akcje</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in itemsPage.Items)
+                    {
+                        var color = StatusColor(item.Status);
+                        <tr>
+                            <td class="text-secondary">#@item.Id</td>
+                            <td>
+                                <div class="fw-bold text-dark">@item.MealName</div>
+                                <div class="text-secondary small">
+                                    @if (!string.IsNullOrWhiteSpace(item.MealVariantName))
+                                    {
+                                        <span>@item.MealVariantName</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Wariant diety #@item.DietVariantId</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(item.CategoryName))
+                                    {
+                                        <span> · @item.CategoryName</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(item.MealSlot))
+                                    {
+                                        <span> · @item.MealSlot</span>
+                                    }
+                                </div>
+                            </td>
+                            <td>
+                                @if (item.HasM2Snapshot)
+                                {
+                                    <span class="badge bg-green-lt text-green">snapshot</span>
+                                    <span class="badge bg-blue-lt text-blue">@item.ComponentCount skl.</span>
+                                    <span class="badge bg-purple-lt text-purple">@item.PackagingRequirementCount opak.</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-orange-lt text-orange">legacy/live</span>
+                                }
+                                @if (item.ValidationWarningCount > 0 || item.HasMissingWarehouseMappings || item.SnapshotWarning != null)
+                                {
+                                    <div class="text-danger small mt-1">
+                                        @(item.SnapshotWarning ?? $"{item.ValidationWarningCount} ostrz., mapowania: {FlagText(item.HasMissingWarehouseMappings, "braki", "ok")}")
+                                    </div>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <div class="fw-bold">@item.CookedQuantity / @item.PlannedQuantity</div>
+                                <div class="progress progress-xs mt-1">
+                                    <div class="progress-bar bg-@color" style="width: @item.ProgressPercent%"></div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-@color-lt text-@color">@StatusText(item.Status)</span>
+                                @if (item.ProductionGroup.HasValue)
+                                {
+                                    <div class="text-secondary small mt-1">Grupa @item.ProductionGroup</div>
+                                }
+                            </td>
+                            <td>
+                                <div class="d-flex flex-column gap-1 small">
+                                    <span class="text-@(item.FefoDeductedAt.HasValue ? "success" : "warning")">
+                                        FEFO: @FlagText(item.FefoDeductedAt.HasValue, "wykonane", "do wykonania")
+                                    </span>
+                                    <span class="text-@(item.PackagingDeductedAt.HasValue ? "success" : "secondary")">
+                                        Opakowania: @FlagText(item.PackagingDeductedAt.HasValue, "zdjete", "czekaja")
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-list flex-nowrap justify-content-end">
+                                    <a asp-action="CookingCard" asp-route-planItemId="@item.Id" class="btn btn-sm btn-outline-primary">Karta</a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (itemsPage.TotalPages > 1)
+        {
+            <div class="card-footer d-flex align-items-center">
+                <div class="text-secondary small">
+                    Strona @itemsPage.Page z @itemsPage.TotalPages
+                </div>
+                <ul class="pagination m-0 ms-auto">
+                    <li class="page-item @(itemsPage.Page <= 1 ? "disabled" : "")">
+                        <a class="page-link" asp-action="Index" asp-all-route-data="@RouteValues(Math.Max(1, itemsPage.Page - 1))">Poprzednia</a>
+                    </li>
+                    @{
+                        var firstPage = Math.Max(1, itemsPage.Page - 2);
+                        var lastPage = Math.Min(itemsPage.TotalPages, itemsPage.Page + 2);
+                    }
+                    @for (var pageNumber = firstPage; pageNumber <= lastPage; pageNumber++)
+                    {
+                        <li class="page-item @(pageNumber == itemsPage.Page ? "active" : "")">
+                            <a class="page-link" asp-action="Index" asp-all-route-data="@RouteValues(pageNumber)">@pageNumber</a>
+                        </li>
+                    }
+                    <li class="page-item @(itemsPage.Page >= itemsPage.TotalPages ? "disabled" : "")">
+                        <a class="page-link" asp-action="Index" asp-all-route-data="@RouteValues(Math.Min(itemsPage.TotalPages, itemsPage.Page + 1))">Nastepna</a>
+                    </li>
+                </ul>
+            </div>
+        }
     </div>
 }
