@@ -12,8 +12,5 @@
   },
   "OpenAI": {
     "ApiKey": ""
-  },
-  "servicestack": {
-    "license": ""
   }
 }
