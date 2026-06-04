@@ -17,6 +17,12 @@ public sealed class RegisterWasteValidator : AbstractValidator<RegisterWasteRequ
             .WithMessage("Powód odpisu jest wymagany.")
             .MaximumLength(250);
 
+        RuleFor(x => x.Notes)
+            .NotEmpty()
+            .When(x => x.Reason == "Inny")
+            .WithMessage("Opis (uwagi) jest wymagany dla powodu 'Inny'.")
+            .MaximumLength(500);
+
         RuleFor(x => x.BatchId).GreaterThan(0)
             .When(x => x.BatchId.HasValue)
             .WithMessage("ID partii musi być prawidłowe.");

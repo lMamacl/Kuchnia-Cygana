@@ -13,9 +13,18 @@ public sealed class OrderItem : AuditableEntity
 
     public int DietVariantId { get; set; }
 
+    public int? MealId { get; set; }
+
+    public int? MealVariantId { get; set; }
+
+    public int? DietMenuPlanItemId { get; set; }
+
     public string DietName { get; set; } = string.Empty;
 
     public string VariantName { get; set; } = string.Empty;
+
+    [StringLength(50)]
+    public string? MealSlot { get; set; }
 
     public int CaloriesPerDay { get; set; }
 

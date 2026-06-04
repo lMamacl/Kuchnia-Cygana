@@ -16,9 +16,23 @@ public sealed class Meal : AuditableEntity
 
     public string? MarketingDescription { get; set; }
 
+    public string? PreparationInstructions { get; set; }
+
     public MealStatus Status { get; set; } = MealStatus.Draft;
 
     public int PreparationTimeMinutes { get; set; }
+
+    public decimal? RawWeightGrams { get; set; }
+
+    public decimal? CookedWeightGrams { get; set; }
+
+    public int? ShelfLifeHours { get; set; }
+
+    public bool UseEarliestIngredientExpiry { get; set; }
+
+    public bool RequiresCoreTemperatureCheck { get; set; }
+
+    public decimal? MinimumCoreTemperatureCelsius { get; set; }
 
     public bool IsActive { get; set; } = true;
 }

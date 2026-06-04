@@ -30,6 +30,16 @@ public class ProductionPlanItem : AuditableEntity<int>
     /// </summary>
     public int DietVariantId { get; set; }
 
+    public int? DietMenuPlanItemId { get; set; }
+
+    [StringLength(500)]
+    public string? RecipeComponentVersionIds { get; set; }
+
+    [StringLength(64)]
+    public string? M2SnapshotHash { get; set; }
+
+    public string? M2SnapshotJson { get; set; }
+
     /// <summary>
     /// Zaplanowana ilość porcji.
     /// </summary>
@@ -63,4 +73,14 @@ public class ProductionPlanItem : AuditableEntity<int>
     /// Rzeczywisty czas gotowości — ustawiany po zatwierdzeniu ugotowania.
     /// </summary>
     public TimeOnly? ActualReadyTime { get; set; }
+
+    public DateTimeOffset? FefoDeductedAt { get; set; }
+
+    [StringLength(50)]
+    public string? FefoReferenceDocument { get; set; }
+
+    public DateTimeOffset? PackagingDeductedAt { get; set; }
+
+    [StringLength(50)]
+    public string? PackagingReferenceDocument { get; set; }
 }

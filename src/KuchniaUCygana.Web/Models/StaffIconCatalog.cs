@@ -21,6 +21,7 @@ public static class StaffIconCatalog
             "ingredients" => "<path d=\"M12 21c4-4 6-8 6-12a6 6 0 0 0-12 0c0 4 2 8 6 12z\"/><path d=\"M12 9v6\"/><path d=\"M9 12h6\"/>",
             "kitchen" => "<path d=\"M6 3v8\"/><path d=\"M10 3v8\"/><path d=\"M8 3v18\"/><path d=\"M14 3v18\"/><path d=\"M14 3c4 2 5 8 0 10\"/>",
             "logistics" => "<path d=\"M5 18a2 2 0 1 0 0-4a2 2 0 0 0 0 4z\"/><path d=\"M19 18a2 2 0 1 0 0-4a2 2 0 0 0 0 4z\"/><path d=\"M7 16h10\"/><path d=\"M3 16V8h11v8\"/><path d=\"M14 10h4l3 3v3\"/>",
+            "logout" => "<path d=\"M14 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-3\"/><path d=\"M9 12h12\"/><path d=\"M18 9l3 3l-3 3\"/>",
             "map" => "<path d=\"M9 18l-6 3V6l6-3l6 3l6-3v15l-6 3z\"/><path d=\"M9 3v15\"/><path d=\"M15 6v15\"/>",
             "meal" => "<path d=\"M4 3v8\"/><path d=\"M8 3v8\"/><path d=\"M6 3v18\"/><path d=\"M14 3c3 2 4 6 4 10h-4v8\"/>",
             "mobile" => "<path d=\"M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z\"/><path d=\"M11 18h2\"/>",

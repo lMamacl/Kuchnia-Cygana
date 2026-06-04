@@ -29,6 +29,9 @@ public class PackingSession : AuditableEntity<int>
     [StringLength(150)]
     public string? ClientName { get; set; }
 
+    [StringLength(50)]
+    public string? ClientPublicId { get; set; }
+
     /// <summary>
     /// Kto pakował (username magazyniera).
     /// </summary>
@@ -41,14 +44,12 @@ public class PackingSession : AuditableEntity<int>
     public PackingStatus Status { get; set; } = PackingStatus.Pending;
 
     /// <summary>
-    /// ID trasy z Modułu 4 (bridge do logistyki).
+    /// ID z tabeli DeliveryCalendar (M1) — klucz integracyjny z M4.
+    /// Pozwala na bezpośredni JOIN z DeliveryRouteStops (M4) w celu
+    /// dynamicznego pobrania RouteId i StopNumber.
+    /// Ustalenia architektoniczne M3↔M4 z 28.05.2026.
     /// </summary>
-    public int? RouteId { get; set; }
-
-    /// <summary>
-    /// Numer stopu na trasie.
-    /// </summary>
-    public int? StopNumber { get; set; }
+    public int? DeliveryCalendarId { get; set; }
 
     /// <summary>
     /// Lista pozycji w sesji pakowania.

@@ -10,6 +10,7 @@ namespace KuchniaUCygana.Domain.Entities.Logistics;
 /// </summary>
 
 
+[System.ComponentModel.DataAnnotations.Schema.Table("Dispatchers")]
 public sealed class Dispatcher : AuditableEntity
 {
     public int UserId { get; set; }

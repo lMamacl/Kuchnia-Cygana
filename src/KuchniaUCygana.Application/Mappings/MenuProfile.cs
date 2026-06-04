@@ -16,9 +16,10 @@ public sealed class MenuProfile : Profile
         this.CreateMap<Meal, MealDetailDto>()
             .IncludeBase<Meal, MealDto>()
             .ForMember(dest => dest.Recipe, opt => opt.Ignore())
+            .ForMember(dest => dest.Components, opt => opt.Ignore())
             .ForMember(dest => dest.Images, opt => opt.Ignore());
-        this.CreateMap<Ingredient, IngredientDto>();
-        this.CreateMap<Allergen, AllergenDto>();
+        this.CreateMap<Ingredient, IngredientDto>().ReverseMap();
+        this.CreateMap<Allergen, AllergenDto>().ReverseMap();
         this.CreateMap<Recipe, RecipeItemDto>()
             .ForMember(dest => dest.IngredientName, opt => opt.Ignore());
         this.CreateMap<NutritionFact, NutritionFactDto>();
@@ -26,6 +27,7 @@ public sealed class MenuProfile : Profile
         this.CreateMap<CreateMealRequest, Meal>();
         this.CreateMap<UpdateMealRequest, Meal>();
         this.CreateMap<CreateDietRequest, Diet>();
+        this.CreateMap<UpdateDietRequest, Diet>();
         this.CreateMap<CreateDietVariantRequest, DietVariant>();
     }
 }

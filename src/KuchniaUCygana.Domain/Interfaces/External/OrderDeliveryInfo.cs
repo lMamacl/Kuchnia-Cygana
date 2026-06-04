@@ -4,9 +4,11 @@
 // w celu wygenerowania dziennego planu produkcji.
 
 public sealed record OrderDeliveryInfo(
+    int DeliveryCalendarId,
     int OrderId,
     string OrderNumber,
     int CustomerId,
+    string? ClientPublicId,
     string CustomerFullName,
     string AddressFullLine,
     string City,
@@ -22,4 +24,8 @@ public sealed record OrderItemInfo(
     string DietName,
     int DietVariantId,
     string VariantName,
-    int CaloriesPerDay);
+    int CaloriesPerDay,
+    int? MealId = null,
+    int? MealVariantId = null,
+    int? DietMenuPlanItemId = null,
+    string? MealSlot = null);

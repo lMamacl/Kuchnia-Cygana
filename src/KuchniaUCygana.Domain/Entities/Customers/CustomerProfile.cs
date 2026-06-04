@@ -9,6 +9,8 @@ public sealed class CustomerProfile : AuditableEntity
 {
     public int UserId { get; set; }
 
+    public Guid PublicId { get; set; } = Guid.NewGuid();
+
     public string? Phone { get; set; }
 
     public string? DietaryNotes { get; set; }

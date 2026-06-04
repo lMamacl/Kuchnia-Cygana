@@ -15,6 +15,8 @@ public class StockItem : AuditableEntity<int>
     public int? BaseIngredientId { get; set; }
     public int DefaultUnitOfMeasureId { get; set; }
 
+    public int WarehouseCategoryId { get; set; } = 4;
+
     public decimal MinimumLevel { get; set; }
 
     public int LeadTimeDays { get; set; }

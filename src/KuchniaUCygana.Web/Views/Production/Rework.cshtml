@@ -1,0 +1,120 @@
+@using KuchniaUCygana.Domain.Enums
+@model KuchniaUCygana.Web.Models.KitchenReworkViewModel
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Ponowne przygotowanie";
+    ViewData["Section"] = "Kuchnia";
+    ViewData["Description"] = "Zamienniki pudełek zgłoszone przez kompletację.";
+}
+
+@functions {
+    string StatusLabel(PackingIncidentStatus status) => status switch
+    {
+        PackingIncidentStatus.New => "Nowe",
+        PackingIncidentStatus.InProgress => "W przygotowaniu",
+        PackingIncidentStatus.KitchenReworkRequested => "Do ponownego przygotowania",
+        PackingIncidentStatus.WarehouseActionRequired => "Czeka też na magazyn",
+        PackingIncidentStatus.Resolved => "Zamknięte",
+        _ => status.ToString()
+    };
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h3 class="card-title mb-1">Ponowne przygotowanie</h3>
+                    <div class="text-secondary small">Zamienniki pudełek po zgłoszeniach z kompletacji.</div>
+                </div>
+                <form method="get" class="d-flex gap-2">
+                    <input type="date" class="form-control" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
+                    <button type="submit" class="btn btn-indigo">Pokaż</button>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th>Zgłoszenie</th>
+                            <th>Dostawa</th>
+                            <th>Danie</th>
+                            <th>Powód</th>
+                            <th>Status</th>
+                            <th class="w-1 text-end">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Incidents.Any())
+                        {
+                            <tr>
+                                <td colspan="6" class="text-secondary">Brak zamienników do przygotowania.</td>
+                            </tr>
+                        }
+                        @foreach (var incident in Model.Incidents)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-bold">#@incident.Id</div>
+                                    <div class="text-secondary small">@incident.ReportedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                </td>
+                                <td>
+                                    <div>Klient ID: <strong>@(incident.ClientPublicId ?? "-")</strong></div>
+                                    <div class="text-secondary small">DeliveryCalendarId: @(incident.DeliveryCalendarId?.ToString() ?? "-")</div>
+                                    <div class="text-secondary small">Sesja: #@incident.PackingSessionId</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold">@incident.MealName</div>
+                                    <div class="text-secondary small">Zamiennik pudełka: #@(incident.ReplacementPackingItemId?.ToString() ?? "-")</div>
+                                    <div class="text-secondary small">Oryginał: @(incident.BoxCode ?? "-")</div>
+                                </td>
+                                <td>
+                                    <div>@incident.ReasonSummary</div>
+                                    @if (!string.IsNullOrWhiteSpace(incident.Description))
+                                    {
+                                        <div class="text-secondary small">@incident.Description</div>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge bg-azure-lt text-azure">@StatusLabel(incident.Status)</span>
+                                    @if (incident.KitchenStartedAt.HasValue)
+                                    {
+                                        <div class="text-secondary small mt-1">Start: @incident.KitchenStartedAt.Value.ToLocalTime().ToString("HH:mm")</div>
+                                    }
+                                    @if (incident.KitchenPreparedAt.HasValue)
+                                    {
+                                        <div class="text-success small mt-1">Przygotowane: @incident.KitchenPreparedAt.Value.ToLocalTime().ToString("HH:mm")</div>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex flex-column gap-2 align-items-end">
+                                        @if (!incident.KitchenStartedAt.HasValue)
+                                        {
+                                            <form asp-action="StartRework" asp-route-incidentId="@incident.Id" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
+                                                <button type="submit" class="btn btn-sm btn-outline-primary">Oznacz w przygotowaniu</button>
+                                            </form>
+                                        }
+                                        @if (!incident.KitchenPreparedAt.HasValue)
+                                        {
+                                            <form asp-action="MarkReworkPrepared" asp-route-incidentId="@incident.Id" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
+                                                <button type="submit" class="btn btn-sm btn-outline-success">Oznacz jako przygotowane</button>
+                                            </form>
+                                        }
+                                        @if (incident.ReplacementPackingItemId.HasValue)
+                                        {
+                                            <a asp-action="FoilLabel" asp-route-packingItemId="@incident.ReplacementPackingItemId.Value" class="btn btn-sm btn-indigo">Drukuj etykietę</a>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

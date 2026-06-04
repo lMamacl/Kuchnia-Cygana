@@ -1,0 +1,261 @@
+@model KuchniaUCygana.Web.Models.BatchDetailsViewModel
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = $"Szczegóły: {Model.Details.StockItem.Name}";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = $"Zarządzanie partiami składnika {Model.Details.StockItem.Name} oraz kontrola dat ważności.";
+}
+
+<div class="container-xl">
+    <!-- Breadcrumb i Tytuł -->
+    <div class="page-header d-print-none mb-3">
+        <div class="row align-items-center">
+            <div class="col">
+                <div class="mb-1">
+                    <ol class="breadcrumb" aria-label="breadcrumbs">
+                        <li class="breadcrumb-item"><a asp-action="Index">Pulpit Magazynu</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Szczegóły składnika</li>
+                    </ol>
+                </div>
+                <h2 class="page-title text-dark">
+                    @Model.Details.StockItem.Name
+                </h2>
+            </div>
+            <div class="col-auto ms-auto">
+                <div class="btn-list">
+                    <a asp-action="Index" class="btn btn-outline-secondary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 14l-4 -4l4 -4" /><path d="M5 10h11a4 4 0 1 1 0 8h-1" /></svg>
+                        Powrót do listy
+                    </a>
+                    <a asp-action="Receive" asp-route-stockItemId="@Model.Details.StockItem.Id" class="btn btn-success">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+                        Nowa partia (Przyjęcie)
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statystyki Składnika -->
+    <div class="row row-cards mb-4">
+        <div class="col-md-3">
+            <div class="card card-premium">
+                <div class="card-body">
+                    <div class="subheader">Aktualny Stan</div>
+                    <div class="h2 mt-1 mb-0 fw-bold">@Model.Details.StockItem.CurrentStock.ToString("F2") @Model.Details.StockItem.UnitSymbol</div>
+                    <div class="text-secondary small">Wszystkie aktywne partie</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-premium">
+                <div class="card-body">
+                    <div class="subheader">Próg Minimalny</div>
+                    <div class="h2 mt-1 mb-0 text-secondary fw-bold">@Model.Details.StockItem.MinimumLevel.ToString("F2") @Model.Details.StockItem.UnitSymbol</div>
+                    <div class="text-secondary small">Minimum bezpieczeństwa</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-premium">
+                <div class="card-body">
+                    <div class="subheader">Aktywne Partie</div>
+                    <div class="h2 mt-1 mb-0 fw-bold">@Model.Details.Batches.Count</div>
+                    <div class="text-secondary small">Partie na stanie</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            @if (Model.Details.StockItem.EarliestExpiryDate.HasValue)
+            {
+                var daysLeft = (Model.Details.StockItem.EarliestExpiryDate.Value - DateTimeOffset.UtcNow).Days;
+                var cardColor = daysLeft <= 3 ? "text-danger fw-bold" : (daysLeft <= 7 ? "text-warning fw-bold" : "text-success");
+                <div class="card card-premium">
+                    <div class="card-body">
+                        <div class="subheader">Najbliższa Ważność</div>
+                        <div class="h2 mt-1 mb-0 @cardColor">@Model.Details.StockItem.EarliestExpiryDate.Value.ToString("dd.MM.yyyy")</div>
+                        <div class="text-secondary small">
+                            @if (daysLeft < 0)
+                            {
+                                <span class="text-danger fw-bold">Przeterminowane o @Math.Abs(daysLeft) dni!</span>
+                            }
+                            else
+                            {
+                                <span>Pozostało @daysLeft dni</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="card card-premium">
+                    <div class="card-body">
+                        <div class="subheader">Najbliższa Ważność</div>
+                        <div class="h2 mt-1 mb-0 text-muted">Brak</div>
+                        <div class="text-secondary small">Brak partii na stanie</div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Dane szczegółowe w zakładkach -->
+    <div class="card card-premium">
+        <div class="card-header py-2">
+            <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <a href="#tab-batches" class="nav-link active" data-bs-toggle="tab" role="tab">Aktywne Partie (@Model.Details.Batches.Count)</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a href="#tab-changelogs" class="nav-link" data-bs-toggle="tab" role="tab">Historia Zmian Dat Ważności (@Model.Details.ExpiryChangeLogs.Count)</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a href="#tab-transactions" class="nav-link" data-bs-toggle="tab" role="tab" 
+                       hx-get="/warehouse/stock-item-transactions/@Model.Details.StockItem.Id" 
+                       hx-target="#transactions-placeholder" 
+                       hx-trigger="click once">Historia Transakcji (HTMX)</a>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content">
+                <!-- Zakładka 1: Aktywne partie -->
+                <div class="tab-pane active show" id="tab-batches" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-vcenter card-table table-premium">
+                            <thead>
+                                <tr>
+                                    <th>ID Partii</th>
+                                    <th>Numer Partii Dostawcy</th>
+                                    <th class="text-end">Ilość</th>
+                                    <th>Data Przyjęcia</th>
+                                    <th>Data Ważności</th>
+                                    <th>Status</th>
+                                    <th class="w-1">Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!Model.Details.Batches.Any())
+                                {
+                                    <tr>
+                                        <td colspan="7" class="text-center text-secondary py-4">
+                                            Brak aktywnych partii dla tego składnika w magazynie.
+                                        </td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    foreach (var batch in Model.Details.Batches)
+                                    {
+                                        var isExpired = batch.ExpiryDate.HasValue && batch.ExpiryDate.Value <= DateTimeOffset.UtcNow;
+                                        var daysLeft = batch.ExpiryDate.HasValue ? (int?)(batch.ExpiryDate.Value - DateTimeOffset.UtcNow).TotalDays : null;
+                                        
+                                        var rowClass = isExpired ? "table-danger" : (daysLeft.HasValue && daysLeft.Value <= 3 ? "table-warning" : "");
+                                        
+                                        <tr class="@rowClass">
+                                            <td class="text-secondary fw-medium">#@batch.Id</td>
+                                            <td class="font-weight-medium text-dark fw-bold">@(string.IsNullOrEmpty(batch.SupplierBatchNumber) ? "BRAK" : batch.SupplierBatchNumber)</td>
+                                            <td class="text-end font-weight-bold text-dark fw-bold">@batch.CurrentQuantity.ToString("F2") @Model.Details.StockItem.UnitSymbol</td>
+                                            <td class="text-secondary small">@batch.ReceivedDate.ToString("dd.MM.yyyy HH:mm")</td>
+                                            <td class="text-dark fw-bold">
+                                                @(batch.ExpiryDate?.ToString("dd.MM.yyyy") ?? "Bezterminowo")
+                                            </td>
+                                            <td>
+                                                @if (isExpired)
+                                                {
+                                                    <span class="badge bg-danger-lt text-danger">Przeterminowana</span>
+                                                }
+                                                else if (daysLeft.HasValue && daysLeft.Value <= 3)
+                                                {
+                                                    <span class="badge bg-danger-lt text-danger">Pilna ważność (@((int)daysLeft.Value) dni)</span>
+                                                }
+                                                else if (daysLeft.HasValue && daysLeft.Value <= 7)
+                                                {
+                                                    <span class="badge bg-warning-lt text-warning">Krótka ważność (@((int)daysLeft.Value) dni)</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-success-lt text-success">OK</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary"
+                                                        hx-get="/warehouse/edit-batch-expiry/@batch.Id"
+                                                        hx-target="#modal-dialog-container"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#modal-container">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" /><path d="M13.5 6.5l4 4" /></svg>
+                                                    Zmień ważność
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Zakładka 2: Log zmian dat ważności -->
+                <div class="tab-pane" id="tab-changelogs" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-vcenter card-table table-premium">
+                            <thead>
+                                <tr>
+                                    <th>Partia</th>
+                                    <th>Poprzednia Data</th>
+                                    <th>Nowa Data</th>
+                                    <th>Powód Zmiany</th>
+                                    <th>Wykonano Przez</th>
+                                    <th>Data Operacji</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!Model.Details.ExpiryChangeLogs.Any())
+                                {
+                                    <tr>
+                                        <td colspan="6" class="text-center text-secondary py-4">
+                                            Brak zarejestrowanych zmian dat ważności dla partii tego składnika.
+                                        </td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    foreach (var log in Model.Details.ExpiryChangeLogs)
+                                    {
+                                        <tr>
+                                            <td class="font-weight-medium text-dark fw-bold">Partia #@log.BatchId (@(string.IsNullOrEmpty(log.BatchNumber) ? "Nieznana" : log.BatchNumber))</td>
+                                            <td class="text-secondary">@(log.OldExpiryDate == DateTime.MinValue ? "Brak" : log.OldExpiryDate.ToString("dd.MM.yyyy"))</td>
+                                            <td class="text-dark fw-bold">@log.NewExpiryDate.ToString("dd.MM.yyyy")</td>
+                                            <td class="text-dark">@log.Reason</td>
+                                            <td><span class="badge bg-blue-lt">@log.ChangedByUserName</span></td>
+                                            <td class="text-secondary small">@log.ChangedAt.ToString("dd.MM.yyyy HH:mm")</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Zakładka 3: Historia transakcji (HTMX Lazy loaded) -->
+                <div class="tab-pane" id="tab-transactions" role="tabpanel">
+                    <div id="transactions-placeholder" class="py-4 text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Ładowanie historii transakcji...</span>
+                        </div>
+                        <p class="text-secondary mt-2">Pobieranie historii transakcji z serwera...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal kontener dla formularzy HTMX -->
+<div class="modal modal-blur fade" id="modal-container" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document" id="modal-dialog-container">
+        <!-- Zawartość ładowana dynamicznie przez HTMX -->
+    </div>
+</div>

@@ -4,6 +4,7 @@ using KuchniaUCygana.Application;
 using KuchniaUCygana.Infrastructure;
 using KuchniaUCygana.Infrastructure.Persistence.Migrations;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
+using KuchniaUCygana.Web.ModelBinding;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.DataProtection;
@@ -34,7 +35,6 @@ builder.Services
         {
             options.Cookie.Name = "KuchniaUCygana.Auth";
             options.Cookie.HttpOnly = true;
-            // Production should keep Always; local HTTP development can switch to SameAsRequest.
             options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
                 ? CookieSecurePolicy.SameAsRequest
                 : CookieSecurePolicy.Always;
@@ -70,9 +70,18 @@ builder.Services
             };
         });
 builder.Services.AddAuthorization();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.Cookie.Name = "KuchniaUCygana.Session";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
 builder.Services.AddControllersWithViews(options =>
     {
         options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+        options.ModelBinderProviders.Insert(0, new FlexibleDecimalModelBinderProvider());
     })
     .AddFluentValidation(fv => fv.RegisterValidatorsFromAssemblyContaining<Program>());
 
@@ -115,6 +124,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseRouting();
+app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
 

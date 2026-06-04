@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
-using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 
 namespace KuchniaUCygana.Domain.Services;
@@ -15,6 +13,8 @@ public sealed class InventoryAlert
     public int StockItemId { get; set; }
 
     public string StockItemName { get; set; } = string.Empty;
+
+    public string? SupplierBatchNumber { get; set; }
 
     public InventoryAlertType AlertType { get; set; }
 
@@ -49,82 +49,63 @@ public enum InventoryAlertType
 public sealed class SmartInventoryAnalyzer
 {
     private readonly IStockItemRepository _stockItemRepository;
-    private readonly IBatchRepository _batchRepository;
 
-    public SmartInventoryAnalyzer(
-        IStockItemRepository stockItemRepository,
-        IBatchRepository batchRepository)
+    public SmartInventoryAnalyzer(IStockItemRepository stockItemRepository)
     {
         _stockItemRepository = stockItemRepository;
-        _batchRepository = batchRepository;
     }
 
     /// <summary>
     /// Generuje pełną listę alertów: poniżej minimum + przeterminowane + bliskie przeterminowania.
     /// </summary>
-    public async Task<IReadOnlyList<InventoryAlert>> AnalyzeAsync()
+    public async Task<IReadOnlyList<InventoryAlert>> AnalyzeAsync(int? limit = null)
     {
+        var rows = await _stockItemRepository.GetSmartInventoryAlertRowsAsync(DateTimeOffset.UtcNow, limit);
         var alerts = new List<InventoryAlert>();
 
-        // 1. Składniki poniżej poziomu minimum
-        var belowMinimum = await _stockItemRepository.GetBelowMinimumAsync();
-        foreach (var item in belowMinimum)
+        foreach (var row in rows)
         {
-            var available = (await _batchRepository.GetActiveBatchesByStockItemAsync(item.Id))
-                .Sum(b => b.CurrentQuantity);
-
-            alerts.Add(new InventoryAlert
-            {
-                StockItemId = item.Id,
-                StockItemName = item.Name,
-                AlertType = available <= 0 ? InventoryAlertType.NoStock : InventoryAlertType.BelowMinimum,
-                Message = available <= 0
-                    ? $"BRAK W MAGAZYNIE: {item.Name}"
-                    : $"Stan {available:F1} poniżej minimum {item.MinimumLevel:F1} — zamów uzupełnienie (lead time: {item.LeadTimeDays} dni)",
-                CurrentQuantity = available,
-                MinimumLevel = item.MinimumLevel,
-            });
+            alerts.Add(CreateAlert(row));
         }
 
-        // 2. Partie przeterminowane
-        var expired = await _batchRepository.GetExpiringBeforeAsync(DateTimeOffset.UtcNow);
-        foreach (var batch in expired)
-        {
-            alerts.Add(CreateExpiryAlert(batch, InventoryAlertType.Expired, "PRZETERMINOWANA"));
-        }
-
-        // 3. Partie przeterminowujące się w ciągu 3 dni
-        var expiring3 = await _batchRepository.GetExpiringBeforeAsync(DateTimeOffset.UtcNow.AddDays(3));
-        foreach (var batch in expiring3.Where(b => b.ExpiryDate > DateTimeOffset.UtcNow))
-        {
-            alerts.Add(CreateExpiryAlert(batch, InventoryAlertType.ExpiringWithin3Days, "przeterminuje się w ciągu 3 dni"));
-        }
-
-        // 4. Partie przeterminowujące się w ciągu 7 dni
-        var expiring7 = await _batchRepository.GetExpiringBeforeAsync(DateTimeOffset.UtcNow.AddDays(7));
-        foreach (var batch in expiring7.Where(b => b.ExpiryDate > DateTimeOffset.UtcNow.AddDays(3)))
-        {
-            alerts.Add(CreateExpiryAlert(batch, InventoryAlertType.ExpiringWithin7Days, "przeterminuje się w ciągu 7 dni"));
-        }
-
-        return alerts.OrderByDescending(a => a.AlertType).ToList();
+        return alerts;
     }
 
-    private static InventoryAlert CreateExpiryAlert(Batch batch, InventoryAlertType type, string desc)
+    private static InventoryAlert CreateAlert(SmartInventoryAlertRow row)
     {
-        var daysLeft = batch.ExpiryDate.HasValue
-            ? (int)(batch.ExpiryDate.Value - DateTimeOffset.UtcNow).TotalDays
-            : 0;
+        var alertType = row.AlertCode switch
+        {
+            "NoStock" => InventoryAlertType.NoStock,
+            "Expired" => InventoryAlertType.Expired,
+            "ExpiringWithin3Days" => InventoryAlertType.ExpiringWithin3Days,
+            "ExpiringWithin7Days" => InventoryAlertType.ExpiringWithin7Days,
+            _ => InventoryAlertType.BelowMinimum,
+        };
 
         return new InventoryAlert
         {
-            StockItemId = batch.StockItemId,
-            StockItemName = $"Partia {batch.SupplierBatchNumber}",
-            AlertType = type,
-            Message = $"Partia {batch.SupplierBatchNumber} ({batch.CurrentQuantity:F1} szt.) — {desc}",
-            CurrentQuantity = batch.CurrentQuantity,
-            EarliestExpiry = batch.ExpiryDate,
-            DaysUntilExpiry = daysLeft,
+            StockItemId = row.StockItemId,
+            StockItemName = row.StockItemName,
+            SupplierBatchNumber = row.SupplierBatchNumber,
+            AlertType = alertType,
+            Message = BuildMessage(row, alertType),
+            CurrentQuantity = row.CurrentQuantity,
+            MinimumLevel = row.MinimumLevel,
+            EarliestExpiry = row.EarliestExpiry,
+            DaysUntilExpiry = row.DaysUntilExpiry,
+        };
+    }
+
+    private static string BuildMessage(SmartInventoryAlertRow row, InventoryAlertType alertType)
+    {
+        return alertType switch
+        {
+            InventoryAlertType.NoStock => $"BRAK W MAGAZYNIE: {row.StockItemName}",
+            InventoryAlertType.BelowMinimum => $"Stan {row.CurrentQuantity:F1} poniżej minimum {row.MinimumLevel:F1} — zamów uzupełnienie",
+            InventoryAlertType.Expired => $"{row.StockItemName} (Partia {row.SupplierBatchNumber}, {row.CurrentQuantity:F1} szt.) — PRZETERMINOWANA",
+            InventoryAlertType.ExpiringWithin3Days => $"{row.StockItemName} (Partia {row.SupplierBatchNumber}, {row.CurrentQuantity:F1} szt.) — przeterminuje się w ciągu 3 dni",
+            InventoryAlertType.ExpiringWithin7Days => $"{row.StockItemName} (Partia {row.SupplierBatchNumber}, {row.CurrentQuantity:F1} szt.) — przeterminuje się w ciągu 7 dni",
+            _ => row.StockItemName,
         };
     }
 }

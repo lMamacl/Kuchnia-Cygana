@@ -9,11 +9,16 @@ namespace KuchniaUCygana.Application.Services.Logistics;
 public class VehicleService : IVehicleService
 {
     private readonly IVehicleRepository _vehicleRepo;
+    private readonly IDriverVehicleAssignmentRepository _assignmentRepository;
     private readonly IMapper _mapper;
 
-    public VehicleService(IVehicleRepository vehicleRepo, IMapper mapper)
+    public VehicleService(
+        IVehicleRepository vehicleRepo,
+        IDriverVehicleAssignmentRepository assignmentRepository,
+        IMapper mapper)
     {
         _vehicleRepo = vehicleRepo;
+        _assignmentRepository = assignmentRepository;
         _mapper = mapper;
     }
 
@@ -29,8 +34,19 @@ public class VehicleService : IVehicleService
         return vehicle == null ? null : _mapper.Map<VehicleDto>(vehicle);
     }
 
+    public async Task<VehicleDto?> GetByRegistrationNumberAsync(string registrationNumber)
+    {
+        var vehicle = await _vehicleRepo.GetByRegistrationNumberAsync(registrationNumber);
+        return vehicle == null ? null : _mapper.Map<VehicleDto>(vehicle);
+    }
+
     public async Task<VehicleDto> CreateAsync(CreateVehicleRequest request)
     {
+        var existing = await _vehicleRepo.GetByRegistrationNumberAsync(request.RegistrationNumber);
+
+        if (existing != null)
+            throw new InvalidOperationException($"Vehicle with registration number '{request.RegistrationNumber}' already exists.");
+
         var vehicle = _mapper.Map<Vehicle>(request);
         var id = await _vehicleRepo.InsertAsync(vehicle);
         var created = await _vehicleRepo.GetByIdAsync(id);
@@ -39,15 +55,28 @@ public class VehicleService : IVehicleService
 
     public async Task<VehicleDto?> UpdateAsync(int id, UpdateVehicleRequest request)
     {
+        var existingByRegistration = await _vehicleRepo.GetByRegistrationNumberAsync(request.RegistrationNumber);
+
+        if (existingByRegistration != null && existingByRegistration.Id != id)
+        {
+            throw new InvalidOperationException($"Vehicle with registration number '{request.RegistrationNumber}' already exists.");
+        }
+
         var existing = await _vehicleRepo.GetByIdAsync(id);
         if (existing == null) return null;
         _mapper.Map(request, existing);
         await _vehicleRepo.UpdateAsync(existing);
+        if (!existing.IsOperational())
+        {
+            await _assignmentRepository.UnassignVehicleAsync(existing.Id);
+        }
+
         return _mapper.Map<VehicleDto>(existing);
     }
 
     public async Task<bool> DeleteAsync(int id)
     {
+        await _assignmentRepository.UnassignVehicleAsync(id);
         return await _vehicleRepo.DeleteAsync(id);
     }
 }

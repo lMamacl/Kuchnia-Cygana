@@ -1,0 +1,287 @@
+@model KuchniaUCygana.Application.DTOs.Menu.DietMenuDayDto
+@using KuchniaUCygana.Application.DTOs.Menu
+@{
+    Layout = "_LayoutStaff";
+    var diets = ViewBag.Diets as IEnumerable<DietDto> ?? Enumerable.Empty<DietDto>();
+    var meals = ViewBag.Meals as IEnumerable<MealDto> ?? Enumerable.Empty<MealDto>();
+    var slots = ViewBag.Slots as IEnumerable<string> ?? new[] { "Breakfast", "Snack1", "Lunch", "Snack2", "Dinner" };
+    var variants = diets.SelectMany(d => d.Variants.Select(v => new { Diet = d.Name, Variant = v })).ToList();
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h3 class="card-title">Dzien menu @Model.PlanDate.ToString("yyyy-MM-dd")</h3>
+                    <div class="text-secondary small">@Model.Status</div>
+                </div>
+                <a asp-controller="DietMenuPlan" asp-action="Index" asp-route-startDate="@Model.PlanDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-primary">Tydzien</a>
+            </div>
+            <div class="card-body">
+                @if (Model.HasPlan)
+                {
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <span class="badge @(Model.Status == "Published" ? "bg-success-lt text-success" : "bg-blue-lt text-blue")">@Model.Status</span>
+                        <span class="text-secondary">@Model.Items.Count pozycji</span>
+                        @if (Model.PublishedAt.HasValue)
+                        {
+                            <span class="text-secondary">Opublikowano: @Model.PublishedAt.Value.ToString("yyyy-MM-dd HH:mm") przez @Model.PublishedBy</span>
+                        }
+                    </div>
+                    @if (!Model.CanEdit && !string.IsNullOrWhiteSpace(Model.EditBlockReason))
+                    {
+                        <div class="alert alert-warning mt-3 mb-0">@Model.EditBlockReason</div>
+                    }
+                }
+                else
+                {
+                    <form asp-controller="DietMenuPlan" asp-action="CreateDay" method="post" class="row g-3 align-items-end">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="PlanDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
+                        <div class="col-md-8">
+                            <label class="form-label">Notatka</label>
+                            <input name="Notes" class="form-control" maxlength="500" />
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary w-100">Utworz draft dnia</button>
+                        </div>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (Model.HasPlan)
+    {
+        <div class="col-lg-8">
+            <div class="card card-premium">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="card-title">Pozycje planu</h3>
+                    @if (Model.CanEdit)
+                    {
+                        <form asp-controller="DietMenuPlan" asp-action="Publish" asp-route-planId="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
+                            <button type="submit" class="btn btn-sm btn-success" disabled="@(!Model.Validation.CanPublish)">Publikuj</button>
+                        </form>
+                    }
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-vcenter card-table">
+                        <thead>
+                            <tr>
+                                <th>Slot</th>
+                                <th>Wariant</th>
+                                <th>Posilek</th>
+                                <th class="text-center">Skladowe</th>
+                                <th>Status</th>
+                                <th class="w-1"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.Items.Count == 0)
+                            {
+                                <tr><td colspan="6" class="text-center text-secondary py-4">Brak pozycji w dniu menu.</td></tr>
+                            }
+                            @foreach (var item in Model.Items.OrderBy(i => i.SortOrder).ThenBy(i => i.Id))
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold">@item.MealSlot</div>
+                                        <div class="text-secondary small">#@item.SortOrder</div>
+                                    </td>
+                                    <td>
+                                        <div>@item.DietName</div>
+                                        <div class="text-secondary small">@item.VariantName</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold">@item.MealName</div>
+                                        <div class="text-secondary small">@(item.MealVariantName ?? "wariant bazowy") | x @item.ServingSizeMultiplier.ToString("0.##") | @item.MealStatus</div>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-blue-lt">@item.ComponentCount</span>
+                                        @if (item.LegacyRecipeCount > 0)
+                                        {
+                                            <span class="badge bg-secondary-lt">legacy @item.LegacyRecipeCount</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (item.ValidationWarnings.Count == 0)
+                                        {
+                                            <span class="badge bg-success-lt text-success">OK</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning-lt text-warning">@item.ValidationWarnings.Count brakow</span>
+                                            <div class="text-secondary small">@string.Join("; ", item.ValidationWarnings)</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (Model.CanEdit)
+                                        {
+                                            <form asp-controller="DietMenuPlan" asp-action="DeleteItem" asp-route-planId="@Model.Id" asp-route-itemId="@item.Id" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Usun</button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @if (Model.CanEdit)
+            {
+                <div class="card card-premium mt-3">
+                    <div class="card-header">
+                        <h3 class="card-title">Edycja pozycji</h3>
+                    </div>
+                    <div class="card-body">
+                        @foreach (var item in Model.Items.OrderBy(i => i.SortOrder).ThenBy(i => i.Id))
+                        {
+                            <form asp-controller="DietMenuPlan" asp-action="UpdateItem" asp-route-planId="@Model.Id" asp-route-itemId="@item.Id" method="post" class="row g-2 align-items-end mb-3">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
+                                <div class="col-md-3">
+                                    <label class="form-label">Wariant</label>
+                                    <select name="DietVariantId" class="form-select form-select-sm" required>
+                                        @foreach (var variant in variants)
+                                        {
+                                            <option value="@variant.Variant.Id" selected="@(variant.Variant.Id == item.DietVariantId)">@variant.Diet / @variant.Variant.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Slot</label>
+                                    <select name="MealSlot" class="form-select form-select-sm" required>
+                                        @foreach (var slot in slots)
+                                        {
+                                            <option value="@slot" selected="@(slot == item.MealSlot)">@slot</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Posilek</label>
+                                    <select name="MealId" class="form-select form-select-sm" required>
+                                        @foreach (var meal in meals)
+                                        {
+                                            <option value="@meal.Id" selected="@(meal.Id == item.MealId)">@meal.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label">x</label>
+                                    <input name="ServingSizeMultiplier" type="number" step="0.01" min="0.01" value="@item.ServingSizeMultiplier" class="form-control form-control-sm" />
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label">Lp.</label>
+                                    <input name="SortOrder" type="number" value="@item.SortOrder" class="form-control form-control-sm" />
+                                </div>
+                                <div class="col-md-1">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary w-100">Zapisz</button>
+                                </div>
+                            </form>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card card-premium">
+                <div class="card-header">
+                    <h3 class="card-title">Walidacja publikacji</h3>
+                </div>
+                <div class="card-body">
+                    @if (Model.Validation.Warnings.Count == 0)
+                    {
+                        <span class="badge bg-success-lt text-success">Plan gotowy do publikacji</span>
+                    }
+                    else
+                    {
+                        <ul class="mb-0">
+                            @foreach (var warning in Model.Validation.Warnings)
+                            {
+                                <li>@warning</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+
+            @if (Model.CanEdit)
+            {
+                <div class="card card-premium mt-3">
+                    <div class="card-header">
+                        <h3 class="card-title">Dodaj pozycje</h3>
+                    </div>
+                    <div class="card-body">
+                        <form asp-controller="DietMenuPlan" asp-action="AddItem" asp-route-planId="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
+                            <div class="mb-3">
+                                <label class="form-label">Wariant diety</label>
+                                <select name="DietVariantId" class="form-select" required>
+                                    <option value="">Wybierz wariant</option>
+                                    @foreach (var variant in variants)
+                                    {
+                                        <option value="@variant.Variant.Id">@variant.Diet / @variant.Variant.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Slot</label>
+                                <select name="MealSlot" class="form-select" required>
+                                    @foreach (var slot in slots)
+                                    {
+                                        <option value="@slot">@slot</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Posilek</label>
+                                <select name="MealId" class="form-select" required>
+                                    <option value="">Wybierz posilek</option>
+                                    @foreach (var meal in meals)
+                                    {
+                                        <option value="@meal.Id">@meal.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label">Mnoznik</label>
+                                    <input name="ServingSizeMultiplier" type="number" step="0.01" min="0.01" value="1" class="form-control" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Kolejnosc</label>
+                                    <input name="SortOrder" type="number" value="0" class="form-control" />
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 mt-3">Dodaj</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card card-premium mt-3">
+                    <div class="card-header">
+                        <h3 class="card-title">Kopiuj dzien</h3>
+                    </div>
+                    <div class="card-body">
+                        <form asp-controller="DietMenuPlan" asp-action="CopyDay" asp-route-planId="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="returnDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
+                            <label class="form-label">Data docelowa</label>
+                            <input type="date" name="TargetDate" class="form-control" required />
+                            <button type="submit" class="btn btn-outline-primary w-100 mt-3">Kopiuj aktywne pozycje</button>
+                        </form>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

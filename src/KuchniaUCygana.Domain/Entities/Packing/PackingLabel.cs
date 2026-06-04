@@ -19,6 +19,11 @@ public class PackingLabel : BaseEntity<int>
     public int? PackingSessionId { get; set; }
 
     /// <summary>
+    /// Fizyczna torba transportowa. Dla nowych etykiet transportowych jest to glowny klucz.
+    /// </summary>
+    public int? PackingBagId { get; set; }
+
+    /// <summary>
     /// Typ etykiety: Product (na pudełko) lub Shipping (na torbę).
     /// </summary>
     public LabelType LabelType { get; set; }
@@ -27,7 +32,7 @@ public class PackingLabel : BaseEntity<int>
     /// Kod QR (wygenerowany UUID lub sekwencyjny).
     /// </summary>
     [Required]
-    [StringLength(100)]
+    [StringLength(300)]
     public string QrCode { get; set; } = string.Empty;
 
     /// <summary>
@@ -64,6 +69,28 @@ public class PackingLabel : BaseEntity<int>
     /// </summary>
     [StringLength(50)]
     public string? DeliveryWindow { get; set; }
+
+    [StringLength(2000)]
+    public string? MealsList { get; set; }
+
+    [StringLength(250)]
+    public string? ReprintReason { get; set; }
+
+    public int PrintNumber { get; set; } = 1;
+
+    public string? LabelDataJson { get; set; }
+
+    public DateTimeOffset? PrintedAt { get; set; }
+
+    [StringLength(100)]
+    public string? PrintedBy { get; set; }
+
+    public DateTimeOffset? AttachedAt { get; set; }
+
+    public int? AttachedByUserId { get; set; }
+
+    [StringLength(100)]
+    public string? AttachedBy { get; set; }
 }
 
 /// <summary>

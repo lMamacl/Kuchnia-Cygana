@@ -5,8 +5,10 @@
     ViewData["Section"] = "Magazyn";
     ViewData["Description"] = "Zgłoś straty ilościowe lub jakościowe składnika w celu zdjęcia ich ze stanu według zasady FEFO.";
 
-    var stockItems = ViewBag.StockItems as IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
-                     ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
+    var selectedStockItem = ViewBag.SelectedStockItem as KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto;
+    var selectedBatches = ViewBag.SelectedBatches as IReadOnlyList<KuchniaUCygana.Application.DTOs.Warehouse.BatchDto>
+                          ?? Array.Empty<KuchniaUCygana.Application.DTOs.Warehouse.BatchDto>();
+    var selectedBatchId = ViewBag.SelectedBatchId is int batchId ? batchId : (int?)null;
 
     var reasons = new[]
     {
@@ -14,7 +16,8 @@
         "Uszkodzenie opakowania",
         "Wada jakościowa / organoleptyczna",
         "Zanieczyszczenie",
-        "Błąd kulinarny"
+        "Błąd kulinarny",
+        "Inny"
     };
 }
 
@@ -42,20 +45,33 @@
                                 <div>
                                     <h4 class="alert-title">Wykryto błędy formularza</h4>
                                     <div class="text-secondary">Proszę poprawić poniższe pola, aby zgłosić stratę.</div>
+                                    <div asp-validation-summary="All" class="text-secondary small mt-2"></div>
                                 </div>
                             </div>
                         </div>
                     }
 
-                    <div class="mb-3">
-                        <label class="form-label required">Składnik magazynowy</label>
-                        <select asp-for="StockItemId" class="form-select" aria-label="Wybierz składnik">
-                            <option value="">-- Wybierz z listy --</option>
-                            @foreach (var item in stockItems)
-                            {
-                                <option value="@item.Id">@item.Name (@item.UnitSymbol)</option>
-                            }
-                        </select>
+                    <div class="mb-3 position-relative">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label required mb-0">Składnik magazynowy</label>
+                            <a href="http://localhost:8080/ingredients/create" class="btn btn-sm btn-outline-primary py-0 px-2 small">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-inline me-1" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                Dodaj nowy produkt
+                            </a>
+                        </div>
+                        <input type="hidden" asp-for="StockItemId" id="StockItemId" />
+                        <input type="text" 
+                               id="StockItemSearch" 
+                               class="form-control" 
+                               placeholder="Zacznij wpisywać nazwę składnika..." 
+                               autocomplete="off"
+                               hx-get="/warehouse/stock-lookup"
+                               hx-vals='{"onlyAvailable": true}'
+                               hx-trigger="keyup changed delay:200ms"
+                               hx-target="#search-results"
+                               name="q"
+                               value="@(selectedStockItem?.Name ?? "")" />
+                        <div id="search-results" class="position-absolute w-100" style="z-index: 1050;"></div>
                         <span asp-validation-for="StockItemId" class="text-danger small"></span>
                     </div>
 
@@ -67,7 +83,7 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label required">Powód spisania</label>
-                            <select asp-for="Reason" class="form-select" aria-label="Wybierz powód">
+                            <select asp-for="Reason" id="ReasonSelect" class="form-select" aria-label="Wybierz powód">
                                 <option value="">-- Wybierz powód --</option>
                                 @foreach (var r in reasons)
                                 {
@@ -78,11 +94,32 @@
                         </div>
                     </div>
 
+                    <div class="mb-3" id="NotesField" style="display: none;">
+                        <label class="form-label required">Uwagi (wymagane dla powodu 'Inny')</label>
+                        <textarea asp-for="Notes" class="form-control" rows="2" placeholder="Wpisz szczegółowy powód..."></textarea>
+                        <span asp-validation-for="Notes" class="text-danger small"></span>
+                    </div>
+
                     <div class="mb-3">
-                        <label class="form-label">Numer konkretnej partii (opcjonalnie)</label>
-                        <input type="number" asp-for="BatchId" class="form-control" placeholder="Pozostaw puste w celu automatycznego rozliczenia FEFO" />
+                        <label class="form-label">Partia magazynowa (opcjonalnie)</label>
+                        <select asp-for="BatchId" id="BatchIdSelect" class="form-select">
+                            @if (selectedBatches.Any())
+                            {
+                                <option value="">-- Automatycznie wg FEFO --</option>
+                                @foreach (var batch in selectedBatches)
+                                {
+                                    <option value="@batch.Id" selected="@(selectedBatchId == batch.Id ? "selected" : null)">
+                                        #@batch.Id - @batch.SupplierBatchNumber (@batch.CurrentQuantity.ToString("F2") kg, ważność: @(batch.ExpiryDate?.ToString("dd.MM.yyyy") ?? "bez terminu"))
+                                    </option>
+                                }
+                            }
+                            else
+                            {
+                                <option value="">-- Wybierz najpierw składnik --</option>
+                            }
+                        </select>
                         <span asp-validation-for="BatchId" class="text-danger small"></span>
-                        <small class="form-hint">Jeśli pole pozostanie puste, system pobierze ilość z najwcześniej wygasającej partii.</small>
+                        <small class="form-hint">Jeśli nie wybierzesz konkretnej partii, system automatycznie rozliczy odpis wg zasady FEFO.</small>
                     </div>
 
                     <div class="card-footer bg-transparent p-0 pt-3 d-flex justify-content-between">
@@ -94,3 +131,44 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        function selectStockItem(id, name) {
+            document.getElementById('StockItemId').value = id;
+            document.getElementById('StockItemSearch').value = name;
+            document.getElementById('search-results').innerHTML = '';
+            
+            // Trigger fetching batches via HTMX
+            htmx.ajax('GET', '/warehouse/batches-for-item?stockItemId=' + id, '#BatchIdSelect');
+        }
+
+        document.getElementById('StockItemSearch').addEventListener('input', function() {
+            if (!this.value.trim()) {
+                document.getElementById('StockItemId').value = '';
+                document.getElementById('BatchIdSelect').innerHTML = '<option value="">-- Wybierz najpierw składnik --</option>';
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            if (e.target.id !== 'StockItemSearch') {
+                document.getElementById('search-results').innerHTML = '';
+            }
+        });
+
+        function toggleNotes() {
+            var reasonSelect = document.getElementById('ReasonSelect');
+            var notesField = document.getElementById('NotesField');
+            var textarea = notesField.querySelector('textarea');
+            if (reasonSelect.value === 'Inny') {
+                notesField.style.display = 'block';
+                textarea.setAttribute('required', 'required');
+            } else {
+                notesField.style.display = 'none';
+                textarea.removeAttribute('required');
+            }
+        }
+        document.getElementById('ReasonSelect').addEventListener('change', toggleNotes);
+        toggleNotes();
+    </script>
+}

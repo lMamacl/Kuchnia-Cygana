@@ -39,6 +39,25 @@ public sealed class DependencyInjectionTests
         dbFactory1.Should().BeOfType<SqlServerConnectionFactory>();
     }
 
+    [Fact]
+    public void AddInfrastructure_Allows_Separate_MigrationConnection()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DefaultConnection"] = "Server=localhost,1433;Database=KuchniaUCygana_Test;User Id=pracownik;Password=Runtime123!;Encrypt=True;TrustServerCertificate=True;",
+                ["ConnectionStrings:MigrationConnection"] = "Server=localhost,1433;Database=KuchniaUCygana_Test;User Id=admin;Password=Migration123!;Encrypt=True;TrustServerCertificate=True;",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+
+        services.AddInfrastructure(config);
+        var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IDbConnectionFactory>().Should().BeOfType<SqlServerConnectionFactory>();
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("Mock")]
@@ -66,6 +85,30 @@ public sealed class DependencyInjectionTests
     }
 
     [Fact]
+    public void AddInfrastructure_Registers_M4DeliveryManifestProvider_ByDefault()
+    {
+        var config = CreateConfiguration();
+        var services = new ServiceCollection();
+
+        services.AddInfrastructure(config);
+        var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IDeliveryManifestProvider>().Should().BeOfType<M4DeliveryManifestProvider>();
+    }
+
+    [Fact]
+    public void AddInfrastructure_Registers_MockDeliveryManifestProvider_WhenConfigured()
+    {
+        var config = CreateConfiguration(deliveryManifestProvider: "Mock");
+        var services = new ServiceCollection();
+
+        services.AddInfrastructure(config);
+        var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IDeliveryManifestProvider>().Should().BeOfType<MockDeliveryManifestProvider>();
+    }
+
+    [Fact]
     public void AddInfrastructure_Registers_Module3RepositoryContracts()
     {
         var config = CreateConfiguration();
@@ -78,7 +121,7 @@ public sealed class DependencyInjectionTests
         provider.GetRequiredService<ITemperatureLogRepository>().Should().NotBeNull();
     }
 
-    private static IConfiguration CreateConfiguration(string? orderProvider = null)
+    private static IConfiguration CreateConfiguration(string? orderProvider = null, string? deliveryManifestProvider = null)
     {
         var values = new Dictionary<string, string?>
         {
@@ -88,6 +131,11 @@ public sealed class DependencyInjectionTests
         if (orderProvider is not null)
         {
             values["OrderProvider"] = orderProvider;
+        }
+
+        if (deliveryManifestProvider is not null)
+        {
+            values["DeliveryManifestProvider"] = deliveryManifestProvider;
         }
 
         return new ConfigurationBuilder()

@@ -12,11 +12,11 @@ public sealed class QuestPdfGenerator : IPdfGenerator
         {
             container.Page(page =>
             {
-                page.Margin(24);
+                page.Margin(12);
                 page.Content().Column(column =>
                 {
-                    column.Item().Text(title).FontSize(20).SemiBold();
-                    column.Item().PaddingTop(8).Text(content);
+                    column.Item().Text(title).FontSize(14).SemiBold().FontFamily("Courier New");
+                    column.Item().PaddingTop(6).Text(content).FontSize(9).FontFamily("Courier New");
                 });
             });
         }).GeneratePdf();

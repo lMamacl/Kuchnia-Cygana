@@ -1,4 +1,4 @@
-using KuchniaUCygana.Application.DTOs.Production;
+using KuchniaUCygana.Application.DTOs.Packing;
 
 namespace KuchniaUCygana.Web.Models;
 
@@ -9,4 +9,6 @@ public sealed class PackingDeliveryViewModel
     public PackingRouteDto Route { get; set; } = null!;
 
     public PackingManifestDto? Manifest { get; set; }
+
+    public ManifestControlDto? ManifestControl { get; set; }
 }

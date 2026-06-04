@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using KuchniaUCygana.Application.DTOs.Production;
+using KuchniaUCygana.Application.DTOs.Packing;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -20,11 +21,16 @@ public sealed class ProductionController : Controller
 {
     private readonly IProductionService productionService;
     private readonly IPackingService packingService;
+    private readonly IPackingIncidentService packingIncidentService;
 
-    public ProductionController(IProductionService productionService, IPackingService packingService)
+    public ProductionController(
+        IProductionService productionService,
+        IPackingService packingService,
+        IPackingIncidentService packingIncidentService)
     {
         this.productionService = productionService;
         this.packingService = packingService;
+        this.packingIncidentService = packingIncidentService;
     }
 
     // ── Plan dnia ─────────────────────────────────────────────
@@ -159,8 +165,16 @@ public sealed class ProductionController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ApproveCooking(int planItemId, decimal actualQuantity)
     {
-        await productionService.ApproveCookingAsync(planItemId, actualQuantity);
-        TempData["Success"] = "Gotowanie zatwierdzone.";
+        try
+        {
+            await productionService.ApproveCookingAsync(planItemId, actualQuantity);
+            TempData["Success"] = "Gotowanie zatwierdzone.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
         return RedirectToAction(nameof(CookingCard), new { planItemId });
     }
 
@@ -175,8 +189,16 @@ public sealed class ProductionController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ProduceSemiFinished(int planId)
     {
-        await productionService.ProduceSemiFinishedAsync(planId);
+        try
+        {
+            await productionService.ProduceSemiFinishedAsync(planId);
         TempData["Success"] = "Składniki zdjęte z magazynu wg FEFO. Plan uruchomiony.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
         return RedirectToAction(nameof(Plan), new { planId });
     }
 
@@ -192,27 +214,47 @@ public sealed class ProductionController : Controller
         var targetDate = date ?? DateOnly.FromDateTime(DateTime.Today);
         var sessions = (await packingService.GetSessionsByDateAsync(targetDate)).ToList();
 
-        // Automatycznie generujemy pudełka dla dzisiejszych zamówień, jeśli nie zostały jeszcze utworzone
-        foreach (var session in sessions)
-        {
-            if (session.Items.Count == 0 && session.OrderId.HasValue)
-            {
-                try
-                {
-                    await packingService.PrepareOrderBoxesAsync(session.Id);
-                }
-                catch (Exception)
-                {
-                    // Ignorujemy błędy generowania dla pojedynczych sesji (np. brak diety w bazie)
-                }
-            }
-        }
-
-        // Pobieramy sesje ponownie, tym razem z załadowanymi pudełkami
-        sessions = (await packingService.GetSessionsByDateAsync(targetDate)).ToList();
-
         ViewBag.SelectedDate = targetDate;
         return View(sessions);
+    }
+
+    [HttpGet("rework")]
+    public async Task<IActionResult> Rework(DateOnly? date)
+    {
+        var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        return View(new KitchenReworkViewModel
+        {
+            SelectedDate = selectedDate,
+            Incidents = await packingIncidentService.GetKitchenReworkAsync(selectedDate),
+        });
+    }
+
+    [HttpPost("rework/{incidentId:int}/start")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartRework(int incidentId, DateOnly date)
+    {
+        await packingIncidentService.MarkKitchenInProgressAsync(new HandlePackingIncidentRequest
+        {
+            IncidentId = incidentId,
+            Notes = "Kuchnia rozpoczęła ponowne przygotowanie.",
+        });
+
+        TempData["Success"] = $"Oznaczono zgłoszenie #{incidentId} jako rozpoczęte.";
+        return RedirectToAction(nameof(Rework), new { date });
+    }
+
+    [HttpPost("rework/{incidentId:int}/prepared")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MarkReworkPrepared(int incidentId, DateOnly date)
+    {
+        await packingIncidentService.MarkKitchenPreparedAsync(new HandlePackingIncidentRequest
+        {
+            IncidentId = incidentId,
+            Notes = "Kuchnia oznaczyła zamiennik jako przygotowany.",
+        });
+
+        TempData["Success"] = $"Oznaczono zgłoszenie #{incidentId} jako przygotowane.";
+        return RedirectToAction(nameof(Rework), new { date });
     }
 
     /// <summary>
@@ -222,11 +264,33 @@ public sealed class ProductionController : Controller
     [HttpGet("foil-label/{packingItemId:int}")]
     public async Task<IActionResult> FoilLabel(int packingItemId)
     {
+        try
+        {
+            var label = await packingService.GetLatestFoilLabelAsync(packingItemId);
+            if (label is null)
+            {
+                TempData["Error"] = "Brak wygenerowanej etykiety produktowej. Użyj przycisku Drukuj z listy foliowania.";
+                return RedirectToAction(nameof(FoilPrinting));
+            }
+
+            return View(label);
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(FoilPrinting));
+        }
+    }
+
+    [HttpPost("foil-label/{packingItemId:int}/print")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PrintFoilLabel(int packingItemId)
+    {
         var operatorName = User.Identity?.Name ?? "Kuchnia";
         try
         {
             var label = await packingService.PrintFoilLabelAsync(packingItemId, operatorName);
-            return View(label);
+            return View(nameof(FoilLabel), label);
         }
         catch (Exception ex)
         {
@@ -239,7 +303,8 @@ public sealed class ProductionController : Controller
     /// Zbiorczy wydruk etykiet foliowych (bulk).
     /// GET /production/foil-labels-bulk?ids=1,2,3
     /// </summary>
-    [HttpGet("foil-labels-bulk")]
+    [HttpPost("foil-labels-bulk")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> FoilLabelsBulk(string ids)
     {
         var operatorName = User.Identity?.Name ?? "Kuchnia";

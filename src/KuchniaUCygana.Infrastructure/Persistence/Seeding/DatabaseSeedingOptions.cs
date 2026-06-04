@@ -9,6 +9,8 @@ public sealed class DatabaseSeedingOptions
     public string? Mode { get; set; }
 
     public string? Profile { get; set; }
+
+    public bool ResetDemoData { get; set; }
 }
 
 public enum DatabaseSeedingMode

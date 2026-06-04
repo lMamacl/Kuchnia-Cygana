@@ -4,6 +4,7 @@ using Dapper;
 using AutoMapper;
 using KuchniaUCygana.Application.Mappings;
 using KuchniaUCygana.Application.Services;
+using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Entities.Production;
@@ -11,6 +12,7 @@ using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.External;
+using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Adapters;
 using KuchniaUCygana.Infrastructure.Mocks;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
@@ -44,7 +46,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-1", DateTimeOffset.UtcNow.AddDays(10), false, false);
         await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-2", DateTimeOffset.UtcNow.AddDays(3), false, false);
         await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-3", null, false, false);
-        await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-4", DateTimeOffset.UtcNow.AddDays(1), true, false);
+        await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-4", DateTimeOffset.UtcNow.AddDays(1), true, false, currentQuantity: 0m);
         await InsertBatchAsync(connectionFactory, stockItemId, "FEFO-5", DateTimeOffset.UtcNow.AddDays(2), false, true);
 
         var repository = new BatchRepository(connectionFactory);
@@ -107,6 +109,468 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task StockItemRepository_SearchStockLookupAsync_ShouldReturnAtMostRequestedLimit()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var unique = $"Lookup-{Guid.NewGuid():N}"[..15];
+
+        for (var i = 0; i < 25; i++)
+        {
+            var stockItemId = await CreateStockItemAsync(connectionFactory, $"{unique}-{i:D2}");
+            await InsertBatchAsync(connectionFactory, stockItemId, $"LOOK-{i:D2}", DateTimeOffset.UtcNow.AddDays(10), false, false);
+        }
+
+        var repository = new StockItemRepository(connectionFactory);
+
+        var result = (await repository.SearchStockLookupAsync(unique, limit: 20, onlyAvailable: false)).ToList();
+
+        result.Should().HaveCount(20);
+        result.Should().OnlyContain(x => x.Name.Contains(unique));
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task StockItemRepository_GetStockTablePageAsync_ShouldReturnTotalCountAndRequestedPage()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var unique = $"Page-{Guid.NewGuid():N}"[..14];
+
+        for (var i = 0; i < 3; i++)
+        {
+            var stockItemId = await CreateStockItemAsync(connectionFactory, $"{unique}-{i:D2}");
+            await InsertBatchAsync(connectionFactory, stockItemId, $"PAGE-{i:D2}", DateTimeOffset.UtcNow.AddDays(14), false, false);
+        }
+
+        var repository = new StockItemRepository(connectionFactory);
+        var query = new StockItemTableQuery(unique, CategoryId: null, LegacyCategory: null, ShowExpiredOnly: false, ShowLowStockOnly: false, ShowExpiringSoonOnly: false, Page: 2, PageSize: 2);
+
+        var (items, totalCount) = await repository.GetStockTablePageAsync(query);
+
+        totalCount.Should().Be(3);
+        items.Should().ContainSingle();
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task StockItemRepository_GetStockTablePageAsync_ShouldFilterExpiringSoonWithoutExpired()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var unique = $"ExpSoon-{Guid.NewGuid():N}"[..18];
+        var expiredId = await CreateStockItemAsync(connectionFactory, $"{unique}-Expired");
+        var soonId = await CreateStockItemAsync(connectionFactory, $"{unique}-Soon");
+        var laterId = await CreateStockItemAsync(connectionFactory, $"{unique}-Later");
+
+        await InsertBatchAsync(connectionFactory, expiredId, "EXPSOON-EXPIRED", DateTimeOffset.UtcNow.AddDays(-1), false, false);
+        await InsertBatchAsync(connectionFactory, soonId, "EXPSOON-SOON", DateTimeOffset.UtcNow.AddDays(5), false, false);
+        await InsertBatchAsync(connectionFactory, laterId, "EXPSOON-LATER", DateTimeOffset.UtcNow.AddDays(14), false, false);
+
+        var repository = new StockItemRepository(connectionFactory);
+        var query = new StockItemTableQuery(
+            unique,
+            CategoryId: null,
+            LegacyCategory: null,
+            ShowExpiredOnly: false,
+            ShowLowStockOnly: false,
+            ShowExpiringSoonOnly: true,
+            Page: 1,
+            PageSize: 10);
+
+        var (items, totalCount) = await repository.GetStockTablePageAsync(query);
+        var page = items.ToList();
+
+        totalCount.Should().Be(1);
+        page.Should().ContainSingle()
+            .Which.Name.Should().Contain("Soon");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task StockItemRepository_GetStockTablePageAsync_ShouldFilterByWarehouseCategoryId()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var unique = $"Cat-{Guid.NewGuid():N}"[..14];
+        var meatCategoryItemId = await CreateStockItemAsync(connectionFactory, $"{unique}-Alpha", warehouseCategoryId: 1);
+        var dryCategoryItemId = await CreateStockItemAsync(connectionFactory, $"{unique}-Beta", warehouseCategoryId: 4);
+
+        await InsertBatchAsync(connectionFactory, meatCategoryItemId, "CAT-MEAT", DateTimeOffset.UtcNow.AddDays(10), false, false);
+        await InsertBatchAsync(connectionFactory, dryCategoryItemId, "CAT-DRY", DateTimeOffset.UtcNow.AddDays(10), false, false);
+
+        var repository = new StockItemRepository(connectionFactory);
+        var query = new StockItemTableQuery(
+            unique,
+            CategoryId: 1,
+            LegacyCategory: null,
+            ShowExpiredOnly: false,
+            ShowLowStockOnly: false,
+            ShowExpiringSoonOnly: false,
+            Page: 1,
+            PageSize: 10);
+
+        var (items, totalCount) = await repository.GetStockTablePageAsync(query);
+        var page = items.ToList();
+
+        totalCount.Should().Be(1);
+        page.Should().ContainSingle()
+            .Which.CategoryId.Should().Be(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task BatchRepository_GetFefoReportPageAsync_ShouldFilterBeforePaging()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var unique = $"Fefo-{Guid.NewGuid():N}"[..14];
+        var matchingNameId = await CreateStockItemAsync(connectionFactory, $"{unique}-Name");
+        var matchingBatchId = await CreateStockItemAsync(connectionFactory, "Fefo other product");
+        var expiredId = await CreateStockItemAsync(connectionFactory, $"{unique}-Expired");
+
+        await InsertBatchAsync(connectionFactory, matchingNameId, "LOT-NAME", DateTimeOffset.UtcNow.AddDays(5), false, false);
+        await InsertBatchAsync(connectionFactory, matchingBatchId, $"{unique}-BATCH", DateTimeOffset.UtcNow.AddDays(5), false, false);
+        await InsertBatchAsync(connectionFactory, expiredId, "LOT-EXPIRED", DateTimeOffset.UtcNow.AddDays(-1), false, false);
+
+        var repository = new BatchRepository(connectionFactory);
+        var query = new FefoReportQuery(unique, Status: "Warning", Page: 1, PageSize: 1, UsePaging: true);
+
+        var (items, totalCount) = await repository.GetFefoReportPageAsync(query);
+
+        totalCount.Should().Be(2);
+        items.Should().ContainSingle()
+            .Which.Status.Should().Be("Warning");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task BatchRepository_GetBatchInventoryPageAsync_ShouldFilterByProductOrBatchBeforePaging()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var unique = $"BatchInv-{Guid.NewGuid():N}"[..18];
+        var matchingNameId = await CreateStockItemAsync(connectionFactory, $"{unique}-Name");
+        var matchingBatchId = await CreateStockItemAsync(connectionFactory, "Other inventory product");
+
+        await InsertBatchAsync(connectionFactory, matchingNameId, "INV-NAME", DateTimeOffset.UtcNow.AddDays(5), false, false, currentQuantity: 4m);
+        await InsertBatchAsync(connectionFactory, matchingBatchId, $"{unique}-BATCH", DateTimeOffset.UtcNow.AddDays(6), false, false, currentQuantity: 6m);
+        await InsertBatchAsync(connectionFactory, matchingBatchId, "INV-HIDDEN", DateTimeOffset.UtcNow.AddDays(7), false, false, currentQuantity: 8m);
+
+        var repository = new BatchRepository(connectionFactory);
+        var query = new BatchInventoryQuery(unique, CategoryId: null, LegacyCategory: null, Page: 1, PageSize: 1);
+
+        var (items, totalCount) = await repository.GetBatchInventoryPageAsync(query);
+
+        totalCount.Should().Be(2);
+        items.Should().ContainSingle();
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task InventoryTransactionRepository_GetTransactionHistoryPageAsync_ShouldReturnLatestPage()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var stockItemId = await CreateStockItemAsync(connectionFactory, "HistoryPage-Test");
+        var batchId = await InsertBatchAsync(connectionFactory, stockItemId, "HISTORY-BATCH", DateTimeOffset.UtcNow.AddDays(20), false, false);
+        var start = new DateTimeOffset(2040, 1, 1, 8, 0, 0, TimeSpan.Zero);
+
+        for (var i = 0; i < 30; i++)
+        {
+            await InsertInventoryTransactionAsync(connectionFactory, batchId, start.AddMinutes(i), $"HIST-{i:D2}");
+        }
+
+        var repository = new InventoryTransactionRepository(connectionFactory);
+        var query = new TransactionHistoryQuery(StockItemId: null, From: null, To: null, TransactionType: null, Page: 1, PageSize: 25);
+
+        var (items, totalCount) = await repository.GetTransactionHistoryPageAsync(query);
+        var page = items.ToList();
+
+        totalCount.Should().BeGreaterThanOrEqualTo(30);
+        page.Should().HaveCount(25);
+        page[0].ReferenceDocument.Should().Be("HIST-29");
+        page.Select(x => x.PerformedAt).Should().BeInDescendingOrder();
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task WarehouseCommandRepository_ApplyInventoryAsync_ShouldCreateSurplusBatchAdjustmentAndTransaction()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var stockItemId = await CreateStockItemAsync(connectionFactory, "Inventory-Surplus");
+        await InsertBatchAsync(connectionFactory, stockItemId, "INV-SUR-BASE", DateTimeOffset.UtcNow.AddDays(10), false, false, currentQuantity: 10m);
+
+        var repository = new WarehouseCommandRepository(connectionFactory);
+
+        var results = await repository.ApplyInventoryAsync(
+            new[] { new InventoryAdjustmentCommand(stockItemId, 15m, "Test nadwyżki") },
+            "IntegrationTest");
+
+        results.Should().ContainSingle()
+            .Which.Difference.Should().Be(5m);
+
+        using var db = connectionFactory.CreateConnection();
+        var surplusBatch = await db.QuerySingleAsync<Batch>(
+            """
+            SELECT TOP 1 *
+            FROM [Batches]
+            WHERE [StockItemId] = @stockItemId
+              AND [SupplierBatchNumber] LIKE 'INV-%'
+            ORDER BY [Id] DESC;
+            """,
+            new { stockItemId });
+
+        surplusBatch.CurrentQuantity.Should().Be(5m);
+        surplusBatch.ExpiryDate.Should().BeNull();
+
+        var transaction = await db.QuerySingleAsync<InventoryTransaction>(
+            """
+            SELECT TOP 1 *
+            FROM [InventoryTransactions]
+            WHERE [BatchId] = @batchId
+            ORDER BY [Id] DESC;
+            """,
+            new { batchId = surplusBatch.Id });
+
+        transaction.StockItemId.Should().Be(stockItemId);
+        transaction.TransactionType.Should().Be(InventoryTransactionType.Adjustment);
+        transaction.QuantityChanged.Should().Be(5m);
+
+        var adjustmentCount = await db.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM [InventoryAdjustments] WHERE [StockItemId] = @stockItemId;",
+            new { stockItemId });
+        adjustmentCount.Should().Be(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task WarehouseCommandRepository_ApplyInventoryAsync_ShouldDeductShortageByFefo()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var stockItemId = await CreateStockItemAsync(connectionFactory, "Inventory-Shortage");
+        var firstBatchId = await InsertBatchAsync(connectionFactory, stockItemId, "INV-SHO-1", DateTimeOffset.UtcNow.AddDays(1), false, false, currentQuantity: 10m);
+        var secondBatchId = await InsertBatchAsync(connectionFactory, stockItemId, "INV-SHO-2", DateTimeOffset.UtcNow.AddDays(2), false, false, currentQuantity: 20m);
+
+        var repository = new WarehouseCommandRepository(connectionFactory);
+
+        var results = await repository.ApplyInventoryAsync(
+            new[] { new InventoryAdjustmentCommand(stockItemId, 25m, "Test niedoboru") },
+            "IntegrationTest");
+
+        results.Should().ContainSingle()
+            .Which.Difference.Should().Be(-5m);
+
+        using var db = connectionFactory.CreateConnection();
+        var firstQuantity = await db.ExecuteScalarAsync<decimal>(
+            "SELECT [CurrentQuantity] FROM [Batches] WHERE [Id] = @firstBatchId;",
+            new { firstBatchId });
+        var secondQuantity = await db.ExecuteScalarAsync<decimal>(
+            "SELECT [CurrentQuantity] FROM [Batches] WHERE [Id] = @secondBatchId;",
+            new { secondBatchId });
+
+        firstQuantity.Should().Be(5m);
+        secondQuantity.Should().Be(20m);
+
+        var transaction = await db.QuerySingleAsync<InventoryTransaction>(
+            """
+            SELECT TOP 1 *
+            FROM [InventoryTransactions]
+            WHERE [BatchId] = @firstBatchId
+            ORDER BY [Id] DESC;
+            """,
+            new { firstBatchId });
+
+        transaction.StockItemId.Should().Be(stockItemId);
+        transaction.QuantityChanged.Should().Be(-5m);
+        transaction.TransactionType.Should().Be(InventoryTransactionType.Adjustment);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task WarehouseCommandRepository_ApplyBatchInventoryAsync_ShouldAdjustOnlySelectedBatch()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var stockItemId = await CreateStockItemAsync(connectionFactory, "Inventory-Batch");
+        var expiredBatchId = await InsertBatchAsync(connectionFactory, stockItemId, "BAT-OLD", DateTimeOffset.UtcNow.AddDays(-1), false, false, currentQuantity: 0.4m);
+        var freshBatchId = await InsertBatchAsync(connectionFactory, stockItemId, "BAT-NEW", DateTimeOffset.UtcNow.AddDays(10), false, false, currentQuantity: 12m);
+
+        var repository = new WarehouseCommandRepository(connectionFactory);
+
+        var results = await repository.ApplyBatchInventoryAsync(
+            new[] { new BatchInventoryAdjustmentCommand(expiredBatchId, 0m, "Przeterminowana partia zutylizowana") },
+            "IntegrationTest");
+
+        results.Should().ContainSingle()
+            .Which.Difference.Should().Be(-0.4m);
+
+        using var db = connectionFactory.CreateConnection();
+        var expiredBatch = await db.QuerySingleAsync<Batch>(
+            "SELECT * FROM [Batches] WHERE [Id] = @expiredBatchId;",
+            new { expiredBatchId });
+        var freshQuantity = await db.ExecuteScalarAsync<decimal>(
+            "SELECT [CurrentQuantity] FROM [Batches] WHERE [Id] = @freshBatchId;",
+            new { freshBatchId });
+
+        expiredBatch.CurrentQuantity.Should().Be(0m);
+        expiredBatch.IsDepleted.Should().BeTrue();
+        freshQuantity.Should().Be(12m);
+
+        var transaction = await db.QuerySingleAsync<InventoryTransaction>(
+            """
+            SELECT TOP 1 *
+            FROM [InventoryTransactions]
+            WHERE [BatchId] = @expiredBatchId
+            ORDER BY [Id] DESC;
+            """,
+            new { expiredBatchId });
+
+        transaction.StockItemId.Should().Be(stockItemId);
+        transaction.QuantityChanged.Should().Be(-0.4m);
+        transaction.TransactionType.Should().Be(InventoryTransactionType.Adjustment);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task WarehouseCommandRepository_ApplyBatchInventoryAsync_ShouldRejectNegativePhysicalStock()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var stockItemId = await CreateStockItemAsync(connectionFactory, "Inventory-Batch-Neg");
+        var batchId = await InsertBatchAsync(connectionFactory, stockItemId, "BAT-NEG", DateTimeOffset.UtcNow.AddDays(10), false, false, currentQuantity: 3m);
+
+        var repository = new WarehouseCommandRepository(connectionFactory);
+
+        var act = async () => await repository.ApplyBatchInventoryAsync(
+            new[] { new BatchInventoryAdjustmentCommand(batchId, -1m, "Błąd") },
+            "IntegrationTest");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*nie może być ujemny*");
+
+        using var db = connectionFactory.CreateConnection();
+        var quantity = await db.ExecuteScalarAsync<decimal>(
+            "SELECT [CurrentQuantity] FROM [Batches] WHERE [Id] = @batchId;",
+            new { batchId });
+        quantity.Should().Be(3m);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task WarehouseCommandRepository_ApplyInventoryAsync_ShouldSkipUnchangedInventory()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var stockItemId = await CreateStockItemAsync(connectionFactory, "Inventory-Unchanged");
+        await InsertBatchAsync(connectionFactory, stockItemId, "INV-UNCHANGED", DateTimeOffset.UtcNow.AddDays(10), false, false, currentQuantity: 100m);
+
+        var repository = new WarehouseCommandRepository(connectionFactory);
+
+        var results = await repository.ApplyInventoryAsync(
+            new[] { new InventoryAdjustmentCommand(stockItemId, 100m, "Bez zmian") },
+            "IntegrationTest");
+
+        results.Should().BeEmpty();
+
+        using var db = connectionFactory.CreateConnection();
+        var adjustmentCount = await db.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM [InventoryAdjustments] WHERE [StockItemId] = @stockItemId;",
+            new { stockItemId });
+        adjustmentCount.Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task WarehouseCommandRepository_ApplyInventoryAsync_ShouldRejectNegativePhysicalStock()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var stockItemId = await CreateStockItemAsync(connectionFactory, "Inventory-Negative");
+        await InsertBatchAsync(connectionFactory, stockItemId, "INV-NEG", DateTimeOffset.UtcNow.AddDays(10), false, false, currentQuantity: 12m);
+
+        var repository = new WarehouseCommandRepository(connectionFactory);
+
+        var act = async () => await repository.ApplyInventoryAsync(
+            new[] { new InventoryAdjustmentCommand(stockItemId, -1m, "Błąd") },
+            "IntegrationTest");
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        using var db = connectionFactory.CreateConnection();
+        var quantity = await db.ExecuteScalarAsync<decimal>(
+            "SELECT [CurrentQuantity] FROM [Batches] WHERE [StockItemId] = @stockItemId;",
+            new { stockItemId });
+        quantity.Should().Be(12m);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task WarehouseCommandRepository_ApplyInventoryAsync_ShouldRollbackWhenLaterAdjustmentFails()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var stockItemId = await CreateStockItemAsync(connectionFactory, "Inventory-Rollback");
+        await InsertBatchAsync(connectionFactory, stockItemId, "INV-ROLLBACK", DateTimeOffset.UtcNow.AddDays(10), false, false, currentQuantity: 10m);
+
+        var repository = new WarehouseCommandRepository(connectionFactory);
+
+        var act = async () => await repository.ApplyInventoryAsync(
+            new[]
+            {
+                new InventoryAdjustmentCommand(stockItemId, 15m, "Pierwsza korekta"),
+                new InventoryAdjustmentCommand(987654321, 1m, "Nieistniejący składnik"),
+            },
+            "IntegrationTest");
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        using var db = connectionFactory.CreateConnection();
+        var totalQuantity = await db.ExecuteScalarAsync<decimal>(
+            """
+            SELECT COALESCE(SUM([CurrentQuantity]), 0)
+            FROM [Batches]
+            WHERE [StockItemId] = @stockItemId
+              AND [IsDeleted] = 0;
+            """,
+            new { stockItemId });
+        totalQuantity.Should().Be(10m);
+
+        var adjustmentCount = await db.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM [InventoryAdjustments] WHERE [StockItemId] = @stockItemId;",
+            new { stockItemId });
+        adjustmentCount.Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task InventoryTransactionRepository_GetTransactionHistoryPageAsync_ShouldFilterByStockItemIdColumn()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var firstStockItemId = await CreateStockItemAsync(connectionFactory, "History-Filter-A");
+        var secondStockItemId = await CreateStockItemAsync(connectionFactory, "History-Filter-B");
+        var firstBatchId = await InsertBatchAsync(connectionFactory, firstStockItemId, "HIST-FLT-A", DateTimeOffset.UtcNow.AddDays(10), false, false);
+        var secondBatchId = await InsertBatchAsync(connectionFactory, secondStockItemId, "HIST-FLT-B", DateTimeOffset.UtcNow.AddDays(10), false, false);
+
+        await InsertInventoryTransactionAsync(connectionFactory, firstBatchId, DateTimeOffset.UtcNow.AddMinutes(-2), "FILTER-A", firstStockItemId);
+        await InsertInventoryTransactionAsync(connectionFactory, secondBatchId, DateTimeOffset.UtcNow.AddMinutes(-1), "FILTER-B", secondStockItemId);
+
+        var repository = new InventoryTransactionRepository(connectionFactory);
+        var query = new TransactionHistoryQuery(firstStockItemId, From: null, To: null, TransactionType: null, Page: 1, PageSize: 25);
+
+        var (items, _) = await repository.GetTransactionHistoryPageAsync(query);
+
+        items.Should().Contain(x => x.ReferenceDocument == "FILTER-A" && x.StockItemId == firstStockItemId);
+        items.Should().NotContain(x => x.ReferenceDocument == "FILTER-B");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task StockItemRepository_GetSmartInventoryAlertRowsAsync_ShouldReturnAggregatedAlerts()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var noStockId = await CreateStockItemAsync(connectionFactory, "Smart-NoStock");
+        var expiringId = await CreateStockItemAsync(connectionFactory, "Smart-Expiry");
+        await InsertBatchAsync(connectionFactory, expiringId, "SMART-EXP", DateTimeOffset.UtcNow.AddDays(2), false, false, currentQuantity: 100m);
+
+        var repository = new StockItemRepository(connectionFactory);
+
+        var rows = (await repository.GetSmartInventoryAlertRowsAsync(DateTimeOffset.UtcNow)).ToList();
+
+        rows.Should().Contain(x => x.StockItemId == noStockId && x.AlertCode == "NoStock");
+        rows.Should().Contain(x => x.StockItemId == expiringId && x.AlertCode == "ExpiringWithin3Days" && x.SupplierBatchNumber == "SMART-EXP");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task ProductionPlanRepository_InsertAsync_ShouldReturnGeneratedIdentity()
     {
         var connectionFactory = CreateConnectionFactory();
@@ -146,14 +610,53 @@ public sealed class WarehouseRepositoriesSqlServerTests
             new BaseRepository<PackingItem>(connectionFactory),
             new BaseRepository<PackingLabel>(connectionFactory),
             new BaseRepository<PackingManifest>(connectionFactory),
+            new PackingBagRepository(connectionFactory),
+            new BoxLabelRepository(connectionFactory),
+            new PackingStatusLogRepository(connectionFactory),
             new M1OrderDataProvider(connectionFactory),
             new TestDietDataProvider(),
             new MockDeliveryManifestProvider(),
+            new TestApplicationUrlProvider(),
+            new TestCurrentUserService(),
             mapper,
             NullLogger<PackingService>.Instance);
     }
 
-    private static async Task<int> CreateStockItemAsync(IDbConnectionFactory connectionFactory, string nameSuffix)
+    private static LoadingService CreateLoadingService(IDbConnectionFactory connectionFactory, IPackingService packingService)
+    {
+        var mapperConfiguration = new MapperConfiguration(
+            cfg => cfg.AddProfile<ProductionProfile>(),
+            NullLoggerFactory.Instance);
+        var mapper = mapperConfiguration.CreateMapper();
+
+        return new LoadingService(
+            new PackingSessionRepository(connectionFactory),
+            new PackingBagRepository(connectionFactory),
+            new BaseRepository<PackingLabel>(connectionFactory),
+            new BaseRepository<PackingManifest>(connectionFactory),
+            new PackingStatusLogRepository(connectionFactory),
+            packingService,
+            mapper,
+            NullLogger<LoadingService>.Instance,
+            currentUserService: new TestCurrentUserService(),
+            packingLabelRepository: new PackingLabelRepository(connectionFactory),
+            packingManifestQueryRepository: new PackingManifestRepository(connectionFactory),
+            manifestIssueRepository: new PackingManifestIssueRepository(connectionFactory));
+    }
+
+    private static PackingSynchronizationService CreatePackingSynchronizationService(IDbConnectionFactory connectionFactory)
+    {
+        return new PackingSynchronizationService(
+            new PackingSessionRepository(connectionFactory),
+            new PackingBagRepository(connectionFactory),
+            new M1OrderDataProvider(connectionFactory),
+            NullLogger<PackingSynchronizationService>.Instance);
+    }
+
+    private static async Task<int> CreateStockItemAsync(
+        IDbConnectionFactory connectionFactory,
+        string nameSuffix,
+        int warehouseCategoryId = 4)
     {
         using var db = connectionFactory.CreateConnection();
 
@@ -179,6 +682,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
             DefaultUnitOfMeasureId = unitId,
             MinimumLevel = 5.25m,
             LeadTimeDays = 2,
+            WarehouseCategoryId = warehouseCategoryId,
             CreatedBy = "IntegrationTest",
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -187,10 +691,10 @@ public sealed class WarehouseRepositoriesSqlServerTests
             """
             INSERT INTO [StockItems]
                 ([Name], [BaseIngredientId], [DefaultUnitOfMeasureId], [MinimumLevel], [LeadTimeDays],
-                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+                 [WarehouseCategoryId], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
             VALUES
                 (@Name, @BaseIngredientId, @DefaultUnitOfMeasureId, @MinimumLevel, @LeadTimeDays,
-                 @CreatedBy, @UpdatedBy, @IsDeleted, @DeletedAt, @DeletedBy, @CreatedAt, @UpdatedAt);
+                 @WarehouseCategoryId, @CreatedBy, @UpdatedBy, @IsDeleted, @DeletedAt, @DeletedBy, @CreatedAt, @UpdatedAt);
             SELECT CAST(SCOPE_IDENTITY() AS int);
             """,
             stockItem);
@@ -202,7 +706,8 @@ public sealed class WarehouseRepositoriesSqlServerTests
         string supplierBatchNumber,
         DateTimeOffset? expiryDate,
         bool isDepleted,
-        bool isDeleted)
+        bool isDeleted,
+        decimal currentQuantity = 100m)
     {
         using var db = connectionFactory.CreateConnection();
 
@@ -210,7 +715,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         {
             StockItemId = stockItemId,
             SupplierBatchNumber = supplierBatchNumber,
-            CurrentQuantity = 100m,
+            CurrentQuantity = currentQuantity,
             ReceivedDate = DateTimeOffset.UtcNow.AddDays(-1),
             ExpiryDate = expiryDate,
             IsDepleted = isDepleted,
@@ -236,13 +741,15 @@ public sealed class WarehouseRepositoriesSqlServerTests
         IDbConnectionFactory connectionFactory,
         int batchId,
         DateTimeOffset createdAt,
-        string referenceDocument)
+        string referenceDocument,
+        int? stockItemId = null)
     {
         using var db = connectionFactory.CreateConnection();
 
         var row = new InventoryTransactionInsertRow
         {
             BatchId = batchId,
+            StockItemId = stockItemId,
             TransactionType = (int)InventoryTransactionType.Receipt,
             QuantityChanged = 10m,
             Reason = "Test przedzialu dat",
@@ -253,9 +760,9 @@ public sealed class WarehouseRepositoriesSqlServerTests
         await db.ExecuteAsync(
             """
             INSERT INTO [InventoryTransactions]
-                ([BatchId], [TransactionType], [QuantityChanged], [Reason], [ReferenceDocument], [CreatedAt])
+                ([BatchId], [StockItemId], [TransactionType], [QuantityChanged], [Reason], [ReferenceDocument], [CreatedAt])
             VALUES
-                (@BatchId, @TransactionType, @QuantityChanged, @Reason, @ReferenceDocument, @CreatedAt);
+                (@BatchId, @StockItemId, @TransactionType, @QuantityChanged, @Reason, @ReferenceDocument, @CreatedAt);
             """,
             row);
     }
@@ -263,6 +770,8 @@ public sealed class WarehouseRepositoriesSqlServerTests
     private sealed class InventoryTransactionInsertRow
     {
         public int BatchId { get; set; }
+
+        public int? StockItemId { get; set; }
 
         public int TransactionType { get; set; }
 
@@ -382,9 +891,12 @@ public sealed class WarehouseRepositoriesSqlServerTests
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 11);
-        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate);
-        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate);
+        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2);
         var service = CreatePackingService(connectionFactory);
+
+        var syncService = CreatePackingSynchronizationService(connectionFactory);
+        await syncService.EnsureSessionsForDateAsync(deliveryDate, "IntegrationTest");
 
         var firstBoard = await service.GetPackingBoardAsync(deliveryDate);
         var secondBoard = await service.GetPackingBoardAsync(deliveryDate);
@@ -418,9 +930,12 @@ public sealed class WarehouseRepositoriesSqlServerTests
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 12);
-        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate);
-        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate);
+        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2);
         var service = CreatePackingService(connectionFactory);
+
+        var syncService = CreatePackingSynchronizationService(connectionFactory);
+        await syncService.EnsureSessionsForDateAsync(deliveryDate, "IntegrationTest");
 
         var board = await service.GetPackingBoardAsync(deliveryDate);
         var firstBag = board.Routes.SelectMany(r => r.Bags).Single(b => b.OrderId == seededOne.OrderId);
@@ -429,6 +944,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var boxes = (await service.PrepareOrderBoxesAsync(firstBag.PackingSessionId)).ToList();
         foreach (var box in boxes)
         {
+            await service.PrintFoilLabelAsync(box.Id, "IntegrationTest");
             await service.MarkBoxPackedAsync(box.Id, "IntegrationTest");
         }
 
@@ -454,14 +970,19 @@ public sealed class WarehouseRepositoriesSqlServerTests
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 13);
-        var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate);
+        var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
         var service = CreatePackingService(connectionFactory);
+
+        var syncService = CreatePackingSynchronizationService(connectionFactory);
+        await syncService.EnsureSessionsForDateAsync(deliveryDate, "IntegrationTest");
+
         var board = await service.GetPackingBoardAsync(deliveryDate);
         var bag = board.Routes.SelectMany(r => r.Bags).Single(b => b.OrderId == seeded.OrderId);
 
         var boxes = (await service.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
         foreach (var box in boxes)
         {
+            await service.PrintFoilLabelAsync(box.Id, "IntegrationTest");
             await service.MarkBoxPackedAsync(box.Id, "IntegrationTest");
         }
         await service.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
@@ -504,30 +1025,46 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task PackingService_GeneratePackingManifestAsync_ShouldPersistJsonSnapshot()
+    public async Task LoadingService_GenerateManifestAsync_ShouldPersistJsonSnapshot()
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 14);
-        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate);
-        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate);
-        var service = CreatePackingService(connectionFactory);
+        var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2);
+        var packingService = CreatePackingService(connectionFactory);
+        var loadingService = CreateLoadingService(connectionFactory, packingService);
 
-        var board = await service.GetPackingBoardAsync(deliveryDate);
+        var syncService = CreatePackingSynchronizationService(connectionFactory);
+        await syncService.EnsureSessionsForDateAsync(deliveryDate, "IntegrationTest");
+
+        var board = await packingService.GetPackingBoardAsync(deliveryDate);
         var route = board.Routes.Single(r => r.Bags.Any(b => b.OrderId == seededOne.OrderId));
+        var initialControl = await loadingService.GetManifestControlAsync(deliveryDate, route.RouteId);
+
+        initialControl.Issues.Should().Contain(issue =>
+            issue.IssueType == "manifest" &&
+            issue.Details.Contains("Brak zapisanego manifestu", StringComparison.OrdinalIgnoreCase));
 
         foreach (var bag in route.Bags)
         {
-            var boxes = (await service.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
+            var boxes = (await packingService.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
             foreach (var box in boxes)
             {
-                await service.MarkBoxPackedAsync(box.Id, "IntegrationTest");
+                await packingService.PrintFoilLabelAsync(box.Id, "IntegrationTest");
+                await packingService.MarkBoxPackedAsync(box.Id, "IntegrationTest");
             }
 
-            await service.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
+            await packingService.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
+            var labels = (await packingService.GenerateTransportLabelsAsync(bag.PackingSessionId)).ToList();
+            foreach (var label in labels)
+            {
+                await packingService.ConfirmTransportLabelAttachedAsync(label.Id);
+            }
         }
 
-        var manifest = await service.GeneratePackingManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
-        var latest = await service.GetLatestPackingManifestAsync(deliveryDate, route.RouteId);
+        var manifest = await loadingService.GenerateManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+        var latest = await loadingService.GetManifestAsync(deliveryDate, route.RouteId);
+        var refreshedControl = await loadingService.GetManifestControlAsync(deliveryDate, route.RouteId);
 
         latest.Should().NotBeNull();
         latest!.Id.Should().Be(manifest.Id);
@@ -536,6 +1073,9 @@ public sealed class WarehouseRepositoriesSqlServerTests
         latest.BagCount.Should().Be(route.TotalBags);
         latest.PayloadJson.Should().Contain(seededOne.OrderId.ToString());
         latest.PayloadJson.Should().Contain(seededTwo.OrderId.ToString());
+        refreshedControl.Issues.Should().NotContain(issue =>
+            issue.IssueType == "manifest" &&
+            issue.Details.Contains("Brak zapisanego manifestu", StringComparison.OrdinalIgnoreCase));
 
         using var document = JsonDocument.Parse(latest.PayloadJson);
         document.RootElement.GetProperty("manifestNumber").GetString().Should().Be(manifest.ManifestNumber);
@@ -544,34 +1084,58 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task PackingService_LoadOrderBagAsync_ShouldRequireVerifiedRouteManifest()
+    public async Task LoadingService_LoadOrderBagAsync_ShouldAllowLoadingAfterWorkerApproval_AndVerifyAfterLoading()
     {
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 15);
-        var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate);
-        var service = CreatePackingService(connectionFactory);
-        var board = await service.GetPackingBoardAsync(deliveryDate);
+        var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        var packingService = CreatePackingService(connectionFactory);
+        var loadingService = CreateLoadingService(connectionFactory, packingService);
+
+        var syncService = CreatePackingSynchronizationService(connectionFactory);
+        await syncService.EnsureSessionsForDateAsync(deliveryDate, "IntegrationTest");
+
+        var board = await packingService.GetPackingBoardAsync(deliveryDate);
         var route = board.Routes.Single(r => r.Bags.Any(b => b.OrderId == seeded.OrderId));
         var bag = route.Bags.Single(b => b.OrderId == seeded.OrderId);
 
-        var boxes = (await service.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
+        var boxes = (await packingService.PrepareOrderBoxesAsync(bag.PackingSessionId)).ToList();
         foreach (var box in boxes)
         {
-            await service.MarkBoxPackedAsync(box.Id, "IntegrationTest");
+            await packingService.PrintFoilLabelAsync(box.Id, "IntegrationTest");
+            await packingService.MarkBoxPackedAsync(box.Id, "IntegrationTest");
         }
 
-        await service.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
+        await packingService.PackOrderBagAsync(bag.PackingSessionId, "IntegrationTest");
+        var labels = (await packingService.GenerateTransportLabelsAsync(bag.PackingSessionId)).ToList();
+        foreach (var label in labels)
+        {
+            await packingService.ConfirmTransportLabelAttachedAsync(label.Id);
+        }
 
-        var loadBeforeManifest = async () => await service.LoadOrderBagAsync(bag.PackingSessionId);
+        var loadBeforeManifest = async () => await loadingService.LoadOrderBagAsync(bag.PackingSessionId);
         await loadBeforeManifest.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*manifestu*");
 
-        await service.GeneratePackingManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
-        await service.VerifyPackingManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
-        await service.LoadOrderBagAsync(bag.PackingSessionId);
+        await loadingService.GenerateManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
 
-        var refreshed = await service.GetSessionByIdAsync(bag.PackingSessionId);
+        var loadBeforeWorkerApproval = async () => await loadingService.LoadOrderBagAsync(bag.PackingSessionId);
+        await loadBeforeWorkerApproval.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*pracownika*");
+
+        await loadingService.ApproveManifestByWorkerAsync(deliveryDate, route.RouteId, "IntegrationTest");
+
+        var verifyBeforeLoading = async () => await loadingService.VerifyManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+        await verifyBeforeLoading.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*zaladowaniu wszystkich toreb*");
+
+        await loadingService.LoadOrderBagAsync(bag.PackingSessionId);
+
+        var refreshed = await packingService.GetSessionByIdAsync(bag.PackingSessionId);
         refreshed!.Status.Should().Be(PackingStatus.Loaded.ToString());
+
+        var verified = await loadingService.VerifyManifestAsync(deliveryDate, route.RouteId, "IntegrationTest");
+        verified.IsVerified.Should().BeTrue();
     }
 
     private static async Task InsertTemperatureLogAsync(
@@ -648,7 +1212,8 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     private static async Task<SeededM1Order> SeedM1OrderAsync(
         IDbConnectionFactory connectionFactory,
-        DateOnly deliveryDate)
+        DateOnly deliveryDate,
+        int? customDeliveryCalendarId = null)
     {
         using var db = connectionFactory.CreateConnection();
         var unique = Guid.NewGuid().ToString("N")[..8];
@@ -733,22 +1298,47 @@ public sealed class WarehouseRepositoriesSqlServerTests
                 createdAt = now,
             });
 
-        await db.ExecuteAsync(
-            """
-            INSERT INTO DeliveryCalendar
-                (OrderId, AddressId, DeliveryWindowId, DeliveryDate, Status, IsSkipped, IsDeleted, CreatedAt)
-            VALUES
-                (@orderId, @addressId, @deliveryWindowId, @deliveryDate, @status, 0, 0, @createdAt);
-            """,
-            new
-            {
-                orderId,
-                addressId,
-                deliveryWindowId = 1,
-                deliveryDate = deliveryDate.ToDateTime(new TimeOnly(8, 0)),
-                status = (int)DeliveryStatus.Scheduled,
-                createdAt = now,
-            });
+        if (customDeliveryCalendarId.HasValue)
+        {
+            await db.ExecuteAsync(
+                """
+                SET IDENTITY_INSERT DeliveryCalendar ON;
+                INSERT INTO DeliveryCalendar
+                    (Id, OrderId, AddressId, DeliveryWindowId, DeliveryDate, Status, IsSkipped, IsDeleted, CreatedAt)
+                VALUES
+                    (@id, @orderId, @addressId, @deliveryWindowId, @deliveryDate, @status, 0, 0, @createdAt);
+                SET IDENTITY_INSERT DeliveryCalendar OFF;
+                """,
+                new
+                {
+                    id = customDeliveryCalendarId.Value,
+                    orderId,
+                    addressId,
+                    deliveryWindowId = 1,
+                    deliveryDate = deliveryDate.ToDateTime(new TimeOnly(8, 0)),
+                    status = (int)DeliveryStatus.Scheduled,
+                    createdAt = now,
+                });
+        }
+        else
+        {
+            await db.ExecuteAsync(
+                """
+                INSERT INTO DeliveryCalendar
+                    (OrderId, AddressId, DeliveryWindowId, DeliveryDate, Status, IsSkipped, IsDeleted, CreatedAt)
+                VALUES
+                    (@orderId, @addressId, @deliveryWindowId, @deliveryDate, @status, 0, 0, @createdAt);
+                """,
+                new
+                {
+                    orderId,
+                    addressId,
+                    deliveryWindowId = 1,
+                    deliveryDate = deliveryDate.ToDateTime(new TimeOnly(8, 0)),
+                    status = (int)DeliveryStatus.Scheduled,
+                    createdAt = now,
+                });
+        }
 
         return new SeededM1Order(orderId, userId, $"M1 Client {unique}", dietVariantId);
     }
@@ -767,16 +1357,26 @@ public sealed class WarehouseRepositoriesSqlServerTests
             {
                 new DietPlanEntry
                 {
+                    PlanDate = startDate,
+                    PlanStatus = "Published",
                     MealId = 801,
                     MealName = "Test breakfast",
                     DietVariantId = 501,
+                    MealSlot = "Breakfast",
+                    SortOrder = 1,
+                    ServingMultiplier = 1.0m,
                     ServingWeightGrams = 300m,
                 },
                 new DietPlanEntry
                 {
+                    PlanDate = startDate,
+                    PlanStatus = "Published",
                     MealId = 802,
                     MealName = "Test dinner",
                     DietVariantId = 501,
+                    MealSlot = "Dinner",
+                    SortOrder = 2,
+                    ServingMultiplier = 1.0m,
                     ServingWeightGrams = 450m,
                 },
             };
@@ -784,9 +1384,48 @@ public sealed class WarehouseRepositoriesSqlServerTests
             return Task.FromResult(entries);
         }
 
+        public Task<IEnumerable<DietPlanEntry>> GetPlanForDateAsync(DateOnly date)
+        {
+            return Get7DayPlanAsync(date);
+        }
+
+        public Task<PublishedDietPlanSnapshotDto?> GetPublishedPlanSnapshotAsync(DateOnly date)
+        {
+            return Task.FromResult<PublishedDietPlanSnapshotDto?>(null);
+        }
+
         public Task<IEnumerable<RecipeIngredientEntry>> GetRecipeForMealAsync(int mealId)
         {
             return Task.FromResult(Enumerable.Empty<RecipeIngredientEntry>());
+        }
+
+        public Task<MealCookingDetailsEntry?> GetMealCookingDetailsAsync(int mealId)
+        {
+            return Task.FromResult<MealCookingDetailsEntry?>(new MealCookingDetailsEntry
+            {
+                MealId = mealId,
+                MealName = $"Meal {mealId}",
+            });
+        }
+    }
+
+    private sealed class TestApplicationUrlProvider : IApplicationUrlProvider
+    {
+        public string BaseUrl => "https://test.local";
+    }
+
+    private sealed class TestCurrentUserService : ICurrentUserService
+    {
+        public bool IsAuthenticated => true;
+
+        public int? GetUserId()
+        {
+            return 7;
+        }
+
+        public string? GetUserName()
+        {
+            return "test-user";
         }
     }
 }

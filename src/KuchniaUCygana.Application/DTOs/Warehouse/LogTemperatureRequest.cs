@@ -5,6 +5,8 @@ namespace KuchniaUCygana.Application.DTOs.Warehouse;
 /// </summary>
 public sealed class LogTemperatureRequest
 {
+    public int? HaccpLocationId { get; set; }
+
     /// <summary>
     /// Nazwa urządzenia lub lokalizacji (np. "Chłodnia główna", "Lodówka nr 3").
     /// </summary>

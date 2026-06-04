@@ -14,4 +14,6 @@ public sealed class HaccpReportDto
     public int OutOfRangeReadings { get; set; }
 
     public List<TemperatureLogDto> Readings { get; set; } = new();
+
+    public IReadOnlyList<HaccpLocationDto> Locations { get; set; } = Array.Empty<HaccpLocationDto>();
 }

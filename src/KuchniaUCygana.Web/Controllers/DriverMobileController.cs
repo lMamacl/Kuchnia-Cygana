@@ -1,53 +1,126 @@
+using KuchniaUCygana.Application.DTOs.Logistics;
+using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
-[Authorize(Roles = "Driver,DriverManager,LogisticsManager,Admin")]
+[Authorize(Roles = UserRoles.Driver)]
 [Route("driver")]
 public sealed class DriverMobileController : Controller
 {
+    private readonly IDriverMobileService driverMobileService;
+
+    public DriverMobileController(IDriverMobileService driverMobileService)
+    {
+        this.driverMobileService = driverMobileService;
+    }
+
     [HttpGet("")]
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
-        ViewData["Title"] = "Moja trasa";
-        ViewData["Description"] = "Lista stopow kierowcy w wersji mobile-first.";
-        return View();
+        SetTitle("Moja trasa");
+        return this.View(await this.driverMobileService.GetDashboardAsync());
     }
 
-    [HttpGet("stop")]
-    [HttpGet("stop/{id:int?}")]
-    public IActionResult Stop(int? id)
+    [HttpPost("start")]
+    public async Task<IActionResult> StartRoute()
     {
-        ViewData["Title"] = "Szczegoly stopu";
-        ViewData["Description"] = id.HasValue ? $"Placeholder stopu #{id}." : "Placeholder aktywnego stopu.";
-        return View();
+        try
+        {
+            await this.driverMobileService.StartRouteAsync();
+            this.TempData["Success"] = "Trasa zostala rozpoczeta.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            this.TempData["Error"] = exception.Message;
+        }
+
+        return this.RedirectToAction(nameof(this.Index));
     }
 
-    [HttpGet("stop/confirm")]
+    [HttpGet("stop/{id:int}")]
+    public async Task<IActionResult> Stop(int id)
+    {
+        SetTitle("Szczegoly dostawy");
+        var stop = await this.driverMobileService.GetStopAsync(id);
+        return stop is null ? this.NotFound() : this.View(stop);
+    }
+
+    [HttpPost("stop/{id:int}/start")]
+    public async Task<IActionResult> StartStop(int id)
+    {
+        try
+        {
+            await this.driverMobileService.StartStopAsync(id);
+            this.TempData["Success"] = "Rozpoczeto obsluge przystanku.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            this.TempData["Error"] = exception.Message;
+        }
+
+        return this.RedirectToAction(nameof(this.Stop), new { id });
+    }
+
     [HttpGet("stop/{id:int}/confirm")]
-    public IActionResult Confirm(int? id)
+    public async Task<IActionResult> Confirm(int id)
     {
-        ViewData["Title"] = "Potwierdzenie dostawy";
-        ViewData["Description"] = id.HasValue ? $"Placeholder potwierdzenia stopu #{id}." : "Placeholder potwierdzenia dostawy.";
-        return View();
+        SetTitle("Potwierdzenie dostawy");
+        var stop = await this.driverMobileService.GetStopAsync(id);
+        return stop is null ? this.NotFound() : this.View(stop);
     }
 
-    [HttpGet("stop/problem")]
-    [HttpGet("stop/{id:int}/problem")]
-    public IActionResult Problem(int? id)
+    [HttpPost("stop/{id:int}/confirm")]
+    public async Task<IActionResult> Confirm(int id, ConfirmDriverDeliveryRequest request)
     {
-        ViewData["Title"] = "Problem z dostawa";
-        ViewData["Description"] = id.HasValue ? $"Placeholder problemu stopu #{id}." : "Placeholder zgloszenia problemu.";
-        return View();
+        try
+        {
+            await this.driverMobileService.ConfirmDeliveryAsync(id, request);
+            this.TempData["Success"] = "Dostawa zostala potwierdzona.";
+            return this.RedirectToAction(nameof(this.Index));
+        }
+        catch (InvalidOperationException exception)
+        {
+            this.TempData["Error"] = exception.Message;
+            return this.RedirectToAction(nameof(this.Confirm), new { id });
+        }
+    }
+
+    [HttpGet("stop/{id:int}/problem")]
+    public async Task<IActionResult> Problem(int id)
+    {
+        SetTitle("Problem z dostawa");
+        var stop = await this.driverMobileService.GetStopAsync(id);
+        return stop is null ? this.NotFound() : this.View(stop);
+    }
+
+    [HttpPost("stop/{id:int}/problem")]
+    public async Task<IActionResult> Problem(int id, ReportDriverDeliveryProblemRequest request)
+    {
+        try
+        {
+            await this.driverMobileService.ReportProblemAsync(id, request);
+            this.TempData["Success"] = "Problem zostal zapisany.";
+            return this.RedirectToAction(nameof(this.Index));
+        }
+        catch (InvalidOperationException exception)
+        {
+            this.TempData["Error"] = exception.Message;
+            return this.RedirectToAction(nameof(this.Problem), new { id });
+        }
     }
 
     [HttpGet("summary")]
-    public IActionResult Summary()
+    public async Task<IActionResult> Summary()
     {
-        ViewData["Title"] = "Podsumowanie dnia";
-        ViewData["Description"] = "Podsumowanie dostaw po zakonczeniu trasy.";
-        return View();
+        SetTitle("Podsumowanie dnia");
+        return this.View(await this.driverMobileService.GetSummaryAsync());
+    }
+
+    private void SetTitle(string title)
+    {
+        this.ViewData["Title"] = title;
     }
 }
-

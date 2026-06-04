@@ -8,6 +8,7 @@ namespace KuchniaUCygana.Domain.Entities.Logistics;
 /// (np. Magazyn -> Kierowca -> Klient -> Kierowca)
 /// </summary>
 
+[System.ComponentModel.DataAnnotations.Schema.Table("BagMovementLogs")]
 public sealed class BagMovementLog : BaseEntity
 {
     public int ThermalBagId { get; set; }

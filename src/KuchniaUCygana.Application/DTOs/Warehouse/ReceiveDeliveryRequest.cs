@@ -29,4 +29,9 @@ public sealed class ReceiveDeliveryRequest
     /// Uwagi do dostawy (opcjonalne).
     /// </summary>
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Numer faktury lub dostawy (opcjonalny).
+    /// </summary>
+    public string? InvoiceNumber { get; set; }
 }

@@ -1,5 +1,48 @@
+@model DriverRouteStopDto
 @{
     Layout = "_LayoutDriver";
 }
-@await Html.PartialAsync("_DriverPlaceholder")
 
+<section class="driver-stack">
+    <a asp-action="Stop" asp-route-id="@Model.Id" class="btn btn-outline-secondary align-self-start">
+        @Html.Raw(StaffIconCatalog.Get("route"))
+        Wroc do przystanku
+    </a>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="text-secondary small">Przystanek #@Model.SequenceNumber</div>
+            <h2 class="h3 driver-address mb-0">@Model.FullAddress</h2>
+        </div>
+    </div>
+
+    <form asp-action="Problem" asp-route-id="@Model.Id" method="post" class="card">
+        @Html.AntiForgeryToken()
+        <div class="card-header">
+            <h3 class="card-title">Zglos problem z dostawa</h3>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="driver-problem-reason" class="form-label">Powod</label>
+                <select id="driver-problem-reason" name="Reason" class="form-select form-select-lg" required>
+                    <option value="">Wybierz powod</option>
+                    <option>Brak odbiorcy</option>
+                    <option>Bledny adres</option>
+                    <option>Klient odmowil odbioru</option>
+                    <option>Uszkodzona przesylka</option>
+                    <option>Inny problem</option>
+                </select>
+            </div>
+            <div>
+                <label for="driver-problem-notes" class="form-label">Notatka</label>
+                <textarea id="driver-problem-notes" name="Notes" class="form-control" rows="4" maxlength="500"></textarea>
+            </div>
+        </div>
+        <div class="card-footer">
+            <button type="submit" class="btn btn-danger btn-lg w-100">
+                @Html.Raw(StaffIconCatalog.Get("alert"))
+                Zapisz problem
+            </button>
+        </div>
+    </form>
+</section>

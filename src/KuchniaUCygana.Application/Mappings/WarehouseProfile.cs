@@ -28,5 +28,8 @@ public sealed class WarehouseProfile : Profile
         // InventoryAlert (domain) → InventoryAlertDto
         CreateMap<InventoryAlert, InventoryAlertDto>()
             .ForMember(d => d.AlertType, o => o.MapFrom(s => s.AlertType.ToString()));
+
+        // BatchExpiryChangeLog → BatchExpiryChangeLogDto
+        CreateMap<BatchExpiryChangeLog, BatchExpiryChangeLogDto>();
     }
 }

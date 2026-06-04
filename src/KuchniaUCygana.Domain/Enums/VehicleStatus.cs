@@ -5,7 +5,7 @@ namespace KuchniaUCygana.Domain.Enums;
 /// </summary>
 public enum VehicleStatus
 {
-    Active = 1,                // Pojazd w uøytku
+    Active = 1,                // Pojazd w u≈ºytku
     Maintenance = 2,           // W serwisie
     Retired = 3,              // Wycofany
 }

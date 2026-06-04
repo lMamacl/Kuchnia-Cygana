@@ -1,5 +1,113 @@
+@model KuchniaUCygana.Application.DTOs.Menu.DietDto
 @{
     Layout = "_LayoutStaff";
+    ViewData["Title"] = Model.Name;
+    ViewData["Section"] = "Katalog Menu";
+    var meals = ViewBag.AvailableMeals as IEnumerable<KuchniaUCygana.Application.DTOs.Menu.MealDto>
+                ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Menu.MealDto>();
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row row-cards">
+    <div class="col-lg-8">
+        <div class="card card-premium">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title">@Model.Name</h3>
+                <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-warning btn-sm">Edytuj dietę</a>
+            </div>
+            <div class="card-body">
+                <p class="text-secondary">@Model.Description</p>
+                <span class="badge @(Model.IsActive ? "bg-success-lt text-success" : "bg-secondary-lt text-secondary")">
+                    @(Model.IsActive ? "Aktywna" : "Wstrzymana")
+                </span>
+            </div>
+        </div>
+
+        <div class="card card-premium mt-3">
+            <div class="card-header">
+                <h3 class="card-title">Warianty i posiłki w planie</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Wariant</th>
+                            <th>Kalorie</th>
+                            <th>Mnożnik ceny</th>
+                            <th>Przypisz posiłek</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var variant in Model.Variants)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@variant.Name</strong>
+                                    @if (variant.IsDefault)
+                                    {
+                                        <span class="badge bg-primary-lt text-primary ms-2">Domyślny</span>
+                                    }
+                                </td>
+                                <td>@variant.TargetCalories kcal</td>
+                                <td>@variant.PriceMultiplier.ToString("F2")</td>
+                                <td style="min-width: 360px;">
+                                    <form asp-action="AssignMeal" asp-route-variantId="@variant.Id" method="post" class="row g-2 align-items-end">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="dietId" value="@Model.Id" />
+                                        <div class="col">
+                                            <select name="mealId" class="form-select form-select-sm" required>
+                                                <option value="">Wybierz posiłek</option>
+                                                @foreach (var meal in meals)
+                                                {
+                                                    <option value="@meal.Id">@meal.Name</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-3">
+                                            <input name="multiplier" type="number" step="0.01" min="0.01" value="1" class="form-control form-control-sm" />
+                                        </div>
+                                        <div class="col-2">
+                                            <input name="sortOrder" type="number" min="0" value="0" class="form-control form-control-sm" />
+                                        </div>
+                                        <div class="col-auto">
+                                            <button type="submit" class="btn btn-sm btn-primary">Dodaj</button>
+                                        </div>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Dodaj wariant</h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="AddVariant" asp-route-dietId="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label class="form-label">Nazwa</label>
+                        <input name="Name" class="form-control" placeholder="np. 2000 kcal" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Kalorie</label>
+                        <input name="TargetCalories" type="number" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Mnożnik ceny</label>
+                        <input name="PriceMultiplier" type="number" step="0.01" value="1" class="form-control" required />
+                    </div>
+                    <label class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="IsDefault" value="true" />
+                        <span class="form-check-label">Domyślny</span>
+                    </label>
+                    <button type="submit" class="btn btn-primary w-100">Dodaj wariant</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

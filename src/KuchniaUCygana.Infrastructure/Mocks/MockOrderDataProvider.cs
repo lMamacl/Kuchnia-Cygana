@@ -28,17 +28,18 @@ public sealed class MockOrderDataProvider : IOrderDataProvider
     {
         // Deterministyczny seed z daty — te same zamówienia dla tej samej daty
         var seed = deliveryDate.DayNumber;
-        var rng = new Random(seed);
+        var rng = MockDeliveryPlanData.CreateOrderRandom(deliveryDate, out var orderCount);
 
-        var orderCount = rng.Next(12, 25); // 12-24 zamówień dziennie
         var orders = new List<ActiveOrderEntry>();
 
         for (var i = 0; i < orderCount; i++)
         {
             orders.Add(new ActiveOrderEntry
             {
+                DeliveryCalendarId = MockDeliveryPlanData.CreateDeliveryCalendarId(deliveryDate, i),
                 OrderId = seed * 100 + i + 1,
                 ClientId = i + 1,
+                ClientPublicId = MockDeliveryPlanData.CreateClientPublicId(i),
                 ClientName = ClientNames[i % ClientNames.Length],
                 DietVariantId = DietVariantIds[rng.Next(DietVariantIds.Length)],
                 DeliveryDate = deliveryDate,
@@ -53,7 +54,9 @@ public sealed class MockOrderDataProvider : IOrderDataProvider
         var entry = new ActiveOrderEntry
         {
             OrderId = orderId,
+            DeliveryCalendarId = orderId,
             ClientId = orderId % 16 + 1,
+            ClientPublicId = MockDeliveryPlanData.CreateClientPublicId(orderId % 16),
             ClientName = ClientNames[orderId % ClientNames.Length],
             DietVariantId = DietVariantIds[orderId % DietVariantIds.Length],
             DeliveryDate = DateOnly.FromDateTime(DateTime.Today),
@@ -64,6 +67,38 @@ public sealed class MockOrderDataProvider : IOrderDataProvider
 
     public Task<IEnumerable<OrderDeliveryInfo>> GetDeliveriesForDateAsync(DateTime date)
     {
-        return Task.FromResult(Enumerable.Empty<OrderDeliveryInfo>());
+        var deliveryDate = DateOnly.FromDateTime(date.Date);
+        var orders = GetActiveOrdersAsync(deliveryDate).Result.ToList();
+        var deliveries = orders.Select((order, index) => new OrderDeliveryInfo(
+            order.DeliveryCalendarId,
+            order.OrderId,
+            $"MOCK-{order.OrderId}",
+            order.ClientId,
+            order.ClientPublicId,
+            order.ClientName,
+            $"Warszawa, ul. Przykladowa {index + 1}",
+            "Warszawa",
+            "00-001",
+            52.2297 + index * 0.002,
+            21.0122 + index * 0.002,
+            deliveryDate.ToDateTime(TimeOnly.FromTimeSpan(TimeSpan.FromHours(8 + index % 6))),
+            $"{8 + index % 6:00}:00-{9 + index % 6:00}:00",
+            new[]
+            {
+                new OrderItemInfo(
+                    order.DietVariantId,
+                    "Dieta testowa",
+                    order.DietVariantId,
+                    $"Wariant {order.DietVariantId}",
+                    order.DietVariantId switch
+                    {
+                        2 => 1500,
+                        3 => 2500,
+                        4 => 1800,
+                        _ => 2000,
+                    }),
+            }));
+
+        return Task.FromResult<IEnumerable<OrderDeliveryInfo>>(deliveries);
     }
 }

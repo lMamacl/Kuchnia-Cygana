@@ -8,6 +8,7 @@ namespace KuchniaUCygana.Domain.Entities.Logistics;
 /// Każda torba ma swój unikalny identyfikator
 /// </summary>
 
+[System.ComponentModel.DataAnnotations.Schema.Table("ThermalBags")]
 public sealed class ThermalBag : AuditableEntity
 {
     public string SerialNumber { get; set; } = string.Empty;

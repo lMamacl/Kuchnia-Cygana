@@ -1,0 +1,24 @@
+@model KuchniaUCygana.Domain.Entities.Menu.Category
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Nowa kategoria";
+    ViewData["Section"] = "Katalog Menu";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card card-premium">
+            <div class="card-header"><h3 class="card-title">Dodaj kategorię</h3></div>
+            <div class="card-body">
+                <form asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+                    <partial name="_CategoryForm" model="Model" />
+                    <div class="d-flex justify-content-between">
+                        <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
+                        <button type="submit" class="btn btn-primary">Dodaj</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -12,6 +12,16 @@ public sealed class FoodCostEntry
 {
     public int IngredientId { get; set; }
 
+    public int? StockItemId { get; set; }
+
+    public int? WarehouseCategoryId { get; set; }
+
+    public string? WarehouseCategoryName { get; set; }
+
+    public int? RecipeComponentVersionId { get; set; }
+
+    public string? ComponentName { get; set; }
+
     public string IngredientName { get; set; } = string.Empty;
 
     public decimal TotalWeightGrams { get; set; }
@@ -69,18 +79,88 @@ public sealed class FoodCostCalculator
             {
                 var totalGrams = ingredient.WeightInGrams * quantity;
 
-                if (aggregated.TryGetValue(ingredient.IngredientId, out var existing))
+                if (!ingredient.StockItemId.HasValue)
+                {
+                    throw new InvalidOperationException(
+                        $"Skladnik '{ingredient.IngredientName}' (ID {ingredient.IngredientId}) nie jest polaczony z magazynem.");
+                }
+
+                var stockItemId = ingredient.StockItemId.Value;
+
+                if (aggregated.TryGetValue(stockItemId, out var existing))
                 {
                     existing.TotalWeightGrams += totalGrams;
                 }
                 else
                 {
-                    aggregated[ingredient.IngredientId] = new FoodCostEntry
+                    aggregated[stockItemId] = new FoodCostEntry
                     {
                         IngredientId = ingredient.IngredientId,
+                        StockItemId = stockItemId,
                         IngredientName = ingredient.IngredientName,
                         TotalWeightGrams = totalGrams,
                     };
+                }
+            }
+        }
+
+        return new FoodCostReport
+        {
+            Entries = aggregated.Values
+                .OrderByDescending(e => e.TotalWeightGrams)
+                .ToList(),
+        };
+    }
+
+    public FoodCostReport CalculateFromSnapshot(
+        Dictionary<(int MealId, int DietVariantId), int> mealQuantities,
+        PublishedDietPlanSnapshotDto snapshot)
+    {
+        var aggregated = new Dictionary<string, FoodCostEntry>();
+
+        foreach (var item in snapshot.Items)
+        {
+            if (!mealQuantities.TryGetValue((item.MealId, item.DietVariantId), out var orderedPortions))
+            {
+                continue;
+            }
+
+            foreach (var component in item.Components)
+            {
+                foreach (var ingredient in component.Ingredients)
+                {
+                    if (!ingredient.StockItemId.HasValue && !ingredient.WarehouseCategoryId.HasValue)
+                    {
+                        throw new InvalidOperationException(
+                            $"Skladnik '{ingredient.IngredientName}' (ID {ingredient.IngredientId}) nie ma mapowania magazynowego.");
+                    }
+
+                    var aggregateKey = ingredient.StockItemId.HasValue
+                        ? $"S:{ingredient.StockItemId.Value}"
+                        : $"C:{ingredient.WarehouseCategoryId!.Value}";
+                    var totalGrams = ingredient.WeightInGrams
+                        * component.QuantityPerServing
+                        * item.ServingMultiplier
+                        * orderedPortions;
+
+                    if (aggregated.TryGetValue(aggregateKey, out var existing))
+                    {
+                        existing.TotalWeightGrams += totalGrams;
+                    }
+                    else
+                    {
+                        aggregated[aggregateKey] = new FoodCostEntry
+                        {
+                            IngredientId = ingredient.IngredientId,
+                            StockItemId = ingredient.StockItemId,
+                            WarehouseCategoryId = ingredient.WarehouseCategoryId,
+                            WarehouseCategoryName = ingredient.WarehouseCategoryName,
+                            RecipeComponentVersionId = component.RecipeComponentVersionId,
+                            ComponentName = component.ComponentName,
+                            IngredientName = ingredient.IngredientName,
+                            TotalWeightGrams = totalGrams,
+                        };
+                    }
                 }
             }
         }
@@ -97,11 +177,11 @@ public sealed class FoodCostCalculator
     /// Wzbogaca raport o dane magazynowe (dostępność).
     /// Wywoływane przez WarehouseService po wyliczeniu food cost.
     /// </summary>
-    public void EnrichWithStockData(FoodCostReport report, Dictionary<int, decimal> stockByIngredientId)
+    public void EnrichWithStockData(FoodCostReport report, Dictionary<int, decimal> stockByStockItemId)
     {
         foreach (var entry in report.Entries)
         {
-            if (stockByIngredientId.TryGetValue(entry.IngredientId, out var available))
+            if (entry.StockItemId.HasValue && stockByStockItemId.TryGetValue(entry.StockItemId.Value, out var available))
             {
                 entry.AvailableInStock = available;
                 entry.Shortage = entry.TotalWeightGrams - available > 0

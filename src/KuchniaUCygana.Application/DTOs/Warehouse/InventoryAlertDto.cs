@@ -11,6 +11,8 @@ public sealed class InventoryAlertDto
 
     public string StockItemName { get; set; } = string.Empty;
 
+    public string? SupplierBatchNumber { get; set; }
+
     public string AlertType { get; set; } = string.Empty;
 
     public string Message { get; set; } = string.Empty;

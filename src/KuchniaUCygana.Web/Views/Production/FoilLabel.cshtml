@@ -1,4 +1,4 @@
-@model KuchniaUCygana.Application.DTOs.Production.PackingLabelDto
+@model KuchniaUCygana.Application.DTOs.Packing.PackingLabelDto
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Etykieta foliowa";
@@ -106,7 +106,9 @@
                 </div>
             </div>
             <div class="col-auto text-end">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=@(Model.QrCode)" class="foil-label-qr" alt="Kod kreskowy QR" />
+                <div class="foil-label-qr d-flex align-items-center justify-content-center text-center small fw-bold">
+                    @Model.QrCode
+                </div>
             </div>
         </div>
     </div>

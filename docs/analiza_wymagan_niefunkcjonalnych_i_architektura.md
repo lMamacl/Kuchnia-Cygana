@@ -898,6 +898,8 @@ erDiagram
 - **Raport FEFO (lista aktywnych partii)** – zestawienie wszystkich niezużytych partii posortowanych według daty ważności, z danymi składników, powinno być realizowane jako widok lub procedura z parametrami (filtrowanie po kategorii, dniu ważności).
 - **Archiwizacja logów systemowych** – logi starsze niż 6 miesięcy muszą być automatycznie przenoszone do tabeli archiwalnej w celu utrzymania wydajności operacyjnej. Proces uruchamiany cyklicznie (np. nocny job).
 
+Aktualny stan implementacji SBD: fizyczne obiekty bazodanowe są tworzone migracją `507_AddSbdSqlObjectsAndIndexes`. Migracja dodaje trigger `tr_Batches_UpdateIsDepleted`, procedurę `usp_ArchiveSystemLogs`, funkcję raportową `fn_MealNutritionCost`, tabelę `SystemLogsArchive` oraz brakujące indeksy dla M1/M5/SystemLogs. Duży seed wydajnościowy 100k+ i materiał execution plan przed/po pozostają poza bieżącym zakresem.
+
 ### 10.3. Zapewnienie integralności danych
 
 - `InventoryTransaction.QuantityChanged` dla typów `ProductionIssue` i `WasteDisposal` musi być wartością ujemną (walidacja na poziomie aplikacji).

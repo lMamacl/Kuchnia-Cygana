@@ -1,76 +1,74 @@
-@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
+@model KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<KuchniaUCygana.Application.DTOs.Warehouse.BatchInventoryItemDto>
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Inwentaryzacja Magazynu";
     ViewData["Section"] = "Magazyn";
-    ViewData["Description"] = "Formularz rozliczenia inwentaryzacyjnego. Wprowadź rzeczywiste stany fizyczne składników.";
+    ViewData["Description"] = "Formularz rozliczenia inwentaryzacyjnego. Wprowadź rzeczywiste stany fizyczne partii.";
 
-    var stockItemsList = Model?.ToList() ?? new List<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>();
+    var filter = ViewBag.Filter as KuchniaUCygana.Application.DTOs.Warehouse.StockTableFilterDto
+                 ?? new KuchniaUCygana.Application.DTOs.Warehouse.StockTableFilterDto { PageSize = 50 };
+    var warehouseCategories = ViewBag.WarehouseCategories as IReadOnlyList<KuchniaUCygana.Application.DTOs.Warehouse.WarehouseCategoryDto>
+                              ?? Array.Empty<KuchniaUCygana.Application.DTOs.Warehouse.WarehouseCategoryDto>();
 }
 
 <div class="row justify-content-center">
     <div class="col-12 col-xl-10">
-        <form asp-action="Inventory" method="post" autocomplete="off">
+        <form asp-action="Inventory" method="post" autocomplete="off" id="inventoryForm" onsubmit="prepareInventorySubmit()">
             @Html.AntiForgeryToken()
 
             <div class="card card-premium">
                 <div class="card-status-top bg-azure"></div>
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                    <h3 class="card-title d-flex align-items-center gap-2">
+                    <h3 class="card-title d-flex align-items-center gap-2 mb-0">
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z" /><path d="M13 13h4" /><path d="M13 9h4" /><path d="M9 9h.01" /><path d="M9 13h.01" /><path d="M3 5h2v14h-2z" /></svg>
                         Arkusz Inwentaryzacyjny
                     </h3>
-                    <div class="btn-list">
+                    <div class="d-flex flex-wrap align-items-center gap-3">
+                        <div class="input-group input-group-flat" style="width: 220px;">
+                            <input type="text"
+                                   id="SearchInput"
+                                   name="Search"
+                                   class="form-control form-control-sm"
+                                   placeholder="Szukaj składnika lub partii..."
+                                   value="@filter.Search"
+                                   hx-get="/warehouse/inventory-table"
+                                   hx-trigger="keyup changed delay:300ms"
+                                   hx-target="#inventory-table-container"
+                                   hx-include="#CategoryFilter" />
+                            <span class="input-group-text bg-transparent py-0 px-2">
+                                <a href="javascript:void(0)" class="link-secondary" title="Wyczyść" onclick="resetSearch()">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                                </a>
+                            </span>
+                        </div>
+                        <select id="CategoryFilter"
+                                name="CategoryId"
+                                class="form-select form-select-sm w-auto"
+                                hx-get="/warehouse/inventory-table"
+                                hx-trigger="change"
+                                hx-target="#inventory-table-container"
+                                hx-include="#SearchInput">
+                            <option value="">Wszystkie kategorie</option>
+                            @foreach (var category in warehouseCategories)
+                            {
+                                <option value="@category.Id" selected="@(filter.CategoryId == category.Id ? "selected" : null)">@category.Name</option>
+                            }
+                        </select>
+                        <label class="form-check form-switch m-0">
+                            <input type="checkbox" id="ShowChangedOnly" class="form-check-input" onchange="filterInventory()">
+                            <span class="form-check-label text-azure fw-bold">Tylko zmienione</span>
+                        </label>
                         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="fillSystemValues()">Kopiuj stany systemowe</button>
                     </div>
                 </div>
-                
-                <div class="table-responsive">
-                    <table class="table table-vcenter card-table table-premium">
-                        <thead>
-                            <tr>
-                                <th class="w-1">ID</th>
-                                <th>Składnik</th>
-                                <th>Kategoria</th>
-                                <th class="text-end">Stan w systemie</th>
-                                <th class="w-25 text-center">Fizyczny stan rzeczywisty</th>
-                                <th>Powód korekty (w razie różnic)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @for (int i = 0; i < stockItemsList.Count; i++)
-                            {
-                                var item = stockItemsList[i];
-                                <tr>
-                                    <td class="text-secondary font-weight-medium">#@item.Id</td>
-                                    <td>
-                                        <div class="font-weight-bold text-dark">@item.Name</div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-secondary-lt">@item.Category</span>
-                                    </td>
-                                    <td class="text-end font-weight-bold fw-bold text-dark">
-                                        @item.CurrentStock.ToString("F2") @item.UnitSymbol
-                                    </td>
-                                    <td>
-                                        <input type="hidden" name="adjustments[@i].StockItemId" value="@item.Id" />
-                                        <div class="input-group">
-                                            <input type="number" step="0.01" name="adjustments[@i].ActualQuantity" id="actual-@i" class="form-control text-end fw-bold" placeholder="0.00" required data-system-qty="@item.CurrentStock.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)" />
-                                            <span class="input-group-text bg-transparent text-secondary">@item.UnitSymbol</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <input type="text" name="adjustments[@i].Reason" class="form-control form-control-sm" placeholder="np. Inwentaryzacja okresowa" value="Spis z natury" />
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
+
+                <div id="inventory-table-container">
+                    @await Html.PartialAsync("_InventoryTablePartial", Model)
                 </div>
 
                 <div class="card-footer bg-transparent d-flex justify-content-between">
                     <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
-                    <button type="submit" class="btn btn-primary">
+                    <button type="button" class="btn btn-primary" onclick="showSummary()">
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                         Zatwierdź Inwentaryzację
                     </button>
@@ -80,13 +78,213 @@
     </div>
 </div>
 
+<!-- Modal Podsumowania Inwentaryzacji -->
+<div class="modal modal-blur fade" id="summaryModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header">
+                <h5 class="modal-title text-azure fw-bold d-flex align-items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z" /><path d="M13 13h4" /><path d="M13 9h4" /></svg>
+                    Podsumowanie Różnic Inwentaryzacyjnych
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-secondary">Sprawdź poniższe podsumowanie zmian przed ich ostatecznym zapisaniem w bazie danych. Wyświetlamy wyłącznie pozycje, dla których wprowadzono zmiany ilościowe:</p>
+                <div class="table-responsive">
+                    <table class="table table-vcenter table-premium">
+                        <thead>
+                            <tr>
+                                <th>Składnik / partia</th>
+                                <th class="text-end">Stan partii w systemie</th>
+                                <th class="text-end">Stan fizyczny partii</th>
+                                <th class="text-end">Różnica</th>
+                                <th>Powód korekty</th>
+                            </tr>
+                        </thead>
+                        <tbody id="summaryTableBody">
+                            <!-- Wypełniane przez JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-transparent">
+                <button type="button" class="btn btn-link link-secondary" data-bs-dismiss="modal">Powrót do edycji</button>
+                <button type="button" class="btn btn-primary" id="confirmSubmitBtn">Potwierdź i zapisz zmiany</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
+        function calculateDiff(index) {
+            const input = document.getElementById('actual-' + index);
+            const diffSpan = document.getElementById('diff-' + index);
+            if (!input || !diffSpan) return;
+
+            const systemVal = parseFloat(input.getAttribute('data-system-qty')) || 0;
+            const actualVal = parseFloat(input.value);
+
+            if (isNaN(actualVal)) {
+                diffSpan.innerText = "0.00";
+                diffSpan.className = "";
+                return;
+            }
+
+            const diff = actualVal - systemVal;
+            if (diff > 0.001) {
+                diffSpan.innerText = "+" + diff.toFixed(2);
+                diffSpan.className = "text-success font-weight-bold fw-bold";
+            } else if (diff < -0.001) {
+                diffSpan.innerText = diff.toFixed(2);
+                diffSpan.className = "text-danger font-weight-bold fw-bold";
+            } else {
+                diffSpan.innerText = "0.00";
+                diffSpan.className = "";
+            }
+
+            filterInventory();
+        }
+
         function fillSystemValues() {
-            const inputs = document.querySelectorAll('input[id^="actual-"]');
+            const inputs = document.querySelectorAll('#inventory-table-container input[id^="actual-"]');
             inputs.forEach(input => {
-                input.value = input.getAttribute('data-system-qty');
+                if (!input.value.trim() || parseFloat(input.value) === 0) {
+                    input.value = input.getAttribute('data-system-qty');
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                }
             });
         }
+
+        function resetSearch() {
+            const searchInput = document.getElementById("SearchInput");
+            if (searchInput) {
+                searchInput.value = "";
+                if (window.htmx) {
+                    htmx.trigger(searchInput, "keyup");
+                }
+            }
+        }
+
+        function filterInventory() {
+            const showChangedOnly = document.getElementById("ShowChangedOnly").checked;
+            const rows = document.querySelectorAll("#inventory-table-container tbody tr[data-category]");
+
+            rows.forEach(row => {
+                const index = row.getAttribute('data-row-index');
+                const input = document.getElementById('actual-' + index);
+                const systemVal = parseFloat(input.getAttribute('data-system-qty')) || 0;
+                const actualVal = parseFloat(input.value);
+                const hasDiff = !isNaN(actualVal) && Math.abs(actualVal - systemVal) > 0.001;
+
+                row.style.display = !showChangedOnly || hasDiff ? "" : "none";
+            });
+        }
+
+        function prepareInventorySubmit() {
+            const rows = document.querySelectorAll('#inventory-table-container tbody tr[data-category]');
+
+            rows.forEach(row => {
+                const index = row.getAttribute('data-row-index');
+                const input = document.getElementById('actual-' + index);
+                const systemVal = parseFloat(input.getAttribute('data-system-qty')) || 0;
+                const actualVal = parseFloat(input.value);
+                const hasDiff = !isNaN(actualVal) && Math.abs(actualVal - systemVal) > 0.001;
+
+                row.querySelectorAll('.inventory-field').forEach(control => {
+                    control.disabled = !hasDiff;
+                });
+            });
+        }
+
+        function showSummary() {
+            const tbody = document.getElementById('summaryTableBody');
+            tbody.replaceChildren();
+
+            let hasChanges = false;
+            const rows = document.querySelectorAll('#inventory-table-container tbody tr[data-category]');
+
+            rows.forEach((row) => {
+                const index = row.getAttribute('data-row-index');
+                const name = row.querySelector('.stock-item-name').textContent;
+                const batch = row.querySelector('.stock-item-batch').textContent;
+                const input = document.getElementById('actual-' + index);
+                const reasonInput = row.querySelector('input[name$=".Reason"]');
+                const unit = input.closest('.input-group').querySelector('.input-group-text').textContent.trim();
+
+                const systemVal = parseFloat(input.getAttribute('data-system-qty')) || 0;
+                const actualVal = parseFloat(input.value);
+
+                if (!isNaN(actualVal) && Math.abs(actualVal - systemVal) > 0.001) {
+                    hasChanges = true;
+                    const diff = actualVal - systemVal;
+                    const diffText = diff > 0 ? "+" + diff.toFixed(2) : diff.toFixed(2);
+                    const diffClass = diff > 0 ? "text-success" : "text-danger";
+
+                    const tr = document.createElement('tr');
+                    appendSummaryCell(tr, name + ' / ' + batch, 'fw-bold text-dark');
+                    appendSummaryCell(tr, systemVal.toFixed(2) + ' ' + unit, 'text-end');
+                    appendSummaryCell(tr, actualVal.toFixed(2) + ' ' + unit, 'text-end');
+                    appendSummaryCell(tr, diffText + ' ' + unit, 'text-end fw-bold ' + diffClass);
+                    appendSummaryCell(tr, reasonInput.value || 'Spis z natury', 'text-secondary small');
+                    tbody.appendChild(tr);
+                }
+            });
+
+            if (!hasChanges) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 5;
+                td.className = 'text-center py-3 text-secondary';
+                td.textContent = 'Brak zmian w inwentaryzacji (wszystkie stany partii są zgodne).';
+                tr.appendChild(td);
+                tbody.appendChild(tr);
+            }
+
+            const modal = new bootstrap.Modal(document.getElementById('summaryModal'));
+            modal.show();
+        }
+
+        function appendSummaryCell(row, text, className) {
+            const td = document.createElement('td');
+            td.className = className;
+            td.textContent = text;
+            row.appendChild(td);
+        }
+
+        function initializeInventoryInputs() {
+            const inputs = document.querySelectorAll('#inventory-table-container input[id^="actual-"]');
+            inputs.forEach((input) => {
+                if (input.value) {
+                    const index = input.id.replace('actual-', '');
+                    calculateDiff(index);
+                }
+            });
+
+            document.querySelectorAll('#inventory-table-container input[id^="actual-"], #inventory-table-container input[name$=".Reason"]').forEach(input => {
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        prepareInventorySubmit();
+                        document.getElementById('inventoryForm').submit();
+                    }
+                });
+            });
+
+            filterInventory();
+        }
+
+        document.getElementById('confirmSubmitBtn').addEventListener('click', function() {
+            prepareInventorySubmit();
+            document.getElementById('inventoryForm').submit();
+        });
+
+        window.addEventListener('DOMContentLoaded', initializeInventoryInputs);
+        document.body.addEventListener('htmx:afterSwap', function(event) {
+            if (event.detail.target && event.detail.target.id === 'inventory-table-container') {
+                initializeInventoryInputs();
+            }
+        });
     </script>
 }

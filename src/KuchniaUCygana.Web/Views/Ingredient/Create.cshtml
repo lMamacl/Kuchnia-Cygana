@@ -1,5 +1,24 @@
+@model KuchniaUCygana.Application.DTOs.Menu.IngredientDto
 @{
     Layout = "_LayoutStaff";
+    ViewData["Title"] = "Nowy składnik";
+    ViewData["Section"] = "Katalog Menu";
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card card-premium">
+            <div class="card-header"><h3 class="card-title">Dodaj składnik</h3></div>
+            <div class="card-body">
+                <form asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+                    <partial name="_IngredientForm" model="Model" />
+                    <div class="d-flex justify-content-between">
+                        <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
+                        <button type="submit" class="btn btn-primary">Dodaj</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

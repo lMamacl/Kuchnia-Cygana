@@ -17,4 +17,9 @@ public sealed class WarehouseDashboardViewModel
     /// Zestawienie aktualnego asortymentu w magazynie.
     /// </summary>
     public IEnumerable<StockItemDto> StockItems { get; set; } = new List<StockItemDto>();
+
+    /// <summary>
+    /// Łączna liczba pozycji asortymentu pasujących do aktualnego filtra.
+    /// </summary>
+    public int StockTotalCount { get; set; }
 }

@@ -1,0 +1,42 @@
+@model KuchniaUCygana.Application.DTOs.Warehouse.EditBatchExpiryRequest
+
+<div class="modal-content">
+    <div class="modal-header">
+        <h5 class="modal-title text-dark fw-bold">Zmień datę ważności partii #@Model.BatchId</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    </div>
+    <form hx-post="/warehouse/edit-batch-expiry/@Model.BatchId" hx-target="#modal-dialog-container" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="BatchId" />
+
+        <div class="modal-body">
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="alert alert-danger py-2">
+                    <div asp-validation-summary="All" class="text-danger small"></div>
+                </div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label fw-bold text-secondary" asp-for="NewExpiryDate">Nowa data ważności</label>
+                <input type="date" asp-for="NewExpiryDate" class="form-control" 
+                       value="@Model.NewExpiryDate.ToString("yyyy-MM-dd")" 
+                       min="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                <span asp-validation-for="NewExpiryDate" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold text-secondary" asp-for="Reason">Uzasadnienie zmiany</label>
+                <textarea asp-for="Reason" class="form-control" rows="3" placeholder="Wpisz powód zmiany terminu przydatności (wymagane, min. 5 znaków)..." required>@Model.Reason</textarea>
+                <span asp-validation-for="Reason" class="text-danger small"></span>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Anuluj</button>
+            <button type="submit" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                Zapisz zmiany
+            </button>
+        </div>
+    </form>
+</div>

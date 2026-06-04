@@ -17,6 +17,12 @@ public sealed class ProductionPlanItemDto
 
     public int DietVariantId { get; set; }
 
+    public int? DietMenuPlanItemId { get; set; }
+
+    public string? RecipeComponentVersionIds { get; set; }
+
+    public string? M2SnapshotHash { get; set; }
+
     public int PlannedQuantity { get; set; }
 
     public int CookedQuantity { get; set; }
@@ -29,4 +35,12 @@ public sealed class ProductionPlanItemDto
     public string? EstimatedReadyTime { get; set; }
 
     public string? ActualReadyTime { get; set; }
+
+    public DateTimeOffset? FefoDeductedAt { get; set; }
+
+    public string? FefoReferenceDocument { get; set; }
+
+    public DateTimeOffset? PackagingDeductedAt { get; set; }
+
+    public string? PackagingReferenceDocument { get; set; }
 }

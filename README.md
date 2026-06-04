@@ -164,7 +164,7 @@ Co robi reset:
 Mozesz uruchomic aplikacje lokalnie, ale baza dalej powinna wskazywac na SQL Server.
 
 1. Przygotuj `src/KuchniaUCygana.Web/appsettings.Development.json` (na bazie `appsettings.Development.json.example`).
-2. Ustaw poprawny `ConnectionStrings:DefaultConnection` do SQL Server.
+2. Ustaw poprawny `ConnectionStrings:DefaultConnection` i opcjonalnie `ConnectionStrings:MigrationConnection` do SQL Server.
 3. Uruchom:
 ```bash
 dotnet run --project src/KuchniaUCygana.Web
@@ -175,10 +175,27 @@ dotnet run --project src/KuchniaUCygana.Web
 ## Baza danych, migracje i seeding
 
 - Strategia danych: **greenfield-only** (bez migracji danych ze SQLite).
-- Kolejnosc startu runtime: `MigrateUp -> Seed (warunkowo) -> Start aplikacji`.
-- Migracje sa uruchamiane automatycznie przy starcie aplikacji.
-- Seeding w startupie dziala tylko dla `Development` i `Test`.
-- W `Production` startup seeding jest wylaczony.
+- Kolejność startu Dockera: `SQL Server healthy -> SQL init loginów -> MigrateUp -> Seed (warunkowo) -> Start aplikacji`.
+- Migracje są uruchamiane automatycznie przy starcie aplikacji.
+- Seeding w startupie działa tylko dla `Development` i `Test`.
+- W `Production` startup seeding jest wyłączony.
+- `ConnectionStrings:DefaultConnection` jest runtime Dappera i powinien używać ograniczonego loginu `pracownik`.
+- `ConnectionStrings:MigrationConnection` jest używany przez FluentMigrator i powinien używać loginu `admin`.
+- Docker tworzy loginy SQL Server `admin`, `pracownik` i `klient` przez `docker/sqlserver-init.sql`; uzupełnij hasła w `.env` na bazie `.env.example`.
+- Seed wydajnościowy 100k+ oraz dokument/prezentacja z porównaniem zapytania przed/po optymalizacji są poza bieżącym zakresem.
+
+### Status SBD po domknięciu audytu
+
+- Runtime aplikacji nie używa już `sa`; `sa` zostaje wyłącznie do bootstrapu SQL Server w Dockerze/Testcontainers.
+- Migracje używają `MigrationConnection` (`admin`), a runtime Dappera używa `DefaultConnection` (`pracownik`).
+- Login `klient` jest tworzony z ograniczonym DML jako przygotowanie infrastrukturalne, ale nie jest jeszcze przełączany per request.
+- Fizyczne obiekty T-SQL dla SBD są w migracji `507_AddSbdSqlObjectsAndIndexes`: `tr_Batches_UpdateIsDepleted`, `usp_ArchiveSystemLogs`, `fn_MealNutritionCost` i `SystemLogsArchive`.
+- Auth jest świadomie w trybie preview: `Login` i `Register` nie wykonują pełnego produkcyjnego uwierzytelniania, a pracowniczy dev-login jest wydzielony pod `/staff/login` tylko dla `Development`.
+
+### Aktualne przewodniki po zmianach i uruchomieniu
+
+- [Overview zmian 2026-06-02 i show preview](docs/guides/ZMIANY_2026-06-02_OVERVIEW_I_SHOWCASE.md)
+- [Windows Docker SQL Server setup checklist](docs/guides/WINDOWS_DOCKER_SQLSERVER_SETUP_CHECKLIST.md)
 
 Reczne uruchomienie seedingu:
 ```bash

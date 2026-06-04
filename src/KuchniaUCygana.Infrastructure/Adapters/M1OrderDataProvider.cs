@@ -36,8 +36,10 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
 
         return rows.Select(row => new ActiveOrderEntry
         {
+            DeliveryCalendarId = row.DeliveryCalendarId,
             OrderId = row.OrderId,
             ClientId = row.ClientId,
+            ClientPublicId = row.ClientPublicId,
             ClientName = row.ClientName,
             DietVariantId = row.DietVariantId,
             DeliveryDate = DateOnly.FromDateTime(row.DeliveryDate),
@@ -65,8 +67,10 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
 
         return new ActiveOrderEntry
         {
+            DeliveryCalendarId = row.DeliveryCalendarId,
             OrderId = row.OrderId,
             ClientId = row.ClientId,
+            ClientPublicId = row.ClientPublicId,
             ClientName = row.ClientName,
             DietVariantId = row.DietVariantId,
             DeliveryDate = DateOnly.FromDateTime(row.DeliveryDate),
@@ -90,18 +94,27 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
                 scheduledStatus = (int)DeliveryStatus.Scheduled,
             })).ToList();
 
+        var orderIds = deliveries.Select(d => d.OrderId).Distinct().ToArray();
+        var itemRows = orderIds.Length == 0
+            ? new List<OrderItemRow>()
+            : (await db.QueryAsync<OrderItemRow>(
+                OrderItemsForDeliveriesSql,
+                new { orderIds })).ToList();
+        var itemsByOrder = itemRows
+            .GroupBy(item => item.OrderId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
         var result = new List<OrderDeliveryInfo>(deliveries.Count);
 
         foreach (var delivery in deliveries)
         {
-            var items = await db.QueryAsync<OrderItemRow>(
-                OrderItemsForDeliverySql,
-                new { orderId = delivery.OrderId });
-
+            itemsByOrder.TryGetValue(delivery.OrderId, out var items);
             result.Add(new OrderDeliveryInfo(
+                delivery.DeliveryCalendarId,
                 delivery.OrderId,
                 delivery.OrderNumber,
                 delivery.CustomerId,
+                delivery.ClientPublicId,
                 delivery.CustomerFullName,
                 delivery.AddressFullLine,
                 delivery.City,
@@ -110,21 +123,27 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
                 delivery.Longitude,
                 delivery.DeliveryDate,
                 delivery.DeliveryWindowName ?? string.Empty,
-                items.Select(item => new OrderItemInfo(
+                (items ?? new List<OrderItemRow>()).Select(item => new OrderItemInfo(
                     item.DietId,
                     item.DietName,
                     item.DietVariantId,
                     item.VariantName,
-                    item.CaloriesPerDay)).ToList()));
+                    item.CaloriesPerDay,
+                    item.MealId,
+                    item.MealVariantId,
+                    item.DietMenuPlanItemId,
+                    item.MealSlot)).ToList()));
         }
 
         return result;
     }
 
     private const string ActiveOrdersSql = """
-        SELECT
+        SELECT DISTINCT
             o.Id AS OrderId,
+            dc.Id AS DeliveryCalendarId,
             u.Id AS ClientId,
+            LOWER(CONVERT(varchar(36), cp.PublicId)) AS ClientPublicId,
             CONCAT(u.FirstName, ' ', u.LastName) AS ClientName,
             oi.DietVariantId AS DietVariantId,
             dc.DeliveryDate AS DeliveryDate
@@ -132,6 +151,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         INNER JOIN Orders o ON o.Id = dc.OrderId
         INNER JOIN OrderItems oi ON oi.OrderId = o.Id
         INNER JOIN Users u ON u.Id = o.CustomerId
+        LEFT JOIN CustomerProfiles cp ON cp.UserId = u.Id AND cp.IsDeleted = 0
         WHERE dc.DeliveryDate >= @from
           AND dc.DeliveryDate < @to
           AND o.Status IN (@paidStatus, @inProductionStatus)
@@ -140,13 +160,15 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
           AND o.IsDeleted = 0
           AND oi.IsDeleted = 0
           AND dc.IsDeleted = 0
-        ORDER BY o.Id, oi.Id;
+        ORDER BY o.Id, oi.DietVariantId;
         """;
 
     private const string ActiveOrderByIdSql = """
-        SELECT TOP 1
+        SELECT DISTINCT TOP 1
             o.Id AS OrderId,
+            dc.Id AS DeliveryCalendarId,
             u.Id AS ClientId,
+            LOWER(CONVERT(varchar(36), cp.PublicId)) AS ClientPublicId,
             CONCAT(u.FirstName, ' ', u.LastName) AS ClientName,
             oi.DietVariantId AS DietVariantId,
             dc.DeliveryDate AS DeliveryDate
@@ -154,6 +176,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         INNER JOIN OrderItems oi ON oi.OrderId = o.Id
         INNER JOIN DeliveryCalendar dc ON dc.OrderId = o.Id
         INNER JOIN Users u ON u.Id = o.CustomerId
+        LEFT JOIN CustomerProfiles cp ON cp.UserId = u.Id AND cp.IsDeleted = 0
         WHERE o.Id = @orderId
           AND o.Status IN (@paidStatus, @inProductionStatus)
           AND dc.Status = @scheduledStatus
@@ -161,14 +184,16 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
           AND o.IsDeleted = 0
           AND oi.IsDeleted = 0
           AND dc.IsDeleted = 0
-        ORDER BY dc.DeliveryDate, oi.Id;
+        ORDER BY dc.DeliveryDate, oi.DietVariantId;
         """;
 
     private const string DeliveriesForDateSql = """
         SELECT
             o.Id AS OrderId,
+            dc.Id AS DeliveryCalendarId,
             o.OrderNumber AS OrderNumber,
             u.Id AS CustomerId,
+            LOWER(CONVERT(varchar(36), cp.PublicId)) AS ClientPublicId,
             CONCAT(u.FirstName, ' ', u.LastName) AS CustomerFullName,
             CASE
                 WHEN a.ApartmentNumber IS NULL OR a.ApartmentNumber = ''
@@ -184,6 +209,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         FROM DeliveryCalendar dc
         INNER JOIN Orders o ON o.Id = dc.OrderId
         INNER JOIN Users u ON u.Id = o.CustomerId
+        LEFT JOIN CustomerProfiles cp ON cp.UserId = u.Id AND cp.IsDeleted = 0
         INNER JOIN Addresses a ON a.Id = dc.AddressId
         LEFT JOIN DeliveryWindows dw ON dw.Id = dc.DeliveryWindowId
         WHERE dc.DeliveryDate >= @from
@@ -199,22 +225,49 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
 
     private const string OrderItemsForDeliverySql = """
         SELECT
+            OrderId,
             DietId,
             DietName,
             DietVariantId,
             VariantName,
-            CaloriesPerDay
+            CaloriesPerDay,
+            MealId,
+            MealVariantId,
+            DietMenuPlanItemId,
+            MealSlot
         FROM OrderItems
         WHERE OrderId = @orderId
           AND IsDeleted = 0
         ORDER BY Id;
         """;
 
+    private const string OrderItemsForDeliveriesSql = """
+        SELECT
+            OrderId,
+            DietId,
+            DietName,
+            DietVariantId,
+            VariantName,
+            CaloriesPerDay,
+            MealId,
+            MealVariantId,
+            DietMenuPlanItemId,
+            MealSlot
+        FROM OrderItems
+        WHERE OrderId IN @orderIds
+          AND IsDeleted = 0
+        ORDER BY OrderId, Id;
+        """;
+
     private sealed class ActiveOrderRow
     {
         public int OrderId { get; set; }
 
+        public int DeliveryCalendarId { get; set; }
+
         public int ClientId { get; set; }
+
+        public string? ClientPublicId { get; set; }
 
         public string ClientName { get; set; } = string.Empty;
 
@@ -227,9 +280,13 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
     {
         public int OrderId { get; set; }
 
+        public int DeliveryCalendarId { get; set; }
+
         public string OrderNumber { get; set; } = string.Empty;
 
         public int CustomerId { get; set; }
+
+        public string? ClientPublicId { get; set; }
 
         public string CustomerFullName { get; set; } = string.Empty;
 
@@ -250,6 +307,8 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
 
     private sealed class OrderItemRow
     {
+        public int OrderId { get; set; }
+
         public int DietId { get; set; }
 
         public string DietName { get; set; } = string.Empty;
@@ -259,5 +318,13 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         public string VariantName { get; set; } = string.Empty;
 
         public int CaloriesPerDay { get; set; }
+
+        public int? MealId { get; set; }
+
+        public int? MealVariantId { get; set; }
+
+        public int? DietMenuPlanItemId { get; set; }
+
+        public string? MealSlot { get; set; }
     }
 }

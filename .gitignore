@@ -25,6 +25,7 @@ coverage/
 *.cobertura.xml
 TestResults/
 publish/
+.tmp/
 
 docker-compose.override.yml
 
@@ -39,3 +40,4 @@ extract.py
 .ai_docs/
 
 
+/.vscode/settings.json

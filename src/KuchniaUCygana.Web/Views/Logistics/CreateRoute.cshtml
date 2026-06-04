@@ -1,5 +1,50 @@
+@model GenerateDailyRoutesRequest
 @{
     Layout = "_LayoutStaff";
+    var selectedDate = Model.RouteDate.ToString("yyyy-MM-dd");
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Kreator tras dziennych</h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="GenerateDailyRoutes" method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="RouteDate" class="form-label required">Dzien dostaw</label>
+                            <input type="date" name="routeDate" value="@selectedDate" class="form-control" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="MaxStopsPerRoute" class="form-label">Maksymalna liczba przystankow na trase</label>
+                            <input type="number" asp-for="MaxStopsPerRoute" class="form-control" min="1" placeholder="Bez limitu" />
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info mt-4 mb-0">
+                        <div class="d-flex">
+                            <div class="me-2">@Html.Raw(StaffIconCatalog.Get("route"))</div>
+                            <div>
+                                System pobierze dostawy z kalendarza, pominie adresy bez wspolrzednych, przydzieli aktywne pojazdy i utworzy przystanki po DeliveryCalendarId.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-footer d-flex align-items-center justify-content-between">
+                        <a asp-action="Routes" asp-route-date="@selectedDate" class="btn btn-link text-secondary">
+                            Wroc do listy
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            @Html.Raw(StaffIconCatalog.Get("wand"))
+                            Generuj trasy
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

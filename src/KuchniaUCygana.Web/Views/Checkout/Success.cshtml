@@ -1,6 +1,72 @@
-﻿@* Views/Checkout/Success.cshtml *@
+@model KuchniaUCygana.Domain.Entities.Orders.Order
 @{
-	ViewData["Title"] = "Sukces";
+    ViewData["Title"] = "Zamówienie opłacone pomyślnie";
+    var culture = new System.Globalization.CultureInfo("pl-PL");
 }
-<h1>Widok poprawnego zlozenia zamowienia</h1>
-<p>TODO</p>
+
+<style>
+    .success-card {
+        overflow: hidden;
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 28px;
+        background: #fff;
+        box-shadow: 0 24px 70px rgba(23, 33, 27, .12);
+    }
+
+    .success-mark {
+        display: grid;
+        place-items: center;
+        width: 78px;
+        height: 78px;
+        border-radius: 24px;
+        background: #edf8ef;
+        color: #1f7a4d;
+        font-size: 2.4rem;
+        font-weight: 900;
+        margin: 0 auto;
+    }
+
+    .success-details {
+        border-radius: 22px;
+        background: #f7fbf7;
+    }
+</style>
+
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="success-card p-4 p-md-5 text-center">
+                <div class="success-mark mb-4">✓</div>
+                <div class="text-success small fw-bold text-uppercase mb-2">Płatność przyjęta</div>
+                <h1 class="fw-bold mb-2">Zamówienie jest opłacone</h1>
+                <p class="text-muted fs-5 mb-4">
+                    Dziękujemy za skorzystanie z cateringu Kuchnia u Cygana. Zamówienie może przejść do dalszej realizacji.
+                </p>
+
+                <div class="success-details p-4 text-start mb-4">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Numer zamówienia</span>
+                        <span class="fw-bold">@Model.OrderNumber</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Status</span>
+                        <span class="badge text-bg-success rounded-pill">Opłacone</span>
+                    </div>
+                    <div class="d-flex justify-content-between border-top pt-3 mt-3">
+                        <span class="fw-bold">Suma pobrana</span>
+                        <span class="fw-bold fs-5 text-success">@Model.FinalPrice.ToString("C", culture)</span>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+                    <a asp-controller="Order" asp-action="Index" class="btn btn-success btn-lg px-4 fw-bold">
+                        Moje zamówienia
+                    </a>
+                    <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary btn-lg px-4">
+                        Strona główna
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

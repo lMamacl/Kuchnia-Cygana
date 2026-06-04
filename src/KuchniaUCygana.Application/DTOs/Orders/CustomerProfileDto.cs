@@ -4,6 +4,7 @@ public sealed class CustomerProfileDto
 {
     public int Id { get; set; }
     public int UserId { get; set; }
+    public Guid PublicId { get; set; }
     public string? Phone { get; set; }
     public string? DietaryNotes { get; set; }
     public int? DefaultAddressId { get; set; }

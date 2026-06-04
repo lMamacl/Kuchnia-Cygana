@@ -1,22 +1,433 @@
+﻿@model KuchniaUCygana.Web.Models.PackingIndexViewModel
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Generator Etykiet";
+    ViewData["Title"] = "Etykiety transportowe";
     ViewData["Section"] = "Pakowanie";
-    ViewData["Description"] = "Wyszukaj aktywną sesję pakowania w celu wygenerowania i wydrukowania etykiet.";
+    ViewData["Description"] = "Druk, redruk i potwierdzanie przyklejenia etykiet transportowych.";
+
+    var selectedDate = Model.SelectedDate;
+    var returnUrl = ViewContext.HttpContext.Request.Path + ViewContext.HttpContext.Request.QueryString;
+    var bagStatuses = new[]
+    {
+        ("all", "Wszystkie"),
+        ("pending", "W toku"),
+        ("packed", "Spakowane"),
+        ("labeled", "Z etykietą"),
+        ("loaded", "Załadowane"),
+        ("dispatched", "Wysłane"),
+        ("damaged", "Uszkodzone"),
+    };
+    var labelStatuses = new[]
+    {
+        ("all", "Wszystkie"),
+        ("missing", "Brak etykiety"),
+        ("generated", "Etykieta wygenerowana"),
+        ("not-attached", "Nieprzyklejona"),
+        ("attached", "Przyklejona"),
+    };
 }
 
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card card-premium text-center p-4">
-            <div class="card-status-top bg-azure"></div>
-            <div class="card-body">
-                <div class="mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure icon-lg" width="48" height="48" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" /><path d="M7 16h10" /><path d="M7 12h10" /><path d="M7 8h10" /></svg>
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body py-4">
+                <div class="row align-items-center g-3">
+                    <div class="col">
+                        <div class="text-uppercase text-secondary small fw-bold">Etykiety transportowe</div>
+                        <h2 class="h1 mb-1 text-dark">@selectedDate.ToString("dd.MM.yyyy")</h2>
+                        <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
+                            <span>Torby: <strong>@Model.Board.TotalBags</strong></span>
+                            <span>W filtrze: <strong>@Model.TotalBags</strong></span>
+                        </div>
+                    </div>
+                    <div class="col-auto d-flex flex-wrap gap-2">
+                        <form asp-action="Start" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                            <input type="hidden" name="packedBy" value="@(User.Identity?.Name ?? "Packing")" />
+                            <button type="submit" class="btn btn-outline-secondary">Synchronizuj zamówienia</button>
+                        </form>
+                        <a asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-search="@Model.Search" asp-route-routeId="@Model.RouteId" asp-route-bagStatus="@Model.BagStatus" class="btn btn-outline-primary">Kompletacja</a>
+                        <a asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-primary">Etykiety</a>
+                        <a asp-controller="Loading" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Załadunek aut</a>
+                    </div>
                 </div>
-                <h2 class="h2 mb-2 text-dark">Wybierz sesję pakowania</h2>
-                <p class="text-secondary small mb-4">Aby wydrukować etykiety QR dla klientów, musisz najpierw otworzyć lub wyszukać sesję pakowania z widoku głównego.</p>
-                <a asp-action="Index" class="btn btn-primary">Przejdź do listy sesji</a>
             </div>
         </div>
     </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="get" class="row g-3 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label">Data</label>
+                        <input type="date" class="form-control" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Szukaj</label>
+                        <input class="form-control" name="search" value="@Model.Search" placeholder="Zamówienie, DeliveryCalendarId, torba, klient, auto, trasa" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Trasa</label>
+                        <select class="form-select" name="routeId">
+                            <option value="">Wszystkie</option>
+                            @foreach (var route in Model.AllRoutes)
+                            {
+                                <option value="@route.RouteId" selected="@(Model.RouteId == route.RouteId)">@route.RouteName (@route.VehicleRegistration)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Status torby</label>
+                        <select class="form-select" name="bagStatus">
+                            @foreach (var option in bagStatuses)
+                            {
+                                <option value="@option.Item1" selected="@(Model.BagStatus == option.Item1)">@option.Item2</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Status etykiety</label>
+                        <select class="form-select" name="labelStatus">
+                            @foreach (var option in labelStatuses)
+                            {
+                                <option value="@option.Item1" selected="@(Model.LabelStatus == option.Item1)">@option.Item2</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">Na stronie</label>
+                        <select class="form-select" name="pageSize">
+                            @foreach (var size in new[] { 10, 20, 50, 100 })
+                            {
+                                <option value="@size" selected="@(Model.PageSize == size)">@size</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12 d-flex justify-content-end gap-2">
+                        <input type="hidden" name="page" value="1" />
+                        <a asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wyczyść</a>
+                        <button type="submit" class="btn btn-primary">Filtruj</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.Board.TotalBags == 0)
+    {
+        <div class="col-12">
+            <div class="alert alert-info">Brak aktywnych zamówień do etykietowania dla wybranej daty.</div>
+        </div>
+    }
+    else if (Model.TotalBags == 0)
+    {
+        <div class="col-12">
+            <div class="alert alert-warning">Brak toreb pasujących do wybranych filtrów.</div>
+        </div>
+    }
+
+    <div class="col-12">
+        <form asp-action="ConfirmSelectedLabelsAttached" method="post" id="packing-labels-form">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+            @if (Model.RouteId.HasValue)
+            {
+                <input type="hidden" name="routeId" value="@Model.RouteId.Value" />
+            }
+            <input type="hidden" name="selectedLabelIds" id="selected-label-ids" />
+            <input type="hidden" name="selectedBagIds" id="selected-bag-ids" />
+            <input type="hidden" name="returnUrl" value="@returnUrl" />
+
+            <div class="card">
+                <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                    <div class="me-auto">
+                        <strong>@Model.FirstItem-@Model.LastItem</strong> z <strong>@Model.TotalBags</strong> toreb
+                    </div>
+                    <button type="submit"
+                            class="btn btn-primary btn-sm"
+                            formaction="@Url.Action("PrintSelectedLabels")"
+                            formtarget="_blank"
+                            data-label-action="print"
+                            data-empty-message="Zaznacz co najmniej jedna torbe do wygenerowania albo wydruku etykiety."
+                            disabled>
+                        Generuj/drukuj zaznaczone (<span id="selected-label-count">0</span>)
+                    </button>
+                    <button type="submit"
+                            class="btn btn-outline-success btn-sm"
+                            data-confirm="Potwierdzić przyklejenie zaznaczonych etykiet?"
+                            data-label-action="confirm"
+                            data-empty-message="Zaznacz co najmniej jedna nieprzyklejona etykiete do potwierdzenia."
+                            disabled>
+                        Potwierdź wybrane jako przyklejone (<span id="selected-attachable-count">0</span>)
+                    </button>
+                </div>
+
+                @foreach (var route in Model.Board.Routes)
+                {
+                    var routeSummary = Model.AllRoutes.FirstOrDefault(item => item.RouteId == route.RouteId) ?? route;
+                    var missingLabels = routeSummary.Bags.Count(bag => !bag.HasLabels);
+                    var unattachedLabels = routeSummary.Bags.Count(bag => bag.HasLabels && !bag.IsTransportLabelAttached);
+
+                    <div class="border-top">
+                        <div class="px-3 py-3 d-flex flex-wrap justify-content-between align-items-center gap-3 bg-light">
+                            <div>
+                                <h3 class="card-title mb-1">@route.RouteName</h3>
+                                <div class="text-secondary small">
+                                    Auto @route.VehicleRegistration · @route.PackedBags/@route.TotalBags spakowane · brak etykiet: @missingLabels · nieprzyklejone: @unattachedLabels
+                                </div>
+                            </div>
+                            <div class="btn-list">
+                                <button type="submit"
+                                        class="btn btn-sm btn-outline-primary"
+                                        formaction="@Url.Action("GenerateMissingRouteLabels", new { routeId = route.RouteId })"
+                                        formtarget="_blank"
+                                        @(!route.AllBagsPacked ? "disabled" : null)
+                                        data-confirm="Wygenerować brakujące etykiety dla tej trasy?">
+                                    Generuj brakujące etykiety
+                                </button>
+                                <a asp-action="RouteLabels" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" target="_blank" class="btn btn-sm btn-primary">Drukuj etykiety trasy</a>
+                                <a asp-controller="Loading" asp-action="Manifest" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-success">Manifest</a>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-vcenter card-table table-premium mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="w-1">
+                                            <input class="form-check-input js-route-select" type="checkbox" aria-label="Zaznacz etykiety trasy" />
+                                        </th>
+                                        <th class="w-1">Stop</th>
+                                        <th>Zamówienie</th>
+                                        <th>Identyfikator</th>
+                                        <th>DeliveryCalendarId</th>
+                                        <th>Pudełka</th>
+                                        <th>Status torby</th>
+                                        <th>Etykieta</th>
+                                        <th class="w-1 text-end">Akcje</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var bag in route.Bags)
+                                    {
+                                        var canSelectForPrint = bag.TransportLabelId.HasValue || bag.CanGenerateTransportLabel;
+                                        <tr>
+                                            <td>
+                                                <input class="form-check-input js-label-select"
+                                                       type="checkbox"
+                                                       value="@(bag.TransportLabelId?.ToString() ?? bag.PackingBagId.ToString())"
+                                                       data-label-id="@(bag.TransportLabelId?.ToString() ?? string.Empty)"
+                                                       data-bag-id="@bag.PackingBagId"
+                                                       data-can-confirm="@(bag.CanConfirmTransportLabelAttached ? "true" : "false")"
+                                                       data-can-generate="@(bag.CanGenerateTransportLabel ? "true" : "false")"
+                                                       disabled="@(!canSelectForPrint)"
+                                                       aria-label="Zaznacz torbę do etykiety" />
+                                            </td>
+                                            <td class="fw-bold text-dark">#@bag.StopNumber</td>
+                                            <td>
+                                                <div class="fw-bold text-dark">#@bag.OrderId</div>
+                                                <div class="text-secondary small">@bag.DeliveryWindow</div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@(bag.ClientPublicId ?? "-")</div>
+                                                <span class="badge bg-indigo-lt text-indigo">@bag.DietType</span>
+                                            </td>
+                                            <td class="text-secondary small">@(bag.DeliveryCalendarId?.ToString() ?? "-")</td>
+                                            <td><span class="fw-bold text-dark">@bag.PackedBoxes/@bag.TotalBoxes</span></td>
+                                            <td>
+                                                <span class="badge bg-@bag.StatusColor-lt text-@bag.StatusColor">@bag.StatusText</span>
+                                            </td>
+                                            <td>
+                                                @if (!bag.HasLabels)
+                                                {
+                                                    <span class="badge bg-warning-lt text-warning">Brak etykiety</span>
+                                                }
+                                                else if (bag.IsTransportLabelAttached)
+                                                {
+                                                    <div><span class="badge bg-success-lt text-success">Przyklejona</span></div>
+                                                    <div class="text-secondary small">#@bag.TransportLabelPrintNumber · @(bag.TransportLabelAttachedAt?.ToLocalTime().ToString("dd.MM HH:mm") ?? "-")</div>
+                                                }
+                                                else
+                                                {
+                                                    <div><span class="badge bg-azure-lt text-azure">Wydruk #@bag.TransportLabelPrintNumber</span></div>
+                                                    <div class="text-secondary small">Czeka na przyklejenie</div>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="btn-list flex-nowrap justify-content-end">
+                                                    @if (bag.HasLabels)
+                                                    {
+                                                        <a asp-action="Labels" asp-route-sessionId="@bag.PackingSessionId" target="_blank" class="btn btn-sm btn-outline-primary">Drukuj</a>
+                                                    }
+                                                    else if (bag.CanGenerateTransportLabel)
+                                                    {
+                                                        <button type="submit"
+                                                                class="btn btn-sm btn-outline-primary"
+                                                                formaction="@Url.Action("GenerateBagLabel", new { packingBagId = bag.PackingBagId })"
+                                                                formtarget="_blank"
+                                                                data-confirm="Wygenerować etykietę transportową dla tej torby?">
+                                                            Drukuj
+                                                        </button>
+                                                    }
+                                                    @if (bag.CanConfirmTransportLabelAttached && bag.TransportLabelId.HasValue)
+                                                    {
+                                                        <button type="submit"
+                                                                class="btn btn-sm btn-outline-success"
+                                                                formaction="@Url.Action("ConfirmLabelAttached", new { labelId = bag.TransportLabelId.Value })"
+                                                                data-confirm="Potwierdzić przyklejenie tej etykiety?">
+                                                            Przyklejona
+                                                        </button>
+                                                    }
+                                                    @if (bag.HasLabels && (User.IsInRole("PackingManager") || User.IsInRole("Admin")))
+                                                    {
+                                                        <a asp-action="ReprintLabelForm" asp-route-sessionId="@bag.PackingSessionId" class="btn btn-sm btn-outline-danger">Redruk</a>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+
+                @if (Model.TotalPages > 1)
+                {
+                    <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-3">
+                        <div class="text-secondary small">Strona @Model.Page z @Model.TotalPages</div>
+                        <ul class="pagination m-0">
+                            <li class="page-item @(Model.Page <= 1 ? "disabled" : string.Empty)">
+                                <a class="page-link" asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-search="@Model.Search" asp-route-routeId="@Model.RouteId" asp-route-labelStatus="@Model.LabelStatus" asp-route-bagStatus="@Model.BagStatus" asp-route-page="@(Model.Page - 1)" asp-route-pageSize="@Model.PageSize">Poprzednia</a>
+                            </li>
+                            @for (var pageNumber = Math.Max(1, Model.Page - 2); pageNumber <= Math.Min(Model.TotalPages, Model.Page + 2); pageNumber++)
+                            {
+                                <li class="page-item @(pageNumber == Model.Page ? "active" : string.Empty)">
+                                    <a class="page-link" asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-search="@Model.Search" asp-route-routeId="@Model.RouteId" asp-route-labelStatus="@Model.LabelStatus" asp-route-bagStatus="@Model.BagStatus" asp-route-page="@pageNumber" asp-route-pageSize="@Model.PageSize">@pageNumber</a>
+                                </li>
+                            }
+                            <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : string.Empty)">
+                                <a class="page-link" asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-search="@Model.Search" asp-route-routeId="@Model.RouteId" asp-route-labelStatus="@Model.LabelStatus" asp-route-bagStatus="@Model.BagStatus" asp-route-page="@(Model.Page + 1)" asp-route-pageSize="@Model.PageSize">Następna</a>
+                            </li>
+                        </ul>
+                    </div>
+                }
+            </div>
+        </form>
+    </div>
 </div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const form = document.getElementById("packing-labels-form");
+            const selectedIdsInput = document.getElementById("selected-label-ids");
+            const selectedBagIdsInput = document.getElementById("selected-bag-ids");
+            const selectedCount = document.getElementById("selected-label-count");
+            const selectedAttachableCount = document.getElementById("selected-attachable-count");
+            const actionButtons = [...document.querySelectorAll("[data-label-action]")];
+            const getSelectedCheckboxes = () => [...document.querySelectorAll(".js-label-select:checked")];
+            const getActionCheckboxes = action => {
+                const selected = getSelectedCheckboxes();
+                return action === "confirm"
+                    ? selected.filter(checkbox => checkbox.dataset.canConfirm === "true")
+                    : selected;
+            };
+
+            const updateActionButtons = () => {
+                const selected = getSelectedCheckboxes();
+                const attachable = selected.filter(checkbox => checkbox.dataset.canConfirm === "true");
+                if (selectedCount) {
+                    selectedCount.textContent = selected.length;
+                }
+
+                if (selectedAttachableCount) {
+                    selectedAttachableCount.textContent = attachable.length;
+                }
+
+                actionButtons.forEach(button => {
+                    const action = button.dataset.labelAction;
+                    const count = action === "confirm" ? attachable.length : selected.length;
+                    button.disabled = count === 0;
+                });
+            };
+
+            document.querySelectorAll(".js-route-select").forEach(routeCheckbox => {
+                const table = routeCheckbox.closest("table");
+                const checkboxes = [...table.querySelectorAll(".js-label-select:not(:disabled)")];
+
+                const updateRouteCheckbox = () => {
+                    const checked = checkboxes.filter(checkbox => checkbox.checked).length;
+                    routeCheckbox.checked = checkboxes.length > 0 && checked === checkboxes.length;
+                    routeCheckbox.indeterminate = checked > 0 && checked < checkboxes.length;
+                    routeCheckbox.disabled = checkboxes.length === 0;
+                };
+
+                routeCheckbox.addEventListener("change", () => {
+                    checkboxes.forEach(checkbox => {
+                        checkbox.checked = routeCheckbox.checked;
+                    });
+                    updateRouteCheckbox();
+                    updateActionButtons();
+                });
+
+                checkboxes.forEach(checkbox => {
+                    checkbox.addEventListener("change", () => {
+                        updateRouteCheckbox();
+                        updateActionButtons();
+                    });
+                });
+
+                updateRouteCheckbox();
+            });
+
+            form?.addEventListener("submit", event => {
+                const submitter = event.submitter;
+                const action = submitter?.getAttribute("data-label-action");
+                if (action) {
+                    const selected = getActionCheckboxes(action);
+                    if (selected.length === 0) {
+                        event.preventDefault();
+                        window.alert(submitter?.getAttribute("data-empty-message") ?? "Zaznacz co najmniej jedna etykiete.");
+                        return;
+                    }
+
+                    if (selectedIdsInput) {
+                        selectedIdsInput.value = selected
+                            .map(checkbox => checkbox.dataset.labelId)
+                            .filter(Boolean)
+                            .join(",");
+                    }
+
+                    if (selectedBagIdsInput) {
+                        selectedBagIdsInput.value = action === "print"
+                            ? selected
+                                .filter(checkbox => !checkbox.dataset.labelId && checkbox.dataset.canGenerate === "true")
+                                .map(checkbox => checkbox.dataset.bagId)
+                                .filter(Boolean)
+                                .join(",")
+                            : "";
+                    }
+                }
+                else {
+                    if (selectedIdsInput) {
+                        selectedIdsInput.value = "";
+                    }
+
+                    if (selectedBagIdsInput) {
+                        selectedBagIdsInput.value = "";
+                    }
+                }
+
+                const confirmation = submitter?.getAttribute("data-confirm");
+                if (confirmation && !window.confirm(confirmation)) {
+                    event.preventDefault();
+                }
+            });
+
+            updateActionButtons();
+        })();
+    </script>
+}
