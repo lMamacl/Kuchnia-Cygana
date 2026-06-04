@@ -50,11 +50,19 @@ MSSQL_ADMIN_PASSWORD=YourStrong!Admin123
 MSSQL_PRACOWNIK_PASSWORD=YourStrong!Pracownik123
 MSSQL_KLIENT_PASSWORD=YourStrong!Klient123
 MSSQL_PORT=1433
-WEB_PORT=8080
 MSSQL_MEMORY_LIMIT_MB=768
 MSSQL_CONTAINER_MEMORY_LIMIT=1g
 WEB_CONTAINER_MEMORY_LIMIT=512m
+
+# Stripe (wymagane przez moduł płatności)
+STRIPE_SECRET=sk_test_...
+STRIPE_PUBLISHABLE=pk_test_...
+
+# OpenAI (wymagane przez marketing AI w katalogu)
+OPENAI_KEY=sk-...
 ```
+
+*Uwaga: Port aplikacji webowej (`8080`) jest w `docker-compose.yml` zmapowany bezpośrednio jako port hosta. Zmienna `WEB_PORT` nie jest aktualnie używana w konfiguracji compose.*
 
 Hasła SQL Server muszą być wystarczająco mocne. W praktyce użyj wielkiej litery, małej litery, cyfry i znaku specjalnego.
 
@@ -199,7 +207,7 @@ netstat -ano | findstr ":8080"
 Opcje:
 
 - zatrzymaj proces zajmujący port,
-- zmień `MSSQL_PORT` albo `WEB_PORT` w `.env`,
+- zmień `MSSQL_PORT` w `.env` (dla bazy) lub zmień mapowanie portu `8080:8080` bezpośrednio w `docker-compose.yml` (dla aplikacji web),
 - uruchom ponownie compose.
 
 ### SQL Server zużywa dużo RAM

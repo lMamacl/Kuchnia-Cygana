@@ -92,7 +92,7 @@ Podział odpowiedzialności w zespole:
 *   **F10**: Obsługa ticketów reklamacyjnych ze zdjęciami oraz grafików pracy.
 
 ### Wymagania Niefunkcjonalne (NFR)
-*   **NF1 (Wydajność)**: Czas generowania zapotrzebowania na surowce dla 1000 zamówień nie może przekroczyć 3 sekund (dzięki optymalnym indeksom i lekkiemu micro-ORM OrmLite).
+*   **NF1 (Wydajność)**: Czas generowania zapotrzebowania na surowce dla 1000 zamówień nie może przekroczyć 3 sekund (dzięki optymalnym indeksom i lekkiemu micro-ORM Dapper).
 *   **NF2 (Bezpieczeństwo)**: Hasła haszowane jednokierunkowo algorytmem o wysokiej odporności (np. BCrypt/Argon2). Dane wrażliwe (adresy, dane osobowe) chronione są na poziomie bazy danych (TDE - Transparent Data Encryption lub szyfrowanie kolumnowe).
 *   **NF3 (HACCP i Audytowalność)**: Każda edycja rekordów finansowych, magazynowych oraz zmian uprawnień musi zapisać ślad audytowy w tabeli `SystemLogs` zawierający stary i nowy stan rekordu w formacie JSON (`OldValue`, `NewValue`).
 *   **NF4 (Responsywność)**: Interfejs webowy musi być dostosowany do urządzeń mobilnych (kierowcy) oraz tabletów dotykowych (kucharze i pakowacze w środowisku o podwyższonej wilgotności).
@@ -149,18 +149,21 @@ flowchart TD
 ---
 
 ## 5. Elementy Słownikowe (Lookup Tables)
-W celu optymalizacji struktury i uniknięcia redundancji danych, system posiada wydzielone tabele słownikowe:
-*   `UnitsOfMeasure` (Jednostki miary): Przechowuje symbole (`kg`, `g`, `l`, `ml`, `szt.`) oraz pełne nazwy jednostek miar wykorzystywanych w przepisach i na magazynie.
-*   `Categories` (Kategorie dań): Słownik kategoryzujący posiłki w jadłospisie (np. *Śniadanie*, *Drugie Śniadanie*, *Obiad*, *Podwieczorek*, *Kolacja*).
-*   `Allergens` (Alergeny): Lista substancji uczulających według dyrektyw unijnych (np. *gluten*, *skorupiaki*, *orzechy*, *seler*). Każdy alergen posiada unikalny kod oraz ikonę.
+W celu optymalizacji struktury i uniknięcia redundancji danych, system posiada wydzielone tabele słownikowe (w tym specyficzne dla HACCP i gospodarki magazynowej):
+*   `UnitsOfMeasure` (Jednostki miary): Przechowuje symbole (`kg`, `g`, `l`, `ml`, `szt.`, `porcja`) oraz pełne nazwy jednostek miar wykorzystywanych w przepisach i na magazynie.
+*   `Categories` (Kategorie dań i surowców): Słownik kategoryzujący posiłki w jadłospisie (np. *Śniadanie*, *Drugie Śniadanie*, *Obiad*, *Podwieczorek*, *Kolacja*) oraz grupy surowców i produktów spożywczych (np. *Warzywa*, *Mięso*, *Nabiał*).
+*   `Allergens` (Alergeny): Lista substancji uczulających według dyrektyw unijnych (np. *gluten*, *skorupiaki*, *orzechy*, *seler*). Każdy alergen posiada unikalny kod, nazwę oraz ikonę.
 *   `DeliveryWindows` (Przedziały dostaw): Godziny, w których kurier może dostarczyć torbę (np. `04:00 - 06:00`, `06:00 - 08:00`).
-*   `DiscountCodes` (Kody rabatowe): Słownik kodów promocyjnych wraz z wartościami procentowymi lub kwotowymi i datą ważności.
+*   `DiscountCodes` (Kody rabatowe): Słownik kodów promocyjnych wraz z wartościami procentowymi lub kwotowymi, datą ważności i ograniczeniami użycia.
 *   `Departments` (Działy HR): Słownik organizacyjny przedsiębiorstwa (np. *Kuchnia*, *Magazyn*, *Logistyka*, *Administracja*).
+*   `WarehouseCategories` (Kategorie magazynowe surowców): Klasyfikacja stref przechowywania produktów (np. *Suchy*, *Chłodnia*, *Zamrażalnik*).
+*   `HaccpLocationCategories` (Typy lokalizacji HACCP): Rodzaje punktów pomiaru temperatury (np. *Chłodziarka surowców*, *Chłodziarka wyrobów gotowych*, *Sala produkcyjna*).
+*   `HaccpLocations` (Lokalizacje HACCP): Konkretne urządzenia lub pomieszczenia podlegające reżimowi HACCP (np. *Chłodnia Mięsna nr 1*, *Szafa chłodnicza warzyw*).
 
 ---
 
 ## 6. Bezpieczeństwo, Ochrona Danych i Audytowalność
-W celu ochrony danych wrażliwych i zapewnienia pełnej rozliczalności personelu, wdrożono zaawansowane mechanizmy zabezpieczeń.
+W celu ochrony danych wrażliwych i zapewnienia pełnej rozliczalności personelu, wdrożono zaawansowane mechanizmy zabezpieczeń oraz mechanizmy audytowe.
 
 ### 6.1. Ochrona danych wrażliwych (Szyfrowanie i Maskowanie)
 *   **Haszowanie haseł**: Zastosowanie funkcji haszującej opartej na soli (np. BCrypt z kosztem obliczeniowym równym 11 lub Argon2id), co zabezpiecza hasła przed atakami metodą słownikową i siłową w przypadku wycieku bazy.
@@ -168,13 +171,16 @@ W celu ochrony danych wrażliwych i zapewnienia pełnej rozliczalności personel
 *   **Maskowanie danych wrażliwych w logach**: System automatycznie filtruje wartości zapisywane w tabeli `SystemLogs`. Pola takie jak hasła, tokeny sesji czy klucze Stripe są podmieniane na maskę `********` na poziomie warstwy aplikacyjnej (kod walidatorów i interceptorów).
 
 ### 6.2. Mechanizm historii zmian (Audit Trail)
-System realizuje trójpoziomowe śledzenie historii operacji:
+System realizuje trójpoziomowe i wielokanałowe śledzenie historii operacji:
 1.  **Auditable Entities (Miękkie Usuwanie i Historia Rekordu)**:
-    Większość encji biznesowych dziedziczy po klasie bazowej `AuditableEntity`. Zawiera ona pola: `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, `IsDeleted`, `DeletedAt`, `DeletedBy`. Usunięcie obiektu jest operacją logiczną (ustawienie flagi `IsDeleted = 1`), co zapobiega utracie powiązań historycznych w raportach finansowych.
-2.  **Tabela `SystemLogs` (Logi Zdarzeń Systemowych)**:
-    Każda akcja modyfikująca dane (Insert, Update, Delete) wyzwala zapis w tabeli `SystemLogs`. Zapisywane są stany obiektów przed i po modyfikacji w formacie JSON (`OldValue` oraz `NewValue`), co umożliwia odtworzenie historii zmian dowolnego obiektu w czasie.
-3.  **Tabela `InventoryTransactions` (Śledzenie Ilościowe Magazynu)**:
-    Każdy ruch surowca na magazynie (przyjęcie dostawy, zużycie do planu produkcji, korekta inwentaryzacyjna) musi posiadać referencję do partii (`BatchId`) oraz wpisaną ilość i powód. Gwarantuje to pełną rozliczalność stanów magazynowych.
+    Większość encji biznesowych dziedziczy po klasie bazowej `AuditableEntity`. Zawiera ona pola: `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, `IsDeleted`, `DeletedAt`, `DeletedBy`. Usunięcie obiektu jest operacją logiczną (ustawienie flagi `IsDeleted = 1`), co zapobiega utracie powiązań historycznych w raportach finansowych i produkcyjnych.
+2.  **Tabela `SystemLogs` (Logi Zdarzeń Systemowych) i archiwizacja**:
+    Każda akcja modyfikująca dane (Insert, Update, Delete) wyzwala zapis w tabeli `SystemLogs`. Zapisywane są stany obiektów przed i po modyfikacji w formacie JSON (`OldValue` oraz `NewValue`), co umożliwia odtworzenie historii zmian dowolnego obiektu w czasie. W celu zachowania wydajności bazy operacyjnej wdrożono tabelę `SystemLogsArchive` oraz procedurę składowaną `usp_ArchiveSystemLogs` wywoływaną cyklicznie (np. raz na dobę), przenoszącą rekordy starsze niż 180 dni do tabeli archiwalnej z zachowaniem optymalnego batchowania.
+3.  **Specjalistyczne Dzienniki Operacyjne**:
+    *   `InventoryTransactions` (Śledzenie Ilościowe Magazynu): Każdy ruch surowca na magazynie (przyjęcie dostawy, zużycie do planu produkcji, rejestracja odpadu, korekta inwentaryzacyjna) musi posiadać referencję do partii (`BatchId`) oraz wpisaną ilość i powód. Gwarantuje to pełną rozliczalność stanów magazynowych.
+    *   `BatchExpiryChangeLogs` (Zmiany Dat Ważności): Każda ręczna korekta daty ważności partii (`ExpiryDate` w tabeli `Batches`) wymusza zapis do tej tabeli, dokumentując przyczynę modyfikacji, poprzednią datę, nową datę i dane użytkownika wykonującego operację.
+    *   `PackingStatusLogs` (Śledzenie Kompletacji): Loguje kolejne etapy pakowania pudełek (Generowanie etykiety -> Przypisanie do torby -> Skanowanie -> Załadunek na trasę).
+    *   `HaccpTemperatureAlerts` (Logi Alertów): Rejestruje przekroczenia temperatur w chłodniach zarejestrowane przez `TemperatureLogs`, dokumentując czas trwania incydentu oraz podjęte działania korygujące.
 
 ---
 
@@ -189,16 +195,19 @@ Założenia:
 *   500 aktywnych klientów dostaje 5 posiłków dziennie = **2500 pudełek dziennie**.
 *   Dostawy realizowane są przez 360 dni w roku.
 *   Każde pudełko generuje rekord kompletacji (`PackingItems`).
+*   Każdy posiłek przechodzi proces gotowania i kontroli krytycznych punktów (HACCP).
 
 | Tabela / Typ Danych | Średni rozmiar wiersza | Liczba wierszy (Rocznie) | Przyrost danych (Rocznie) | Opis |
 | :--- | :--- | :--- | :--- | :--- |
 | `PackingItems` | ~150 B | 900 000 | **135 MB** | Zapis kompletacji pudełek (traceability) |
-| `SystemLogs` | ~1000 B | 720 000 | **720 MB** | Logi audytowe zmian w systemie |
+| `SystemLogs` / `Archive`| ~1000 B | 720 000 | **720 MB** | Logi audytowe zmian w systemie (przenoszone do archiwum) |
 | `TemperatureLogs` | ~80 B | 175 200 | **14 MB** | Odczyt z 5 lodówek co 15 minut |
-| `InventoryTransactions`| ~100 B | 250 000 | **25 MB** | Zapisy zmian ilościowych w partiach |
+| `InventoryTransactions`| ~100 B | 250 000 | **25 MB** | Zapisy zmian ilościowych w partiach (FEFO) |
+| `BagMovementLogs` | ~80 B | 360 000 | **29 MB** | Rejestracja skanów i wydań toreb termicznych |
+| `CookingSessionStepChecks`| ~120 B | 450 000 | **54 MB** | Logi kontrolne etapów gotowania dań (critical points) |
 | `Orders` & `OrderItems`| ~120 B | 36 000 | **4.3 MB** | Zamówienia i pozycje zamówień |
-| Pozostałe tabele | - | - | **15 MB** | Słowniki, diety, konta użytkowników |
-| **Suma (Dane + Indeksy)**| - | - | **ok. 1.1 GB / Rok** | Łączny przyrost przestrzeni dyskowej |
+| Pozostałe tabele | - | - | **25 MB** | Warianty dań, słowniki, konta, incydenty, reklamacje |
+| **Suma (Dane + Indeksy)**| - | - | **ok. 1.25 GB / Rok** | Łączny przyrost przestrzeni dyskowej |
 
 > [!IMPORTANT]
 > Pliki załączników do zgłoszeń reklamacyjnych (np. zdjęcia JPG/PNG o średnim rozmiarze 2MB) nie są przechowywane w bazie danych SQL. Baza przechowuje jedynie URL (np. `NVARCHAR(1000)`) wskazujący na Object Storage. Pozwala to zaoszczędzić około **720 GB** przestrzeni bazodanowej rocznie przy założeniu 1000 reklamacji ze zdjęciami miesięcznie.
@@ -229,19 +238,23 @@ quadrantChart
     "Orders" : [0.82, 0.55]
     "Tickets" : [0.45, 0.38]
     "WorkSchedules" : [0.55, 0.18]
+    "CookingSessionStepChecks" : [0.50, 0.70]
+    "MealVariants" : [0.88, 0.20]
 ```
 
 1.  **Tabele Krytyczne (High Write / High Read)**:
     *   `PackingItems`: Podczas kompletacji wieczornej (okienko 4-godzinowe) następuje skanowanie 2500 pudełek. Generuje to intensywny ruch zapisu (Insert statusów) oraz odczytu (wyszukiwanie po kodzie kreskowym). Wymaga optymalnego indeksu na `BoxCode`.
     *   `Batches`: Intensywnie wykorzystywane przez algorytm FEFO (częste wyszukiwanie partii o najkrótszym terminie ważności oraz aktualizacja kolumny `CurrentQuantity` i flagi `IsDepleted`).
-    *   `ProductionPlanItems`: W nocy i rano kucharze aktualizują ugotowane ilości, co wiąże się z częstymi odczytami planów oraz zapisem raportów z postępu prac.
+    *   `ProductionPlanItems`: Kucharze i dietetycy aktualizują planowane/ugotowane ilości, co wiąże się z częstymi odczytami planów oraz zapisem raportów z postępu prac.
 2.  **Tabele typu Write-Heavy (Intensywny zapis, sporadyczny odczyt)**:
-    *   `SystemLogs` oraz `TemperatureLogs`: Ciągły napływ logów telemetrii (temperatury z lodówek) i audytu operacji. Tabele te wymagają partycjonowania oraz cyklicznej archiwizacji.
+    *   `SystemLogs` oraz `TemperatureLogs`: Ciągły napływ logów telemetrii (temperatury z lodówek) i audytu operacji. Tabele te wymagają partycjonowania oraz cyklicznej archiwizacji procedurą `usp_ArchiveSystemLogs`.
     *   `BagMovementLogs`: Rejestruje każde zeskanowanie torby termicznej przez kierowcę przy wydaniu/odbiorze. Generuje dużą liczbę wierszy logu w krótkim czasie.
+    *   `CookingSessionStepChecks`: Rejestruje odczyty temperatur i wartości pomiarowych dla kroków krytycznych (CCP) w sesjach gotowania.
 3.  **Tabele typu Read-Heavy (Intensywny odczyt, rzadki zapis)**:
-    *   `Recipes`, `DietVariantMeals` oraz `Meals`: Odczytywane przy każdym wyświetleniu menu przez klienta oraz podczas nocnego generowania planu produkcji i wyliczania food-costu. Wymagają agresywnego indeksowania i keszowania.
+    *   `Recipes`, `RecipeComponentVersions`, `MealVariants` oraz `Meals`: Odczytywane przy każdym wyświetleniu menu przez klienta oraz podczas nocnego generowania planu produkcji i wyliczania kosztów surowców. Wymagają indeksowania i keszowania.
     *   `Orders` & `DeliveryRouteStops`: Informacje o zamówieniach i punktach dostaw są masowo czytane przez system logistyki przy generowaniu tras oraz przez kurierów na urządzeniach mobilnych podczas dostaw.
     *   `Users`: Tabele kont użytkowników, czytana przy każdym zapytaniu autoryzowanym (RBAC) w celu pobrania ról i danych sesyjnych. Rzadko aktualizowana.
+```
 
 ---
 
@@ -266,6 +279,35 @@ erDiagram
         string NewValue
         datetimeoffset Timestamp
         string IPAddress
+    }
+
+    SystemLogsArchive {
+        int Id PK
+        int UserId
+        string Action
+        string TargetEntity
+        string TargetId
+        string OldValue
+        string NewValue
+        datetimeoffset Timestamp
+        string IPAddress
+        datetimeoffset ArchivedAt
+    }
+
+    Notification {
+        int Id PK
+        string Title
+        string Message
+        string Type
+        datetimeoffset CreatedAt
+    }
+
+    UserNotification {
+        int Id PK
+        int UserId FK
+        int NotificationId FK
+        bool IsRead
+        datetimeoffset ReadAt
     }
 
     Ticket {
@@ -408,8 +450,8 @@ erDiagram
     OrderItem {
         int Id PK
         int OrderId FK
-        int DietId
-        int DietVariantId
+        int DietId FK
+        int DietVariantId FK
         string DietName
         string VariantName
         int CaloriesPerDay
@@ -468,6 +510,12 @@ erDiagram
         decimal CostPerUnit
         string Notes
         bool IsActive
+        string ResourceType
+        int FoodCategoryId FK
+        string Description
+        string ImageUrl
+        string ProductComposition
+        bool WarehouseCategoryFefoApproved
     }
 
     IngredientAllergen {
@@ -475,6 +523,59 @@ erDiagram
         int IngredientId FK
         int AllergenId FK
         bool TraceAmount
+    }
+
+    RecipeComponent {
+        int Id PK
+        string Name
+        int CategoryId FK
+        string ImageUrl
+        int PreparationTimeMinutes
+        bool IsActive
+    }
+
+    RecipeComponentVersion {
+        int Id PK
+        int RecipeComponentId FK
+        int VersionNumber
+        int Status
+        string RecipeText
+        decimal RawWeightGrams
+        decimal CookedWeightGrams
+        string NutritionSource
+        string NutritionOverrideReason
+        bool AllergensApproved
+        string AllergenOverrideReason
+        datetimeoffset AllergensApprovedAt
+        string AllergensApprovedBy
+    }
+
+    RecipeComponentIngredient {
+        int Id PK
+        int RecipeComponentVersionId FK
+        int IngredientId FK
+        decimal WeightInGrams
+        bool IsOptional
+        string Notes
+    }
+
+    RecipeComponentInstructionSection {
+        int Id PK
+        int RecipeComponentVersionId FK
+        string Title
+        int SortOrder
+    }
+
+    RecipeComponentInstructionStep {
+        int Id PK
+        int RecipeComponentInstructionSectionId FK
+        string StepText
+        int SortOrder
+        bool RequiresControl
+        string ControlType
+        decimal ExpectedValue
+        string ExpectedUnit
+        bool IsCritical
     }
 
     Meal {
@@ -493,6 +594,48 @@ erDiagram
         int MealId FK
         int AllergenId FK
         bool IsTrace
+    }
+
+    MealVariant {
+        int Id PK
+        int MealId FK
+        string Name
+        string VariantType
+        string Status
+        string Description
+        bool IsDefault
+        decimal RawWeightGrams
+        decimal CookedWeightGrams
+        decimal CaloriesPer100g
+        decimal ProteinPer100g
+        decimal CarbohydratesPer100g
+        decimal FatPer100g
+        decimal FiberPer100g
+        string NutritionSource
+        string NutritionOverrideReason
+        bool AllergensApproved
+        string AllergenOverrideReason
+        datetimeoffset PublishedAt
+        string PublishedBy
+    }
+
+    MealVariantComponent {
+        int Id PK
+        int MealVariantId FK
+        int RecipeComponentVersionId FK
+        string Role
+        decimal QuantityPerServing
+        string Unit
+        int SortOrder
+        bool IsOptional
+    }
+
+    MealVariantAllergen {
+        int Id PK
+        int MealVariantId FK
+        int AllergenId FK
+        bool IsTrace
+        string SourceType
     }
 
     Diet {
@@ -518,6 +661,7 @@ erDiagram
         int Id PK
         int DietVariantId FK
         int MealId FK
+        int MealVariantId FK
         decimal ServingSizeMultiplier
         int SortOrder
     }
@@ -529,6 +673,7 @@ erDiagram
         decimal WeightInGrams
         bool IsOptional
         string Notes
+        bool IsDeleted
     }
 
     NutritionFact {
@@ -561,6 +706,13 @@ erDiagram
         string Description
     }
 
+    WarehouseCategory {
+        int Id PK
+        string Name
+        string Code
+        string Description
+    }
+
     StockItem {
         int Id PK
         string Name
@@ -568,6 +720,7 @@ erDiagram
         int DefaultUnitOfMeasureId FK
         decimal MinimumLevel
         int LeadTimeDays
+        int WarehouseCategoryId FK
     }
 
     Batch {
@@ -580,9 +733,20 @@ erDiagram
         bool IsDepleted
     }
 
+    BatchExpiryChangeLog {
+        int Id PK
+        int BatchId FK
+        datetimeoffset OldExpiryDate
+        datetimeoffset NewExpiryDate
+        string Reason
+        string ChangedBy
+        datetimeoffset ChangedAt
+    }
+
     InventoryTransaction {
         bigint Id PK
         int BatchId FK
+        int StockItemId FK
         int TransactionType
         decimal QuantityChanged
         string Reason
@@ -599,9 +763,38 @@ erDiagram
         string AdjustedBy
     }
 
+    HaccpLocationCategory {
+        int Id PK
+        string Name
+        string Code
+        string Description
+    }
+
+    HaccpLocation {
+        int Id PK
+        string Name
+        string Code
+        int CategoryId FK
+        decimal MinTargetTemperatureCelsius
+        decimal MaxTargetTemperatureCelsius
+        bool IsActive
+    }
+
+    HaccpTemperatureAlert {
+        int Id PK
+        int HaccpLocationId FK
+        decimal RecordedValueCelsius
+        string Severity
+        string Status
+        string ActionTaken
+        string ActionTakenBy
+        datetimeoffset ActionTakenAt
+    }
+
     TemperatureLog {
         bigint Id PK
         string DeviceNameOrLocation
+        int HaccpLocationId FK
         decimal RecordedTemperatureCelsius
         datetimeoffset RecordedAt
         string Remarks
@@ -622,9 +815,9 @@ erDiagram
     ProductionPlanItem {
         int Id PK
         int ProductionPlanId FK
-        int MealId
+        int MealId FK
         string MealName
-        int DietVariantId
+        int DietVariantId FK
         int PlannedQuantity
         int CookedQuantity
         int Status
@@ -636,10 +829,34 @@ erDiagram
     ProductionBatch {
         int Id PK
         int ProductionPlanId FK
-        int MealId
+        int MealId FK
         string Name
         decimal PlannedQuantity
         decimal ProducedQuantity
+    }
+
+    CookingSession {
+        int Id PK
+        int RecipeComponentVersionId FK
+        date ProductionDate
+        int ProductionPlanItemId FK
+        string Status
+        datetimeoffset StartedAt
+        string StartedBy
+        datetimeoffset CompletedAt
+        string CompletedBy
+    }
+
+    CookingSessionStepCheck {
+        int Id PK
+        int CookingSessionId FK
+        int RecipeComponentInstructionStepId FK
+        string Status
+        datetimeoffset CheckedAt
+        string CheckedBy
+        decimal ActualValue
+        string ActualUnit
+        string Notes
     }
 
     %% ==============================
@@ -654,14 +871,15 @@ erDiagram
         int Status
         int RouteId FK
         int StopNumber
+        string ClientPublicId
     }
 
     PackingItem {
         int Id PK
         int PackingSessionId FK
-        int MealId
+        int MealId FK
         string MealName
-        int DietVariantId
+        int DietVariantId FK
         int BatchId FK
         string BoxCode
         int Status
@@ -685,15 +903,19 @@ erDiagram
         string ClientName
         string RouteInfo
         string DeliveryWindow
+        bool IsReprinted
+        string ReprintReason
+        datetimeoffset ReprintedAt
+        string ReprintedBy
     }
 
     PackingManifest {
         int Id PK
         date PackingDate
         string ManifestNumber
-        int RouteId
+        int RouteId FK
         string RouteName
-        int VehicleId
+        int VehicleId FK
         string VehicleRegistration
         int RouteCount
         int BagCount
@@ -703,6 +925,46 @@ erDiagram
         datetimeoffset VerifiedAt
         string VerifiedBy
         string PayloadJson
+        string DriverSignaturePath
+        string DispatcherApprovedBy
+    }
+
+    PackingManifestIssue {
+        int Id PK
+        int PackingManifestId FK
+        string IssueType
+        string Description
+        string ReportedBy
+        datetimeoffset ReportedAt
+        string Resolution
+    }
+
+    PackingBag {
+        int Id PK
+        int PackingSessionId FK
+        string BagBarcode
+        int Status
+        datetimeoffset PackedAt
+    }
+
+    PackingIncident {
+        int Id PK
+        int PackingSessionId FK
+        int PackingItemId FK
+        string IncidentType
+        string Description
+        string ReportedBy
+        datetimeoffset ReportedAt
+        string ResolutionStatus
+    }
+
+    PackingStatusLog {
+        int Id PK
+        int PackingItemId FK
+        int FromStatus
+        int ToStatus
+        string ChangedBy
+        datetimeoffset ChangedAt
     }
 
     %% ==============================
@@ -728,6 +990,14 @@ erDiagram
         int UserId FK
         string DeskPhoneNumber
         bool IsOnDuty
+    }
+
+    DriverVehicleAssignment {
+        int Id PK
+        int DriverId FK
+        int VehicleId FK
+        datetimeoffset AssignedAt
+        bool IsActive
     }
 
     DeliveryRoute {
@@ -766,6 +1036,15 @@ erDiagram
         int RouteStopId FK
     }
 
+    DeliveryIssue {
+        int Id PK
+        int DeliveryRouteStopId FK
+        string IssueType
+        string Description
+        datetimeoffset ReportedAt
+        string Status
+    }
+
     %% ============================================
     %% RELACJE MIĘDZY MODUŁAMI
     %% ============================================
@@ -777,6 +1056,9 @@ erDiagram
     User ||--o{ Dispatcher : "is (1:1)"
     User ||--o{ WorkSchedule : scheduled_for
     User ||--o{ SystemLog : triggers
+    User ||--o{ UserNotification : receives
+
+    Notification ||--o{ UserNotification : maps
 
     CustomerProfile ||--o{ Address : has
     CustomerProfile ||--|| Address : "default (DefaultAddressId)"
@@ -795,6 +1077,12 @@ erDiagram
     DeliveryRoute ||--|| Driver : "assigned"
 
     ThermalBag ||--|{ BagMovementLog : tracks
+    Driver ||--o{ BagMovementLog : performs
+    DeliveryRouteStop ||--o{ BagMovementLog : logs_at
+    DeliveryRouteStop ||--o{ DeliveryIssue : logs_issue
+
+    Driver ||--o{ DriverVehicleAssignment : assigned_to
+    Vehicle ||--o{ DriverVehicleAssignment : assigned_to
 
     Department ||--o{ Employee : employs
     Employee ||--o{ LeaveRequest : requests
@@ -808,25 +1096,49 @@ erDiagram
     Diet ||--|{ DietVariant : has
     DietVariant ||--|{ DietVariantMeal : contains
     Meal ||--o{ DietVariantMeal : "appears in"
-    Meal ||--o{ Recipe : "uses ingredients"
-    Ingredient ||--o{ Recipe : "used in"
-    Meal ||--o{ MealAllergen : has
+    MealVariant ||--o{ DietVariantMeal : "variant used in"
+    Category ||--o{ Meal : categorizes
+    Category ||--o{ RecipeComponent : categorizes
+    Category ||--o{ Ingredient : categorizes
     Allergen ||--o{ IngredientAllergen : "associated with ingredient"
     Ingredient ||--o{ IngredientAllergen : has
     Allergen ||--o{ MealAllergen : "associated with meal"
+    Meal ||--o{ MealAllergen : has
     Meal ||--o{ MealImage : displays
     Meal ||--o{ NutritionFact : "nutrition data"
     Ingredient ||--o{ NutritionFact : "nutrition data"
 
-    %% Relacje magazynu
+    RecipeComponent ||--|{ RecipeComponentVersion : versions
+    RecipeComponentVersion ||--|{ RecipeComponentIngredient : ingredients
+    Ingredient ||--o{ RecipeComponentIngredient : "used in component"
+    RecipeComponentVersion ||--|{ RecipeComponentInstructionSection : instructions
+    RecipeComponentInstructionSection ||--|{ RecipeComponentInstructionStep : steps
+
+    Meal ||--|{ MealVariant : variants
+    MealVariant ||--|{ MealVariantComponent : components
+    RecipeComponentVersion ||--o{ MealVariantComponent : "uses version"
+    MealVariant ||--o{ MealVariantAllergen : has
+    Allergen ||--o{ MealVariantAllergen : maps
+
+    %% Relacje magazynu i HACCP
+    WarehouseCategory ||--o{ StockItem : categorizes
     StockItem ||--|{ Batch : stocks
     Batch ||--|{ InventoryTransaction : transact
     StockItem ||--o{ InventoryAdjustment : adjusts
     UnitOfMeasure ||--o{ StockItem : measures
+    Batch ||--o{ BatchExpiryChangeLog : logs_expiry_change
+
+    HaccpLocationCategory ||--o{ HaccpLocation : categorizes
+    HaccpLocation ||--o{ HaccpTemperatureAlert : alerts
+    HaccpLocation ||--o{ TemperatureLog : logs
 
     %% Relacje produkcji i packingu
     ProductionPlan ||--|{ ProductionPlanItem : contains
     ProductionPlan ||--o{ ProductionBatch : prepares
+    ProductionPlanItem ||--o{ CookingSession : schedules
+    RecipeComponentVersion ||--o{ CookingSession : gotowana_w
+    CookingSession ||--|{ CookingSessionStepCheck : steps_validation
+    RecipeComponentInstructionStep ||--o{ CookingSessionStepCheck : validated_step
 
     PackingSession ||--|{ PackingItem : contains
     PackingItem ||--|| Batch : "HACCP trace"
@@ -834,10 +1146,16 @@ erDiagram
     PackingSession ||--o{ PackingLabel : prints
     PackingSession ||--|| Order : "belongs to"
     PackingSession ||--|| DeliveryRoute : "loaded on"
+    PackingSession ||--o{ PackingBag : bags
+    PackingSession ||--o{ PackingIncident : logs_session_incident
+    PackingItem ||--o{ PackingIncident : logs_item_incident
+    PackingItem ||--o{ PackingStatusLog : status_changes
 
     PackingManifest ||--|| DeliveryRoute : "references"
     PackingManifest ||--|| Vehicle : "references"
+    PackingManifest ||--o{ PackingManifestIssue : logs_manifest_issue
 ```
+
 ---
 
 ## 9. Logiczny Model Danych i Wymagania dotyczące przechowywania
@@ -846,37 +1164,31 @@ erDiagram
 
 | Grupa | Zawartość | Wynika z wymagań (ID) |
 |-------|-----------|------------------------|
-| **Administracja i audyt** | Logi operacji (`SystemLog`), zgłoszenia (`Ticket`), załączniki (`TicketAttachment`), grafiki pracy (`WorkSchedule`) | F10, NF3 |
-| **Konta i klienci** | Użytkownicy, profile klientów, adresy | F1, F3 |
-| **HR i kadry** | Pracownicy, działy, wnioski urlopowe | (zakres modułu 5) |
-| **Zamówienia i płatności** | Zamówienia, pozycje, kalendarz dostaw, kody rabatowe, płatności Stripe | F1–F3 |
-| **Katalog diet i posiłków** | Diety, warianty, posiłki, składniki, alergeny, przepisy, wartości odżywcze | F4 |
-| **Magazyn i HACCP** | Składniki magazynowe, partie (FEFO), transakcje, korekty, logi temperatur | F5–F6, NF3 |
-| **Produkcja** | Plany produkcyjne, pozycje planu, partie półproduktów | F5 |
-| **Kompletacja (packing)** | Sesje pakowania (torby), pudełka, etykiety (produktowe i transportowe), manifesty | F7 |
-| **Logistyka** | Pojazdy, kierowcy, trasy, przystanki, torby termiczne, logi ruchu toreb | F8–F9 |
+| **Administracja i audyt** | Logi operacji (`SystemLog`), archiwum logów (`SystemLogsArchive`), powiadomienia (`Notification`), statusy powiadomień (`UserNotification`), zgłoszenia (`Ticket`), załączniki (`TicketAttachment`), grafiki pracy (`WorkSchedule`) | F10, NF3 |
+| **Konta i klienci** | Użytkownicy (`User`), profile klientów (`CustomerProfile`), adresy (`Address`) | F1, F3 |
+| **HR i kadry** | Pracownicy (`Employee`), działy (`Department`), wnioski urlopowe (`LeaveRequest`) | (zakres modułu 5) |
+| **Zamówienia i płatności** | Zamówienia (`Order`), pozycje (`OrderItem`), kalendarz dostaw (`DeliveryCalendar`), kody rabatowe (`DiscountCode`), płatności Stripe (`Payment`), przedziały dostaw (`DeliveryWindow`) | F1–F3 |
+| **Katalog diet i posiłków** | Diety (`Diet`), warianty diet (`DietVariant`), posiłki (`Meal`), warianty posiłków (`MealVariant`), warianty dań w menu (`DietVariantMeal`), składniki (`Ingredient`), alergeny surowców i posiłków (`IngredientAllergen`, `MealVariantAllergen`), obrazy (`MealImage`), wartości odżywcze (`NutritionFact`), przepisy historyczne (`Recipe`), komponenty receptur (`RecipeComponent`), wersje komponentów (`RecipeComponentVersion`), składniki komponentu (`RecipeComponentIngredient`), sekcje instrukcji (`RecipeComponentInstructionSection`), kroki instrukcji (`RecipeComponentInstructionStep`) | F4 |
+| **Magazyn i WMS** | Składniki magazynowe (`StockItem`), kategorie magazynowe (`WarehouseCategory`), partie (FEFO) surowców (`Batch`), korekty dat ważności (`BatchExpiryChangeLog`), transakcje magazynowe (`InventoryTransaction`), korekty inwentaryzacyjne (`InventoryAdjustment`), jednostki miar (`UnitOfMeasure`) | F5–F6, NF3 |
+| **HACCP** | Lokalizacje HACCP (`HaccpLocation`), kategorie lokalizacji (`HaccpLocationCategory`), odczyty lodówek (`TemperatureLog`), alerty temperatur (`HaccpTemperatureAlert`) | NF3, F6 |
+| **Produkcja** | Plany produkcyjne (`ProductionPlan`), pozycje planu (`ProductionPlanItem`), partie gotowania (`ProductionBatch`), sesje gotowania (`CookingSession`), weryfikacje punktów krytycznych gotowania (`CookingSessionStepCheck`), etykiety pudełek (`BoxLabel`) | F5 |
+| **Kompletacja (packing)** | Sesje pakowania (`PackingSession`), pudełka (`PackingItem`), etykiety (`PackingLabel`), manifesty załadunkowe (`PackingManifest`), błędy w manifestach (`PackingManifestIssue`), torby kompletacyjne (`PackingBag`), incydenty kompletacji (`PackingIncident`), logi statusów kompletacji (`PackingStatusLog`) | F7 |
+| **Logistyka** | Pojazdy (`Vehicle`), kierowcy (`Driver`), przypisania pojazdów (`DriverVehicleAssignment`), dyspozytorzy (`Dispatcher`), trasy dostaw (`DeliveryRoute`), przystanki (`DeliveryRouteStop`), torby termiczne (`ThermalBag`), logi ruchu toreb (`BagMovementLog`), problemy z dostawami (`DeliveryIssue`) | F8–F9 |
 
 ### 9.2. Kluczowe założenia dotyczące przechowywania danych
 
-1. **Audytowalność (NF3)** – Większość encji biznesowych dziedziczy po `AuditableEntity`, co oznacza, że każda zmiana jest rejestrowana z datą, autorem i flagą miękkiego usunięcia. Tabela `SystemLog` przechowuje pełne historie zmian (stare i nowe wartości w formacie JSON) dla kluczowych operacji (zmiany ról, statusów zamówień, korekt magazynowych).
-
-2. **Śledzenie partii (FEFO, HACCP)** – Każdy składnik magazynowy (`StockItem`) składa się z wielu partii (`Batch`) z datą ważności. Każde wydanie (do produkcji, odpad, korekta) jest rejestrowane jako `InventoryTransaction` z referencją do partii, co zapewnia pełną identyfikowalność od dostawcy do gotowego pudełka.
-
-3. **Traceability posiłku** – Każde spakowane pudełko (`PackingItem`) zawiera `BatchId`, co pozwala odtworzyć, z jakich partii surowców pochodzi dany posiłek (wymóg HACCP i możliwość wycofania partii).
-
-4. **Denormalizacja dla wydajności** – Wybrane pola (np. `MealName` w `ProductionPlanItem`, `ClientName` w `PackingSession`) są denormalizowane, aby uniknąć kosztownych złączeń w krytycznych ścieżkach (kompletacja, raporty). Integralność tych pól jest utrzymywana na poziomie aplikacji.
-
-5. **Pliki (załączniki, obrazy)** – Nie są przechowywane w bazie danych, lecz w zewnętrznym magazynie obiektów (Azure Blob / AWS S3). W bazie przechowuje się tylko URL, nazwę pliku i rozmiar.
+1. **Audytowalność (NF3)** – Większość encji biznesowych dziedziczy po `AuditableEntity`, co oznacza, że każda zmiana jest rejestrowana z datą, autorem i flagą miękkiego usunięcia (`IsDeleted`). Tabela `SystemLog` przechowuje pełne historie zmian (stare i nowe wartości w formacie JSON) dla kluczowych operacji. W przypadku archiwizacji dane trafiają do `SystemLogsArchive`.
+2. **Wersjonowanie przepisów i komponentów** – Zamiast modyfikować istniejące receptury bezpośrednio (co zepsułoby historię gotowania dla starych planów), każda modyfikacja komponentu generuje nową wersję w tabeli `RecipeComponentVersions`. Plany produkcji oraz sesje gotowania (`CookingSessions`) są trwale powiązane z konkretnym identyfikatorem wersji komponentu (`RecipeComponentVersionId`).
+3. **Śledzenie partii (FEFO, HACCP)** – Każdy składnik magazynowy (`StockItem`) składa się z wielu partii (`Batch`) z datą ważności. Każde wydanie jest rejestrowane jako `InventoryTransaction` z referencją do partii, co zapewnia pełną identyfikowalność od dostawcy do gotowego pudełka.
+4. **Traceability posiłku (Kompletacja)** – Każde spakowane pudełko (`PackingItem`) zawiera `BatchId` surowców/półproduktów, co pozwala odtworzyć, z jakich partii surowców pochodzi dany posiłek (wymóg HACCP).
+5. **Denormalizacja dla wydajności** – Wybrane pola (np. `MealName` w `ProductionPlanItem`, `ClientName` w `PackingSession`) są denormalizowane, aby uniknąć kosztownych złączeń w krytycznych ścieżkach.
+6. **Pliki (załączniki, obrazy)** – Nie są przechowywane w bazie danych, lecz w zewnętrznym magazynie obiektów (np. AWS S3 / Azure Blob Storage). Baza przechowuje jedynie odnośniki URL.
 
 ### 9.3. Zasady integralności i wydajności
 
-- Klucze główne: `Id` (int lub long) z autoinkrementacją.
-- Klucze obce: tam, gdzie wymagana jest integralność referencyjna (np. `OrderItem.OrderId`), zakładamy klasyczne klucze obce. W przypadku luźnych powiązań między modułami (np. `PackingSession.OrderId`) – klucz obcy jest opcjonalny (bridge), ale zapewniamy spójność na poziomie aplikacji.
-- Indeksy są wymagane dla kolumn używanych w:
-  - Filtrowaniu (`DeliveryDate`, `PackingDate`, `Status`)
-  - Sortowaniu FEFO (`ExpiryDate`)
-  - Skanowaniu kodów QR (`BoxCode`, `QrCode`, `SerialNumber`)
-  - Wyszukiwaniu (`Email`, `OrderNumber`).
+- **Klucze główne**: `Id` (int) z autoinkrementacją (Identity w SQL Server) lub `bigint` dla tabel logów (`SystemLogs`, `TemperatureLogs`, `InventoryTransactions`).
+- **Klucze obce**: Zaimplementowane z więzami spójności referencyjnej na poziomie bazy danych tam, gdzie operacje zachodzą w ramach jednej domeny. Dla powiązań między modułami (np. `PackingSession.OrderId` wskazujący na moduł E-commerce) stosowane są powiązania logiczne na poziomie aplikacji (bridge), a fizyczne klucze obce w bazie są pomijane w celu unikania ścisłego sprzężenia między modułami.
+- **Indeksy**: Wymagane na wszystkich kluczach obcych, a także dla kolumn wykorzystywanych do sortowania (FEFO: `ExpiryDate`), wyszukiwania statusów, dat (`DeliveryDate`, `PackingDate`) oraz skanowania kodów QR (`BoxCode`, `QrCode`, `SerialNumber`, `BagBarcode`).
 
 ---
 
@@ -884,34 +1196,52 @@ erDiagram
 
 ### 10.1. Reguły biznesowe wymuszane na poziomie bazy danych
 
-| Reguła | Uzasadnienie |
-|--------|--------------|
-| Partia jest automatycznie oznaczana jako wyczerpana (`IsDepleted = true`), gdy `CurrentQuantity <= 0`. | Zapobiega uwzględnianiu pustych partii w algorytmie FEFO, redukuje złożoność zapytań. |
-| Unikalność kodu QR dla etykiet (`PackingLabels.QrCode`). | Gwarantuje, że każda etykieta może być jednoznacznie zeskanowana. |
-| W tabeli `WorkSchedules` nie może istnieć więcej niż jeden rekord dla tego samego pracownika, dnia i zmiany (unikalny klucz złożony). | Eliminuje konflikty w grafiku pracy. |
-| Nie można usunąć zamówienia, które ma status `Paid` lub `InProduction`. | Chroni integralność danych rozliczeniowych i produkcyjnych. |
-| Data ważności partii nie może być wcześniejsza niż data przyjęcia. | Zapewnia logiczną spójność dla algorytmu FEFO. |
+| Reguła | Uzasadnienie i mechanizm |
+|--------|--------------------------|
+| Partia jest automatycznie oznaczana jako wyczerpana (`IsDepleted = 1`), gdy `CurrentQuantity <= 0`. | Wyzwalacz (Trigger) `tr_Batches_UpdateIsDepleted` automatycznie przestawia flagę. Zapobiega to uwzględnianiu pustych partii w algorytmie FEFO. |
+| Unikalność powiązań alergenów w wariantach dań (`MealVariantAllergens`). | Indeks unikalny złożony `IX_MealVariantAllergens_Unique` na kolumnach (`MealVariantId`, `AllergenId`). |
+| Unikalność wpisów w grafiku pracy (`WorkSchedules`). | Unikalny klucz złożony zapobiega planowaniu pracownika na tę samą zmianę (`UserId`, `ShiftDate`, `Shift`). |
+| Blokada usunięcia zamówienia w toku. | Nie można usunąć zamówienia o statusie `Paid`, `InProduction` lub `Completed` (więzy spójności i walidatory aplikacyjne). |
+| Walidacja logiczna daty ważności partii. | `ExpiryDate` >= `ReceivedDate` (wymuszane na poziomie FluentValidation oraz CHECK constraint). |
+| Unikalność kodu QR etykiet kompletacyjnych. | Indeks unikalny na `PackingLabels.QrCode`. |
 
 ### 10.2. Obszary wymagające zoptymalizowanego przetwarzania po stronie bazy danych
 
-- **Agregacja zapotrzebowania produkcyjnego** – złączenie tabel `DeliveryCalendar` → `OrderItems` → `DietVariantMeals` → `Meals` → `Recipes` jest wykonywane przy każdym generowaniu planu produkcji. Dopuszcza się implementację widoku zmaterializowanego lub procedury składowanej dla wydajności.
-- **Raport FEFO (lista aktywnych partii)** – zestawienie wszystkich niezużytych partii posortowanych według daty ważności, z danymi składników, powinno być realizowane jako widok lub procedura z parametrami (filtrowanie po kategorii, dniu ważności).
-- **Archiwizacja logów systemowych** – logi starsze niż 6 miesięcy muszą być automatycznie przenoszone do tabeli archiwalnej w celu utrzymania wydajności operacyjnej. Proces uruchamiany cyklicznie (np. nocny job).
+W celu spełnienia wymagań niefunkcjonalnych wydajności i bezpieczeństwa zaimplementowano dedykowane obiekty bazodanowe oraz plany indeksowania:
 
-Aktualny stan implementacji SBD: fizyczne obiekty bazodanowe są tworzone migracją `507_AddSbdSqlObjectsAndIndexes`. Migracja dodaje trigger `tr_Batches_UpdateIsDepleted`, procedurę `usp_ArchiveSystemLogs`, funkcję raportową `fn_MealNutritionCost`, tabelę `SystemLogsArchive` oraz brakujące indeksy dla M1/M5/SystemLogs. Duży seed wydajnościowy 100k+ i materiał execution plan przed/po pozostają poza bieżącym zakresem.
+#### 1. Wyzwalacze (Triggers)
+*   `tr_Batches_UpdateIsDepleted`: Działa na tabeli `Batches` po operacjach INSERT i UPDATE. Automatycznie aktualizuje flagę `IsDepleted` na podstawie stanu ilościowego:
+    ```sql
+    CREATE TRIGGER [dbo].[tr_Batches_UpdateIsDepleted] ON [dbo].[Batches] AFTER INSERT, UPDATE AS ...
+    ```
+
+#### 2. Procedury Składowane (Stored Procedures)
+*   `usp_ArchiveSystemLogs`: Służy do przenoszenia starych logów audytowych z tabeli operacyjnej `SystemLogs` do tabeli `SystemLogsArchive`. Umożliwia cykliczne czyszczenie bazy. Przyjmuje parametry `@OlderThanDays` (domyślnie 180) oraz `@BatchSize` (domyślnie 1000) i działa w bezpiecznej transakcji z poziomem blokowania `READPAST` i `UPDLOCK`, eliminując ryzyko zakleszczeń (deadlocks).
+
+#### 3. Funkcje Bazodanowe (User-Defined Functions)
+*   `fn_MealNutritionCost`: Funkcja tabelaryczna inline, która dla zadanego `@MealId` oblicza dynamicznie szacowany koszt składników dań (food-cost) oraz sumaryczne wartości odżywcze (makro składniki i kaloryczność) na podstawie gramatur z przepisów:
+    ```sql
+    CREATE FUNCTION [dbo].[fn_MealNutritionCost] (@MealId int) RETURNS TABLE AS ...
+    ```
+
+#### 4. Krytyczne Indeksy Wydajnościowe (Zrealizowane w migracjach)
+*   `IX_Batches_StockItem_Active_Expiry` na tabeli `Batches` (kolumny: `StockItemId`, `IsDeleted`, `IsDepleted`, `CurrentQuantity`, `ExpiryDate`): Kluczowy dla wydajnego działania algorytmu FEFO.
+*   `IX_SystemLogs_Timestamp_Action_TargetEntity_UserId` na tabeli `SystemLogs`: Pozwala na błyskawiczne filtrowanie i generowanie raportów audytowych.
+*   `IX_Meals_Category_Status_Name` na tabeli `Meals` oraz `IX_RecipeComponentVersions_Status_Component` na wersjach przepisów: Optymalizują odczyty podczas pobierania menu dla klientów i generowania zapotrzebowania.
+*   `IX_DeliveryCalendar_Date_Status_Skipped_IsDeleted` na tabeli `DeliveryCalendar`: Zabezpiecza proces nocnego pobierania zamówień do planów produkcyjnych.
+*   `UX_Payments_StripePaymentIntentId` na tabeli `Payments`: Zapewnia unikalność transakcji płatniczych (indeks unikalny).
 
 ### 10.3. Zapewnienie integralności danych
 
-- `InventoryTransaction.QuantityChanged` dla typów `ProductionIssue` i `WasteDisposal` musi być wartością ujemną (walidacja na poziomie aplikacji).
-- `Batch.ExpiryDate` ≥ `Batch.ReceivedDate` (walidacja przy przyjęciu dostawy).
-- `DeliveryCalendar.DeliveryDate` nie może być w przeszłości przy tworzeniu nowego zamówienia.
-- `ThermalBag.SerialNumber` musi być unikalny w całym systemie (indeks unikalny).
-- Każda zmiana daty ważności partii (edycja ręczna) wymaga zapisu w tabeli `BatchExpiryChangeLog` (powód, data, autor).
+- Spójność transakcyjna: Wszystkie operacje magazynowe modyfikujące stan partii (`Batches.CurrentQuantity`) oraz dodające transakcję (`InventoryTransactions`) są owinięte w transakcję bazodanową (`TransactionScope` w C#).
+- Ręczna korekta daty ważności partii wymusza logowanie zdarzenia w `BatchExpiryChangeLogs` z podaniem przyczyny tekstowej (`Reason`).
+- Zmiany stanów kompletacji w bazie są logowane chronologicznie w `PackingStatusLogs`.
 
 ---
 
 ## 11. Przepływ Danych przy Zapytaniu (Request Data Flow Walkthrough)
-Architektura Clean Architecture odcina odpowiedzialności poszczególnych warstw. Aby to zilustrować, poniżej opisano szczegółowy przepływ danych przykładowego zapytania: **Zatwierdzenie planu produkcji i automatyczne wydanie surowców według algorytmu FEFO**.
+
+Architektura Clean Architecture odcina odpowiedzialności poszczególnych warstw. Poniżej przedstawiono szczegółowy przepływ danych zapytania zatwierdzenia planu produkcji i automatycznego wydania surowców (FEFO).
 
 ### 11.1. Schemat Sekwencyjny Przepływu (Mermaid)
 
@@ -932,7 +1262,7 @@ sequenceDiagram
     V->>C: HTTP POST /Production/Approve { PlanId }
     
     Note over C: Filtry ASP.NET Core MVC:<br/>1. Autoryzacja i weryfikacja roli (ClaimsPrincipal)<br/>2. Weryfikacja tokenu CSRF
-    C->>C: Sprawdzenie uprawnień: User.IsInRole("KitchenStaff")
+    C->>C: Sprawdzenie uprawnień: User.IsInRole("KitchenManager")
     
     C->>C: Mapowanie żądania na DTO: ApproveProductionPlanRequest
     C->>Val: Wywołanie walidacji (FluentValidation)
@@ -941,22 +1271,22 @@ sequenceDiagram
     C->>S: Wywołanie serwisu (DI: IProductionService): ApprovePlanAsync(dto)
     
     Note over S: Warstwa Aplikacyjna spina transakcję:<br/>using var transaction = new TransactionScope();
-    S->>R: Pobranie planu z bazy (Dapper/OrmLite)
+    S->>R: Pobranie planu z bazy (Dapper)
     R-->>S: Zwrócenie encji planu: ProductionPlan
     
     S->>D: Wywołanie logiki biznesowej domeny:<br/>FefoService.DeductByFefoAsync(stockItemId, qty, reason)
     
     Note over D: Domena (FefoService) realizuje algorytm FEFO:<br/>- pobiera aktywne partie surowca<br/>- rozdziela ilość na partie od najkrótszej daty ważności
     D->>R: GetActiveBatchesByStockItemAsync(stockItemId)
-    R->>DB: SELECT * FROM Batches WHERE StockItemId = X AND IsDepleted = 0 ORDER BY ExpiryDate ASC
+    R->>DB: SELECT * FROM Batches WHERE StockItemId = X AND IsDepleted = 0 ORDER BY ExpiryDate ASC, ReceivedDate ASC
     DB-->>R: Zwrócenie partii surowców
     R-->>D: Aktywne partie (Batches)
     
     D->>D: Zmniejszenie ilości na partiach (CurrentQuantity -= toDeduct)
     D->>R: UpdateAsync(batch)
-    R->>DB: UPDATE Batches SET CurrentQuantity = X, IsDepleted = Y WHERE Id = Z
+    R->>DB: UPDATE Batches SET CurrentQuantity = X WHERE Id = Z
     
-    Note over DB: Wyzwalacz (Trigger):<br/>tr_UpdateBatchDepleted ustawia IsDepleted = 1<br/>jeśli CurrentQuantity <= 0
+    Note over DB: Wyzwalacz (Trigger):<br/>tr_Batches_UpdateIsDepleted ustawia IsDepleted = 1<br/>jeśli CurrentQuantity <= 0
     
     D->>R: InsertAsync(InventoryTransaction)
     R->>DB: INSERT INTO InventoryTransactions (...)
@@ -970,43 +1300,40 @@ sequenceDiagram
 
 ### 11.2. Opis Warstwowy i Rola Komponentów
 
-#### 1. Warstwa Prezentacji (Web Layer - Razor + HTMX)
-*   **Żądanie**: Użytkownik w przeglądarce wyzwala akcję (kliknięcie przycisku "Zatwierdź Plan"). Interfejs korzysta z atrybutów HTMX (`hx-post="/Production/Approve"`, `hx-target="#plan-status-container"`).
-*   **Bezpieczeństwo CSRF**: Zabezpieczenie przed atakami CSRF realizowane jest automatycznie poprzez wstrzykiwanie nagłówka `__RequestVerificationToken` generowanego przez silnik Razor, a HTMX przesyła go w nagłówkach HTTP (obsługa w globalnej konfiguracji `htmx-config.js`).
-
-#### 2. Warstwa Kontrolera (Web Layer - Controllers)
-*   **Autoryzacja (RBAC)**: Kontroler `ProductionController` posiada atrybut `[Authorize(Roles = "KitchenStaff,SuperAdmin")]`. Filtr autoryzacji sprawdza tożsamość użytkownika (`ClaimsPrincipal`) zapisaną w ciasteczku sesyjnym (`Cookie Authentication`). Jeśli rola się zgadza, żądanie przechodzi dalej.
-*   **Model Binding & DTO**: Kontroler przyjmuje parametry żądania i automatycznie binduje je do obiektu DTO (np. `ApproveProductionPlanRequest`). Kontroler nie zna encji domenowych – komunikuje się z warstwą aplikacyjną wyłącznie za pomocą interfejsów i obiektów DTO.
-
-#### 3. Warstwa Walidacji (Application Layer - FluentValidation)
-*   **Walidacja wejściowa**: Zanim zostanie uruchomiony serwis aplikacyjny, wywoływany jest walidator (np. `ApproveProductionPlanRequestValidator`). FluentValidation sprawdza poprawność formalną danych (np. czy `PlanId` jest większy od zera, czy planowana data nie jest wsteczna). W przypadku błędów walidacji rzucany jest wyjątek `ValidationException`, a filtr globalny w aplikacji automatycznie mapuje go na odpowiedni fragment HTML z komunikatami o błędach (zwracany do HTMX).
-
-#### 4. Serwis Aplikacyjny (Application Layer - Services)
-*   **Zależności i DI**: Kontroler wstrzykuje interfejs `IProductionService` (właściwa implementacja `ProductionService` żyje w warstwie aplikacyjnej). Serwis ten koordynuje cały proces.
-*   **Zarządzanie Transakcjami**: Serwis aplikacyjny odpowiada za otwarcie transakcji bazodanowej (`TransactionScope` lub transakcja OrmLite). Jeśli jakakolwiek operacja w bazie (np. update partii surowca) nie powiedzie się, cała transakcja jest wycofywana (Rollback), chroniąc dane przed niespójnością.
-*   **Mapowanie obiektów**: Serwis pobiera encje z bazy danych przez wstrzyknięte interfejsy repozytoriów, wywołuje na nich logikę biznesową, a na koniec mapuje encje na DTO wyjściowe przy użyciu biblioteki AutoMapper.
-
-#### 5. Domena (Domain Layer - Entities & Domain Services)
-*   **Brak Zależności Infrastrukturalnych**: Encja `ProductionPlan` oraz serwis domenowy `FefoService` reprezentują czystą logikę biznesową. Nie wiedzą one nic o bazach danych, SQL Serverze ani OrmLite. Zależności są wstrzykiwane w postaci interfejsów (np. `IBatchRepository`).
-*   **Algorytm FEFO**: `FefoService` realizuje algorytm ściśle w pamięci operacyjnej: pobiera kolekcję aktywnych partii (posortowanych już po dacie ważności), dokonuje kalkulacji odejmowania ilości i rejestruje wiersze transakcji magazynowych.
-
-#### 6. Infrastruktura i Dostęp do Danych (Infrastructure Layer - DAL)
-*   **Implementacja Repozytoriów**: Klasa `BatchRepository` implementuje interfejs `IBatchRepository` należący do domeny. Do komunikacji wykorzystuje fabrykę połączeń `IDbConnectionFactory` oraz micro-ORM OrmLite.
-*   **Wykonanie na SQL Server**: OrmLite tłumaczy polecenia na zapytanie SQL, otwiera połączenie i wykonuje transakcję na bazie danych MS SQL Server. Zmiany są zatwierdzane i zwracane w górę łańcucha wywołań.
+1.  **Warstwa Prezentacji (Web Layer - Razor + HTMX 2.x)**: Użytkownik wysyła żądanie asynchronicznie poprzez HTMX, wstrzykując token CSRF w nagłówku HTTP.
+2.  **Warstwa Kontrolera (Web Layer - Controllers)**: Kontroler `ProductionController` weryfikuje rolę użytkownika (Claims: `KitchenManager` lub `Admin`). Mapuje dane na obiekt żądania (DTO).
+3.  **Warstwa Walidacji (Application Layer - FluentValidation)**: Sprawdza formalne kryteria poprawności danych wejściowych, rzucając wyjątek `ValidationException` w przypadku niezgodności.
+4.  **Serwis Aplikacyjny (Application Layer - Services)**: Klasa koordynująca przepływ, otwierająca transakcję bazodanową (`TransactionScope`) i spajająca repozytoria oraz logikę domenową.
+5.  **Domena (Domain Layer - Entities & Domain Services)**: Klasa `FefoService` zawiera czystą logikę biznesową wydawania surowców metodą FEFO. Jest całkowicie uniezależniona od bazy danych.
+6.  **Infrastruktura i Dostęp do Danych (Infrastructure Layer - Repositories)**: Klasa `BatchRepository` realizuje faktyczne zapytania SQL do MS SQL Server przy użyciu Dapper.
 
 ---
 
 ## 12. Potencjalne Trudności i Ryzyka Projektowe
-Prace nad integracją modułów niosą za sobą wyzwania architektoniczno-bazodanowe.
 
-### 12.2. Wyzwania techniczne i plany ich rozwiązania
+### 12.1. Wyzwania techniczne i plany ich rozwiązania
 
-1.  **Deadlocki i kolizje transakcyjne na bazie SQL Server podczas testów integracyjnych**:
-    *   *Opis*: Równoległe uruchamianie testów integracyjnych w xUnit korzystających z tej samej instancji bazy danych MS SQL Server (np. w kontenerze Docker) może prowadzić do blokad (deadlocks) i wyścigów przy jednoczesnych zapytaniach modyfikujących te same tabele słownikowe i transakcyjne.
-    *   *Rozwiązanie*: Zastosowanie izolacji transakcji w testach przy użyciu `TransactionScope` (z automatycznym rollbackiem po każdym teście) lub wydzielenie niezależnych baz danych dla poszczególnych kolekcji testowych (xUnit Collection Fixtures) oraz optymalne sterowanie współbieżnością po stronie bazy danych.
-2.  **Wyścig (Race Condition) przy FEFO**:
-    *   *Opis*: Dwu pakowaczy jednocześnie skanuje kompletację lub dwóch kucharzy zatwierdza wydanie składnika do produkcji. Może to doprowadzić do pobrania tej samej partii magazynowej ponad stan (wartości ujemne).
-    *   *Rozwiązanie*: Wdrożenie transakcji o poziomie izolacji `Repeatable Read` przy pobieraniu partii lub wykorzystanie blokad pesymistycznych (`SELECT ... WITH (UPDLOCK)` w zapytaniach SQL do bazy SQL Server).
+1.  **Zakleszczenia (Deadlocks) podczas testów integracyjnych w xUnit**:
+    *   *Opis*: Równoległe testy integracyjne wykonujące operacje zapisu na współdzielonych tabelach słownikowych i transakcyjnych mogą wywołać deadlocki na bazie MS SQL Server.
+    *   *Rozwiązanie*: Zastosowanie izolacji transakcji w testach integracyjnych przy użyciu xUnit Collection Fixtures w celu unikania współbieżnego modyfikowania tych samych zasobów testowych oraz wymuszenie sekwencyjnego uruchamiania określonych zestawów testów.
+2.  **Stan wyścigu (Race Condition) w algorytmie FEFO**:
+    *   *Opis*: Jednoczesne zatwierdzanie gotowania lub pakowania przez dwóch pracowników może doprowadzić do przypisania tej samej partii ponad stan (ujemna ilość w `CurrentQuantity`).
+    *   *Rozwiązanie*: Narzucenie poziomu izolacji transakcji `Repeatable Read` lub zastosowanie blokad pesymistycznych (`WITH (UPDLOCK)`) podczas pobierania partii surowców do alokacji FEFO w repozytorium.
+3.  **Szybki przyrost tabel logów (SystemLogs, TemperatureLogs)**:
+    *   *Opis*: Tabele te generują setki tysięcy rekordów rocznie, spowalniając zapytania analityczne i raportowe.
+    *   *Rozwiązanie*: Wdrożenie procedury `usp_ArchiveSystemLogs` i automatyczne przenoszenie danych do `SystemLogsArchive` oraz partycjonowanie tabeli `TemperatureLogs` po dacie.
+4.  **Złożoność relacji wersjonowanych przepisów**:
+    *   *Opis*: Konieczność śledzenia, która dokładnie wersja receptury (`RecipeComponentVersion`) została użyta w danym planie produkcji, komplikuje zapytania raportujące (np. food-cost).
+    *   *Rozwiązanie*: Wykorzystanie zoptymalizowanej funkcji tabelarycznej `fn_MealNutritionCost` oraz agregowanie makroskładników na poziomie wariantów posiłków (`MealVariants`) podczas publikacji menu.
+
+### 12.2. Elementy wymagające uszczegółowienia (Status: Do Opracowania)
+
+| Obszar Brakujący | Kto Odpowiada | Kiedy Zostanie Uzupełniony | Dlaczego Teraz Tego Nie Ma |
+| :--- | :--- | :--- | :--- |
+| **Dokładne stawki podatkowe VAT dla diet** | Dawid (M1) | Faza 5 (Integracja) | Wymaga decyzji biznesowej klienta odnośnie stawek (np. catering z dowozem 8% vs 23% VAT). |
+| **Integracja Geokodowania OSRM** | Tomasz (M4) | Faza 4 (Logistyka) | Wybór pomiędzy darmowym serwerem OSRM (OpenSource Routing Machine) a płatnym API Google Maps. |
+| **Mechanizm podpisu biometrycznego kuriera** | Tomasz (M4) | Faza 6 (Frontend) | Czekamy na decyzję, czy podpis będzie realizowany przez rysowanie na ekranie, czy kod PIN kuriera. |
+| **Obsługa załączników wideo w reklamacjach**| Paweł (M5) | Faza 5 (Integracja) | Ustalenie limitów rozmiaru plików (np. max 10MB) w celu ochrony przepustowości sieciowej serwera. |  *Rozwiązanie*: Wdrożenie transakcji o poziomie izolacji `Repeatable Read` przy pobieraniu partii lub wykorzystanie blokad pesymistycznych (`SELECT ... WITH (UPDLOCK)` w zapytaniach SQL do bazy SQL Server).
 3.  **Czasowe zawieszenie diety w trakcie nocy produkcyjnej**:
     *   *Opis*: Klient anuluje lub przesuwa dostawę o godzinie 22:00, podczas gdy kucharze od 20:00 przygotowują jedzenie na rano na podstawie planu z godziny 18:00.
     *   *Rozwiązanie*: Określenie „punktu bez powrotu” (Lock Hour) na godzinę 18:00. Po tej godzinie kalendarz dostaw na dzień następny zostaje zamrożony dla klienta w panelu e-commerce.
