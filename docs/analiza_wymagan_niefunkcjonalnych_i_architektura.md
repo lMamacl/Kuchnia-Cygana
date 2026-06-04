@@ -1051,9 +1051,9 @@ erDiagram
     User ||--o{ CustomerProfile : has
     User ||--o{ Address : has
     User ||--o{ Order : places
-    User ||--o{ Employee : "is (1:1)"
-    User ||--o{ Driver : "is (1:1)"
-    User ||--o{ Dispatcher : "is (1:1)"
+    User ||--o{ Employee : is_employee
+    User ||--o{ Driver : is_driver
+    User ||--o{ Dispatcher : is_dispatcher
     User ||--o{ WorkSchedule : scheduled_for
     User ||--o{ SystemLog : triggers
     User ||--o{ UserNotification : receives
@@ -1061,20 +1061,20 @@ erDiagram
     Notification ||--o{ UserNotification : maps
 
     CustomerProfile ||--o{ Address : has
-    CustomerProfile ||--|| Address : "default (DefaultAddressId)"
+    CustomerProfile ||--|| Address : default_address
 
     Order ||--|{ OrderItem : contains
     Order ||--|{ DeliveryCalendar : scheduled
     Order ||--|| Payment : billing
-    Order ||--o{ PackingSession : "packed into"
+    Order ||--o{ PackingSession : packed_into
 
-    DeliveryCalendar ||--|| Address : "delivers to"
-    DeliveryCalendar ||--|| DeliveryWindow : "within"
-    DeliveryCalendar ||--o{ DeliveryRouteStop : "assigned to"
+    DeliveryCalendar ||--|| Address : delivers_to
+    DeliveryCalendar ||--|| DeliveryWindow : within
+    DeliveryCalendar ||--o{ DeliveryRouteStop : assigned_to
 
-    DeliveryRoute ||--|{ DeliveryRouteStop : "has stops"
-    DeliveryRoute ||--|| Vehicle : "assigned"
-    DeliveryRoute ||--|| Driver : "assigned"
+    DeliveryRoute ||--|{ DeliveryRouteStop : has_stops
+    DeliveryRoute ||--|| Vehicle : assigned_vehicle
+    DeliveryRoute ||--|| Driver : assigned_driver
 
     ThermalBag ||--|{ BagMovementLog : tracks
     Driver ||--o{ BagMovementLog : performs
@@ -1089,34 +1089,34 @@ erDiagram
     Employee ||--o{ Department : manages
 
     Ticket ||--|{ TicketAttachment : has
-    Ticket ||--|| User : "opened by (ClientUserId)"
-    Ticket ||--|| User : "assigned to (AssignedToUserId)"
+    Ticket ||--|| User : opened_by
+    Ticket ||--|| User : assigned_to
 
     %% Relacje katalogu
     Diet ||--|{ DietVariant : has
     DietVariant ||--|{ DietVariantMeal : contains
-    Meal ||--o{ DietVariantMeal : "appears in"
-    MealVariant ||--o{ DietVariantMeal : "variant used in"
+    Meal ||--o{ DietVariantMeal : appears_in
+    MealVariant ||--o{ DietVariantMeal : variant_used_in
     Category ||--o{ Meal : categorizes
     Category ||--o{ RecipeComponent : categorizes
     Category ||--o{ Ingredient : categorizes
-    Allergen ||--o{ IngredientAllergen : "associated with ingredient"
+    Allergen ||--o{ IngredientAllergen : associated_with_ingredient
     Ingredient ||--o{ IngredientAllergen : has
-    Allergen ||--o{ MealAllergen : "associated with meal"
+    Allergen ||--o{ MealAllergen : associated_with_meal
     Meal ||--o{ MealAllergen : has
     Meal ||--o{ MealImage : displays
-    Meal ||--o{ NutritionFact : "nutrition data"
-    Ingredient ||--o{ NutritionFact : "nutrition data"
+    Meal ||--o{ NutritionFact : nutrition_data
+    Ingredient ||--o{ NutritionFact : nutrition_data
 
     RecipeComponent ||--|{ RecipeComponentVersion : versions
     RecipeComponentVersion ||--|{ RecipeComponentIngredient : ingredients
-    Ingredient ||--o{ RecipeComponentIngredient : "used in component"
+    Ingredient ||--o{ RecipeComponentIngredient : used_in_component
     RecipeComponentVersion ||--|{ RecipeComponentInstructionSection : instructions
     RecipeComponentInstructionSection ||--|{ RecipeComponentInstructionStep : steps
 
     Meal ||--|{ MealVariant : variants
     MealVariant ||--|{ MealVariantComponent : components
-    RecipeComponentVersion ||--o{ MealVariantComponent : "uses version"
+    RecipeComponentVersion ||--o{ MealVariantComponent : uses_version
     MealVariant ||--o{ MealVariantAllergen : has
     Allergen ||--o{ MealVariantAllergen : maps
 
@@ -1136,23 +1136,23 @@ erDiagram
     ProductionPlan ||--|{ ProductionPlanItem : contains
     ProductionPlan ||--o{ ProductionBatch : prepares
     ProductionPlanItem ||--o{ CookingSession : schedules
-    RecipeComponentVersion ||--o{ CookingSession : gotowana_w
+    RecipeComponentVersion ||--o{ CookingSession : cooked_in
     CookingSession ||--|{ CookingSessionStepCheck : steps_validation
     RecipeComponentInstructionStep ||--o{ CookingSessionStepCheck : validated_step
 
     PackingSession ||--|{ PackingItem : contains
-    PackingItem ||--|| Batch : "HACCP trace"
+    PackingItem ||--|| Batch : haccp_trace
     PackingItem ||--o{ PackingLabel : prints
     PackingSession ||--o{ PackingLabel : prints
-    PackingSession ||--|| Order : "belongs to"
-    PackingSession ||--|| DeliveryRoute : "loaded on"
+    PackingSession ||--|| Order : belongs_to
+    PackingSession ||--|| DeliveryRoute : loaded_on
     PackingSession ||--o{ PackingBag : bags
     PackingSession ||--o{ PackingIncident : logs_session_incident
     PackingItem ||--o{ PackingIncident : logs_item_incident
     PackingItem ||--o{ PackingStatusLog : status_changes
 
-    PackingManifest ||--|| DeliveryRoute : "references"
-    PackingManifest ||--|| Vehicle : "references"
+    PackingManifest ||--|| DeliveryRoute : references_route
+    PackingManifest ||--|| Vehicle : references_vehicle
     PackingManifest ||--o{ PackingManifestIssue : logs_manifest_issue
 ```
 
