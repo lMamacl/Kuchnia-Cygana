@@ -261,7 +261,7 @@ quadrantChart
 ## 8. Relacyjny Model Logiczny i Diagram Fizyczny (ERD)
 Poniższy diagram ERD przedstawia główne encje systemu oraz kluczowe relacje między nimi (pominięto atrybuty niekluczowe dla czytelności). Diagram ten w zupełności wystarcza na etapie analizy wymagań – szczegółowa specyfikacja typów pól, indeksów i kluczy obcych zostanie zamieszczona w odrębnym dokumencie „Projekt bazy danych”.
 
-Uwaga: Diagram wygenerowano na podstawie rzeczywistych encji z projektu (Entities.cs). Relacje oznaczono zgodnie z konwencją: ||--|| – jeden do jednego, ||--o{ – jeden do wielu, }o--|| – wiele do jednego.
+Uwaga: Diagram wygenerowano na podstawie rzeczywistych encji z projektu (Entities.cs). Relacje oznaczono zgodnie z konwencją crow's foot (np. jeden-do-jednego, jeden-do-wielu, wiele-do-jednego).
 
 ```mermaid
 erDiagram
