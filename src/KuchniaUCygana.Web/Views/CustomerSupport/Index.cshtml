@@ -1,0 +1,58 @@
+@model CustomerSupportDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+}
+
+<div class="row row-cards">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Otwarte</div>
+                <div class="h1 mb-0">@Model.OpenTickets.Count</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Wszystkie</div>
+                <div class="h1 mb-0">@Model.Tickets.Count</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Wysoki priorytet</div>
+                <div class="h1 mb-0">@Model.Tickets.Count(x => x.Priority is "High" or "Critical")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Logi</div>
+                <div class="h1 mb-0">@Model.SystemLogs.Count</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <a class="card staff-nav-card" asp-controller="CustomerSupport" asp-action="Tickets">
+            <div class="card-body">
+                <span class="staff-nav-card-icon">@Html.Raw(StaffIconCatalog.Get("support"))</span>
+                <h3 class="card-title mt-3 mb-1">Zgloszenia</h3>
+                <p class="text-secondary mb-0">Kolejka pracy BOK, statusy i przypisania.</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6">
+        <a class="card staff-nav-card" asp-controller="CustomerSupport" asp-action="Logs">
+            <div class="card-body">
+                <span class="staff-nav-card-icon">@Html.Raw(StaffIconCatalog.Get("report"))</span>
+                <h3 class="card-title mt-3 mb-1">Logi systemowe</h3>
+                <p class="text-secondary mb-0">Ostatnie zdarzenia zwiazane z obsluga klienta.</p>
+            </div>
+        </a>
+    </div>
+</div>

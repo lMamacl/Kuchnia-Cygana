@@ -50,11 +50,6 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
     private async Task SeedUsersAsync(IDbConnection db, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        if (await CountRowsAsync(db, "Users", cancellationToken) > 0)
-        {
-            return;
-        }
-
         var users = new[]
         {
             MakeUser("admin@kuchnia.local", "Admin123!", "System", "Administrator", UserRoles.Admin, now),
@@ -65,17 +60,26 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             MakeUser("packing@kuchnia.local", "Packing123!", "Pakowanie", "Pracownik", UserRoles.Packing, now),
             MakeUser("packingm@kuchnia.local", "Packing123!", "Pakowanie", "Kierownik", UserRoles.PackingManager, now),
             MakeUser("dietitian@kuchnia.local", "Diet123!", "Anna", "Dietetyk", UserRoles.Dietitian, now),
+            MakeUser("logistics@kuchnia.local", "Logistics123!", "Logistyka", "Operator", UserRoles.Logistics, now),
+            MakeUser("logisticsm@kuchnia.local", "Logistics123!", "Logistyka", "Kierownik", UserRoles.LogisticsManager, now),
             MakeUser("driver@kuchnia.local", "Driver123!", "Dostawa", "Kierowca", UserRoles.Driver, now),
+            MakeUser("hr@kuchnia.local", "HR123!", "HR", "Specjalista", UserRoles.HR, now),
+            MakeUser("hrm@kuchnia.local", "HR123!", "HR", "Kierownik", UserRoles.HRManager, now),
+            MakeUser("bok@kuchnia.local", "BOK123!", "BOK", "Konsultant", UserRoles.BOK, now),
+            MakeUser("bokm@kuchnia.local", "BOK123!", "BOK", "Kierownik", UserRoles.BOKManager, now),
         };
 
-        await db.ExecuteAsync(new CommandDefinition(
+        var inserted = await db.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO [Users] ([Email], [PasswordHash], [FirstName], [LastName], [Role], [CreatedAt], [UpdatedAt])
-            VALUES (@Email, @PasswordHash, @FirstName, @LastName, @Role, @CreatedAt, @UpdatedAt);
+            IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = @Email)
+            BEGIN
+                INSERT INTO [Users] ([Email], [PasswordHash], [FirstName], [LastName], [Role], [CreatedAt], [UpdatedAt])
+                VALUES (@Email, @PasswordHash, @FirstName, @LastName, @Role, @CreatedAt, @UpdatedAt);
+            END
             """,
             users,
             cancellationToken: cancellationToken));
-        this.logger.LogInformation("Seeded {Count} users with all M3/M4/M5 roles.", users.Length);
+        this.logger.LogInformation("Ensured {Count} seed users with all M3/M4/M5 roles. Inserted {Inserted}.", users.Length, inserted);
     }
 
     private static User MakeUser(string email, string password, string firstName, string lastName, string role, DateTimeOffset now)

@@ -1,0 +1,76 @@
+@model HumanResourcesDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+}
+
+<div class="row row-cards">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Aktywni pracownicy</div>
+                <div class="h1 mb-0">@Model.Employees.Count(x => x.IsActive)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Dzialy</div>
+                <div class="h1 mb-0">@Model.Departments.Count</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Wnioski urlopowe</div>
+                <div class="h1 mb-0">@Model.LeaveRequests.Count</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Zmiany w grafiku</div>
+                <div class="h1 mb-0">@Model.WorkSchedules.Count</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <a class="card staff-nav-card" asp-controller="HumanResources" asp-action="Employees">
+            <div class="card-body">
+                <span class="staff-nav-card-icon">@Html.Raw(StaffIconCatalog.Get("users"))</span>
+                <h3 class="card-title mt-3 mb-1">Pracownicy</h3>
+                <p class="text-secondary mb-0">Kartoteka, stanowiska i status zatrudnienia.</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a class="card staff-nav-card" asp-controller="HumanResources" asp-action="Departments">
+            <div class="card-body">
+                <span class="staff-nav-card-icon">@Html.Raw(StaffIconCatalog.Get("department"))</span>
+                <h3 class="card-title mt-3 mb-1">Dzialy</h3>
+                <p class="text-secondary mb-0">Struktura organizacyjna i liderzy.</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a class="card staff-nav-card" asp-controller="HumanResources" asp-action="Leaves">
+            <div class="card-body">
+                <span class="staff-nav-card-icon">@Html.Raw(StaffIconCatalog.Get("calendar"))</span>
+                <h3 class="card-title mt-3 mb-1">Urlopy</h3>
+                <p class="text-secondary mb-0">Wnioski urlopowe i decyzje kadrowe.</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a class="card staff-nav-card" asp-controller="HumanResources" asp-action="Schedules">
+            <div class="card-body">
+                <span class="staff-nav-card-icon">@Html.Raw(StaffIconCatalog.Get("checklist"))</span>
+                <h3 class="card-title mt-3 mb-1">Grafik</h3>
+                <p class="text-secondary mb-0">Zmiany i role pracownikow.</p>
+            </div>
+        </a>
+    </div>
+</div>

@@ -1,3 +1,6 @@
+using System.Security.Claims;
+using KuchniaUCygana.Domain.Enums;
+
 namespace KuchniaUCygana.Web.Models;
 
 public sealed record StaffNavItem(
@@ -127,6 +130,30 @@ public static class StaffNavigationCatalog
                 new("Kierowcy", "Logistics", "Drivers", "users", "Lista kierowcow.", "kierowcy logistyka"),
             ]),
         new(
+            "hr",
+            "HR",
+            "department",
+            "Kadry, pracownicy, urlopy i grafik zmian.",
+            true,
+            [
+                new("Dashboard HR", "HumanResources", "Index", "department", "Zbiorczy ekran dzialu HR.", "hr kadry pracownicy"),
+                new("Pracownicy", "HumanResources", "Employees", "users", "Kartoteka pracownikow.", "pracownicy kartoteka"),
+                new("Dzialy", "HumanResources", "Departments", "department", "Struktura organizacyjna.", "dzialy departamenty"),
+                new("Urlopy", "HumanResources", "Leaves", "calendar", "Wnioski urlopowe.", "urlopy wnioski"),
+                new("Grafik", "HumanResources", "Schedules", "checklist", "Grafik zmian pracownikow.", "grafik zmiany"),
+            ]),
+        new(
+            "bok",
+            "BOK",
+            "support",
+            "Zgloszenia klientow, przypisania i logi obslugi.",
+            true,
+            [
+                new("Dashboard BOK", "CustomerSupport", "Index", "support", "Zbiorczy ekran obslugi klienta.", "bok obsluga klienta"),
+                new("Zgloszenia", "CustomerSupport", "Tickets", "support", "Lista zgloszen klientow.", "zgloszenia tickety klient"),
+                new("Logi systemowe", "CustomerSupport", "Logs", "report", "Zdarzenia widoczne dla BOK.", "logi systemowe"),
+            ]),
+        new(
             "admin",
             "Administracja",
             "admin",
@@ -153,17 +180,81 @@ public static class StaffNavigationCatalog
             ]),
     ];
 
+    private static readonly string[] AllStaffRoles =
+    [
+        UserRoles.Admin,
+        UserRoles.Kitchen,
+        UserRoles.KitchenManager,
+        UserRoles.Warehouse,
+        UserRoles.WarehouseManager,
+        UserRoles.Packing,
+        UserRoles.PackingManager,
+        UserRoles.Dietitian,
+        UserRoles.Logistics,
+        UserRoles.LogisticsManager,
+        UserRoles.Driver,
+        UserRoles.DriverManager,
+        UserRoles.HR,
+        UserRoles.HRManager,
+        UserRoles.BOK,
+        UserRoles.BOKManager,
+    ];
+
+    private static readonly IReadOnlyDictionary<string, string[]> SectionRoles =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["dashboard"] = AllStaffRoles,
+            ["kitchen"] = [UserRoles.Kitchen, UserRoles.KitchenManager, UserRoles.Admin],
+            ["warehouse"] = [UserRoles.Warehouse, UserRoles.WarehouseManager, UserRoles.Admin],
+            ["ingredients"] = [UserRoles.Kitchen, UserRoles.KitchenManager, UserRoles.Warehouse, UserRoles.WarehouseManager, UserRoles.Dietitian, UserRoles.Admin],
+            ["packing"] = [UserRoles.Packing, UserRoles.PackingManager, UserRoles.Admin],
+            ["diets"] = [UserRoles.Dietitian, UserRoles.Admin],
+            ["logistics"] = [UserRoles.Logistics, UserRoles.LogisticsManager, UserRoles.DriverManager, UserRoles.Admin],
+            ["hr"] = [UserRoles.HR, UserRoles.HRManager, UserRoles.Admin],
+            ["bok"] = [UserRoles.BOK, UserRoles.BOKManager, UserRoles.Admin],
+            ["admin"] = [UserRoles.Admin],
+            ["mobile"] = [UserRoles.Driver, UserRoles.DriverManager, UserRoles.LogisticsManager, UserRoles.Admin],
+        };
+
     public static IReadOnlyList<StaffNavItem> Items { get; } = Sections
         .SelectMany(section => section.Items)
         .ToArray();
+
+    public static IReadOnlyList<StaffNavSection> VisibleSections(ClaimsPrincipal user)
+    {
+        return Sections.Where(section => CanAccess(user, section)).ToArray();
+    }
+
+    public static bool CanAccess(ClaimsPrincipal user, StaffNavSection section)
+    {
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            return false;
+        }
+
+        return SectionRoles.TryGetValue(section.Key, out var roles) &&
+            roles.Any(user.IsInRole);
+    }
 
     public static StaffNavSection? FindSection(string? controller)
     {
         return Sections.FirstOrDefault(section => section.IsActive(controller));
     }
 
+    public static StaffNavSection? FindSection(string? controller, ClaimsPrincipal user)
+    {
+        return VisibleSections(user).FirstOrDefault(section => section.IsActive(controller));
+    }
+
     public static StaffNavItem? FindItem(string? controller, string? action)
     {
         return Items.FirstOrDefault(item => item.Matches(controller, action));
+    }
+
+    public static StaffNavItem? FindItem(string? controller, string? action, ClaimsPrincipal user)
+    {
+        return VisibleSections(user)
+            .SelectMany(section => section.Items)
+            .FirstOrDefault(item => item.Matches(controller, action));
     }
 }

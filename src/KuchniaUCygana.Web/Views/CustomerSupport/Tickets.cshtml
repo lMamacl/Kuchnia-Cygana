@@ -1,0 +1,116 @@
+@model CustomerSupportDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+}
+
+<div class="row row-cards">
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Nowe zgloszenie</h3>
+            </div>
+            <form asp-action="CreateTicket" method="post">
+                @Html.AntiForgeryToken()
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="ticket-client">Klient</label>
+                        <select id="ticket-client" class="form-select" name="ClientUserId" required>
+                            <option value="">Wybierz uzytkownika</option>
+                            @foreach (var user in Model.Users.OrderBy(x => x.FullName))
+                            {
+                                <option value="@user.Id">@user.FullName (@user.Email)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="ticket-title">Tytul</label>
+                        <input id="ticket-title" class="form-control" name="Title" value="@Model.NewTicket.Title" maxlength="200" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="ticket-priority">Priorytet</label>
+                        <select id="ticket-priority" class="form-select" name="Priority">
+                            @foreach (var priority in Enum.GetValues<TicketPriority>())
+                            {
+                                <option value="@priority">@priority</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label" for="ticket-description">Opis</label>
+                        <textarea id="ticket-description" class="form-control" name="Description" rows="5" required>@Model.NewTicket.Description</textarea>
+                    </div>
+                </div>
+                <div class="card-footer text-end">
+                    <button class="btn btn-primary" type="submit">Dodaj zgloszenie</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="col-xl-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Zgloszenia</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Zgloszenie</th>
+                            <th>Klient</th>
+                            <th>Status</th>
+                            <th>Priorytet</th>
+                            <th>Przypisane</th>
+                            <th class="text-end">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ticket in Model.Tickets.OrderByDescending(x => x.CreatedAt))
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@ticket.Title</div>
+                                    <div class="text-secondary small">@ticket.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                </td>
+                                <td>@(ticket.ClientFullName ?? $"#{ticket.ClientUserId}")</td>
+                                <td><span class="badge bg-blue-lt text-blue">@ticket.Status</span></td>
+                                <td>@ticket.Priority</td>
+                                <td>@(ticket.AssignedToFullName ?? "-")</td>
+                                <td class="text-end">
+                                    <div class="d-inline-flex flex-wrap justify-content-end gap-2">
+                                        <form asp-action="AssignTicket" asp-route-id="@ticket.Id" method="post" class="d-inline-flex gap-2">
+                                            @Html.AntiForgeryToken()
+                                            <select class="form-select form-select-sm" name="assignedToUserId" required>
+                                                <option value="">Pracownik</option>
+                                                @foreach (var user in Model.Users.Where(x => x.Role is "BOK" or "BOKManager" or "Admin").OrderBy(x => x.FullName))
+                                                {
+                                                    <option value="@user.Id">@user.FullName</option>
+                                                }
+                                            </select>
+                                            <button class="btn btn-sm btn-outline-primary" type="submit">Przypisz</button>
+                                        </form>
+                                        <form asp-action="ChangeTicketStatus" asp-route-id="@ticket.Id" method="post" class="d-inline-flex gap-2">
+                                            @Html.AntiForgeryToken()
+                                            <select class="form-select form-select-sm" name="status">
+                                                @foreach (var status in Enum.GetValues<TicketStatus>())
+                                                {
+                                                    <option value="@status">@status</option>
+                                                }
+                                            </select>
+                                            <button class="btn btn-sm btn-outline-secondary" type="submit">Zmien</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        @if (Model.Tickets.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="text-secondary text-center py-4">Brak zgloszen.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

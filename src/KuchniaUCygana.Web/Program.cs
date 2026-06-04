@@ -35,7 +35,9 @@ builder.Services
             options.Cookie.Name = "KuchniaUCygana.Auth";
             options.Cookie.HttpOnly = true;
             // Production should keep Always; local HTTP development can switch to SameAsRequest.
-            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
             options.Cookie.SameSite = SameSiteMode.Lax;
             options.LoginPath = "/Account/Login";
             options.AccessDeniedPath = "/Account/AccessDenied";

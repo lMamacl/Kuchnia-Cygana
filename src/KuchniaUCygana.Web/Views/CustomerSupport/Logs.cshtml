@@ -1,0 +1,41 @@
+@model CustomerSupportDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+}
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Logi systemowe</h3>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter card-table">
+            <thead>
+                <tr>
+                    <th>Czas</th>
+                    <th>Uzytkownik</th>
+                    <th>Akcja</th>
+                    <th>Obiekt</th>
+                    <th>Wartosc</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var log in Model.SystemLogs.OrderByDescending(x => x.Timestamp))
+                {
+                    <tr>
+                        <td>@log.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td>@(log.UserFullName ?? $"#{log.UserId}")</td>
+                        <td>@log.Action</td>
+                        <td>@log.TargetEntity #@log.TargetId</td>
+                        <td class="text-secondary">@(log.NewValue ?? log.OldValue ?? "-")</td>
+                    </tr>
+                }
+                @if (Model.SystemLogs.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="text-secondary text-center py-4">Brak logow.</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

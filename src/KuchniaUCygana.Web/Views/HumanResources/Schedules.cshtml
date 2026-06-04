@@ -1,0 +1,95 @@
+@model HumanResourcesDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+}
+
+<div class="row row-cards">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Nowa zmiana</h3>
+            </div>
+            <form asp-action="CreateWorkSchedule" method="post">
+                @Html.AntiForgeryToken()
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="schedule-user">Uzytkownik</label>
+                        <select id="schedule-user" class="form-select" name="UserId" required>
+                            <option value="">Wybierz uzytkownika</option>
+                            @foreach (var user in Model.Users.OrderBy(x => x.FullName))
+                            {
+                                <option value="@user.Id">@user.FullName (@user.Role)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="schedule-date">Data</label>
+                        <input id="schedule-date" class="form-control" name="ShiftDate" type="date" value="@Model.NewWorkSchedule.ShiftDate.ToString("yyyy-MM-dd")" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="schedule-shift">Zmiana</label>
+                        <select id="schedule-shift" class="form-select" name="Shift" required>
+                            @foreach (var shift in Enum.GetValues<WorkShift>())
+                            {
+                                <option value="@shift">@shift</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label" for="schedule-role">Rola na zmianie</label>
+                        <input id="schedule-role" class="form-control" name="RoleAtShift" value="@Model.NewWorkSchedule.RoleAtShift" maxlength="50" />
+                    </div>
+                </div>
+                <div class="card-footer text-end">
+                    <button class="btn btn-primary" type="submit">Dodaj zmiane</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Grafik</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Zmiana</th>
+                            <th>Pracownik</th>
+                            <th>Rola</th>
+                            <th class="text-end">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var schedule in Model.WorkSchedules.OrderBy(x => x.ShiftDate))
+                        {
+                            <tr>
+                                <td>@schedule.ShiftDate.ToString("dd.MM.yyyy")</td>
+                                <td>@schedule.Shift</td>
+                                <td>@(schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}")</td>
+                                <td>@(schedule.RoleAtShift ?? "-")</td>
+                                <td class="text-end">
+                                    @if (User.IsInRole("HRManager") || User.IsInRole("Admin"))
+                                    {
+                                        <form asp-action="DeleteWorkSchedule" asp-route-id="@schedule.Id" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button class="btn btn-sm btn-outline-danger" type="submit">Usun</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @if (Model.WorkSchedules.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="5" class="text-secondary text-center py-4">Brak zmian w grafiku.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

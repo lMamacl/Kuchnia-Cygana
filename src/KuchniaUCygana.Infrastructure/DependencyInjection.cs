@@ -51,6 +51,7 @@ public static class DependencyInjection
         services.AddSingleton<IDbConnectionFactory>(_ => new SqlServerConnectionFactory(connectionString));
         services.AddScoped(typeof(IRepository<>), typeof(BaseRepository<>));
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
+        services.AddScoped<IUserRepository, UserRepository>();
 
         // Module 3 repositories.
         services.AddScoped<IBatchRepository, BatchRepository>();

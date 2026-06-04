@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
+[Authorize(Roles = "Driver,DriverManager,LogisticsManager,Admin")]
 [Route("driver")]
 public sealed class DriverMobileController : Controller
 {

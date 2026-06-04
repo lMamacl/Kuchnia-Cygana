@@ -3,8 +3,9 @@
     var description = ViewData["Description"]?.ToString() ?? "Widok szkieletowy gotowy do podpiecia komponentow.";
     var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
     var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
-    var activeSection = StaffNavigationCatalog.FindSection(controller);
-    var activeItem = StaffNavigationCatalog.FindItem(controller, action);
+    var visibleSections = StaffNavigationCatalog.VisibleSections(User);
+    var activeSection = StaffNavigationCatalog.FindSection(controller, User);
+    var activeItem = StaffNavigationCatalog.FindItem(controller, action, User);
 }
 
 <div class="row row-cards">
@@ -58,7 +59,7 @@
                 <span class="text-secondary small">Szybkie wejscia z jednego katalogu</span>
             </div>
         </div>
-        @foreach (var navSection in StaffNavigationCatalog.Sections.Where(navSection => navSection.Key != "dashboard"))
+        @foreach (var navSection in visibleSections.Where(navSection => navSection.Key != "dashboard"))
         {
             var item = navSection.PrimaryItem;
             <div class="col-sm-6 col-xl-4">

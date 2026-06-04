@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 using KuchniaUCygana.Application.Interfaces;
@@ -7,6 +8,7 @@ using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 
 namespace KuchniaUCygana.Web.Controllers;
 
+[Authorize(Roles = "Logistics,LogisticsManager,DriverManager,Admin")]
 [Route("logistics")]
 public sealed class LogisticsController : Controller
 {

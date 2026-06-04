@@ -17,7 +17,8 @@
         avatarText = "PU";
     }
 
-    var searchItems = StaffNavigationCatalog.Sections
+    var visibleSections = StaffNavigationCatalog.VisibleSections(User);
+    var searchItems = visibleSections
         .SelectMany(section => section.Items.Select(item => new
         {
             title = item.Label,
@@ -55,8 +56,14 @@
                     <div class="dropdown-header">Powiadomienia</div>
                     <div class="dropdown-item-text text-secondary">Brak nowych alarmow w trybie preview.</div>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" asp-controller="Warehouse" asp-action="Temperatures">Temperatury HACCP</a>
-                    <a class="dropdown-item" asp-controller="Production" asp-action="CookingCards">Karty gotowania</a>
+                    @if (User.IsInRole("Warehouse") || User.IsInRole("WarehouseManager") || User.IsInRole("Admin"))
+                    {
+                        <a class="dropdown-item" asp-controller="Warehouse" asp-action="Temperatures">Temperatury HACCP</a>
+                    }
+                    @if (User.IsInRole("Kitchen") || User.IsInRole("KitchenManager") || User.IsInRole("Admin"))
+                    {
+                        <a class="dropdown-item" asp-controller="Production" asp-action="CookingCards">Karty gotowania</a>
+                    }
                 </div>
             </div>
 
@@ -67,9 +74,15 @@
                 <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
                     <a class="dropdown-item" asp-controller="Home" asp-action="Index">Strona klienta</a>
                     <a class="dropdown-item" asp-controller="Staff" asp-action="Index">Panel staff</a>
-                    <a class="dropdown-item" asp-controller="DriverMobile" asp-action="Index">Panel kierowcy</a>
-                    <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" asp-controller="Admin" asp-action="Settings">Ustawienia preview</a>
+                    @if (User.IsInRole("Driver") || User.IsInRole("DriverManager") || User.IsInRole("Admin"))
+                    {
+                        <a class="dropdown-item" asp-controller="DriverMobile" asp-action="Index">Panel kierowcy</a>
+                    }
+                    @if (User.IsInRole("Admin"))
+                    {
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-item" asp-controller="Admin" asp-action="Settings">Ustawienia preview</a>
+                    }
                 </div>
             </div>
 
@@ -84,7 +97,14 @@
                 <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
                     <div class="dropdown-header">Preview</div>
                     <a class="dropdown-item" asp-controller="Account" asp-action="Profile">Profil</a>
-                    <a class="dropdown-item" asp-controller="Admin" asp-action="Settings">Ustawienia</a>
+                    @if (User.IsInRole("Admin"))
+                    {
+                        <a class="dropdown-item" asp-controller="Admin" asp-action="Settings">Ustawienia</a>
+                    }
+                    <form asp-controller="Account" asp-action="Logout" method="post">
+                        @Html.AntiForgeryToken()
+                        <button class="dropdown-item" type="submit">Wyloguj</button>
+                    </form>
                 </div>
             </div>
         </div>

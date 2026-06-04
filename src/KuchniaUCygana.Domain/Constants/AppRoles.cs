@@ -16,4 +16,6 @@ public static class AppRoles
     public const string Admin = "Admin";
     public const string HR = "HR";
     public const string HRManager = "HRManager";
+    public const string BOK = "BOK";
+    public const string BOKManager = "BOKManager";
 }
