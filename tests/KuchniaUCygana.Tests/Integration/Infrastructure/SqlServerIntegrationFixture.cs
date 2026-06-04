@@ -17,6 +17,10 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
 
     public string AppConnectionString { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Prepare a disposable SQL Server instance for integration tests: start the container, construct the application connection string, run migrations, and seed the database.
+    /// </summary>
+    /// <returns>A task that completes when the container is started, the migration runner has executed, and the database seeding has finished.</returns>
     public async Task InitializeAsync()
     {
         await container.StartAsync();
@@ -46,11 +50,23 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
         await seeder.SeedAsync(DatabaseSeedingProfile.MinimalRealistic);
     }
 
+    /// <summary>
+    /// Stops and disposes the SQL Server test container used by the fixture.
+    /// </summary>
+    /// <remarks>
+    /// Cleans up resources created during initialization so the container is removed when the fixture is disposed.
+    /// </remarks>
     public async Task DisposeAsync()
     {
         await container.DisposeAsync();
     }
 
+    /// <summary>
+    /// Builds an application connection string that targets the specified database and normalizes encryption/trust settings.
+    /// </summary>
+    /// <param name="baseConnectionString">The original connection string to modify.</param>
+    /// <param name="databaseName">The database name to set in the resulting connection string.</param>
+    /// <returns>A connection string based on <paramref name="baseConnectionString"/> with the database set to <paramref name="databaseName"/>, `Encrypt=False`, and `TrustServerCertificate=True`.</returns>
     private static string BuildAppConnectionString(string baseConnectionString, string databaseName)
     {
         var normalized = baseConnectionString

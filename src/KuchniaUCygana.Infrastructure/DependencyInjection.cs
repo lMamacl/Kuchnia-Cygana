@@ -18,6 +18,11 @@ namespace KuchniaUCygana.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Configures and registers infrastructure services, persistence, migrations, caching, and external integrations into the provided service collection.
+    /// </summary>
+    /// <returns>The input <see cref="IServiceCollection"/> with infrastructure services registered.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the configuration does not contain a "DefaultConnection" connection string.</exception>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection")

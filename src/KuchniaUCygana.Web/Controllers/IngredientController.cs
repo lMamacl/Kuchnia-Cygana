@@ -5,6 +5,13 @@ namespace KuchniaUCygana.Web.Controllers;
 [Route("ingredients")]
 public sealed class IngredientController : Controller
 {
+    /// <summary>
+    /// Displays the ingredients catalog page.
+    /// </summary>
+    /// <remarks>
+    /// Prepares view data keys "Title", "Section", and "Description" for the catalog view.
+    /// </remarks>
+    /// <returns>The view result for the ingredients catalog page.</returns>
     [HttpGet("")]
     public IActionResult Index()
     {
@@ -14,6 +21,10 @@ public sealed class IngredientController : Controller
         return View();
     }
 
+    /// <summary>
+    /// Renders the view for creating a new ingredient.
+    /// </summary>
+    /// <returns>The view result for the ingredient creation page.</returns>
     [HttpGet("create")]
     public IActionResult Create()
     {
@@ -23,6 +34,11 @@ public sealed class IngredientController : Controller
         return View();
     }
 
+    /// <summary>
+    /// Shows the edit page for an ingredient.
+    /// </summary>
+    /// <param name="id">Optional ingredient identifier; when provided the page is prepared for editing that ingredient, otherwise a placeholder without an identifier is shown.</param>
+    /// <returns>An <see cref="IActionResult"/> that renders the ingredient edit view.</returns>
     [HttpGet("{id:int?}")]
     public IActionResult Details(int? id)
     {
@@ -34,6 +50,11 @@ public sealed class IngredientController : Controller
         return View();
     }
 
+    /// <summary>
+    /// Shows the nutrition values view for an ingredient.
+    /// </summary>
+    /// <param name="id">Optional ingredient identifier; when provided the description includes the identifier.</param>
+    /// <returns>An <see cref="IActionResult"/> that renders the nutrition view. <see cref="ViewData"/> keys "Title", "Section", and "Description" are populated for the view.</returns>
     [HttpGet("nutrition")]
     [HttpGet("{id:int}/nutrition")]
     public IActionResult Nutrition(int? id)

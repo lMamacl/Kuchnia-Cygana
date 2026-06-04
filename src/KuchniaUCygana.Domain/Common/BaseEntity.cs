@@ -19,6 +19,10 @@ public abstract class BaseEntity<TId> : IEquatable<BaseEntity<TId>>
     [NotMapped]
     public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
+    /// <summary>
+    /// Adds the specified domain event to the entity's internal list of domain events.
+    /// </summary>
+    /// <param name="domainEvent">The domain event to add.</param>
     public void AddDomainEvent(IDomainEvent domainEvent)
     {
         _domainEvents.Add(domainEvent);

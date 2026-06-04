@@ -12,12 +12,22 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
     private readonly IDbConnectionFactory connectionFactory;
     private readonly ILogger<DatabaseSeeder> logger;
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="DatabaseSeeder"/> with the specified database connection factory and logger.
+    /// </summary>
     public DatabaseSeeder(IDbConnectionFactory connectionFactory, ILogger<DatabaseSeeder> logger)
     {
         this.connectionFactory = connectionFactory;
         this.logger = logger;
     }
 
+    /// <summary>
+    /// Seed the database according to the specified seeding profile.
+    /// </summary>
+    /// <param name="profile">The seeding profile that determines which data set to apply.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation.</param>
+    /// <returns>A task that completes when seeding has finished.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the provided seeding profile is not supported.</exception>
     public async Task SeedAsync(DatabaseSeedingProfile profile, CancellationToken cancellationToken = default)
     {
         switch (profile)
@@ -30,6 +40,10 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         }
     }
 
+    /// <summary>
+    /// Seeds a minimal realistic set of initial data into the database (currently users).
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the seeding operation.</param>
     private async Task SeedMinimalRealisticAsync(CancellationToken cancellationToken)
     {
         using var db = connectionFactory.CreateConnection();
@@ -38,6 +52,12 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await SeedUsersAsync(db, now, cancellationToken);
     }
 
+    /// <summary>
+    /// Inserts a set of default user accounts into the Users table when the table contains no rows.
+    /// </summary>
+    /// <param name="db">Open database connection used to query and insert users.</param>
+    /// <param name="now">Timestamp to assign to the users' CreatedAt fields.</param>
+    /// <param name="cancellationToken">Token to cancel database operations.</param>
     private async Task SeedUsersAsync(System.Data.IDbConnection db, DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (await db.ExecuteScalarAsync<int>(
