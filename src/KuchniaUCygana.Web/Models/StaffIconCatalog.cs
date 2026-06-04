@@ -2,6 +2,11 @@ namespace KuchniaUCygana.Web.Models;
 
 public static class StaffIconCatalog
 {
+    /// <summary>
+    /// Get SVG markup for a named staff icon.
+    /// </summary>
+    /// <param name="key">The icon name from the catalog (e.g., "admin", "alert", "bell"). If the name is not recognized, a default plus-sign icon is returned.</param>
+    /// <returns>An SVG string containing the icon markup with fixed attributes (20x20, viewBox 0 0 24 24, stroke set to currentColor).</returns>
     public static string Get(string key)
     {
         var path = key switch

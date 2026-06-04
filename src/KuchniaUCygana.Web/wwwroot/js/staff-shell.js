@@ -2,6 +2,11 @@
     var storageKey = "kuc.staff.theme";
     var toggle = document.querySelector("[data-staff-theme-toggle]");
 
+    /**
+     * Apply the UI theme to the document and update the optional theme toggle element.
+     *
+     * @param {string} theme - "dark" to enable dark theme; any other value removes the theme attribute (reverting to default/light).
+     */
     function applyTheme(theme) {
         if (theme === "dark") {
             document.documentElement.setAttribute("data-bs-theme", "dark");
@@ -43,10 +48,20 @@
         items = [];
     }
 
+    /**
+     * Convert a value to a lowercase string, returning an empty string for falsy input.
+     * @param {*} value - The value to normalize; may be any type or falsy.
+     * @returns {string} The input coerced to a string and converted to lowercase, or `""` if the input was falsy.
+     */
     function normalize(value) {
         return (value || "").toString().toLowerCase();
     }
 
+    /**
+     * Finds up to eight items whose title, section, description, or keywords contain the query as a case-insensitive substring.
+     * @param {string} query - The search text to match against item fields.
+     * @returns {Array} An array of matching item objects, limited to 8; returns an empty array if the query is empty or no matches are found.
+     */
     function getMatches(query) {
         var value = normalize(query).trim();
         if (!value) {
@@ -63,6 +78,12 @@
             .slice(0, 8);
     }
 
+    /**
+     * Hide and clear the search results container within a search root.
+     * Removes the `show` class and empties the contents of the element matching
+     * `[data-staff-search-results]` inside the provided root, if present.
+     * @param {Element} root - The search root element that contains the results container.
+     */
     function hideResults(root) {
         var results = root.querySelector("[data-staff-search-results]");
         if (results) {
@@ -71,6 +92,17 @@
         }
     }
 
+    /**
+     * Render search results for a given search root into its [data-staff-search-results] container.
+     *
+     * If `query` is empty the results container is cleared and hidden. If `matches` is empty, an
+     * empty-state message containing the query is inserted. Otherwise, a link is created for each
+     * match using the match's `title`, `section`, `description`, and `href`. The container's `show`
+     * class is added when results or the empty-state are displayed and removed when hidden.
+     * @param {Element} root - The search root element that contains the results container.
+     * @param {Array<Object>} matches - Array of match objects to render; each object should include `title`, `section`, `description`, and `href`.
+     * @param {string} query - The raw query string used for the empty-state message.
+     */
     function renderResults(root, matches, query) {
         var results = root.querySelector("[data-staff-search-results]");
         if (!results) {

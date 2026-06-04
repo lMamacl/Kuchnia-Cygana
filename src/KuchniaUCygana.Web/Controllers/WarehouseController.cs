@@ -5,6 +5,10 @@ namespace KuchniaUCygana.Web.Controllers;
 [Route("warehouse")]
 public sealed class WarehouseController : Controller
 {
+    /// <summary>
+    /// Displays the warehouse overview page and prepares preview metadata for the view.
+    /// </summary>
+    /// <returns>The view result for the warehouse overview (warehouse dashboard) page.</returns>
     [HttpGet("")]
     public IActionResult Index()
     {
@@ -12,6 +16,10 @@ public sealed class WarehouseController : Controller
         return this.View();
     }
 
+    /// <summary>
+    /// Renders the warehouse alerts partial view and sets preview metadata for the page.
+    /// </summary>
+    /// <returns>A PartialViewResult that renders the "_AlertsPartial" partial view.</returns>
     [HttpGet("alerts")]
     public IActionResult Alerts()
     {
@@ -19,6 +27,10 @@ public sealed class WarehouseController : Controller
         return this.PartialView("_AlertsPartial");
     }
 
+    /// <summary>
+    /// Renders the incoming deliveries page and sets preview metadata for the view.
+    /// </summary>
+    /// <returns>A view result that renders the receive deliveries page.</returns>
     [HttpGet("receive")]
     public IActionResult Receive()
     {
@@ -26,6 +38,10 @@ public sealed class WarehouseController : Controller
         return this.View();
     }
 
+    /// <summary>
+    /// Displays the warehouse waste register view and sets preview metadata for the page.
+    /// </summary>
+    /// <returns>The view for the waste register.</returns>
     [HttpGet("waste")]
     public IActionResult Waste()
     {
@@ -33,6 +49,13 @@ public sealed class WarehouseController : Controller
         return this.View();
     }
 
+    /// <summary>
+    /// Displays the inventory screen for the warehouse.
+    /// </summary>
+    /// <remarks>
+    /// Populates view preview metadata (title, section, description) used by the rendered view.
+    /// </remarks>
+    /// <returns>The view result for the inventory screen.</returns>
     [HttpGet("inventory")]
     public IActionResult Inventory()
     {
@@ -40,6 +63,10 @@ public sealed class WarehouseController : Controller
         return this.View();
     }
 
+    /// <summary>
+    /// Displays the Temperatures HACCP page and sets preview metadata for mock HACCP monitoring.
+    /// </summary>
+    /// <returns>A view rendering of the Temperatures HACCP page.</returns>
     [HttpGet("temperatures")]
     public IActionResult Temperatures()
     {
@@ -47,6 +74,12 @@ public sealed class WarehouseController : Controller
         return this.View();
     }
 
+    /// <summary>
+    /// Renders the HACCP report view with an applied date range.
+    /// </summary>
+    /// <param name="from">Optional start date for the report range; defaults to seven days before today when null.</param>
+    /// <param name="to">Optional end date for the report range; defaults to today when null.</param>
+    /// <returns>The view that displays the HACCP report with ViewBag.DateFrom and ViewBag.DateTo set.</returns>
     [HttpGet("haccp-report")]
     public IActionResult HaccpReport(DateOnly? from, DateOnly? to)
     {
@@ -56,6 +89,12 @@ public sealed class WarehouseController : Controller
         return this.View();
     }
 
+    /// <summary>
+    /// Populates view metadata used by views and partials for previewing the page (title, section and description).
+    /// </summary>
+    /// <param name="title">Page title shown in the view preview.</param>
+    /// <param name="section">Section label shown in the view preview.</param>
+    /// <param name="description">Short descriptive text shown in the view preview.</param>
     private void SetPreview(string title, string section, string description)
     {
         this.ViewData["Title"] = title;

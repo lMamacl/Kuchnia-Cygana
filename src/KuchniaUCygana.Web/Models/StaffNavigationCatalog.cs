@@ -8,12 +8,23 @@ public sealed record StaffNavItem(
     string Description,
     string Keywords = "")
 {
+    /// <summary>
+    /// Determines whether the item's Controller and Action match the provided values using case-insensitive ordinal comparison.
+    /// </summary>
+    /// <param name="controller">Controller name to compare; may be null.</param>
+    /// <param name="action">Action name to compare; may be null.</param>
+    /// <returns>`true` if both Controller and Action match the provided values using case-insensitive ordinal comparison, `false` otherwise.</returns>
     public bool Matches(string? controller, string? action)
     {
         return string.Equals(this.Controller, controller, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(this.Action, action, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Determines whether the item's Controller matches the specified controller name.
+    /// </summary>
+    /// <param name="controller">The controller name to compare; may be null.</param>
+    /// <returns>`true` if the controller names are equal using a case-insensitive ordinal comparison, `false` otherwise.</returns>
     public bool MatchesController(string? controller)
     {
         return string.Equals(this.Controller, controller, StringComparison.OrdinalIgnoreCase);
@@ -30,6 +41,11 @@ public sealed record StaffNavSection(
 {
     public StaffNavItem PrimaryItem => this.Items[0];
 
+    /// <summary>
+    /// Determines whether any navigation item in the section corresponds to the specified controller.
+    /// </summary>
+    /// <param name="controller">The controller name to check for activity; comparison is case-insensitive and the value may be null.</param>
+    /// <returns>`true` if any item in the section matches the provided controller, `false` otherwise.</returns>
     public bool IsActive(string? controller)
     {
         return this.Items.Any(item => item.MatchesController(controller));
@@ -156,11 +172,22 @@ public static class StaffNavigationCatalog
         .SelectMany(section => section.Items)
         .ToArray();
 
+    /// <summary>
+    /// Finds the first navigation section that is active for the specified controller.
+    /// </summary>
+    /// <param name="controller">The controller name to match against section items (case-insensitive).</param>
+    /// <returns>The matching <see cref="StaffNavSection"/>, or <c>null</c> if no section matches.</returns>
     public static StaffNavSection? FindSection(string? controller)
     {
         return Sections.FirstOrDefault(section => section.IsActive(controller));
     }
 
+    /// <summary>
+    /// Locate a navigation item that matches the specified controller and action using case-insensitive ordinal comparison.
+    /// </summary>
+    /// <param name="controller">The controller name to match; may be null.</param>
+    /// <param name="action">The action name to match; may be null.</param>
+    /// <returns>The matching <see cref="StaffNavItem"/>, or null if no match is found.</returns>
     public static StaffNavItem? FindItem(string? controller, string? action)
     {
         return Items.FirstOrDefault(item => item.Matches(controller, action));
