@@ -12,20 +12,17 @@ public sealed class CustomerSupportService : ICustomerSupportService
 {
     private readonly ITicketRepository ticketRepository;
     private readonly IRepository<TicketAttachment> ticketAttachmentRepository;
-    private readonly IRepository<SystemLog> systemLogRepository;
     private readonly IRepository<User> userRepository;
     private readonly IMapper mapper;
 
     public CustomerSupportService(
         ITicketRepository ticketRepository,
         IRepository<TicketAttachment> ticketAttachmentRepository,
-        IRepository<SystemLog> systemLogRepository,
         IRepository<User> userRepository,
         IMapper mapper)
     {
         this.ticketRepository = ticketRepository;
         this.ticketAttachmentRepository = ticketAttachmentRepository;
-        this.systemLogRepository = systemLogRepository;
         this.userRepository = userRepository;
         this.mapper = mapper;
     }
@@ -175,52 +172,6 @@ public sealed class CustomerSupportService : ICustomerSupportService
         return await ticketAttachmentRepository.DeleteAsync(id);
     }
 
-    public async Task<IEnumerable<SystemLogDto>> GetSystemLogsAsync()
-    {
-        var logs = await systemLogRepository.GetAllAsync();
-        return await MapSystemLogsAsync(logs.OrderByDescending(log => log.Timestamp));
-    }
-
-    public async Task<IEnumerable<SystemLogDto>> GetSystemLogsByUserAsync(int userId)
-    {
-        var logs = await systemLogRepository.GetAllAsync();
-        return await MapSystemLogsAsync(logs
-            .Where(log => log.UserId == userId)
-            .OrderByDescending(log => log.Timestamp));
-    }
-
-    public async Task<IEnumerable<SystemLogDto>> GetSystemLogsByTargetAsync(string targetEntity, string targetId)
-    {
-        var logs = await systemLogRepository.GetAllAsync();
-        return await MapSystemLogsAsync(logs
-            .Where(log =>
-                log.TargetEntity.Equals(targetEntity, StringComparison.OrdinalIgnoreCase) &&
-                log.TargetId.Equals(targetId, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(log => log.Timestamp));
-    }
-
-    public async Task<SystemLogDto?> GetSystemLogByIdAsync(int id)
-    {
-        var log = await systemLogRepository.GetByIdAsync(id);
-        if (log is null)
-        {
-            return null;
-        }
-
-        return (await MapSystemLogsAsync(new[] { log })).Single();
-    }
-
-    public async Task<SystemLogDto> CreateSystemLogAsync(CreateSystemLogRequest request)
-    {
-        await EnsureUserExistsAsync(request.UserId);
-
-        var log = mapper.Map<SystemLog>(request);
-        var id = await systemLogRepository.InsertAsync(log);
-        log.Id = id;
-
-        return (await MapSystemLogsAsync(new[] { log })).Single();
-    }
-
     private async Task<List<TicketDto>> MapTicketsAsync(IEnumerable<Ticket> tickets)
     {
         var list = mapper.Map<List<TicketDto>>(tickets);
@@ -254,22 +205,6 @@ public sealed class CustomerSupportService : ICustomerSupportService
             if (users.TryGetValue(attachment.UploadedByUserId, out var user))
             {
                 attachment.UploadedByFullName = BuildUserFullName(user);
-            }
-        }
-
-        return list;
-    }
-
-    private async Task<List<SystemLogDto>> MapSystemLogsAsync(IEnumerable<SystemLog> logs)
-    {
-        var list = mapper.Map<List<SystemLogDto>>(logs);
-        var users = (await userRepository.GetAllAsync()).ToDictionary(user => user.Id);
-
-        foreach (var log in list)
-        {
-            if (users.TryGetValue(log.UserId, out var user))
-            {
-                log.UserFullName = BuildUserFullName(user);
             }
         }
 

@@ -32,14 +32,4 @@ public interface ICustomerSupportService
     Task<TicketAttachmentDto> AddTicketAttachmentAsync(CreateTicketAttachmentRequest request);
 
     Task<bool> DeleteTicketAttachmentAsync(int id);
-
-    Task<IEnumerable<SystemLogDto>> GetSystemLogsAsync();
-
-    Task<IEnumerable<SystemLogDto>> GetSystemLogsByUserAsync(int userId);
-
-    Task<IEnumerable<SystemLogDto>> GetSystemLogsByTargetAsync(string targetEntity, string targetId);
-
-    Task<SystemLogDto?> GetSystemLogByIdAsync(int id);
-
-    Task<SystemLogDto> CreateSystemLogAsync(CreateSystemLogRequest request);
 }

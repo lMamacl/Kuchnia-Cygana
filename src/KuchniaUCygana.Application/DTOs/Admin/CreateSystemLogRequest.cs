@@ -1,4 +1,4 @@
-namespace KuchniaUCygana.Application.DTOs.CustomerService;
+namespace KuchniaUCygana.Application.DTOs.Admin;
 
 public sealed class CreateSystemLogRequest
 {

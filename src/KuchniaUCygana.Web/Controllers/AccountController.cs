@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using KuchniaUCygana.Application.DTOs.HR;
+using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Web.Models;
@@ -31,13 +33,38 @@ public sealed class AccountController : Controller
         UserRoles.BOKManager,
     ];
 
+    private static readonly IReadOnlyDictionary<string, string> DevRoleEmails =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [UserRoles.Admin] = "admin@kuchnia.local",
+            [UserRoles.Kitchen] = "kitchen@kuchnia.local",
+            [UserRoles.KitchenManager] = "kitchenm@kuchnia.local",
+            [UserRoles.Warehouse] = "warehouse@kuchnia.local",
+            [UserRoles.WarehouseManager] = "warehousem@kuchnia.local",
+            [UserRoles.Packing] = "packing@kuchnia.local",
+            [UserRoles.PackingManager] = "packingm@kuchnia.local",
+            [UserRoles.Dietitian] = "dietitian@kuchnia.local",
+            [UserRoles.Logistics] = "logistics@kuchnia.local",
+            [UserRoles.LogisticsManager] = "logisticsm@kuchnia.local",
+            [UserRoles.Driver] = "driver@kuchnia.local",
+            [UserRoles.HR] = "hr@kuchnia.local",
+            [UserRoles.HRManager] = "hrm@kuchnia.local",
+            [UserRoles.BOK] = "bok@kuchnia.local",
+            [UserRoles.BOKManager] = "bokm@kuchnia.local",
+        };
+
     private readonly IWebHostEnvironment env;
     private readonly IUserRepository userRepository;
+    private readonly IHumanResourcesService humanResourcesService;
 
-    public AccountController(IWebHostEnvironment env, IUserRepository userRepository)
+    public AccountController(
+        IWebHostEnvironment env,
+        IUserRepository userRepository,
+        IHumanResourcesService humanResourcesService)
     {
         this.env = env;
         this.userRepository = userRepository;
+        this.humanResourcesService = humanResourcesService;
     }
 
     [HttpGet]
@@ -50,11 +77,43 @@ public sealed class AccountController : Controller
 
     [Authorize]
     [HttpGet]
-    public IActionResult Profile()
+    public async Task<IActionResult> Profile()
     {
         ViewData["Title"] = "Profil";
-        ViewData["Description"] = "Profil zalogowanego uzytkownika.";
-        return View();
+        ViewData["Description"] = "Profil pracownika, grafik i wnioski urlopowe.";
+        return View(await BuildProfileModelAsync());
+    }
+
+    [Authorize]
+    [HttpPost]
+    [Route("account/profile/leave")]
+    public async Task<IActionResult> RequestLeave(CreateLeaveRequestRequest request)
+    {
+        var employee = await GetCurrentEmployeeAsync();
+        if (employee is null)
+        {
+            TempData["Error"] = "Nie znaleziono kartoteki pracownika dla zalogowanego konta.";
+            return RedirectToAction(nameof(Profile));
+        }
+
+        if (request.EndDate < request.StartDate)
+        {
+            TempData["Error"] = "Data konca urlopu nie moze byc wczesniejsza niz data poczatku.";
+            return RedirectToAction(nameof(Profile));
+        }
+
+        request.EmployeeId = employee.Id;
+        try
+        {
+            await humanResourcesService.CreateLeaveRequestAsync(request);
+            TempData["Success"] = "Wniosek urlopowy zostal przekazany do HR.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Profile));
     }
 
     [AllowAnonymous]
@@ -129,10 +188,14 @@ public sealed class AccountController : Controller
             return BadRequest("Nieznana rola deweloperska.");
         }
 
+        var seedUser = DevRoleEmails.TryGetValue(role, out var seedEmail)
+            ? await userRepository.FindByEmailAsync(seedEmail)
+            : null;
+
         await SignInAsync(
-            "0",
-            $"Dev {role}",
-            $"dev-{role.ToLowerInvariant()}@kuchniaucygana.pl",
+            seedUser?.Id.ToString() ?? "0",
+            seedUser is null ? $"Dev {role}" : $"{seedUser.FirstName} {seedUser.LastName}".Trim(),
+            seedUser?.Email ?? $"dev-{role.ToLowerInvariant()}@kuchniaucygana.pl",
             role);
 
         TempData["Success"] = $"Zalogowano jako: {role} (dev).";
@@ -175,6 +238,55 @@ public sealed class AccountController : Controller
         var principal = new ClaimsPrincipal(identity);
 
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+    }
+
+    private async Task<EmployeeProfileViewModel> BuildProfileModelAsync()
+    {
+        var userId = GetCurrentUserId();
+        var employee = await GetCurrentEmployeeAsync();
+        var schedules = userId > 0
+            ? (await humanResourcesService.GetWorkSchedulesByUserAsync(userId)).ToArray()
+            : Array.Empty<WorkScheduleDto>();
+        var leaveRequests = employee is null
+            ? Array.Empty<LeaveRequestDto>()
+            : (await humanResourcesService.GetLeaveRequestsByEmployeeAsync(employee.Id)).ToArray();
+
+        return new EmployeeProfileViewModel
+        {
+            DisplayName = User.Identity?.Name ?? "Uzytkownik",
+            Email = User.Claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Email)?.Value ?? string.Empty,
+            Roles = User.Claims
+                .Where(claim => claim.Type == ClaimTypes.Role)
+                .Select(claim => claim.Value)
+                .Distinct()
+                .ToArray(),
+            Employee = employee,
+            WorkSchedules = schedules
+                .OrderBy(schedule => schedule.ShiftDate)
+                .ThenBy(schedule => schedule.Shift)
+                .ToArray(),
+            LeaveRequests = leaveRequests
+                .OrderByDescending(request => request.CreatedAt)
+                .ToArray(),
+        };
+    }
+
+    private async Task<EmployeeDto?> GetCurrentEmployeeAsync()
+    {
+        var userId = GetCurrentUserId();
+        if (userId <= 0)
+        {
+            return null;
+        }
+
+        return (await humanResourcesService.GetEmployeesAsync())
+            .FirstOrDefault(employee => employee.UserId == userId);
+    }
+
+    private int GetCurrentUserId()
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(value, out var userId) ? userId : 0;
     }
 
     private IActionResult RedirectToRoleHome(string? role, string? returnUrl)

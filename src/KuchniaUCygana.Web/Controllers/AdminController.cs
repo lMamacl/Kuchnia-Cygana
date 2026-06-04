@@ -1,3 +1,5 @@
+using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,13 +9,22 @@ namespace KuchniaUCygana.Web.Controllers;
 [Route("admin")]
 public sealed class AdminController : Controller
 {
+    private readonly IAuditLogService auditLogService;
+    private readonly IUserService userService;
+
+    public AdminController(IAuditLogService auditLogService, IUserService userService)
+    {
+        this.auditLogService = auditLogService;
+        this.userService = userService;
+    }
+
     [HttpGet("")]
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
         ViewData["Title"] = "Admin";
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Dashboard administracyjny systemu.";
-        return View();
+        return View(await BuildModelAsync());
     }
 
     [HttpGet("users")]
@@ -34,6 +45,15 @@ public sealed class AdminController : Controller
         return View();
     }
 
+    [HttpGet("logs")]
+    public async Task<IActionResult> Logs()
+    {
+        ViewData["Title"] = "Logi systemowe";
+        ViewData["Section"] = "Administracja";
+        ViewData["Description"] = "Audyt zmian w systemie.";
+        return View(await BuildModelAsync());
+    }
+
     [HttpGet("settings")]
     public IActionResult Settings()
     {
@@ -42,5 +62,13 @@ public sealed class AdminController : Controller
         ViewData["Description"] = "Ustawienia systemowe.";
         return View();
     }
-}
 
+    private async Task<AdminDashboardViewModel> BuildModelAsync()
+    {
+        return new AdminDashboardViewModel
+        {
+            SystemLogs = (await auditLogService.GetSystemLogsAsync()).Take(100).ToArray(),
+            Users = (await userService.GetAllAsync()).ToArray(),
+        };
+    }
+}

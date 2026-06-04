@@ -1,6 +1,10 @@
-@model CustomerSupportDashboardViewModel
+@model AdminDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+
+    var logs = Model.SystemLogs
+        .OrderByDescending(x => x.Timestamp)
+        .ToArray();
 }
 
 <div class="card">
@@ -15,24 +19,30 @@
                     <th>Uzytkownik</th>
                     <th>Akcja</th>
                     <th>Obiekt</th>
-                    <th>Wartosc</th>
+                    <th>Stara wartosc</th>
+                    <th>Nowa wartosc</th>
+                    <th>IP</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var log in Model.SystemLogs.OrderByDescending(x => x.Timestamp))
+                @foreach (var log in logs)
                 {
+                    var oldValue = string.IsNullOrWhiteSpace(log.OldValue) ? "-" : log.OldValue;
+                    var newValue = string.IsNullOrWhiteSpace(log.NewValue) ? "-" : log.NewValue;
                     <tr>
                         <td>@log.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
                         <td>@(log.UserFullName ?? $"#{log.UserId}")</td>
                         <td>@log.Action</td>
                         <td>@log.TargetEntity #@log.TargetId</td>
-                        <td class="text-secondary">@(log.NewValue ?? log.OldValue ?? "-")</td>
+                        <td class="text-secondary">@oldValue</td>
+                        <td class="text-secondary">@newValue</td>
+                        <td class="text-secondary">@(log.IPAddress ?? "-")</td>
                     </tr>
                 }
-                @if (Model.SystemLogs.Count == 0)
+                @if (logs.Length == 0)
                 {
                     <tr>
-                        <td colspan="5" class="text-secondary text-center py-4">Brak logow.</td>
+                        <td colspan="7" class="text-secondary text-center py-4">Brak zapisanych logow systemowych.</td>
                     </tr>
                 }
             </tbody>

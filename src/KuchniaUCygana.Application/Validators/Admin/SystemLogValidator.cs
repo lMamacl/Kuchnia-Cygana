@@ -1,7 +1,7 @@
 using FluentValidation;
-using KuchniaUCygana.Application.DTOs.CustomerService;
+using KuchniaUCygana.Application.DTOs.Admin;
 
-namespace KuchniaUCygana.Application.Validators.CustomerService;
+namespace KuchniaUCygana.Application.Validators.Admin;
 
 public sealed class CreateSystemLogRequestValidator : AbstractValidator<CreateSystemLogRequest>
 {

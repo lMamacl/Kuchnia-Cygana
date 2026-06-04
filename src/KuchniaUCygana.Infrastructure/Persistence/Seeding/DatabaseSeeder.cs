@@ -46,6 +46,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         var now = DateTimeOffset.UtcNow;
 
         await SeedUsersAsync(db, now, cancellationToken);
+        await SeedPersonnelAsync(db, now, cancellationToken);
     }
 
     private async Task SeedUsersAsync(IDbConnection db, DateTimeOffset now, CancellationToken cancellationToken)
@@ -96,6 +97,167 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
     // ─────────────────────────────────────────────────────────────────
     //  DemoData — dane operacyjne M3 (Magazyn, Produkcja, Pakowanie)
     // ─────────────────────────────────────────────────────────────────
+
+    private async Task SeedPersonnelAsync(IDbConnection db, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var departments = new[]
+        {
+            new { Name = "Kuchnia", Description = "Produkcja posilkow i karty gotowania." },
+            new { Name = "Magazyn", Description = "Stany, przyjecia i HACCP." },
+            new { Name = "Kompletacja", Description = "Pakowanie, etykiety i zaladunek." },
+            new { Name = "Diety", Description = "Diety, posilki i przepisy." },
+            new { Name = "Logistyka", Description = "Trasy, flota i kierowcy." },
+            new { Name = "HR", Description = "Kadry, urlopy i grafik." },
+            new { Name = "BOK", Description = "Obsluga klienta i zgloszenia." },
+            new { Name = "Administracja", Description = "Role i konfiguracja systemu." },
+        };
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            IF NOT EXISTS (SELECT 1 FROM [Departments] WHERE [Name] = @Name)
+            BEGIN
+                INSERT INTO [Departments] ([Name], [Description], [HeadEmployeeId], [CreatedAt], [UpdatedAt])
+                VALUES (@Name, @Description, NULL, @CreatedAt, NULL);
+            END
+            """,
+            departments.Select(department => new
+            {
+                department.Name,
+                department.Description,
+                CreatedAt = now,
+            }),
+            cancellationToken: cancellationToken));
+
+        var employees = new[]
+        {
+            new { Email = "admin@kuchnia.local", DepartmentName = "Administracja", Position = "Administrator systemu" },
+            new { Email = "kitchen@kuchnia.local", DepartmentName = "Kuchnia", Position = "Kucharz" },
+            new { Email = "kitchenm@kuchnia.local", DepartmentName = "Kuchnia", Position = "Szef kuchni" },
+            new { Email = "warehouse@kuchnia.local", DepartmentName = "Magazyn", Position = "Magazynier" },
+            new { Email = "warehousem@kuchnia.local", DepartmentName = "Magazyn", Position = "Kierownik magazynu" },
+            new { Email = "packing@kuchnia.local", DepartmentName = "Kompletacja", Position = "Pakowacz" },
+            new { Email = "packingm@kuchnia.local", DepartmentName = "Kompletacja", Position = "Kierownik kompletacji" },
+            new { Email = "dietitian@kuchnia.local", DepartmentName = "Diety", Position = "Dietetyk" },
+            new { Email = "logistics@kuchnia.local", DepartmentName = "Logistyka", Position = "Logistyk" },
+            new { Email = "logisticsm@kuchnia.local", DepartmentName = "Logistyka", Position = "Kierownik logistyki" },
+            new { Email = "driver@kuchnia.local", DepartmentName = "Logistyka", Position = "Kierowca" },
+            new { Email = "hr@kuchnia.local", DepartmentName = "HR", Position = "Specjalista HR" },
+            new { Email = "hrm@kuchnia.local", DepartmentName = "HR", Position = "Kierownik HR" },
+            new { Email = "bok@kuchnia.local", DepartmentName = "BOK", Position = "Konsultant BOK" },
+            new { Email = "bokm@kuchnia.local", DepartmentName = "BOK", Position = "Kierownik BOK" },
+        };
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO [Employees]
+                ([UserId], [FirstName], [LastName], [Email], [PhoneNumber], [HireDate], [TerminationDate],
+                 [DepartmentId], [Position], [IsActive], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt],
+                 [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                u.[Id], u.[FirstName], u.[LastName], u.[Email], NULL, @HireDate, NULL,
+                d.[Id], @Position, 1, @CreatedBy, NULL, 0, NULL, NULL, @CreatedAt, NULL
+            FROM [Users] u
+            INNER JOIN [Departments] d ON d.[Name] = @DepartmentName
+            WHERE u.[Email] = @Email
+              AND NOT EXISTS (SELECT 1 FROM [Employees] e WHERE e.[UserId] = u.[Id]);
+            """,
+            employees.Select(employee => new
+            {
+                employee.Email,
+                employee.DepartmentName,
+                employee.Position,
+                HireDate = DateOnly.FromDateTime(DateTime.Today.AddMonths(-3)),
+                CreatedBy = "DatabaseSeeder",
+                CreatedAt = now,
+            }),
+            cancellationToken: cancellationToken));
+
+        var shifts = new[]
+        {
+            new { Email = "kitchen@kuchnia.local", ShiftDate = DateOnly.FromDateTime(DateTime.Today), Shift = WorkShift.Morning, RoleAtShift = "Produkcja sniadan" },
+            new { Email = "warehouse@kuchnia.local", ShiftDate = DateOnly.FromDateTime(DateTime.Today), Shift = WorkShift.Morning, RoleAtShift = "Przyjecia dostaw" },
+            new { Email = "packing@kuchnia.local", ShiftDate = DateOnly.FromDateTime(DateTime.Today), Shift = WorkShift.Evening, RoleAtShift = "Kompletacja tras" },
+            new { Email = "driver@kuchnia.local", ShiftDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1)), Shift = WorkShift.Morning, RoleAtShift = "Trasa poranna" },
+            new { Email = "bok@kuchnia.local", ShiftDate = DateOnly.FromDateTime(DateTime.Today), Shift = WorkShift.Morning, RoleAtShift = "Kolejka BOK" },
+            new { Email = "hr@kuchnia.local", ShiftDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1)), Shift = WorkShift.Morning, RoleAtShift = "Dyzurowanie HR" },
+        };
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO [WorkSchedules]
+                ([UserId], [ShiftDate], [Shift], [RoleAtShift], [CreatedBy], [UpdatedBy], [IsDeleted],
+                 [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                u.[Id], @ShiftDate, @Shift, @RoleAtShift, @CreatedBy, NULL, 0, NULL, NULL, @CreatedAt, NULL
+            FROM [Users] u
+            WHERE u.[Email] = @Email
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [WorkSchedules] ws
+                    WHERE ws.[UserId] = u.[Id]
+                      AND ws.[ShiftDate] = @ShiftDate
+                      AND ws.[Shift] = @Shift
+                      AND ws.[IsDeleted] = 0);
+            """,
+            shifts.Select(shift => new
+            {
+                shift.Email,
+                shift.ShiftDate,
+                Shift = (int)shift.Shift,
+                shift.RoleAtShift,
+                CreatedBy = "DatabaseSeeder",
+                CreatedAt = now,
+            }),
+            cancellationToken: cancellationToken));
+
+        var leaveRequests = new[]
+        {
+            new { Email = "kitchen@kuchnia.local", StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(7)), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(8)), LeaveType = 0, Status = 0 },
+            new { Email = "warehouse@kuchnia.local", StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(14)), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(14)), LeaveType = 0, Status = 1 },
+        };
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO [LeaveRequests]
+                ([EmployeeId], [LeaveType], [StartDate], [EndDate], [Status], [ApprovedByEmployeeId],
+                 [RejectionReason], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy],
+                 [CreatedAt], [UpdatedAt])
+            SELECT
+                e.[Id], @LeaveType, @StartDate, @EndDate, @Status,
+                CASE WHEN @Status = 1 THEN approver.[Id] ELSE NULL END,
+                NULL, @CreatedBy, NULL, 0, NULL, NULL, @CreatedAt, NULL
+            FROM [Employees] e
+            INNER JOIN [Users] u ON u.[Id] = e.[UserId]
+            OUTER APPLY (
+                SELECT TOP 1 hr.[Id]
+                FROM [Employees] hr
+                INNER JOIN [Departments] d ON d.[Id] = hr.[DepartmentId]
+                WHERE d.[Name] = 'HR'
+                ORDER BY hr.[Id]
+            ) approver
+            WHERE u.[Email] = @Email
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [LeaveRequests] lr
+                    WHERE lr.[EmployeeId] = e.[Id]
+                      AND lr.[StartDate] = @StartDate
+                      AND lr.[EndDate] = @EndDate
+                      AND lr.[IsDeleted] = 0);
+            """,
+            leaveRequests.Select(request => new
+            {
+                request.Email,
+                request.StartDate,
+                request.EndDate,
+                request.LeaveType,
+                request.Status,
+                CreatedBy = "DatabaseSeeder",
+                CreatedAt = now,
+            }),
+            cancellationToken: cancellationToken));
+
+        this.logger.LogInformation("Ensured minimal HR personnel, schedules and leave requests.");
+    }
 
     private async Task SeedDemoDataAsync(CancellationToken cancellationToken)
     {

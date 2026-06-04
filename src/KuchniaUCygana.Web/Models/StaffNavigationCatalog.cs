@@ -45,12 +45,12 @@ public static class StaffNavigationCatalog
     [
         new(
             "dashboard",
-            "Dashboard",
+            "Moj panel",
             "home",
-            "Centralna mapa dzialow Sprint 4B.",
+            "Profil pracownika, grafik i wnioski urlopowe.",
             true,
             [
-                new("Mapa dzialow", "Staff", "Index", "home", "Start panelu pracowniczego i szybkie przejscia.", "staff dashboard home mapa dzialow"),
+                new("Profil i grafik", "Account", "Profile", "home", "Osobisty panel pracownika.", "profil grafik urlopy pracownik"),
             ]),
         new(
             "kitchen",
@@ -146,23 +146,23 @@ public static class StaffNavigationCatalog
             "bok",
             "BOK",
             "support",
-            "Zgloszenia klientow, przypisania i logi obslugi.",
+            "Zgloszenia klientow i przypisania do konsultantow.",
             true,
             [
                 new("Dashboard BOK", "CustomerSupport", "Index", "support", "Zbiorczy ekran obslugi klienta.", "bok obsluga klienta"),
                 new("Zgloszenia", "CustomerSupport", "Tickets", "support", "Lista zgloszen klientow.", "zgloszenia tickety klient"),
-                new("Logi systemowe", "CustomerSupport", "Logs", "report", "Zdarzenia widoczne dla BOK.", "logi systemowe"),
             ]),
         new(
             "admin",
             "Administracja",
             "admin",
-            "Uzytkownicy, role i ustawienia systemu.",
+            "Uzytkownicy, role, audyt i ustawienia systemu.",
             true,
             [
                 new("Dashboard admina", "Admin", "Index", "admin", "Pulpit administracyjny.", "admin administracja"),
                 new("Uzytkownicy", "Admin", "Users", "users", "Zarzadzanie uzytkownikami.", "uzytkownicy"),
                 new("Role", "Admin", "Roles", "shield", "Role i uprawnienia.", "role uprawnienia"),
+                new("Logi systemowe", "Admin", "Logs", "report", "Audyt zmian i zdarzen systemowych.", "logi audyt zmiany"),
                 new("Ustawienia", "Admin", "Settings", "settings", "Ustawienia systemowe.", "ustawienia konfiguracja"),
             ]),
         new(

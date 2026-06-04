@@ -96,20 +96,12 @@ public sealed class CustomerSupportController : Controller
         return RedirectToAction(nameof(Tickets));
     }
 
-    [HttpGet("logs")]
-    public async Task<IActionResult> Logs()
-    {
-        SetViewData("Logi systemowe", "Obsluga klienta", "Ostatnie zdarzenia widoczne dla BOK.");
-        return View(await BuildModelAsync());
-    }
-
     private async Task<CustomerSupportDashboardViewModel> BuildModelAsync(CreateTicketRequest? newTicket = null)
     {
         return new CustomerSupportDashboardViewModel
         {
             Tickets = (await customerSupportService.GetTicketsAsync()).ToArray(),
             OpenTickets = (await customerSupportService.GetOpenTicketsAsync()).ToArray(),
-            SystemLogs = (await customerSupportService.GetSystemLogsAsync()).Take(50).ToArray(),
             Users = (await userService.GetAllAsync()).ToArray(),
             NewTicket = newTicket ?? new CreateTicketRequest(),
         };
