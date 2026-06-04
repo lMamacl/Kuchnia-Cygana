@@ -18,4 +18,30 @@ public static class AppRoles
     public const string HRManager = "HRManager";
     public const string BOK = "BOK";
     public const string BOKManager = "BOKManager";
+
+    public static readonly string[] StaffRoleNames =
+    [
+        Admin,
+        Kitchen,
+        KitchenManager,
+        Warehouse,
+        WarehouseManager,
+        Packing,
+        PackingManager,
+        Dietitian,
+        Logistics,
+        LogisticsManager,
+        Driver,
+        DriverManager,
+        HR,
+        HRManager,
+        BOK,
+        BOKManager,
+    ];
+
+    public static bool IsStaffRole(string? role)
+    {
+        return !string.IsNullOrWhiteSpace(role) &&
+            StaffRoleNames.Contains(role, StringComparer.Ordinal);
+    }
 }

@@ -40,7 +40,7 @@
             </div>
             <div class="card-body">
                 <div class="d-flex align-items-center gap-3 mb-3">
-                    <span class="avatar avatar-lg">@new string(Model.DisplayName.Where(char.IsLetterOrDigit).Take(2).Select(char.ToUpperInvariant).DefaultIfEmpty('P').ToArray())</span>
+                    <span class="avatar avatar-lg">@(new string(Model.DisplayName.Where(char.IsLetterOrDigit).Take(2).Select(char.ToUpperInvariant).DefaultIfEmpty('P').ToArray()))</span>
                     <div>
                         <div class="h3 mb-1">@Model.DisplayName</div>
                         <div class="text-secondary">@Model.Email</div>

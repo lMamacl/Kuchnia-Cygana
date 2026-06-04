@@ -129,6 +129,18 @@ public sealed class AccountController : Controller
     }
 
     [AllowAnonymous]
+    [HttpGet]
+    public IActionResult StaffLogin(string? returnUrl = null)
+    {
+        if (!env.IsDevelopment())
+        {
+            return RedirectToAction(nameof(Login), new { returnUrl });
+        }
+
+        return View(new LoginViewModel { ReturnUrl = returnUrl });
+    }
+
+    [AllowAnonymous]
     [HttpPost]
     public async Task<IActionResult> Login(LoginViewModel model, string? returnUrl = null)
     {
