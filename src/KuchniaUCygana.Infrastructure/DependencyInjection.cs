@@ -1,7 +1,6 @@
 using FluentMigrator.Runner;
 using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Interfaces;
-using KuchniaUCygana.Infrastructure.Auth;
 using KuchniaUCygana.Infrastructure.Cache;
 using KuchniaUCygana.Infrastructure.ExternalServices.AI;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
@@ -9,6 +8,8 @@ using KuchniaUCygana.Infrastructure.ExternalServices.Stripe;
 using KuchniaUCygana.Infrastructure.FileStorage;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
+using KuchniaUCygana.Infrastructure.Persistence.Seeding;
+using KuchniaUCygana.Infrastructure.Persistence.TypeHandlers;
 using KuchniaUCygana.Infrastructure.Pdf;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,22 +18,31 @@ namespace KuchniaUCygana.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Configures and registers infrastructure services, persistence, migrations, caching, and external integrations into the provided service collection.
+    /// </summary>
+    /// <returns>The input <see cref="IServiceCollection"/> with infrastructure services registered.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the configuration does not contain a "DefaultConnection" connection string.</exception>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddSingleton<IDbConnectionFactory, SqliteConnectionFactory>();
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+        DapperTypeHandlers.Register();
+
+        services.AddSingleton<IDbConnectionFactory>(_ => new SqlServerConnectionFactory(connectionString));
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
+        services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
 
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(
                 builder => builder
-                    .AddSQLite()
-                    .WithGlobalConnectionString(configuration.GetConnectionString("DefaultConnection"))
+                    .AddSqlServer()
+                    .WithGlobalConnectionString(connectionString)
                     .ScanIn(typeof(DependencyInjection).Assembly).For.Migrations())
             .AddLogging(loggingBuilder => loggingBuilder.AddFluentMigratorConsole());
 
-        services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
-        services.AddScoped<IJwtService, JwtService>();
         services.AddMemoryCache();
         services.AddSingleton<ICacheService, MemoryCacheService>();
         services.AddScoped<IPaymentService, StripePaymentService>();

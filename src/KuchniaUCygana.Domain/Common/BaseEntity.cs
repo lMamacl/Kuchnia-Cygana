@@ -1,25 +1,28 @@
 using System;
 using System.Collections.Generic;
-using ServiceStack.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common.Events;
 
 namespace KuchniaUCygana.Domain.Common;
 
 public abstract class BaseEntity<TId> : IEquatable<BaseEntity<TId>>
 {
-    [AutoIncrement]
-    [PrimaryKey]
+    [Key]
     public TId Id { get; set; } = default!;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? UpdatedAt { get; set; }
 
-    // ServiceStack.OrmLite ignores private fields by default
     private readonly List<IDomainEvent> _domainEvents = new();
     
-    [Ignore]
+    [NotMapped]
     public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
+    /// <summary>
+    /// Adds the specified domain event to the entity's internal list of domain events.
+    /// </summary>
+    /// <param name="domainEvent">The domain event to add.</param>
     public void AddDomainEvent(IDomainEvent domainEvent)
     {
         _domainEvents.Add(domainEvent);

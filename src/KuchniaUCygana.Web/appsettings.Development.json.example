@@ -1,17 +1,19 @@
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Data Source=kuchniaucygana_dev.db"
+    "DefaultConnection": "Server=localhost,1433;Database=KuchniaUCygana_Dev;User Id=sa;Password=YourStrong!Passw0rd;Encrypt=True;TrustServerCertificate=True;"
   },
-  "JwtSettings": {
-    "SecretKey": "--- USTAW PRZEZ: dotnet user-secrets set JwtSettings:SecretKey TWOJ_KLUCZ ---",
-    "Issuer": "KuchniaUCygana",
-    "Audience": "KuchniaUCyganaUsers",
-    "ExpiryHours": 8
+  "DatabaseSeeding": {
+    "Enabled": true,
+    "Mode": "Both",
+    "Profile": "MinimalRealistic"
   },
   "Stripe": {
     "SecretKey": ""
   },
   "OpenAI": {
     "ApiKey": ""
+  },
+  "servicestack": {
+    "license": ""
   }
 }

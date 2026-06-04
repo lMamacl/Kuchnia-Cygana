@@ -18,7 +18,8 @@ secrets.json
 .env
 
 src/KuchniaUCygana.Web/wwwroot/uploads/
-
+src/KuchniaUCygana.Web/Keys
+/Keys
 coverage/
 *.cobertura.xml
 TestResults/
@@ -34,3 +35,5 @@ extract.py
 
 # Katalog z pomocniczymi notatkami AI (wyodrębniony tekst z pdf modułów)
 .ai_docs/
+
+
