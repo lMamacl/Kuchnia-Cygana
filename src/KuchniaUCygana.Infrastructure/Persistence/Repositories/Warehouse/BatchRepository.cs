@@ -94,10 +94,13 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
         var page = Math.Max(query.Page, 1);
         var pageSize = Math.Clamp(query.PageSize, 1, 200);
         var offset = (page - 1) * pageSize;
-        var parameters = CreateFefoParameters(query, offset, pageSize);
+        var search = CreateSearchParameters(query.Search);
+        var parameters = CreateFefoParameters(query, offset, pageSize, search);
+        var sql = CreateFefoRowsPagedQuerySql(search.UseContains);
 
-        var totalCount = await db.ExecuteScalarAsync<int>($"{FefoRowsCte} {FefoRowsCountSql}", parameters);
-        var items = await db.QueryAsync<FefoReportRow>($"{FefoRowsCte} {FefoRowsPageSql}", parameters);
+        using var multi = await db.QueryMultipleAsync(sql, parameters);
+        var totalCount = await multi.ReadSingleAsync<int>();
+        var items = (await multi.ReadAsync<FefoReportRow>()).ToList();
 
         return (items, totalCount);
     }
@@ -106,8 +109,10 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
     {
         using var db = Factory.CreateConnection();
 
-        var parameters = CreateFefoParameters(query, offset: 0, pageSize: int.MaxValue);
-        return await db.QueryAsync<FefoReportRow>($"{FefoRowsCte} {FefoRowsAllSql}", parameters);
+        var search = CreateSearchParameters(query.Search);
+        var parameters = CreateFefoParameters(query, offset: 0, pageSize: int.MaxValue, search);
+        var sql = CreateFefoRowsAllQuerySql(search.UseContains);
+        return await db.QueryAsync<FefoReportRow>(sql, parameters);
     }
 
     public async Task<(IEnumerable<BatchInventoryRow> Items, int TotalCount)> GetBatchInventoryPageAsync(
@@ -118,44 +123,45 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
         var page = Math.Max(query.Page, 1);
         var pageSize = Math.Clamp(query.PageSize, 1, 200);
         var offset = (page - 1) * pageSize;
-        var search = string.IsNullOrWhiteSpace(query.Search)
-            ? null
-            : $"%{query.Search.Trim()}%";
+        var search = CreateSearchParameters(query.Search);
         var legacyCategory = string.IsNullOrWhiteSpace(query.LegacyCategory)
             ? null
             : query.LegacyCategory.Trim();
 
         var parameters = new
         {
-            search,
+            searchExact = search.Exact,
+            searchPrefix = search.Prefix,
+            searchContains = search.Contains,
             categoryId = query.CategoryId,
             legacyCategory,
             offset,
             pageSize,
         };
 
-        var totalCount = await db.ExecuteScalarAsync<int>(
-            $"{BatchInventoryRowsCte} {BatchInventoryRowsCountSql}",
-            parameters);
-        var items = await db.QueryAsync<BatchInventoryRow>(
-            $"{BatchInventoryRowsCte} {BatchInventoryRowsPageSql}",
-            parameters);
+        var sql = CreateBatchInventoryRowsPagedQuerySql(search.UseContains);
+        using var multi = await db.QueryMultipleAsync(sql, parameters);
+        var totalCount = await multi.ReadSingleAsync<int>();
+        var items = (await multi.ReadAsync<BatchInventoryRow>()).ToList();
 
         return (items, totalCount);
     }
 
-    private static object CreateFefoParameters(FefoReportQuery query, int offset, int pageSize)
+    private static object CreateFefoParameters(
+        FefoReportQuery query,
+        int offset,
+        int pageSize,
+        SearchParameters search)
     {
-        var search = string.IsNullOrWhiteSpace(query.Search)
-            ? null
-            : $"%{query.Search.Trim()}%";
         var status = string.IsNullOrWhiteSpace(query.Status)
             ? null
             : query.Status.Trim();
 
         return new
         {
-            search,
+            searchExact = search.Exact,
+            searchPrefix = search.Prefix,
+            searchContains = search.Contains,
             status,
             now = DateTimeOffset.UtcNow,
             offset,
@@ -163,33 +169,90 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
         };
     }
 
-    private const string FefoRowsCte = """
-        WITH FefoRows AS (
-            SELECT
-                b.[StockItemId],
-                si.[Name] AS [StockItemName],
-                b.[Id] AS [BatchId],
-                COALESCE(b.[SupplierBatchNumber], '') AS [BatchNumber],
-                b.[ExpiryDate],
-                b.[CurrentQuantity] AS [Quantity],
-                CASE
-                    WHEN b.[ExpiryDate] IS NULL THEN NULL
-                    ELSE DATEDIFF(day, @now, b.[ExpiryDate])
-                END AS [DaysToExpiry],
-                CASE
-                    WHEN b.[ExpiryDate] IS NOT NULL AND b.[ExpiryDate] <= @now THEN 'Expired'
-                    WHEN b.[ExpiryDate] IS NOT NULL AND DATEDIFF(day, @now, b.[ExpiryDate]) <= 3 THEN 'Critical'
-                    WHEN b.[ExpiryDate] IS NOT NULL AND DATEDIFF(day, @now, b.[ExpiryDate]) <= 7 THEN 'Warning'
-                    ELSE 'Safe'
-                END AS [Status]
-            FROM [Batches] b
-            INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId]
-            WHERE b.[IsDeleted] = 0
-              AND b.[IsDepleted] = 0
-              AND si.[IsDeleted] = 0
-              AND (@search IS NULL OR si.[Name] LIKE @search OR b.[SupplierBatchNumber] LIKE @search)
-        )
-        """;
+    private static SearchParameters CreateSearchParameters(string? value)
+    {
+        var term = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        return new SearchParameters(
+            term,
+            term is null ? null : $"{term}%",
+            term is { Length: >= 3 } ? $"%{term}%" : null,
+            term is { Length: >= 3 });
+    }
+
+    private static string CreateFefoRowsPagedQuerySql(bool includeContains)
+    {
+        var searchPredicate = includeContains
+            ? BatchSearchPredicateContainsSql
+            : BatchSearchPredicatePrefixSql;
+
+        return $"""
+            {CreateFefoRowsTempTableSql(searchPredicate)}
+            {FefoRowsCountSql}
+            {FefoRowsPageSql}
+            DROP TABLE #FefoRows;
+            """;
+    }
+
+    private static string CreateFefoRowsAllQuerySql(bool includeContains)
+    {
+        var searchPredicate = includeContains
+            ? BatchSearchPredicateContainsSql
+            : BatchSearchPredicatePrefixSql;
+
+        return $"""
+            {CreateFefoRowsTempTableSql(searchPredicate)}
+            {FefoRowsAllSql}
+            DROP TABLE #FefoRows;
+            """;
+    }
+
+    private static string CreateBatchInventoryRowsPagedQuerySql(bool includeContains)
+    {
+        var searchPredicate = includeContains
+            ? BatchSearchPredicateContainsSql
+            : BatchSearchPredicatePrefixSql;
+
+        return $"""
+            {CreateBatchInventoryRowsTempTableSql(searchPredicate)}
+            {BatchInventoryRowsCountSql}
+            {BatchInventoryRowsPageSql}
+            DROP TABLE #BatchInventoryRows;
+            """;
+    }
+
+    private static string CreateFefoRowsTempTableSql(string searchPredicate)
+    {
+        return $"""
+            WITH FefoRows AS (
+                SELECT
+                    b.[StockItemId],
+                    si.[Name] AS [StockItemName],
+                    b.[Id] AS [BatchId],
+                    COALESCE(b.[SupplierBatchNumber], '') AS [BatchNumber],
+                    b.[ExpiryDate],
+                    b.[CurrentQuantity] AS [Quantity],
+                    CASE
+                        WHEN b.[ExpiryDate] IS NULL THEN NULL
+                        ELSE DATEDIFF(day, @now, b.[ExpiryDate])
+                    END AS [DaysToExpiry],
+                    CASE
+                        WHEN b.[ExpiryDate] IS NOT NULL AND b.[ExpiryDate] <= @now THEN 'Expired'
+                        WHEN b.[ExpiryDate] IS NOT NULL AND DATEDIFF(day, @now, b.[ExpiryDate]) <= 3 THEN 'Critical'
+                        WHEN b.[ExpiryDate] IS NOT NULL AND DATEDIFF(day, @now, b.[ExpiryDate]) <= 7 THEN 'Warning'
+                        ELSE 'Safe'
+                    END AS [Status]
+                FROM [Batches] b
+                INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId]
+                WHERE b.[IsDeleted] = 0
+                  AND b.[IsDepleted] = 0
+                  AND si.[IsDeleted] = 0
+                  {searchPredicate}
+            )
+            SELECT *
+            INTO #FefoRows
+            FROM FefoRows;
+            """;
+    }
 
     private const string FefoRowsWhereSql = """
         WHERE (@status IS NULL OR [Status] = @status)
@@ -197,7 +260,7 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
 
     private const string FefoRowsCountSql = $"""
         SELECT COUNT(*)
-        FROM FefoRows
+        FROM #FefoRows
         {FefoRowsWhereSql};
         """;
 
@@ -211,53 +274,77 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
 
     private const string FefoRowsAllSql = $"""
         SELECT *
-        FROM FefoRows
+        FROM #FefoRows
         {FefoRowsWhereSql}
         {FefoRowsOrderSql};
         """;
 
     private const string FefoRowsPageSql = $"""
         SELECT *
-        FROM FefoRows
+        FROM #FefoRows
         {FefoRowsWhereSql}
         {FefoRowsOrderSql}
         OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
         """;
 
-    private const string BatchInventoryRowsCte = """
-        WITH BatchInventoryRows AS (
-            SELECT
-                b.[Id] AS [BatchId],
-                b.[StockItemId],
-                si.[Name] AS [StockItemName],
-                COALESCE(b.[SupplierBatchNumber], '') AS [BatchNumber],
-                si.[WarehouseCategoryId] AS [CategoryId],
-                wc.[Name] AS [Category],
-                b.[CurrentQuantity],
-                uom.[Symbol] AS [UnitSymbol],
-                b.[ExpiryDate],
-                b.[ReceivedDate]
-            FROM [Batches] b
-            INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId]
-            INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
-            INNER JOIN [UnitsOfMeasure] uom ON uom.[Id] = si.[DefaultUnitOfMeasureId]
-            WHERE b.[IsDeleted] = 0
-              AND b.[IsDepleted] = 0
-              AND b.[CurrentQuantity] > 0
-              AND si.[IsDeleted] = 0
-              AND (@search IS NULL OR si.[Name] LIKE @search OR b.[SupplierBatchNumber] LIKE @search)
+    private static string CreateBatchInventoryRowsTempTableSql(string searchPredicate)
+    {
+        return $"""
+            WITH BatchInventoryRows AS (
+                SELECT
+                    b.[Id] AS [BatchId],
+                    b.[StockItemId],
+                    si.[Name] AS [StockItemName],
+                    COALESCE(b.[SupplierBatchNumber], '') AS [BatchNumber],
+                    si.[WarehouseCategoryId] AS [CategoryId],
+                    wc.[Name] AS [Category],
+                    b.[CurrentQuantity],
+                    uom.[Symbol] AS [UnitSymbol],
+                    b.[ExpiryDate],
+                    b.[ReceivedDate]
+                FROM [Batches] b
+                INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId]
+                INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
+                INNER JOIN [UnitsOfMeasure] uom ON uom.[Id] = si.[DefaultUnitOfMeasureId]
+                WHERE b.[IsDeleted] = 0
+                  AND b.[IsDepleted] = 0
+                  AND b.[CurrentQuantity] > 0
+                  AND si.[IsDeleted] = 0
+                  AND (@categoryId IS NULL OR si.[WarehouseCategoryId] = @categoryId)
+                  AND (@legacyCategory IS NULL OR @categoryId IS NOT NULL OR wc.[Name] = @legacyCategory)
+                  {searchPredicate}
+            )
+            SELECT *
+            INTO #BatchInventoryRows
+            FROM BatchInventoryRows;
+            """;
+    }
+
+    private const string BatchSearchPredicatePrefixSql = """
+        AND (
+                @searchExact IS NULL
+                OR si.[Name] = @searchExact
+                OR si.[Name] LIKE @searchPrefix
+                OR b.[SupplierBatchNumber] = @searchExact
+                OR b.[SupplierBatchNumber] LIKE @searchPrefix
         )
         """;
 
-    private const string BatchInventoryRowsWhereSql = """
-        WHERE (@categoryId IS NULL OR [CategoryId] = @categoryId)
-          AND (@legacyCategory IS NULL OR @categoryId IS NOT NULL OR [Category] = @legacyCategory)
+    private const string BatchSearchPredicateContainsSql = """
+        AND (
+                @searchExact IS NULL
+                OR si.[Name] = @searchExact
+                OR si.[Name] LIKE @searchPrefix
+                OR si.[Name] LIKE @searchContains
+                OR b.[SupplierBatchNumber] = @searchExact
+                OR b.[SupplierBatchNumber] LIKE @searchPrefix
+                OR b.[SupplierBatchNumber] LIKE @searchContains
+        )
         """;
 
-    private const string BatchInventoryRowsCountSql = $"""
+    private const string BatchInventoryRowsCountSql = """
         SELECT COUNT(*)
-        FROM BatchInventoryRows
-        {BatchInventoryRowsWhereSql};
+        FROM #BatchInventoryRows;
         """;
 
     private const string BatchInventoryRowsOrderSql = """
@@ -270,9 +357,14 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
 
     private const string BatchInventoryRowsPageSql = $"""
         SELECT *
-        FROM BatchInventoryRows
-        {BatchInventoryRowsWhereSql}
+        FROM #BatchInventoryRows
         {BatchInventoryRowsOrderSql}
         OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
         """;
+
+    private sealed record SearchParameters(
+        string? Exact,
+        string? Prefix,
+        string? Contains,
+        bool UseContains);
 }

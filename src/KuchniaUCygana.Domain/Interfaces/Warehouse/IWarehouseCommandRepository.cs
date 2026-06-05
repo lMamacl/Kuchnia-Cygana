@@ -12,6 +12,8 @@ public interface IWarehouseCommandRepository
 
     Task<IReadOnlyList<InventoryTransaction>> DeductStockAsync(WarehouseDeductionCommand command);
 
+    Task<IReadOnlyList<InventoryTransaction>> DeductStockByCategoryAsync(WarehouseCategoryDeductionCommand command);
+
     Task<IReadOnlyList<InventoryAdjustmentResult>> ApplyInventoryAsync(
         IEnumerable<InventoryAdjustmentCommand> adjustments,
         string adjustedBy);
@@ -31,7 +33,20 @@ public sealed record WarehouseDeductionCommand(
     string? ReferenceDocument,
     int? BatchId,
     bool ExcludeExpired,
-    bool RequireFullQuantity);
+    bool RequireFullQuantity,
+    string? PerformedBy = null,
+    bool SkipIfReferenceDocumentExists = false);
+
+public sealed record WarehouseCategoryDeductionCommand(
+    int WarehouseCategoryId,
+    decimal Quantity,
+    InventoryTransactionType TransactionType,
+    string Reason,
+    string? ReferenceDocument,
+    bool ExcludeExpired,
+    bool RequireFullQuantity,
+    string? PerformedBy = null,
+    bool SkipIfReferenceDocumentExists = false);
 
 public sealed record InventoryAdjustmentCommand(
     int StockItemId,

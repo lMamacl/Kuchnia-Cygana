@@ -83,8 +83,11 @@ public class InventoryTransactionRepository : BaseRepository<InventoryTransactio
             pageSize,
         };
 
-        var totalCount = await db.ExecuteScalarAsync<int>($"{TransactionRowsCte} {TransactionRowsCountSql}", parameters);
-        var items = await db.QueryAsync<TransactionHistoryRow>($"{TransactionRowsCte} {TransactionRowsPageSql}", parameters);
+        using var multi = await db.QueryMultipleAsync(
+            $"{TransactionRowsCte} {TransactionRowsCountSql} {TransactionRowsCte} {TransactionRowsPageSql}",
+            parameters);
+        var totalCount = await multi.ReadSingleAsync<int>();
+        var items = await multi.ReadAsync<TransactionHistoryRow>();
 
         return (items, totalCount);
     }
@@ -101,11 +104,12 @@ public class InventoryTransactionRepository : BaseRepository<InventoryTransactio
                 it.[QuantityChanged] AS [Quantity],
                 it.[CreatedAt] AS [PerformedAt],
                 COALESCE(it.[Reason], '') AS [Reason],
-                COALESCE(it.[ReferenceDocument], '') AS [ReferenceDocument]
+                COALESCE(it.[ReferenceDocument], '') AS [ReferenceDocument],
+                COALESCE(NULLIF(it.[CreatedBy], ''), NULLIF(it.[UpdatedBy], ''), 'System') AS [PerformedBy]
             FROM [InventoryTransactions] it
             LEFT JOIN [Batches] b ON b.[Id] = it.[BatchId]
             LEFT JOIN [StockItems] si ON si.[Id] = COALESCE(it.[StockItemId], b.[StockItemId])
-            WHERE (@stockItemId IS NULL OR it.[StockItemId] = @stockItemId)
+            WHERE (@stockItemId IS NULL OR COALESCE(it.[StockItemId], b.[StockItemId]) = @stockItemId)
               AND (@transactionType IS NULL OR it.[TransactionType] = @transactionType)
               AND (@fromUtc IS NULL OR it.[CreatedAt] >= @fromUtc)
               AND (@toUtc IS NULL OR it.[CreatedAt] <= @toUtc)

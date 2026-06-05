@@ -345,6 +345,7 @@ public sealed class ProductionController : Controller
                         .ToList();
 
         var labels = new List<PackingLabelDto>();
+        var errors = new List<string>();
         foreach (var id in idList)
         {
             try
@@ -352,12 +353,20 @@ public sealed class ProductionController : Controller
                 var label = await packingService.PrintFoilLabelAsync(id, operatorName);
                 labels.Add(label);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                errors.Add($"Pudelko #{id}: {ex.Message}");
                 // Ignorujemy pojedyncze błędy generowania w pętli bulk
             }
         }
 
+        if (labels.Count == 0 && errors.Count > 0)
+        {
+            TempData["Error"] = "Nie wydrukowano zadnej etykiety: " + string.Join(" | ", errors.Take(3));
+            return RedirectToAction(nameof(FoilPrinting), new { date = returnDate });
+        }
+
+        ViewBag.Errors = errors;
         return View(labels);
     }
 }

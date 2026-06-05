@@ -130,6 +130,44 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task StockItemRepository_SearchStockLookupAsync_ShouldPreferNamePrefixMatches()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var unique = $"Pref-{Guid.NewGuid():N}"[..14];
+        var prefixItemId = await CreateStockItemAsync(connectionFactory, $"{unique}-Alpha");
+        var containsItemId = await CreateStockItemAsync(connectionFactory, $"Other {unique}");
+
+        await InsertBatchAsync(connectionFactory, prefixItemId, "PREF-NAME-1", DateTimeOffset.UtcNow.AddDays(10), false, false);
+        await InsertBatchAsync(connectionFactory, containsItemId, "PREF-NAME-2", DateTimeOffset.UtcNow.AddDays(10), false, false);
+
+        var repository = new StockItemRepository(connectionFactory);
+
+        var result = (await repository.SearchStockLookupAsync(unique, limit: 10, onlyAvailable: false)).ToList();
+
+        result.Should().HaveCount(2);
+        result[0].Name.Should().StartWith(unique);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task StockItemRepository_SearchStockLookupAsync_ShouldFindByBatchNumberPrefix()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var unique = $"LOT-{Guid.NewGuid():N}"[..14];
+        var stockItemId = await CreateStockItemAsync(connectionFactory, "Lookup batch-only product");
+
+        await InsertBatchAsync(connectionFactory, stockItemId, $"{unique}-001", DateTimeOffset.UtcNow.AddDays(10), false, false);
+
+        var repository = new StockItemRepository(connectionFactory);
+
+        var result = (await repository.SearchStockLookupAsync(unique, limit: 10, onlyAvailable: true)).ToList();
+
+        result.Should().ContainSingle()
+            .Which.Id.Should().Be(stockItemId);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task StockItemRepository_GetStockTablePageAsync_ShouldReturnTotalCountAndRequestedPage()
     {
         var connectionFactory = CreateConnectionFactory();
@@ -258,6 +296,29 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
         totalCount.Should().Be(2);
         items.Should().ContainSingle();
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task BatchRepository_GetBatchInventoryPageAsync_ShouldFilterByWarehouseCategoryId()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var unique = $"BatchCat-{Guid.NewGuid():N}"[..18];
+        var meatCategoryItemId = await CreateStockItemAsync(connectionFactory, $"{unique}-Meat", warehouseCategoryId: 1);
+        var dryCategoryItemId = await CreateStockItemAsync(connectionFactory, $"{unique}-Dry", warehouseCategoryId: 4);
+
+        await InsertBatchAsync(connectionFactory, meatCategoryItemId, "BAT-CAT-MEAT", DateTimeOffset.UtcNow.AddDays(5), false, false, currentQuantity: 4m);
+        await InsertBatchAsync(connectionFactory, dryCategoryItemId, "BAT-CAT-DRY", DateTimeOffset.UtcNow.AddDays(6), false, false, currentQuantity: 6m);
+
+        var repository = new BatchRepository(connectionFactory);
+        var query = new BatchInventoryQuery(unique, CategoryId: 4, LegacyCategory: null, Page: 1, PageSize: 10);
+
+        var (items, totalCount) = await repository.GetBatchInventoryPageAsync(query);
+        var page = items.ToList();
+
+        totalCount.Should().Be(1);
+        page.Should().ContainSingle()
+            .Which.CategoryId.Should().Be(4);
     }
 
     [Fact]
@@ -554,6 +615,28 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task InventoryTransactionRepository_GetTransactionHistoryPageAsync_ShouldFilterLegacyRowsByBatchStockItem()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var firstStockItemId = await CreateStockItemAsync(connectionFactory, "History-Legacy-A");
+        var secondStockItemId = await CreateStockItemAsync(connectionFactory, "History-Legacy-B");
+        var firstBatchId = await InsertBatchAsync(connectionFactory, firstStockItemId, "HIST-LEG-A", DateTimeOffset.UtcNow.AddDays(10), false, false);
+        var secondBatchId = await InsertBatchAsync(connectionFactory, secondStockItemId, "HIST-LEG-B", DateTimeOffset.UtcNow.AddDays(10), false, false);
+
+        await InsertInventoryTransactionAsync(connectionFactory, firstBatchId, DateTimeOffset.UtcNow.AddMinutes(-2), "LEGACY-FILTER-A");
+        await InsertInventoryTransactionAsync(connectionFactory, secondBatchId, DateTimeOffset.UtcNow.AddMinutes(-1), "LEGACY-FILTER-B");
+
+        var repository = new InventoryTransactionRepository(connectionFactory);
+        var query = new TransactionHistoryQuery(firstStockItemId, From: null, To: null, TransactionType: null, Page: 1, PageSize: 25);
+
+        var (items, _) = await repository.GetTransactionHistoryPageAsync(query);
+
+        items.Should().Contain(x => x.ReferenceDocument == "LEGACY-FILTER-A" && x.StockItemId == firstStockItemId);
+        items.Should().NotContain(x => x.ReferenceDocument == "LEGACY-FILTER-B");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task StockItemRepository_GetSmartInventoryAlertRowsAsync_ShouldReturnAggregatedAlerts()
     {
         var connectionFactory = CreateConnectionFactory();
@@ -618,6 +701,8 @@ public sealed class WarehouseRepositoriesSqlServerTests
             new MockDeliveryManifestProvider(),
             new TestApplicationUrlProvider(),
             new TestCurrentUserService(),
+            new ProductionPlanRepository(connectionFactory),
+            new BaseRepository<ProductionPlanItem>(connectionFactory),
             mapper,
             NullLogger<PackingService>.Instance);
     }

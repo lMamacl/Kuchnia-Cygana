@@ -285,7 +285,10 @@ public sealed class ProductionService : IProductionService
             }
             else
             {
-                await ProduceFromLegacyRecipesAsync(planId, pendingItems);
+                throw new InvalidOperationException(
+                    $"Nie mozna wykonac FEFO dla planu produkcji {planId}. " +
+                    $"Brak opublikowanego snapshotu M2 dla dnia {plan.ProductionDate:yyyy-MM-dd}. " +
+                    "Wygeneruj plan z opublikowanego M2; legacy Recipes nie sa dopuszczone w normalnym trybie produkcji.");
             }
         }
 
@@ -447,15 +450,20 @@ public sealed class ProductionService : IProductionService
 
         foreach (var item in pendingItems)
         {
-            var referenceDocument = $"PLAN-{planId}-ITEM-{item.Id}";
-            foreach (var requirement in requirementsByItem[item.Id])
+            foreach (var requirementGroup in requirementsByItem[item.Id].GroupBy(CreateRequirementKey))
             {
-                var reason = $"Produkcja skladowej {requirement.ComponentName} plan {planId}, posilek {item.MealId}";
+                var requirement = requirementGroup.First();
+                var requiredQuantity = requirementGroup.Sum(r => r.RequiredQuantity);
+                var referenceDocument = CreateFefoReferenceDocument(planId, item.Id, requirement);
+                var reason = requirementGroup.Count() == 1
+                    ? $"Produkcja skladowej {requirement.ComponentName} plan {planId}, posilek {item.MealId}"
+                    : $"Produkcja skladnikow plan {planId}, posilek {item.MealId}";
+
                 if (requirement.StockItemId.HasValue)
                 {
                     await _fefoService.DeductByFefoAsync(
                         requirement.StockItemId.Value,
-                        requirement.RequiredQuantity,
+                        requiredQuantity,
                         reason,
                         referenceDocument);
                 }
@@ -463,13 +471,13 @@ public sealed class ProductionService : IProductionService
                 {
                     await _fefoService.DeductByFefoCategoryAsync(
                         requirement.WarehouseCategoryId!.Value,
-                        requirement.RequiredQuantity,
+                        requiredQuantity,
                         reason,
                         referenceDocument);
                 }
             }
 
-            await MarkItemFefoDeductedAsync(item, referenceDocument);
+            await MarkItemFefoDeductedAsync(item, $"P{planId}-I{item.Id}-FEFO");
         }
     }
 
@@ -486,7 +494,9 @@ public sealed class ProductionService : IProductionService
         var snapshotItem = TryDeserializeSnapshotItem(item);
         if (snapshotItem is null)
         {
-            return;
+            throw new InvalidOperationException(
+                $"Nie mozna zatwierdzic gotowania pozycji {item.Id} ({item.MealName}). " +
+                "Brak snapshotu M2 z wymaganiami opakowan. Wygeneruj plan z opublikowanego M2 przed zatwierdzeniem produkcji.");
         }
 
         var requirements = BuildPackagingRequirements(snapshotItem, actualQuantity).ToList();
@@ -525,15 +535,26 @@ public sealed class ProductionService : IProductionService
                 "Nie mozna zatwierdzic gotowania. Braki opakowan: " + string.Join("; ", shortages));
         }
 
-        var referenceDocument = $"PLAN-{item.ProductionPlanId}-ITEM-{item.Id}-PACKAGING";
-        foreach (var requirement in requirements.Where(r => r.RequiredQuantity > 0))
+        var groupedRequirements = requirements
+            .Where(r => r.RequiredQuantity > 0)
+            .GroupBy(CreatePackagingRequirementKey)
+            .Select(group => new
+            {
+                Requirement = group.First(),
+                RequiredQuantity = group.Sum(r => r.RequiredQuantity),
+            })
+            .ToList();
+
+        foreach (var group in groupedRequirements)
         {
+            var requirement = group.Requirement;
+            var referenceDocument = CreatePackagingReferenceDocument(item, requirement);
             var reason = $"Opakowania po gotowaniu plan {item.ProductionPlanId}, posilek {item.MealId}";
             if (requirement.StockItemId.HasValue)
             {
                 await _fefoService.DeductByFefoAsync(
                     requirement.StockItemId.Value,
-                    requirement.RequiredQuantity,
+                    group.RequiredQuantity,
                     reason,
                     referenceDocument);
             }
@@ -541,14 +562,14 @@ public sealed class ProductionService : IProductionService
             {
                 await _fefoService.DeductByFefoCategoryAsync(
                     requirement.WarehouseCategoryId!.Value,
-                    requirement.RequiredQuantity,
+                    group.RequiredQuantity,
                     reason,
                     referenceDocument);
             }
         }
 
         item.PackagingDeductedAt = DateTimeOffset.UtcNow;
-        item.PackagingReferenceDocument = referenceDocument;
+        item.PackagingReferenceDocument = $"P{item.ProductionPlanId}-I{item.Id}-PACK";
     }
 
     private static CookingCardDto BuildCookingCardFromSnapshot(
@@ -805,6 +826,21 @@ public sealed class ProductionService : IProductionService
         => requirement.StockItemId.HasValue
             ? $"S:{requirement.StockItemId.Value}"
             : $"C:{requirement.WarehouseCategoryId!.Value}";
+
+    private static string CreateFefoReferenceDocument(
+        int planId,
+        int planItemId,
+        SnapshotIngredientRequirement requirement)
+        => requirement.StockItemId.HasValue
+            ? $"P{planId}-I{planItemId}-S{requirement.StockItemId.Value}"
+            : $"P{planId}-I{planItemId}-C{requirement.WarehouseCategoryId!.Value}";
+
+    private static string CreatePackagingReferenceDocument(
+        ProductionPlanItem item,
+        PackagingRequirement requirement)
+        => requirement.StockItemId.HasValue
+            ? $"P{item.ProductionPlanId}-I{item.Id}-PK-S{requirement.StockItemId.Value}"
+            : $"P{item.ProductionPlanId}-I{item.Id}-PK-C{requirement.WarehouseCategoryId!.Value}";
 
     private async Task MarkItemFefoDeductedAsync(ProductionPlanItem item, string referenceDocument)
     {

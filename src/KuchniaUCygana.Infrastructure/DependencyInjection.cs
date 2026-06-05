@@ -160,7 +160,6 @@ public static class DependencyInjection
         services.AddScoped<IPackingBagService, Application.Services.PackingBagService>();
         services.AddScoped<IPackingIncidentService, Application.Services.PackingIncidentService>();
         services.AddScoped<IBoxLabelService, Application.Services.BoxLabelService>();
-        services.AddScoped<ICookingSessionService, Application.Services.CookingSessionService>();
         services.AddScoped<ILoadingService, Application.Services.LoadingService>();
         services.AddScoped<IManifestService>(sp => (Application.Services.LoadingService)sp.GetRequiredService<ILoadingService>());
         services.AddScoped<ITemperatureService, Application.Services.TemperatureService>();

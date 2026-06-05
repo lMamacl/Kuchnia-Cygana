@@ -200,26 +200,124 @@ public sealed class PackingServiceRouteAssignmentTests
         var sessionRepository = new InMemoryPackingSessionRepository();
         var bagRepository = new InMemoryPackingBagRepository();
         var itemRepository = new InMemoryRepository<PackingItem>();
+        var productionPlanItemRepository = new InMemoryRepository<ProductionPlanItem>();
         var boxLabelRepository = new InMemoryBoxLabelRepository();
+        var productionItem = new ProductionPlanItem
+        {
+            ProductionPlanId = 10,
+            MealId = 501,
+            MealName = "Test meal",
+            DietVariantId = 1,
+            Status = ProductionItemStatus.Cooked,
+            PackagingDeductedAt = DateTimeOffset.UtcNow,
+        };
+        productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
         var service = CreateService(
             sessionRepository,
             bagRepository,
             new ReorderedRouteManifestProvider(),
             new CalendarAwareOrderProvider(date),
             itemRepository,
-            boxLabelRepository: boxLabelRepository);
+            boxLabelRepository: boxLabelRepository,
+            productionPlanItemRepository: productionPlanItemRepository);
         var (_, _, item) = await CreateSessionWithItemAsync(
             date,
             sessionRepository,
             bagRepository,
             itemRepository,
-            PackingItemStatus.Pending);
+            PackingItemStatus.Pending,
+            productionPlanItemId: productionItem.Id);
 
         await service.PrintFoilLabelAsync(item.Id, "kitchen");
         var act = async () => await service.PrintFoilLabelAsync(item.Id, "kitchen");
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Powód redruku*");
+    }
+
+    [Fact]
+    public async Task PrintFoilLabelAsync_RejectsItemWithoutCookedProductionStatus()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var productionPlanItemRepository = new InMemoryRepository<ProductionPlanItem>();
+        var boxLabelRepository = new InMemoryBoxLabelRepository();
+        var productionItem = new ProductionPlanItem
+        {
+            ProductionPlanId = 10,
+            MealId = 501,
+            MealName = "Test meal",
+            DietVariantId = 1,
+            Status = ProductionItemStatus.Cooking,
+            PackagingDeductedAt = DateTimeOffset.UtcNow,
+        };
+        productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            boxLabelRepository: boxLabelRepository,
+            productionPlanItemRepository: productionPlanItemRepository);
+        var (_, _, item) = await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Pending,
+            productionPlanItemId: productionItem.Id);
+
+        var act = async () => await service.PrintFoilLabelAsync(item.Id, "kitchen");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*potwierdzonego ugotowania*");
+        (await boxLabelRepository.GetAllAsync()).Should().BeEmpty();
+        item.Status.Should().Be(PackingItemStatus.Pending);
+    }
+
+    [Fact]
+    public async Task PrintFoilLabelAsync_RejectsItemWithoutPackagingDeduction()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var productionPlanItemRepository = new InMemoryRepository<ProductionPlanItem>();
+        var boxLabelRepository = new InMemoryBoxLabelRepository();
+        var productionItem = new ProductionPlanItem
+        {
+            ProductionPlanId = 10,
+            MealId = 501,
+            MealName = "Test meal",
+            DietVariantId = 1,
+            Status = ProductionItemStatus.Cooked,
+        };
+        productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            boxLabelRepository: boxLabelRepository,
+            productionPlanItemRepository: productionPlanItemRepository);
+        var (_, _, item) = await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Pending,
+            productionPlanItemId: productionItem.Id);
+
+        var act = async () => await service.PrintFoilLabelAsync(item.Id, "kitchen");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*opakowania*");
+        (await boxLabelRepository.GetAllAsync()).Should().BeEmpty();
+        item.Status.Should().Be(PackingItemStatus.Pending);
     }
 
     [Fact]
@@ -427,13 +525,31 @@ public sealed class PackingServiceRouteAssignmentTests
         var sessionRepository = new InMemoryPackingSessionRepository();
         var bagRepository = new InMemoryPackingBagRepository();
         var itemRepository = new InMemoryRepository<PackingItem>();
+        var productionPlanRepository = new InMemoryProductionPlanRepository();
+        var plan = new ProductionPlan
+        {
+            ProductionDate = date,
+            Status = ProductionPlanStatus.Draft,
+        };
+        plan.Id = await productionPlanRepository.InsertAsync(plan);
+        productionPlanRepository.AddPlanItem(new ProductionPlanItem
+        {
+            Id = 123,
+            ProductionPlanId = plan.Id,
+            MealId = 9001,
+            MealName = "Kurczak z ryzem",
+            DietVariantId = 42,
+            Status = ProductionItemStatus.Cooked,
+            PackagingDeductedAt = DateTimeOffset.UtcNow,
+        });
         var service = CreateService(
             sessionRepository,
             bagRepository,
             new ReorderedRouteManifestProvider(),
             new SingleMealOrderProvider(date),
             itemRepository,
-            dietProvider: new SingleMealDietDataProvider(date));
+            dietProvider: new SingleMealDietDataProvider(date),
+            productionPlanRepository: productionPlanRepository);
         var session = new PackingSession
         {
             PackingDate = date,
@@ -455,6 +571,7 @@ public sealed class PackingServiceRouteAssignmentTests
         stored.PackingBagId.Should().NotBeNull();
         stored.MealId.Should().Be(9001);
         stored.MealName.Should().Be("Kurczak z ryzem");
+        stored.ProductionPlanItemId.Should().Be(123);
     }
 
     [Fact]
@@ -533,7 +650,8 @@ public sealed class PackingServiceRouteAssignmentTests
         PackingStatus sessionStatus = PackingStatus.Pending,
         PackingBagStatus bagStatus = PackingBagStatus.Pending,
         int deliveryCalendarId = 100,
-        int orderId = 1)
+        int orderId = 1,
+        int? productionPlanItemId = null)
     {
         var session = new PackingSession
         {
@@ -562,6 +680,7 @@ public sealed class PackingServiceRouteAssignmentTests
             MealId = 501,
             MealName = "Test meal",
             DietVariantId = 1,
+            ProductionPlanItemId = productionPlanItemId,
             BoxCode = $"BOX-{session.Id:D6}-01",
             Status = itemStatus,
             PackedAt = itemStatus == PackingItemStatus.Packed ? DateTimeOffset.UtcNow : null,
@@ -582,7 +701,9 @@ public sealed class PackingServiceRouteAssignmentTests
         IRepository<PackingLabel>? labelRepository = null,
         IRepository<PackingManifest>? manifestRepository = null,
         IBoxLabelRepository? boxLabelRepository = null,
-        IDietDataProvider? dietProvider = null)
+        IDietDataProvider? dietProvider = null,
+        IProductionPlanRepository? productionPlanRepository = null,
+        IRepository<ProductionPlanItem>? productionPlanItemRepository = null)
     {
         var mapperConfiguration = new MapperConfiguration(
             cfg => cfg.AddProfile<ProductionProfile>(),
@@ -601,6 +722,8 @@ public sealed class PackingServiceRouteAssignmentTests
             manifestProvider,
             new TestApplicationUrlProvider(),
             new TestCurrentUserService(),
+            productionPlanRepository ?? new InMemoryProductionPlanRepository(),
+            productionPlanItemRepository ?? new InMemoryRepository<ProductionPlanItem>(),
             mapperConfiguration.CreateMapper(),
             NullLogger<PackingService>.Instance);
     }
@@ -1134,6 +1257,69 @@ public sealed class PackingServiceRouteAssignmentTests
         public Task<FoilLabelSummary> GetFoilLabelSummaryAsync(DateOnly date)
         {
             return Task.FromResult(new FoilLabelSummary());
+        }
+    }
+
+    private sealed class InMemoryProductionPlanRepository : InMemoryRepository<ProductionPlan>, IProductionPlanRepository
+    {
+        private readonly List<ProductionPlanItem> _items = new();
+        private int _nextItemId = 1;
+
+        public void AddPlanItem(ProductionPlanItem item)
+        {
+            if (item.Id <= 0)
+            {
+                item.Id = this._nextItemId++;
+            }
+
+            this._items.Add(item);
+        }
+
+        public Task<ProductionPlan?> GetByDateAsync(DateOnly date)
+        {
+            return Task.FromResult(this.Entities.FirstOrDefault(plan => plan.ProductionDate == date && !plan.IsDeleted));
+        }
+
+        public Task<ProductionPlan?> GetWithItemsAsync(int planId)
+        {
+            return Task.FromResult(this.Entities.FirstOrDefault(plan => plan.Id == planId && !plan.IsDeleted));
+        }
+
+        public Task<IEnumerable<ProductionPlanItem>> GetPlanItemsAsync(int planId)
+        {
+            return Task.FromResult<IEnumerable<ProductionPlanItem>>(
+                this._items.Where(item => item.ProductionPlanId == planId && !item.IsDeleted));
+        }
+
+        public Task<(IReadOnlyList<ProductionPlanItem> Items, int TotalCount)> SearchPlanItemsAsync(
+            ProductionPlanItemQuery query)
+        {
+            var items = this._items
+                .Where(item => item.ProductionPlanId == query.PlanId && !item.IsDeleted)
+                .ToList();
+            return Task.FromResult<(
+                IReadOnlyList<ProductionPlanItem> Items,
+                int TotalCount)>((items, items.Count));
+        }
+
+        public Task<ProductionPlanItemSummary> GetPlanItemSummaryAsync(int planId)
+        {
+            var items = this._items.Where(item => item.ProductionPlanId == planId && !item.IsDeleted).ToList();
+            return Task.FromResult(new ProductionPlanItemSummary
+            {
+                TotalItems = items.Count,
+                TotalPlannedQuantity = items.Sum(item => item.PlannedQuantity),
+                TotalCookedQuantity = items.Sum(item => item.CookedQuantity),
+                PlannedItems = items.Count(item => item.Status == ProductionItemStatus.Planned),
+                CookingItems = items.Count(item => item.Status == ProductionItemStatus.Cooking),
+                CookedItems = items.Count(item => item.Status == ProductionItemStatus.Cooked),
+                FailedItems = items.Count(item => item.Status == ProductionItemStatus.Failed),
+                PendingFefoItems = items.Count(item => !item.FefoDeductedAt.HasValue),
+                FefoDeductedItems = items.Count(item => item.FefoDeductedAt.HasValue),
+                PendingPackagingItems = items.Count(item => !item.PackagingDeductedAt.HasValue),
+                PackagingDeductedItems = items.Count(item => item.PackagingDeductedAt.HasValue),
+                SnapshotItems = items.Count(item => !string.IsNullOrWhiteSpace(item.M2SnapshotJson)),
+            });
         }
     }
 

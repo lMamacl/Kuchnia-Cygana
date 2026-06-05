@@ -93,9 +93,17 @@ public sealed class FoilLabelItemDto
 
     public DateTimeOffset? LatestProductLabelPrintedAt { get; set; }
 
-    public bool CanPrint => Status is "Pending";
+    public string? ProductionStatus { get; set; }
 
-    public bool CanReprint => (Status is "FoilPrinted" or "Packed") && ProductLabelPrintCount > 0;
+    public DateTimeOffset? PackagingDeductedAt { get; set; }
 
-    public bool IsBlocked => Status is "Damaged" or "Missing" || IsDamaged;
+    public string? FoilBlockReason { get; set; }
+
+    public bool IsReadyForFoil => string.IsNullOrWhiteSpace(FoilBlockReason);
+
+    public bool CanPrint => Status is "Pending" && IsReadyForFoil;
+
+    public bool CanReprint => (Status is "FoilPrinted" or "Packed") && ProductLabelPrintCount > 0 && IsReadyForFoil;
+
+    public bool IsBlocked => Status is "Damaged" or "Missing" || IsDamaged || !IsReadyForFoil;
 }

@@ -78,8 +78,14 @@ public sealed class ProductionPlanGenerator
 
         // 3. Pobierz opublikowany snapshot planu M2; legacy plan zostaje fallbackiem kompatybilności.
         var snapshot = await _dietDataProvider.GetPublishedPlanSnapshotAsync(productionDate);
-        var dietPlan = snapshot?.Items.Select(MapSnapshotItemToDietPlanEntry).ToList()
-            ?? (await _dietDataProvider.GetPlanForDateAsync(productionDate)).ToList();
+        if (snapshot is null)
+        {
+            throw new InvalidOperationException(
+                $"Brak opublikowanego snapshotu M2 na dzien {productionDate:yyyy-MM-dd}. " +
+                "M3 nie generuje operacyjnego planu produkcji z legacy GetPlanForDateAsync.");
+        }
+
+        var dietPlan = snapshot.Items.Select(MapSnapshotItemToDietPlanEntry).ToList();
         if (dietPlan.Count == 0)
         {
             throw new InvalidOperationException(
@@ -114,7 +120,7 @@ public sealed class ProductionPlanGenerator
         {
             var dietEntry = dietPlan.FirstOrDefault(d =>
                 d.MealId == key.MealId && d.DietVariantId == key.DietVariantId);
-            var snapshotItem = snapshot?.Items.FirstOrDefault(i =>
+            var snapshotItem = snapshot.Items.FirstOrDefault(i =>
                 i.MealId == key.MealId && i.DietVariantId == key.DietVariantId);
             var snapshotPayload = snapshotItem is null ? null : CreateSnapshotPayload(snapshotItem);
 
@@ -141,13 +147,7 @@ public sealed class ProductionPlanGenerator
         }
 
         // 7. Oblicz Food Cost
-        var mealQtyDict = mealQuantities
-            .GroupBy(kv => kv.Key.MealId)
-            .ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
-
-        var foodCostReport = snapshot is null
-            ? await _foodCostCalculator.CalculateAsync(mealQtyDict)
-            : _foodCostCalculator.CalculateFromSnapshot(mealQuantities, snapshot);
+        var foodCostReport = _foodCostCalculator.CalculateFromSnapshot(mealQuantities, snapshot);
 
         return new PlanGenerationResult
         {

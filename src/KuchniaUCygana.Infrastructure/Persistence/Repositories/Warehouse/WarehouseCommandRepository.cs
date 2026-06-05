@@ -53,6 +53,16 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
         return ExecuteInTransactionAsync(async (db, tx) =>
         {
             await EnsureStockItemExistsAsync(db, tx, command.StockItemId);
+            var referenceDocument = NormalizeReferenceDocument(command.ReferenceDocument);
+            if (await ShouldSkipForExistingReferenceAsync(
+                db,
+                tx,
+                referenceDocument,
+                command.SkipIfReferenceDocumentExists))
+            {
+                return Array.Empty<InventoryTransaction>();
+            }
+
             var now = DateTimeOffset.UtcNow;
             var batches = command.BatchId.HasValue
                 ? await LoadSingleBatchForDeductionAsync(db, tx, command.StockItemId, command.BatchId.Value)
@@ -91,7 +101,8 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
                     TransactionType = command.TransactionType,
                     QuantityChanged = -toDeduct,
                     Reason = command.Reason,
-                    ReferenceDocument = command.ReferenceDocument,
+                    ReferenceDocument = referenceDocument,
+                    CreatedBy = NormalizeActor(command.PerformedBy),
                     CreatedAt = now,
                 };
 
@@ -104,6 +115,85 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
             {
                 throw new InvalidOperationException(
                     $"Nie udało się zdjąć pełnej ilości. Brakująca ilość: {remaining:F2}.");
+            }
+
+            return (IReadOnlyList<InventoryTransaction>)transactions;
+        });
+    }
+
+    public Task<IReadOnlyList<InventoryTransaction>> DeductStockByCategoryAsync(WarehouseCategoryDeductionCommand command)
+    {
+        if (command.Quantity <= 0)
+        {
+            throw new ArgumentException("Quantity must be greater than 0.", nameof(command));
+        }
+
+        return ExecuteInTransactionAsync(async (db, tx) =>
+        {
+            await EnsureWarehouseCategoryExistsAsync(db, tx, command.WarehouseCategoryId);
+            var referenceDocument = NormalizeReferenceDocument(command.ReferenceDocument);
+            if (await ShouldSkipForExistingReferenceAsync(
+                db,
+                tx,
+                referenceDocument,
+                command.SkipIfReferenceDocumentExists))
+            {
+                return Array.Empty<InventoryTransaction>();
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var batches = await LoadBatchesForCategoryDeductionAsync(
+                db,
+                tx,
+                command.WarehouseCategoryId,
+                command.ExcludeExpired,
+                now);
+
+            var available = batches.Sum(b => b.CurrentQuantity);
+            if (command.RequireFullQuantity && available < command.Quantity)
+            {
+                throw new InvalidOperationException(
+                    $"Niewystarczajaca ilosc skladnika w kategorii magazynowej. Dostepne: {available:F2}, wymagane: {command.Quantity:F2}.");
+            }
+
+            var remaining = command.Quantity;
+            var transactions = new List<InventoryTransaction>();
+            foreach (var batch in batches)
+            {
+                if (remaining <= 0)
+                {
+                    break;
+                }
+
+                var toDeduct = Math.Min(remaining, batch.CurrentQuantity);
+                if (toDeduct <= 0)
+                {
+                    continue;
+                }
+
+                await UpdateBatchQuantityAsync(db, tx, batch, batch.CurrentQuantity - toDeduct, now);
+
+                var transaction = new InventoryTransaction
+                {
+                    BatchId = batch.Id,
+                    StockItemId = batch.StockItemId,
+                    TransactionType = command.TransactionType,
+                    QuantityChanged = -toDeduct,
+                    Reason = command.Reason,
+                    ReferenceDocument = referenceDocument,
+                    CreatedBy = NormalizeActor(command.PerformedBy),
+                    CreatedAt = now,
+                };
+
+                transaction.Id = await InsertInventoryTransactionAsync(db, tx, transaction);
+                transactions.Add(transaction);
+                remaining -= toDeduct;
+            }
+
+            if (command.RequireFullQuantity && remaining > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Nie udalo sie zdjac pelnej ilosci. Brakujaca ilosc: {remaining:F2}.");
             }
 
             return (IReadOnlyList<InventoryTransaction>)transactions;
@@ -156,11 +246,11 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
 
                 if (difference < 0)
                 {
-                    await ApplyInventoryShortageAsync(db, tx, batches, adjustment, -difference, now);
+                    await ApplyInventoryShortageAsync(db, tx, batches, adjustment, -difference, adjustedBy, now);
                 }
                 else
                 {
-                    await ApplyInventorySurplusAsync(db, tx, adjustment, difference, now);
+                    await ApplyInventorySurplusAsync(db, tx, adjustment, difference, adjustedBy, now);
                 }
 
                 results.Add(new InventoryAdjustmentResult(
@@ -224,6 +314,7 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
                         QuantityChanged = difference,
                         Reason = $"Inwentaryzacja partii #{batch.Id}: {reason}",
                         ReferenceDocument = $"INV-BATCH-{batch.Id}",
+                        CreatedBy = NormalizeActor(adjustedBy),
                         CreatedAt = now,
                     });
 
@@ -305,6 +396,7 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
                     QuantityChanged = 0,
                     Reason = $"Zmiana daty ważności: {oldExpiryDate:dd.MM.yyyy} -> {command.NewExpiryDate:dd.MM.yyyy}. Powód: {command.Reason}",
                     ReferenceDocument = $"LOG-{batch.Id}",
+                    CreatedBy = "Warehouse",
                     CreatedAt = now,
                 });
 
@@ -349,6 +441,75 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
         }
     }
 
+    private static async Task EnsureWarehouseCategoryExistsAsync(
+        IDbConnection db,
+        IDbTransaction tx,
+        int warehouseCategoryId)
+    {
+        var exists = await db.ExecuteScalarAsync<int>(
+            """
+            SELECT COUNT(1)
+            FROM [WarehouseCategories]
+            WHERE [Id] = @warehouseCategoryId
+              AND [IsDeleted] = 0;
+            """,
+            new { warehouseCategoryId },
+            tx);
+
+        if (exists == 0)
+        {
+            throw new InvalidOperationException($"Kategoria magazynowa o ID {warehouseCategoryId} nie istnieje.");
+        }
+    }
+
+    private static async Task<bool> ShouldSkipForExistingReferenceAsync(
+        IDbConnection db,
+        IDbTransaction tx,
+        string? referenceDocument,
+        bool skipIfReferenceDocumentExists)
+    {
+        if (!skipIfReferenceDocumentExists || string.IsNullOrWhiteSpace(referenceDocument))
+        {
+            return false;
+        }
+
+        await AcquireReferenceDocumentLockAsync(db, tx, referenceDocument);
+        var existing = await db.ExecuteScalarAsync<int>(
+            """
+            SELECT COUNT(1)
+            FROM [InventoryTransactions]
+            WHERE [ReferenceDocument] = @referenceDocument;
+            """,
+            new { referenceDocument },
+            tx);
+
+        return existing > 0;
+    }
+
+    private static async Task AcquireReferenceDocumentLockAsync(
+        IDbConnection db,
+        IDbTransaction tx,
+        string referenceDocument)
+    {
+        var lockResult = await db.ExecuteScalarAsync<int>(
+            """
+            DECLARE @result int;
+            EXEC @result = sp_getapplock
+                @Resource = @resource,
+                @LockMode = 'Exclusive',
+                @LockOwner = 'Transaction',
+                @LockTimeout = 10000;
+            SELECT @result;
+            """,
+            new { resource = $"InventoryTransactions:ReferenceDocument:{referenceDocument}" },
+            tx);
+
+        if (lockResult < 0)
+        {
+            throw new InvalidOperationException("Nie udalo sie zablokowac dokumentu referencyjnego operacji magazynowej.");
+        }
+    }
+
     private static async Task<int> InsertBatchAsync(IDbConnection db, IDbTransaction tx, Batch batch)
     {
         return await db.QuerySingleAsync<int>(
@@ -374,11 +535,11 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
             """
             INSERT INTO [InventoryTransactions]
                 ([BatchId], [StockItemId], [TransactionType], [QuantityChanged], [Reason], [ReferenceDocument],
-                 [CreatedAt], [UpdatedAt])
+                 [CreatedBy], [UpdatedBy], [CreatedAt], [UpdatedAt])
             OUTPUT INSERTED.[Id]
             VALUES
                 (@BatchId, @StockItemId, @TransactionType, @QuantityChanged, @Reason, @ReferenceDocument,
-                 @CreatedAt, @UpdatedAt);
+                 @CreatedBy, @UpdatedBy, @CreatedAt, @UpdatedAt);
             """,
             new
             {
@@ -388,6 +549,8 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
                 transaction.QuantityChanged,
                 Reason = Truncate(transaction.Reason, 250),
                 ReferenceDocument = Truncate(transaction.ReferenceDocument, 50),
+                CreatedBy = Truncate(transaction.CreatedBy, 50),
+                UpdatedBy = Truncate(transaction.UpdatedBy, 50),
                 transaction.CreatedAt,
                 transaction.UpdatedAt,
             },
@@ -511,6 +674,39 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
         return batches.ToList();
     }
 
+    private static async Task<List<Batch>> LoadBatchesForCategoryDeductionAsync(
+        IDbConnection db,
+        IDbTransaction tx,
+        int warehouseCategoryId,
+        bool excludeExpired,
+        DateTimeOffset now)
+    {
+        var expiryFilter = excludeExpired
+            ? "AND (b.[ExpiryDate] IS NULL OR b.[ExpiryDate] >= @now)"
+            : string.Empty;
+
+        var batches = await db.QueryAsync<Batch>(
+            $"""
+            SELECT b.*
+            FROM [Batches] b WITH (UPDLOCK, ROWLOCK)
+            INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId]
+            WHERE si.[WarehouseCategoryId] = @warehouseCategoryId
+              AND si.[IsDeleted] = 0
+              AND b.[IsDeleted] = 0
+              AND b.[IsDepleted] = 0
+              AND b.[CurrentQuantity] > 0
+              {expiryFilter}
+            ORDER BY
+              CASE WHEN b.[ExpiryDate] IS NULL THEN 1 ELSE 0 END,
+              b.[ExpiryDate] ASC,
+              b.[Id] ASC;
+            """,
+            new { warehouseCategoryId, now },
+            tx);
+
+        return batches.ToList();
+    }
+
     private static async Task UpdateBatchQuantityAsync(
         IDbConnection db,
         IDbTransaction tx,
@@ -554,6 +750,7 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
         IReadOnlyList<Batch> batches,
         InventoryAdjustmentCommand adjustment,
         decimal shortage,
+        string adjustedBy,
         DateTimeOffset now)
     {
         var remaining = shortage;
@@ -582,6 +779,7 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
                     QuantityChanged = -toDeduct,
                     Reason = $"Inwentaryzacja: {NormalizeReason(adjustment.Reason)}",
                     ReferenceDocument = $"INV-{adjustment.StockItemId}",
+                    CreatedBy = NormalizeActor(adjustedBy),
                     CreatedAt = now,
                 });
 
@@ -599,6 +797,7 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
         IDbTransaction tx,
         InventoryAdjustmentCommand adjustment,
         decimal surplus,
+        string adjustedBy,
         DateTimeOffset now)
     {
         var batch = new Batch
@@ -610,7 +809,7 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
             ReceivedDate = now,
             IsDepleted = false,
             IsDeleted = false,
-            CreatedBy = "Inventory",
+            CreatedBy = NormalizeActor(adjustedBy),
             CreatedAt = now,
         };
 
@@ -626,6 +825,7 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
                 QuantityChanged = surplus,
                 Reason = $"Inwentaryzacja: {NormalizeReason(adjustment.Reason)}",
                 ReferenceDocument = batch.SupplierBatchNumber,
+                CreatedBy = NormalizeActor(adjustedBy),
                 CreatedAt = now,
             });
     }
@@ -633,6 +833,18 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
     private static string NormalizeReason(string reason)
     {
         return string.IsNullOrWhiteSpace(reason) ? "Spis z natury" : reason.Trim();
+    }
+
+    private static string NormalizeActor(string? actor)
+    {
+        return string.IsNullOrWhiteSpace(actor) ? "System" : actor.Trim();
+    }
+
+    private static string? NormalizeReferenceDocument(string? referenceDocument)
+    {
+        return string.IsNullOrWhiteSpace(referenceDocument)
+            ? null
+            : Truncate(referenceDocument.Trim(), 50);
     }
 
     private static string? Truncate(string? value, int maxLength)

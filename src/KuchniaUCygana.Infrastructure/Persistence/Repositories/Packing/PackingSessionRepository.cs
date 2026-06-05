@@ -12,6 +12,9 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 
 public sealed class PackingSessionRepository : BaseRepository<PackingSession>, IPackingSessionRepository
 {
+    private const string FoilReadyCondition =
+        "pi.ProductionPlanItemId IS NOT NULL AND COALESCE(ppi.[Status], -1) = @CookedProductionStatus AND ppi.PackagingDeductedAt IS NOT NULL";
+
     public PackingSessionRepository(IDbConnectionFactory factory) : base(factory)
     {
     }
@@ -256,6 +259,7 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
         FROM PackingItems pi
         INNER JOIN PackingSessions ps ON ps.Id = pi.PackingSessionId
         LEFT JOIN DeliveryRouteStops drs ON ps.DeliveryCalendarId = drs.DeliveryCalendarId AND drs.IsDeleted = 0
+        LEFT JOIN ProductionPlanItems ppi ON ppi.Id = pi.ProductionPlanItemId AND ppi.IsDeleted = 0
         LEFT JOIN LabelCounts labels ON labels.PackingItemId = pi.Id
         WHERE {where};
 
@@ -288,10 +292,13 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
             drs.RouteId,
             drs.SequenceNumber AS StopNumber,
             COALESCE(labels.ProductLabelPrintCount, 0) AS ProductLabelPrintCount,
-            labels.LatestProductLabelPrintedAt
+            labels.LatestProductLabelPrintedAt,
+            ppi.[Status] AS ProductionStatus,
+            ppi.PackagingDeductedAt
         FROM PackingItems pi
         INNER JOIN PackingSessions ps ON ps.Id = pi.PackingSessionId
         LEFT JOIN DeliveryRouteStops drs ON ps.DeliveryCalendarId = drs.DeliveryCalendarId AND drs.IsDeleted = 0
+        LEFT JOIN ProductionPlanItems ppi ON ppi.Id = pi.ProductionPlanItemId AND ppi.IsDeleted = 0
         LEFT JOIN LabelCounts labels ON labels.PackingItemId = pi.Id
         WHERE {where}
         ORDER BY {orderBy}
@@ -308,7 +315,7 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
     {
         using var db = Factory.CreateConnection();
         return await db.QuerySingleAsync<FoilLabelSummary>(
-            """
+            $"""
             WITH LabelCounts AS (
                 SELECT
                     PackingItemId,
@@ -318,19 +325,24 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
             )
             SELECT
                 COUNT(1) AS TotalBoxes,
-                COALESCE(SUM(CASE WHEN pi.Status = 0 THEN 1 ELSE 0 END), 0) AS PendingCount,
+                COALESCE(SUM(CASE WHEN pi.Status = 0 AND pi.FoilPrintedAt IS NULL AND COALESCE(labels.ProductLabelPrintCount, 0) = 0 AND {FoilReadyCondition} THEN 1 ELSE 0 END), 0) AS PendingCount,
                 COALESCE(SUM(CASE WHEN pi.Status IN (1, 2) OR pi.FoilPrintedAt IS NOT NULL OR COALESCE(labels.ProductLabelPrintCount, 0) > 0 THEN 1 ELSE 0 END), 0) AS PrintedCount,
                 COALESCE(SUM(CASE WHEN COALESCE(labels.ProductLabelPrintCount, 0) > 1 THEN 1 ELSE 0 END), 0) AS ReprintCount,
-                COALESCE(SUM(CASE WHEN pi.Status IN (3, 4) OR pi.IsDamaged = 1 THEN 1 ELSE 0 END), 0) AS BlockedCount,
+                COALESCE(SUM(CASE WHEN pi.Status IN (3, 4) OR pi.IsDamaged = 1 OR (pi.Status IN (0, 1) AND NOT ({FoilReadyCondition})) THEN 1 ELSE 0 END), 0) AS BlockedCount,
                 COALESCE(SUM(CASE WHEN pi.Status = 2 THEN 1 ELSE 0 END), 0) AS PackedCount
             FROM PackingItems pi
             INNER JOIN PackingSessions ps ON ps.Id = pi.PackingSessionId
+            LEFT JOIN ProductionPlanItems ppi ON ppi.Id = pi.ProductionPlanItemId AND ppi.IsDeleted = 0
             LEFT JOIN LabelCounts labels ON labels.PackingItemId = pi.Id
             WHERE ps.PackingDate = @date
               AND ps.IsDeleted = 0
               AND pi.IsDeleted = 0;
             """,
-            new { date = date.ToDateTime(TimeOnly.MinValue) });
+            new
+            {
+                date = date.ToDateTime(TimeOnly.MinValue),
+                CookedProductionStatus = (int)ProductionItemStatus.Cooked,
+            });
     }
 
     private static string BuildPackingItemsWhereClause(PackingItemQuery query, DynamicParameters parameters)
@@ -342,6 +354,7 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
             "pi.IsDeleted = 0",
         };
         parameters.Add("PackingDate", query.PackingDate.ToDateTime(TimeOnly.MinValue));
+        parameters.Add("CookedProductionStatus", (int)ProductionItemStatus.Cooked);
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
@@ -361,7 +374,7 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
         switch (NormalizeLabelState(query.LabelState))
         {
             case "missing":
-                clauses.Add("pi.Status = 0 AND pi.FoilPrintedAt IS NULL AND COALESCE(labels.ProductLabelPrintCount, 0) = 0");
+                clauses.Add($"pi.Status = 0 AND pi.FoilPrintedAt IS NULL AND COALESCE(labels.ProductLabelPrintCount, 0) = 0 AND {FoilReadyCondition}");
                 break;
             case "printed":
                 clauses.Add("(pi.FoilPrintedAt IS NOT NULL OR COALESCE(labels.ProductLabelPrintCount, 0) > 0)");
@@ -370,7 +383,7 @@ public sealed class PackingSessionRepository : BaseRepository<PackingSession>, I
                 clauses.Add("COALESCE(labels.ProductLabelPrintCount, 0) > 1");
                 break;
             case "blocked":
-                clauses.Add("(pi.Status IN (3, 4) OR pi.IsDamaged = 1)");
+                clauses.Add($"(pi.Status IN (3, 4) OR pi.IsDamaged = 1 OR (pi.Status IN (0, 1) AND NOT ({FoilReadyCondition})))");
                 break;
         }
 

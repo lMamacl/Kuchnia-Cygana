@@ -21,18 +21,21 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
 
         return await db.QueryAsync<StockItem>(
             """
+            WITH ActiveBatchTotals AS (
+                SELECT
+                    b.[StockItemId],
+                    SUM(b.[CurrentQuantity]) AS [TotalQuantity]
+                FROM [Batches] b
+                WHERE b.[IsDepleted] = 0
+                  AND b.[IsDeleted] = 0
+                GROUP BY b.[StockItemId]
+            )
             SELECT si.*
             FROM [StockItems] si
-            OUTER APPLY (
-                SELECT COALESCE(SUM(b.[CurrentQuantity]), 0) AS TotalQuantity
-                FROM [Batches] b
-                WHERE b.[StockItemId] = si.[Id]
-                  AND b.[IsDepleted] = 0
-                  AND b.[IsDeleted] = 0
-            ) totals
+            LEFT JOIN ActiveBatchTotals totals ON totals.[StockItemId] = si.[Id]
             WHERE si.[IsDeleted] = 0
               AND si.[MinimumLevel] > 0
-              AND totals.TotalQuantity < si.[MinimumLevel];
+              AND COALESCE(totals.[TotalQuantity], 0) < si.[MinimumLevel];
             """);
     }
 
@@ -107,9 +110,7 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
         var page = Math.Max(query.Page, 1);
         var pageSize = Math.Clamp(query.PageSize, 1, 200);
         var offset = (page - 1) * pageSize;
-        var search = string.IsNullOrWhiteSpace(query.Search)
-            ? null
-            : $"%{query.Search.Trim()}%";
+        var search = CreateSearchParameters(query.Search);
         var legacyCategory = string.IsNullOrWhiteSpace(query.LegacyCategory)
             ? null
             : query.LegacyCategory.Trim();
@@ -118,7 +119,9 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
 
         var parameters = new
         {
-            search,
+            searchExact = search.Exact,
+            searchPrefix = search.Prefix,
+            searchContains = search.Contains,
             categoryId = query.CategoryId,
             legacyCategory,
             showExpiredOnly = query.ShowExpiredOnly,
@@ -130,8 +133,10 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
             pageSize,
         };
 
-        var totalCount = await db.ExecuteScalarAsync<int>($"{StockRowsCte} {StockRowsFilterCountSql}", parameters);
-        var items = await db.QueryAsync<StockItemStockRow>($"{StockRowsCte} {StockRowsPageSql}", parameters);
+        var sql = CreateStockRowsPagedQuerySql(search.UseContains);
+        using var multi = await db.QueryMultipleAsync(sql, parameters);
+        var totalCount = await multi.ReadSingleAsync<int>();
+        var items = (await multi.ReadAsync<StockItemStockRow>()).ToList();
 
         return (items, totalCount);
     }
@@ -143,42 +148,16 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
     {
         using var db = _connectionFactory.CreateConnection();
 
-        var search = $"%{query.Trim()}%";
+        var search = CreateSearchParameters(query);
         var safeLimit = Math.Clamp(limit, 1, 50);
 
         return await db.QueryAsync<StockItemStockRow>(
-            $"""
-            {StockRowsCte}
-            SELECT TOP (@limit)
-                [Id],
-                [Name],
-                [BaseIngredientId],
-                [DefaultUnitOfMeasureId],
-                [MinimumLevel],
-                [LeadTimeDays],
-                [CurrentStock],
-                [CategoryId],
-                [Category],
-                [UnitSymbol],
-                [EarliestExpiryDate]
-            FROM StockRows
-            WHERE ([Name] LIKE @search OR EXISTS (
-                    SELECT 1
-                    FROM [Batches] b
-                    WHERE b.[StockItemId] = StockRows.[Id]
-                      AND b.[IsDeleted] = 0
-                      AND b.[IsDepleted] = 0
-                      AND b.[SupplierBatchNumber] LIKE @search
-                ))
-              AND (@onlyAvailable = 0 OR [CurrentStock] > 0)
-            ORDER BY
-                CASE WHEN [Name] LIKE @prefix THEN 0 ELSE 1 END,
-                [Name] ASC;
-            """,
+            CreateStockLookupQuerySql(search.UseContains),
             new
             {
-                search,
-                prefix = $"{query.Trim()}%",
+                searchExact = search.Exact,
+                searchPrefix = search.Prefix,
+                searchContains = search.Contains,
                 limit = safeLimit,
                 onlyAvailable,
             });
@@ -189,24 +168,38 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
         using var db = _connectionFactory.CreateConnection();
 
         return await db.QuerySingleOrDefaultAsync<StockItemStockRow>(
-            $"""
-            {StockRowsCte}
+            """
+            WITH ActiveBatchTotals AS (
+                SELECT
+                    b.[StockItemId],
+                    SUM(b.[CurrentQuantity]) AS [CurrentStock],
+                    MIN(b.[ExpiryDate]) AS [EarliestExpiryDate]
+                FROM [Batches] b
+                WHERE b.[StockItemId] = @stockItemId
+                  AND b.[IsDeleted] = 0
+                  AND b.[IsDepleted] = 0
+                GROUP BY b.[StockItemId]
+            )
             SELECT TOP 1
-                [Id],
-                [Name],
-                [BaseIngredientId],
-                [DefaultUnitOfMeasureId],
-                [MinimumLevel],
-                [LeadTimeDays],
-                [CurrentStock],
-                [CategoryId],
-                [Category],
-                [UnitSymbol],
-                [EarliestExpiryDate]
-            FROM StockRows
-            WHERE [Id] = @stockItemId;
+                si.[Id],
+                si.[Name],
+                si.[BaseIngredientId],
+                si.[DefaultUnitOfMeasureId],
+                si.[MinimumLevel],
+                si.[LeadTimeDays],
+                COALESCE(totals.[CurrentStock], 0) AS [CurrentStock],
+                si.[WarehouseCategoryId] AS [CategoryId],
+                wc.[Name] AS [Category],
+                uom.[Symbol] AS [UnitSymbol],
+                totals.[EarliestExpiryDate]
+            FROM [StockItems] si
+            INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
+            INNER JOIN [UnitsOfMeasure] uom ON uom.[Id] = si.[DefaultUnitOfMeasureId]
+            LEFT JOIN ActiveBatchTotals totals ON totals.[StockItemId] = si.[Id]
+            WHERE si.[Id] = @stockItemId
+              AND si.[IsDeleted] = 0;
             """,
-            new { stockItemId, search = (string?)null });
+            new { stockItemId });
     }
 
     public async Task<IEnumerable<SmartInventoryAlertRow>> GetSmartInventoryAlertRowsAsync(DateTimeOffset now, int? limit = null)
@@ -298,48 +291,241 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
             new { nowUtc, cutoffUtc, limit = safeLimit });
     }
 
-    private const string StockRowsCte = """
-        WITH StockRows AS (
-            SELECT
-                si.[Id],
-                si.[Name],
-                si.[BaseIngredientId],
-                si.[DefaultUnitOfMeasureId],
-                si.[MinimumLevel],
-                si.[LeadTimeDays],
-                COALESCE(totals.[CurrentStock], 0) AS [CurrentStock],
-                si.[WarehouseCategoryId] AS [CategoryId],
-                wc.[Name] AS [Category],
-                uom.[Symbol] AS [UnitSymbol],
-                totals.[EarliestExpiryDate]
-            FROM [StockItems] si
-            INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
-            INNER JOIN [UnitsOfMeasure] uom ON uom.[Id] = si.[DefaultUnitOfMeasureId]
-            OUTER APPLY (
+    private static SearchParameters CreateSearchParameters(string? value)
+    {
+        var term = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        return new SearchParameters(
+            term,
+            term is null ? null : $"{term}%",
+            term is { Length: >= 3 } ? $"%{term}%" : null,
+            term is { Length: >= 3 });
+    }
+
+    private static string CreateStockLookupQuerySql(bool includeContains)
+    {
+        var searchPredicate = includeContains
+            ? StockLookupSearchPredicateContainsSql
+            : StockLookupSearchPredicatePrefixSql;
+
+        return $"""
+            WITH CandidateItems AS (
                 SELECT
-                    COALESCE(SUM(b.[CurrentQuantity]), 0) AS [CurrentStock],
+                    si.[Id],
+                    si.[Name],
+                    si.[BaseIngredientId],
+                    si.[DefaultUnitOfMeasureId],
+                    si.[MinimumLevel],
+                    si.[LeadTimeDays],
+                    si.[WarehouseCategoryId] AS [CategoryId],
+                    wc.[Name] AS [Category],
+                    uom.[Symbol] AS [UnitSymbol],
+                    CASE
+                        WHEN si.[Name] = @searchExact THEN 0
+                        WHEN si.[Name] LIKE @searchPrefix THEN 1
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM [Batches] exactBatches
+                            WHERE exactBatches.[StockItemId] = si.[Id]
+                              AND exactBatches.[IsDeleted] = 0
+                              AND exactBatches.[IsDepleted] = 0
+                              AND exactBatches.[SupplierBatchNumber] = @searchExact
+                        ) THEN 2
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM [Batches] prefixBatches
+                            WHERE prefixBatches.[StockItemId] = si.[Id]
+                              AND prefixBatches.[IsDeleted] = 0
+                              AND prefixBatches.[IsDepleted] = 0
+                              AND prefixBatches.[SupplierBatchNumber] LIKE @searchPrefix
+                        ) THEN 3
+                        ELSE 4
+                    END AS [SearchRank]
+                FROM [StockItems] si
+                INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
+                INNER JOIN [UnitsOfMeasure] uom ON uom.[Id] = si.[DefaultUnitOfMeasureId]
+                WHERE si.[IsDeleted] = 0
+                  {searchPredicate}
+            ),
+            ActiveBatchTotals AS (
+                SELECT
+                    b.[StockItemId],
+                    SUM(b.[CurrentQuantity]) AS [CurrentStock],
                     MIN(b.[ExpiryDate]) AS [EarliestExpiryDate]
                 FROM [Batches] b
-                WHERE b.[StockItemId] = si.[Id]
-                  AND b.[IsDeleted] = 0
+                INNER JOIN CandidateItems candidates ON candidates.[Id] = b.[StockItemId]
+                WHERE b.[IsDeleted] = 0
                   AND b.[IsDepleted] = 0
-            ) totals
-            WHERE si.[IsDeleted] = 0
-              AND (@search IS NULL OR si.[Name] LIKE @search OR EXISTS (
+                GROUP BY b.[StockItemId]
+            )
+            SELECT TOP (@limit)
+                candidates.[Id],
+                candidates.[Name],
+                candidates.[BaseIngredientId],
+                candidates.[DefaultUnitOfMeasureId],
+                candidates.[MinimumLevel],
+                candidates.[LeadTimeDays],
+                COALESCE(totals.[CurrentStock], 0) AS [CurrentStock],
+                candidates.[CategoryId],
+                candidates.[Category],
+                candidates.[UnitSymbol],
+                totals.[EarliestExpiryDate]
+            FROM CandidateItems candidates
+            LEFT JOIN ActiveBatchTotals totals ON totals.[StockItemId] = candidates.[Id]
+            WHERE (@onlyAvailable = 0 OR COALESCE(totals.[CurrentStock], 0) > 0)
+            ORDER BY
+                candidates.[SearchRank],
+                candidates.[Name] ASC,
+                candidates.[Id] ASC;
+            """;
+    }
+
+    private static string CreateStockRowsPagedQuerySql(bool includeContains)
+    {
+        var searchPredicate = includeContains
+            ? StockRowsSearchPredicateContainsSql
+            : StockRowsSearchPredicatePrefixSql;
+
+        return $"""
+            {CreateStockRowsTempTableSql(searchPredicate)}
+            {StockRowsFilterCountSql}
+            {StockRowsPageSql}
+            DROP TABLE #StockRows;
+            """;
+    }
+
+    private static string CreateStockRowsTempTableSql(string searchPredicate)
+    {
+        return $"""
+            WITH FilteredStockItems AS (
+                SELECT
+                    si.[Id],
+                    si.[Name],
+                    si.[BaseIngredientId],
+                    si.[DefaultUnitOfMeasureId],
+                    si.[MinimumLevel],
+                    si.[LeadTimeDays],
+                    si.[WarehouseCategoryId] AS [CategoryId],
+                    wc.[Name] AS [Category],
+                    uom.[Symbol] AS [UnitSymbol]
+                FROM [StockItems] si
+                INNER JOIN [WarehouseCategories] wc ON wc.[Id] = si.[WarehouseCategoryId]
+                INNER JOIN [UnitsOfMeasure] uom ON uom.[Id] = si.[DefaultUnitOfMeasureId]
+                WHERE si.[IsDeleted] = 0
+                  AND (@categoryId IS NULL OR si.[WarehouseCategoryId] = @categoryId)
+                  AND (@legacyCategory IS NULL OR @categoryId IS NOT NULL OR wc.[Name] = @legacyCategory)
+                  {searchPredicate}
+            ),
+            ActiveBatchTotals AS (
+                SELECT
+                    b.[StockItemId],
+                    SUM(b.[CurrentQuantity]) AS [CurrentStock],
+                    MIN(b.[ExpiryDate]) AS [EarliestExpiryDate]
+                FROM [Batches] b
+                INNER JOIN FilteredStockItems fsi ON fsi.[Id] = b.[StockItemId]
+                WHERE b.[IsDeleted] = 0
+                  AND b.[IsDepleted] = 0
+                GROUP BY b.[StockItemId]
+            )
+            SELECT
+                fsi.[Id],
+                fsi.[Name],
+                fsi.[BaseIngredientId],
+                fsi.[DefaultUnitOfMeasureId],
+                fsi.[MinimumLevel],
+                fsi.[LeadTimeDays],
+                COALESCE(totals.[CurrentStock], 0) AS [CurrentStock],
+                fsi.[CategoryId],
+                fsi.[Category],
+                fsi.[UnitSymbol],
+                totals.[EarliestExpiryDate]
+            INTO #StockRows
+            FROM FilteredStockItems fsi
+            LEFT JOIN ActiveBatchTotals totals ON totals.[StockItemId] = fsi.[Id];
+            """;
+    }
+
+    private const string StockLookupSearchPredicatePrefixSql = """
+        AND (
+                @searchExact IS NULL
+                OR si.[Name] = @searchExact
+                OR si.[Name] LIKE @searchPrefix
+                OR EXISTS (
                     SELECT 1
                     FROM [Batches] searchBatches
                     WHERE searchBatches.[StockItemId] = si.[Id]
                       AND searchBatches.[IsDeleted] = 0
                       AND searchBatches.[IsDepleted] = 0
-                      AND searchBatches.[SupplierBatchNumber] LIKE @search
-                ))
+                      AND (
+                            searchBatches.[SupplierBatchNumber] = @searchExact
+                            OR searchBatches.[SupplierBatchNumber] LIKE @searchPrefix
+                      )
+                )
+        )
+        """;
+
+    private const string StockLookupSearchPredicateContainsSql = """
+        AND (
+                @searchExact IS NULL
+                OR si.[Name] = @searchExact
+                OR si.[Name] LIKE @searchPrefix
+                OR si.[Name] LIKE @searchContains
+                OR EXISTS (
+                    SELECT 1
+                    FROM [Batches] searchBatches
+                    WHERE searchBatches.[StockItemId] = si.[Id]
+                      AND searchBatches.[IsDeleted] = 0
+                      AND searchBatches.[IsDepleted] = 0
+                      AND (
+                            searchBatches.[SupplierBatchNumber] = @searchExact
+                            OR searchBatches.[SupplierBatchNumber] LIKE @searchPrefix
+                            OR searchBatches.[SupplierBatchNumber] LIKE @searchContains
+                      )
+                )
+        )
+        """;
+
+    private const string StockRowsSearchPredicatePrefixSql = """
+        AND (
+                @searchExact IS NULL
+                OR si.[Name] = @searchExact
+                OR si.[Name] LIKE @searchPrefix
+                OR EXISTS (
+                    SELECT 1
+                    FROM [Batches] searchBatches
+                    WHERE searchBatches.[StockItemId] = si.[Id]
+                      AND searchBatches.[IsDeleted] = 0
+                      AND searchBatches.[IsDepleted] = 0
+                      AND (
+                            searchBatches.[SupplierBatchNumber] = @searchExact
+                            OR searchBatches.[SupplierBatchNumber] LIKE @searchPrefix
+                      )
+                )
+        )
+        """;
+
+    private const string StockRowsSearchPredicateContainsSql = """
+        AND (
+                @searchExact IS NULL
+                OR si.[Name] = @searchExact
+                OR si.[Name] LIKE @searchPrefix
+                OR si.[Name] LIKE @searchContains
+                OR EXISTS (
+                    SELECT 1
+                    FROM [Batches] searchBatches
+                    WHERE searchBatches.[StockItemId] = si.[Id]
+                      AND searchBatches.[IsDeleted] = 0
+                      AND searchBatches.[IsDepleted] = 0
+                      AND (
+                            searchBatches.[SupplierBatchNumber] = @searchExact
+                            OR searchBatches.[SupplierBatchNumber] LIKE @searchPrefix
+                            OR searchBatches.[SupplierBatchNumber] LIKE @searchContains
+                      )
+                )
         )
         """;
 
     private const string StockRowsWhereSql = """
-        WHERE (@categoryId IS NULL OR [CategoryId] = @categoryId)
-          AND (@legacyCategory IS NULL OR @categoryId IS NOT NULL OR [Category] = @legacyCategory)
-          AND (@showLowStockOnly = 0 OR [CurrentStock] < [MinimumLevel])
+        WHERE (@showLowStockOnly = 0 OR [CurrentStock] < [MinimumLevel])
           AND (
                 (@showExpiredOnly = 0 AND @showExpiringSoonOnly = 0)
                 OR (@showExpiredOnly = 1 AND [EarliestExpiryDate] <= @now)
@@ -349,7 +535,7 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
 
     private const string StockRowsFilterCountSql = $"""
         SELECT COUNT(*)
-        FROM StockRows
+        FROM #StockRows
         {StockRowsWhereSql};
         """;
 
@@ -366,9 +552,15 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
             [Category],
             [UnitSymbol],
             [EarliestExpiryDate]
-        FROM StockRows
+        FROM #StockRows
         {StockRowsWhereSql}
         ORDER BY [Name] ASC, [Id] ASC
         OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
         """;
+
+    private sealed record SearchParameters(
+        string? Exact,
+        string? Prefix,
+        string? Contains,
+        bool UseContains);
 }

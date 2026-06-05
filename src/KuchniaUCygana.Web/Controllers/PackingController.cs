@@ -12,20 +12,17 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class PackingController : Controller
 {
     private readonly IPackingService packingService;
-    private readonly ILoadingService loadingService;
     private readonly IPackingIncidentService packingIncidentService;
     private readonly IPackingSynchronizationService packingSynchronizationService;
     private readonly IPackingBagService packingBagService;
 
     public PackingController(
         IPackingService packingService,
-        ILoadingService loadingService,
         IPackingIncidentService packingIncidentService,
         IPackingSynchronizationService packingSynchronizationService,
         IPackingBagService packingBagService)
     {
         this.packingService = packingService;
-        this.loadingService = loadingService;
         this.packingIncidentService = packingIncidentService;
         this.packingSynchronizationService = packingSynchronizationService;
         this.packingBagService = packingBagService;
@@ -160,26 +157,6 @@ public sealed class PackingController : Controller
             Bag = bag,
             SelectedDate = session.PackingDate,
         });
-    }
-
-    [HttpPost("pack-client")]
-    [ValidateAntiForgeryToken]
-    public IActionResult PackClient(int sessionId, int orderId)
-    {
-        try
-        {
-            if (DateTime.UtcNow.Ticks >= 0)
-            {
-                throw new InvalidOperationException("Automatyczne pakowanie całego zamówienia jest wyłączone. Użyj skanowania pudełek albo ręcznego spakowania pojedynczych pudełek.");
-            }
-            TempData["Success"] = $"Zamówienie #{orderId} spakowane.";
-        }
-        catch (InvalidOperationException ex)
-        {
-            TempData["Error"] = ex.Message;
-        }
-
-        return RedirectToAction(nameof(Session), new { sessionId });
     }
 
     [HttpPost("loading/{routeId:int}/manifest")]
@@ -395,43 +372,18 @@ public sealed class PackingController : Controller
 
     [HttpPost("loading/{routeId:int}/bag/{sessionId:int}/load")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> LoadBag(int routeId, int sessionId, DateOnly date)
+    public IActionResult LoadBag(int routeId, int sessionId, DateOnly date)
     {
-        try
-        {
-            await loadingService.LoadOrderBagAsync(sessionId);
-            TempData["Success"] = "Torba załadowana do auta.";
-        }
-        catch (InvalidOperationException ex)
-        {
-            TempData["Error"] = ex.Message;
-        }
-
-        return RedirectToAction(nameof(Delivery), new { routeId, date });
+        TempData["Info"] = "Załadunek obsługuje nowy ekran /loading. Akcja legacy została przekierowana bez zmiany danych.";
+        return RedirectToLoadingRoute(routeId, date);
     }
 
     [HttpPost("loading/{routeId:int}/scan-bag")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ScanBag(int routeId, string transportCode, DateOnly date)
+    public IActionResult ScanBag(int routeId, string transportCode, DateOnly date)
     {
-        if (string.IsNullOrWhiteSpace(transportCode))
-        {
-            TempData["Error"] = "Kod etykiety transportowej nie może być pusty.";
-            return RedirectToAction(nameof(Delivery), new { routeId, date });
-        }
-
-        try
-        {
-            var bag = await loadingService.LoadBagByCodeAsync(routeId, transportCode);
-            TempData["Success"] = $"Zeskanowano i załadowano torbę: {transportCode} (Zamówienie #{bag.OrderId}, Klient ID: {bag.ClientPublicId ?? "-"})";
-            return RedirectToAction(nameof(Delivery), new { routeId, date });
-        }
-        catch (InvalidOperationException ex)
-        {
-            TempData["Error"] = ex.Message;
-        }
-
-        return RedirectToAction(nameof(Delivery), new { routeId, date });
+        TempData["Info"] = "Skanowanie załadunku obsługuje nowy ekran /loading. Akcja legacy została przekierowana bez zmiany danych.";
+        return RedirectToLoadingRoute(routeId, date);
     }
 
     [HttpGet("label")]
@@ -728,19 +680,10 @@ public sealed class PackingController : Controller
     [HttpPost("loading/{routeId:int}/dispatch")]
     [Authorize(Roles = "PackingManager,Admin")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DispatchDelivery(int routeId, DateOnly date)
+    public IActionResult DispatchDelivery(int routeId, DateOnly date)
     {
-        try
-        {
-            await loadingService.DispatchAsync(date, routeId);
-            TempData["Success"] = "Cała dostawa zatwierdzona do wysyłki.";
-        }
-        catch (InvalidOperationException ex)
-        {
-            TempData["Error"] = ex.Message;
-        }
-
-        return RedirectToAction(nameof(Delivery), new { routeId, date });
+        TempData["Info"] = "Wysyłkę trasy obsługuje nowy ekran /loading. Akcja legacy została przekierowana bez zmiany danych.";
+        return RedirectToLoadingRoute(routeId, date);
     }
 
     private PackingIndexViewModel BuildPackingIndexViewModel(
@@ -1091,6 +1034,11 @@ public sealed class PackingController : Controller
             ?? $"/loading/{routeId}/manifest?date={date:yyyy-MM-dd}";
 
         return Redirect(url);
+    }
+
+    private IActionResult RedirectToLoadingRoute(int routeId, DateOnly date)
+    {
+        return RedirectToAction("Route", "Loading", new { routeId, date = date.ToString("yyyy-MM-dd") });
     }
 
     private static readonly IReadOnlyList<PackingIssueReasonOption> ItemIssueReasonOptions =

@@ -107,6 +107,10 @@ public sealed class PackingItemSearchRow
     public int ProductLabelPrintCount { get; set; }
 
     public DateTimeOffset? LatestProductLabelPrintedAt { get; set; }
+
+    public ProductionItemStatus? ProductionStatus { get; set; }
+
+    public DateTimeOffset? PackagingDeductedAt { get; set; }
 }
 
 public sealed class FoilLabelSummary

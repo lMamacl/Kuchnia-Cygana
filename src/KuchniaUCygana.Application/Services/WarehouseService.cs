@@ -66,6 +66,8 @@ public sealed class WarehouseService : IWarehouseService
         var stockItem = await _stockItemRepository.GetByIdAsync(request.StockItemId)
             ?? throw new InvalidOperationException($"Składnik magazynowy o ID {request.StockItemId} nie istnieje.");
 
+        var performedBy = _currentUserService.GetUserName() ?? "Warehouse";
+
         var batch = new Batch
         {
             StockItemId = request.StockItemId,
@@ -74,6 +76,7 @@ public sealed class WarehouseService : IWarehouseService
             ExpiryDate = request.ExpiryDate,
             ReceivedDate = DateTimeOffset.UtcNow,
             IsDepleted = false,
+            CreatedBy = performedBy,
         };
 
         var transaction = new InventoryTransaction
@@ -83,6 +86,7 @@ public sealed class WarehouseService : IWarehouseService
             QuantityChanged = request.Quantity,
             Reason = $"Przyjęcie dostawy: {request.SupplierBatchNumber}. Uwagi: {request.Notes}",
             ReferenceDocument = request.InvoiceNumber,
+            CreatedBy = performedBy,
         };
 
         batch = await _warehouseCommandRepository.ReceiveDeliveryAsync(batch, transaction);
@@ -102,6 +106,7 @@ public sealed class WarehouseService : IWarehouseService
         string wasteReason = request.Reason == "Inny"
             ? $"Odpad: Inny - {request.Notes}"
             : $"Odpad: {request.Reason}";
+        var performedBy = _currentUserService.GetUserName() ?? "Warehouse";
 
         await _warehouseCommandRepository.DeductStockAsync(new WarehouseDeductionCommand(
             request.StockItemId,
@@ -113,7 +118,8 @@ public sealed class WarehouseService : IWarehouseService
             request.Reason == "Inny" ? request.Notes : "WASTE",
             request.BatchId is > 0 ? request.BatchId : null,
             ExcludeExpired: false,
-            RequireFullQuantity: true));
+            RequireFullQuantity: true,
+            PerformedBy: performedBy));
 
         _logger.LogInformation(
             "Zarejestrowano odpad: składnik {StockItemId}, ilość: {Qty}, powód: {Reason}",
@@ -227,6 +233,7 @@ public sealed class WarehouseService : IWarehouseService
     /// <inheritdoc/>
     public async Task IssueManualAsync(ManualIssueRequest request)
     {
+        var performedBy = _currentUserService.GetUserName() ?? "Warehouse";
         await _warehouseCommandRepository.DeductStockAsync(new WarehouseDeductionCommand(
             request.StockItemId,
             request.Quantity,
@@ -235,7 +242,8 @@ public sealed class WarehouseService : IWarehouseService
             request.IssuedTo,
             BatchId: null,
             ExcludeExpired: true,
-            RequireFullQuantity: true));
+            RequireFullQuantity: true,
+            PerformedBy: performedBy));
 
         _logger.LogInformation(
             "Wydano ręcznie składnik {StockItemId}, ilość: {Qty}, powód: {Reason}, dla: {IssuedTo}",
@@ -537,7 +545,7 @@ public sealed class WarehouseService : IWarehouseService
             TransactionType = transactionType,
             Quantity = row.Quantity,
             PerformedAt = row.PerformedAt,
-            PerformedBy = "System",
+            PerformedBy = string.IsNullOrWhiteSpace(row.PerformedBy) ? "System" : row.PerformedBy,
             Reason = row.Reason,
             TransactionNumber = $"TXN-{row.PerformedAt:yyyyMMdd}-{row.Id:D4}",
             ReferenceDocument = row.ReferenceDocument,

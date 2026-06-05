@@ -56,5 +56,7 @@ public sealed class TransactionHistoryRow
     public string Reason { get; set; } = string.Empty;
 
     public string ReferenceDocument { get; set; } = string.Empty;
+
+    public string PerformedBy { get; set; } = string.Empty;
 }
 

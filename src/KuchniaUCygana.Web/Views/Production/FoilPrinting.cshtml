@@ -222,9 +222,13 @@
                                     </td>
                                     <td>
                                         <span class="badge bg-@color-lt text-@color">@StatusText(item.Status)</span>
-                                        @if (item.IsBlocked && !string.IsNullOrWhiteSpace(item.Remarks))
+                                        @if (!string.IsNullOrWhiteSpace(item.FoilBlockReason))
                                         {
-                                            <div class="text-danger small mt-1">@item.Remarks</div>
+                                            <div class="text-danger small mt-1">@item.FoilBlockReason</div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(item.ProductionStatus))
+                                        {
+                                            <div class="text-secondary small mt-1">Produkcja: @item.ProductionStatus</div>
                                         }
                                     </td>
                                     <td>

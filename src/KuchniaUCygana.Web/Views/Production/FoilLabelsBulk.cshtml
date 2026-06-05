@@ -3,6 +3,7 @@
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Etykiety foliowe zbiorczo";
     ViewData["Section"] = "Kuchnia";
+    var errors = ViewBag.Errors as IReadOnlyList<string> ?? Array.Empty<string>();
     ViewData["Description"] = "Zbiorczy wydruk etykiet foliowych na pudełka.";
 }
 
@@ -75,6 +76,19 @@
         </div>
     </div>
 </div>
+
+@if (errors.Count > 0)
+{
+    <div class="alert alert-warning d-print-none">
+        <div class="fw-bold">Pominieto @errors.Count etykiet.</div>
+        <ul class="mb-0">
+            @foreach (var error in errors.Take(10))
+            {
+                <li>@error</li>
+            }
+        </ul>
+    </div>
+}
 
 <div class="printable-area">
     <div class="row g-4">

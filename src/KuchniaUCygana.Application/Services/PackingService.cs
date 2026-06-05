@@ -32,6 +32,8 @@ public sealed class PackingService : IPackingService
     private readonly IDeliveryManifestProvider manifestProvider;
     private readonly IApplicationUrlProvider applicationUrlProvider;
     private readonly ICurrentUserService currentUserService;
+    private readonly IProductionPlanRepository productionPlanRepository;
+    private readonly IRepository<ProductionPlanItem> productionPlanItemRepository;
     private readonly IMapper mapper;
     private readonly ILogger<PackingService> logger;
 
@@ -48,6 +50,8 @@ public sealed class PackingService : IPackingService
         IDeliveryManifestProvider manifestProvider,
         IApplicationUrlProvider applicationUrlProvider,
         ICurrentUserService currentUserService,
+        IProductionPlanRepository productionPlanRepository,
+        IRepository<ProductionPlanItem> productionPlanItemRepository,
         IMapper mapper,
         ILogger<PackingService> logger,
         IPackingLabelRepository? packingLabelRepository = null,
@@ -65,6 +69,8 @@ public sealed class PackingService : IPackingService
         this.manifestProvider = manifestProvider;
         this.applicationUrlProvider = applicationUrlProvider;
         this.currentUserService = currentUserService;
+        this.productionPlanRepository = productionPlanRepository;
+        this.productionPlanItemRepository = productionPlanItemRepository;
         this.mapper = mapper;
         this.logger = logger;
         this.packingLabelRepository = packingLabelRepository;
@@ -245,6 +251,7 @@ public sealed class PackingService : IPackingService
                 MealId = definition.MealId,
                 MealName = definition.MealName,
                 DietVariantId = definition.DietVariantId,
+                ProductionPlanItemId = definition.ProductionPlanItemId,
                 BoxCode = CreateBoxCode(session, sequence),
                 Status = PackingItemStatus.Pending,
                 IsDamaged = false,
@@ -892,6 +899,8 @@ public sealed class PackingService : IPackingService
             throw new InvalidOperationException("Nie można drukować etykiety produktowej dla pudełka oznaczonego jako uszkodzone albo brakujące.");
         }
 
+        await EnsureProductionItemReadyForFoilAsync(item);
+
         var ingredients = (await sessionRepository.GetMealIngredientsAsync(item.MealId)).ToList();
         var allergens = (await sessionRepository.GetMealAllergensAsync(item.MealId)).ToList();
         var calories = await sessionRepository.GetMealCaloriesAsync(item.MealId);
@@ -1269,7 +1278,61 @@ public sealed class PackingService : IPackingService
             StopNumber = row.StopNumber,
             ProductLabelPrintCount = row.ProductLabelPrintCount,
             LatestProductLabelPrintedAt = row.LatestProductLabelPrintedAt,
+            ProductionStatus = row.ProductionStatus?.ToString(),
+            PackagingDeductedAt = row.PackagingDeductedAt,
+            FoilBlockReason = GetFoilBlockReason(row),
         };
+
+    private async Task EnsureProductionItemReadyForFoilAsync(PackingItem item)
+    {
+        if (!item.ProductionPlanItemId.HasValue)
+        {
+            throw new InvalidOperationException("Nie mozna wydrukowac etykiety produktowej: pudelko nie jest powiazane z pozycja planu produkcji.");
+        }
+
+        var planItem = await productionPlanItemRepository.GetByIdAsync(item.ProductionPlanItemId.Value);
+        if (planItem is null || planItem.IsDeleted)
+        {
+            throw new InvalidOperationException("Nie mozna wydrukowac etykiety produktowej: pozycja planu produkcji nie istnieje.");
+        }
+
+        if (planItem.Status != ProductionItemStatus.Cooked)
+        {
+            throw new InvalidOperationException("Nie mozna wydrukowac etykiety produktowej: danie nie ma potwierdzonego ugotowania.");
+        }
+
+        if (!planItem.PackagingDeductedAt.HasValue)
+        {
+            throw new InvalidOperationException("Nie mozna wydrukowac etykiety produktowej: opakowania nie zostaly rozliczone po gotowaniu.");
+        }
+    }
+
+    private static string? GetFoilBlockReason(PackingItemSearchRow row)
+    {
+        if (row.Status is PackingItemStatus.Damaged or PackingItemStatus.Missing || row.IsDamaged)
+        {
+            return string.IsNullOrWhiteSpace(row.Remarks)
+                ? "Pudelko oznaczone jako uszkodzone albo brakujace."
+                : row.Remarks;
+        }
+
+        if (!row.ProductionPlanItemId.HasValue)
+        {
+            return "Pudelko nie jest powiazane z pozycja planu produkcji.";
+        }
+
+        if (row.ProductionStatus != ProductionItemStatus.Cooked)
+        {
+            return "Danie nie ma potwierdzonego ugotowania.";
+        }
+
+        if (!row.PackagingDeductedAt.HasValue)
+        {
+            return "Opakowania nie zostaly rozliczone po gotowaniu.";
+        }
+
+        return null;
+    }
 
     private static string? GetSessionBlockReason(PackingSession session, IReadOnlyCollection<PackingItem> activeItems)
     {
@@ -1325,6 +1388,7 @@ public sealed class PackingService : IPackingService
     private async Task<IEnumerable<BoxDefinition>> BuildBoxDefinitionsAsync(PackingSession session)
     {
         var orderId = session.OrderId!.Value;
+        var productionItems = await GetProductionPlanItemsForDateAsync(session.PackingDate);
         var deliveries = await orderProvider.GetDeliveriesForDateAsync(session.PackingDate.ToDateTime(TimeOnly.MinValue));
         var delivery = deliveries.FirstOrDefault(d =>
             session.DeliveryCalendarId.HasValue
@@ -1333,7 +1397,7 @@ public sealed class PackingService : IPackingService
 
         if (delivery is not null && delivery.Items.Count > 0)
         {
-            return await ResolveOrderItemBoxDefinitionsAsync(delivery.Items, session.PackingDate);
+            return await ResolveOrderItemBoxDefinitionsAsync(delivery.Items, session.PackingDate, productionItems);
         }
 
         var order = await orderProvider.GetOrderByIdAsync(orderId)
@@ -1346,7 +1410,15 @@ public sealed class PackingService : IPackingService
 
         if (dietPlan.Count > 0)
         {
-            return dietPlan.Select(p => new BoxDefinition(p.MealId, p.MealName, p.DietVariantId));
+            return dietPlan.Select(p =>
+            {
+                var productionItem = FindProductionItem(productionItems, p.DietMenuPlanItemId, p.MealId, p.DietVariantId);
+                return new BoxDefinition(
+                    productionItem?.MealId ?? p.MealId,
+                    productionItem?.MealName ?? p.MealName,
+                    productionItem?.DietVariantId ?? p.DietVariantId,
+                    productionItem?.Id);
+            });
         }
 
         throw new InvalidOperationException(
@@ -1355,7 +1427,8 @@ public sealed class PackingService : IPackingService
 
     private async Task<IEnumerable<BoxDefinition>> ResolveOrderItemBoxDefinitionsAsync(
         IReadOnlyList<OrderItemInfo> items,
-        DateOnly packingDate)
+        DateOnly packingDate,
+        IReadOnlyList<ProductionPlanItem> productionItems)
     {
         var dietPlan = (await dietProvider.GetPlanForDateAsync(packingDate)).ToList();
         return items.Select(item =>
@@ -1379,10 +1452,17 @@ public sealed class PackingService : IPackingService
                     planItem.MealId == item.MealId.Value &&
                     planItem.DietVariantId == item.DietVariantId);
 
-                return new BoxDefinition(
-                    item.MealId.Value,
-                    explicitPlanItem?.MealName ?? ExtractMealNameFromOrderItem(item),
+                var productionItem = FindProductionItem(
+                    productionItems,
+                    item.DietMenuPlanItemId,
+                    item.MealId,
                     explicitPlanItem?.DietVariantId ?? item.DietVariantId);
+
+                return new BoxDefinition(
+                    productionItem?.MealId ?? item.MealId.Value,
+                    productionItem?.MealName ?? explicitPlanItem?.MealName ?? ExtractMealNameFromOrderItem(item),
+                    productionItem?.DietVariantId ?? explicitPlanItem?.DietVariantId ?? item.DietVariantId,
+                    productionItem?.Id);
             }
 
             var mealName = ExtractMealNameFromOrderItem(item);
@@ -1394,11 +1474,55 @@ public sealed class PackingService : IPackingService
                     planItem.DietVariantId == item.DietVariantId &&
                     string.Equals(planItem.MealSlot, mealSlot, StringComparison.OrdinalIgnoreCase));
 
+            var matchedProductionItem = FindProductionItem(
+                productionItems,
+                matchedPlanItem?.DietMenuPlanItemId ?? item.DietMenuPlanItemId,
+                matchedPlanItem?.MealId,
+                matchedPlanItem?.DietVariantId ?? item.DietVariantId);
+
             return new BoxDefinition(
-                matchedPlanItem?.MealId ?? item.DietVariantId,
-                matchedPlanItem?.MealName ?? mealName,
-                item.DietVariantId);
+                matchedProductionItem?.MealId ?? matchedPlanItem?.MealId ?? item.DietVariantId,
+                matchedProductionItem?.MealName ?? matchedPlanItem?.MealName ?? mealName,
+                matchedProductionItem?.DietVariantId ?? matchedPlanItem?.DietVariantId ?? item.DietVariantId,
+                matchedProductionItem?.Id);
         });
+    }
+
+    private async Task<IReadOnlyList<ProductionPlanItem>> GetProductionPlanItemsForDateAsync(DateOnly date)
+    {
+        var plan = await productionPlanRepository.GetByDateAsync(date);
+        if (plan is null)
+        {
+            return Array.Empty<ProductionPlanItem>();
+        }
+
+        return (await productionPlanRepository.GetPlanItemsAsync(plan.Id)).ToList();
+    }
+
+    private static ProductionPlanItem? FindProductionItem(
+        IReadOnlyList<ProductionPlanItem> productionItems,
+        int? dietMenuPlanItemId,
+        int? mealId,
+        int dietVariantId)
+    {
+        if (dietMenuPlanItemId.HasValue)
+        {
+            var bySnapshotItem = productionItems.FirstOrDefault(item =>
+                item.DietMenuPlanItemId == dietMenuPlanItemId.Value);
+            if (bySnapshotItem is not null)
+            {
+                return bySnapshotItem;
+            }
+        }
+
+        if (mealId.HasValue && mealId.Value > 0)
+        {
+            return productionItems.FirstOrDefault(item =>
+                item.MealId == mealId.Value &&
+                item.DietVariantId == dietVariantId);
+        }
+
+        return null;
     }
 
     private static string ExtractMealNameFromOrderItem(OrderItemInfo item)
@@ -1912,7 +2036,7 @@ public sealed class PackingService : IPackingService
         };
     }
 
-    private sealed record BoxDefinition(int MealId, string MealName, int DietVariantId);
+    private sealed record BoxDefinition(int MealId, string MealName, int DietVariantId, int? ProductionPlanItemId);
 
     private sealed record RouteStop(RouteEntry Route, RouteStopEntry Stop);
 

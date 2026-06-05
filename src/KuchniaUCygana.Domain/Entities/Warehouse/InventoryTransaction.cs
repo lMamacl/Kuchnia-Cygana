@@ -26,4 +26,10 @@ public class InventoryTransaction : BaseEntity<long>
     // E.g. "Order #123", "User #5 Adjustment"
     [StringLength(50)]
     public string? ReferenceDocument { get; set; }
+
+    [StringLength(50)]
+    public string? CreatedBy { get; set; }
+
+    [StringLength(50)]
+    public string? UpdatedBy { get; set; }
 }
