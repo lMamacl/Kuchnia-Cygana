@@ -1,15 +1,15 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
 public sealed class HaccpTemperatureAlertRepository
     : BaseRepository<HaccpTemperatureAlert, long>, IHaccpTemperatureAlertRepository
 {
-    public HaccpTemperatureAlertRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public HaccpTemperatureAlertRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -27,3 +27,5 @@ public sealed class HaccpTemperatureAlertRepository
             new { haccpLocationId, status = HaccpTemperatureAlertStatus.Open });
     }
 }
+
+

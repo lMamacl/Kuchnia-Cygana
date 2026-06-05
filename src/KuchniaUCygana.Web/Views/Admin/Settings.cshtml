@@ -1,5 +1,124 @@
+@model AdminDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+
+    var users = Model.Users.ToArray();
+    var admins = users.Count(user => string.Equals(user.Role, "Admin", StringComparison.Ordinal));
+    var staff = users.Count(user => !string.Equals(user.Role, "Client", StringComparison.Ordinal));
+    var clients = users.Count(user => string.Equals(user.Role, "Client", StringComparison.Ordinal));
+    var lastLog = Model.SystemLogs
+        .OrderByDescending(log => log.Timestamp)
+        .FirstOrDefault();
 }
-@await Html.PartialAsync("_StaffPlaceholder")
+
+<div class="row row-cards">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Konta</div>
+                <div class="h1 mb-0">@users.Length</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Administratorzy</div>
+                <div class="h1 mb-0">@admins</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Pracownicy</div>
+                <div class="h1 mb-0">@staff</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Klienci</div>
+                <div class="h1 mb-0">@clients</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-7">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Administracja systemu</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Obszar</th>
+                            <th>Status</th>
+                            <th>Dane</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Konta i role</td>
+                            <td><span class="badge bg-green-lt text-green">Aktywne</span></td>
+                            <td class="text-secondary">@users.Length kont, @Model.AvailableRoles.Count rol</td>
+                            <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Users">Otworz</a></td>
+                        </tr>
+                        <tr>
+                            <td>Audyt zmian</td>
+                            <td><span class="badge bg-green-lt text-green">Aktywny</span></td>
+                            <td class="text-secondary">@Model.AuditPage.TotalCount wpisow</td>
+                            <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Logs">Otworz</a></td>
+                        </tr>
+                        <tr>
+                            <td>HR</td>
+                            <td><span class="badge bg-green-lt text-green">Aktywny</span></td>
+                            <td class="text-secondary">Pracownicy, dzialy, urlopy, grafiki</td>
+                            <td class="text-end"><a class="btn btn-sm btn-outline-secondary" asp-controller="HumanResources" asp-action="Index">Otworz</a></td>
+                        </tr>
+                        <tr>
+                            <td>BOK</td>
+                            <td><span class="badge bg-green-lt text-green">Aktywny</span></td>
+                            <td class="text-secondary">Zgloszenia, przypisania, statusy</td>
+                            <td class="text-end"><a class="btn btn-sm btn-outline-secondary" asp-controller="CustomerSupport" asp-action="Index">Otworz</a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-5">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Ostatni wpis audytu</h3>
+            </div>
+            <div class="card-body">
+                @if (lastLog is null)
+                {
+                    <div class="text-secondary">Brak logow systemowych.</div>
+                }
+                else
+                {
+                    <dl class="row mb-0">
+                        <dt class="col-4">Czas</dt>
+                        <dd class="col-8">@lastLog.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</dd>
+                        <dt class="col-4">Uzytkownik</dt>
+                        <dd class="col-8">@(lastLog.UserFullName ?? $"#{lastLog.UserId}")</dd>
+                        <dt class="col-4">Akcja</dt>
+                        <dd class="col-8">@lastLog.Action</dd>
+                        <dt class="col-4">Obiekt</dt>
+                        <dd class="col-8">@lastLog.TargetEntity #@lastLog.TargetId</dd>
+                    </dl>
+                }
+            </div>
+            <div class="card-footer text-end">
+                <a class="btn btn-outline-primary" asp-controller="Admin" asp-action="Logs">Logi systemowe</a>
+            </div>
+        </div>
+    </div>
+</div>
 

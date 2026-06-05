@@ -1,13 +1,14 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Interfaces.Production;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
 
 public sealed class BoxLabelRepository : BaseRepository<BoxLabel>, IBoxLabelRepository
 {
-    public BoxLabelRepository(IDbConnectionFactory factory) : base(factory)
+    public BoxLabelRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -49,3 +50,5 @@ public sealed class BoxLabelRepository : BaseRepository<BoxLabel>, IBoxLabelRepo
             new { packingItemId });
     }
 }
+
+

@@ -13,8 +13,7 @@
         .OrderByDescending(x => x.Count())
         .ThenBy(x => x.Key)
         .ToArray();
-    var today = DateOnly.FromDateTime(DateTime.Today);
-    var logsToday = logs.Count(x => DateOnly.FromDateTime(x.Timestamp.LocalDateTime) == today);
+    var auditTotal = Model.AuditPage.TotalCount;
 }
 
 <div class="row row-cards">
@@ -38,15 +37,15 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Logi audytu</div>
-                <div class="h1 mb-0">@logs.Length</div>
+                <div class="h1 mb-0">@auditTotal</div>
             </div>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
         <div class="card staff-metric-card">
             <div class="card-body">
-                <div class="text-secondary">Logi dzisiaj</div>
-                <div class="h1 mb-0">@logsToday</div>
+                <div class="text-secondary">Ostatnie wpisy</div>
+                <div class="h1 mb-0">@logs.Length</div>
             </div>
         </div>
     </div>

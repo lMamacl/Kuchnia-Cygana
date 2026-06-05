@@ -29,6 +29,88 @@ public sealed class AuditLogService : IAuditLogService
         return await MapSystemLogsAsync(logs.OrderByDescending(log => log.Timestamp));
     }
 
+    public async Task<SystemLogPageDto> SearchSystemLogsAsync(SystemLogSearchRequest request)
+    {
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize <= 0 ? 25 : request.PageSize, 10, 100);
+        var logs = await MapSystemLogsAsync(
+            (await systemLogRepository.GetAllAsync()).OrderByDescending(log => log.Timestamp));
+
+        var actions = logs
+            .Select(log => log.Action)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value)
+            .ToArray();
+        var targetEntities = logs
+            .Select(log => log.TargetEntity)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value)
+            .ToArray();
+
+        IEnumerable<SystemLogDto> query = logs;
+
+        if (request.UserId is > 0)
+        {
+            query = query.Where(log => log.UserId == request.UserId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Action))
+        {
+            query = query.Where(log => string.Equals(log.Action, request.Action.Trim(), StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.TargetEntity))
+        {
+            query = query.Where(log => string.Equals(log.TargetEntity, request.TargetEntity.Trim(), StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (request.From.HasValue)
+        {
+            var from = request.From.Value.Date;
+            query = query.Where(log => log.Timestamp.LocalDateTime >= from);
+        }
+
+        if (request.To.HasValue)
+        {
+            var toExclusive = request.To.Value.Date.AddDays(1);
+            query = query.Where(log => log.Timestamp.LocalDateTime < toExclusive);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            query = query.Where(log =>
+                Contains(log.Action, search) ||
+                Contains(log.TargetEntity, search) ||
+                Contains(log.TargetId, search) ||
+                Contains(log.UserFullName, search) ||
+                Contains(log.IPAddress, search) ||
+                Contains(log.OldValue, search) ||
+                Contains(log.NewValue, search));
+        }
+
+        var filtered = query.ToArray();
+        var totalCount = filtered.Length;
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+        page = Math.Min(page, totalPages);
+
+        return new SystemLogPageDto
+        {
+            Items = filtered
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToArray(),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+            TotalPages = totalPages,
+            Actions = actions,
+            TargetEntities = targetEntities,
+        };
+    }
+
     public async Task<IEnumerable<SystemLogDto>> GetSystemLogsByUserAsync(int userId)
     {
         var logs = await systemLogRepository.GetAllAsync();
@@ -97,5 +179,10 @@ public sealed class AuditLogService : IAuditLogService
     {
         var fullName = $"{user.FirstName} {user.LastName}".Trim();
         return string.IsNullOrWhiteSpace(fullName) ? user.Email : fullName;
+    }
+
+    private static bool Contains(string? value, string search)
+    {
+        return value?.Contains(search, StringComparison.OrdinalIgnoreCase) == true;
     }
 }

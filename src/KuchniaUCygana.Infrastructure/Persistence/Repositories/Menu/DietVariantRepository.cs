@@ -2,13 +2,13 @@
 using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
 public sealed class DietVariantRepository : BaseRepository<DietVariant>, IDietVariantRepository
 {
-    public DietVariantRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public DietVariantRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -26,3 +26,5 @@ public sealed class DietVariantRepository : BaseRepository<DietVariant>, IDietVa
         return await db.QuerySingleOrDefaultAsync<DietVariant>(sql, new { DietId = dietId });
     }
 }
+
+

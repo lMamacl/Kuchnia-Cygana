@@ -1,21 +1,21 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
 /// <summary>
-/// Repozytorium logów zmian dat ważności partii.
+/// Repozytorium logĂłw zmian dat waĹĽnoĹ›ci partii.
 /// </summary>
 public sealed class BatchExpiryChangeLogRepository : BaseRepository<BatchExpiryChangeLog>, IBatchExpiryChangeLogRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
-    public BatchExpiryChangeLogRepository(IDbConnectionFactory connectionFactory)
-        : base(connectionFactory)
+    public BatchExpiryChangeLogRepository(IDbConnectionFactory connectionFactory, ICurrentUserService? currentUserService = null) : base(connectionFactory, currentUserService)
     {
         _connectionFactory = connectionFactory;
     }
@@ -51,3 +51,5 @@ public sealed class BatchExpiryChangeLogRepository : BaseRepository<BatchExpiryC
             new { stockItemId });
     }
 }
+
+

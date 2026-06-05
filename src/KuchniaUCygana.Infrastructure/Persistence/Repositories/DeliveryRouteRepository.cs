@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -6,6 +6,7 @@ using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using Dapper;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
@@ -14,8 +15,7 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 /// </summary>
 public sealed class DeliveryRouteRepository : BaseRepository<DeliveryRoute>, IDeliveryRouteRepository
 {
-    public DeliveryRouteRepository(IDbConnectionFactory connectionFactory)
-        : base(connectionFactory)
+    public DeliveryRouteRepository(IDbConnectionFactory connectionFactory, ICurrentUserService? currentUserService = null) : base(connectionFactory, currentUserService)
     {
     }
 
@@ -31,7 +31,7 @@ public sealed class DeliveryRouteRepository : BaseRepository<DeliveryRoute>, IDe
         
         if (route == null) return null;
         
-        // Pobranie przystanków
+        // Pobranie przystankĂłw
         var stopsSql = @"
             SELECT * FROM [DeliveryRouteStops] 
             WHERE [RouteId] = @RouteId AND [IsDeleted] = 0 
@@ -143,3 +143,5 @@ public sealed class DeliveryRouteRepository : BaseRepository<DeliveryRoute>, IDe
         }
     }
 }
+
+

@@ -1,14 +1,14 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
 public sealed class HaccpLocationRepository : BaseRepository<HaccpLocation>, IHaccpLocationRepository
 {
-    public HaccpLocationRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public HaccpLocationRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -93,3 +93,5 @@ public sealed class HaccpLocationRepository : BaseRepository<HaccpLocation>, IHa
         tx.Commit();
     }
 }
+
+

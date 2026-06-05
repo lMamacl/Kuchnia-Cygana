@@ -1,4 +1,4 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Admin;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
@@ -8,7 +8,7 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class TicketRepository : BaseRepository<Ticket>, ITicketRepository
 {
-    public TicketRepository(IDbConnectionFactory factory) : base(factory) { }
+    public TicketRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
     public async Task<IEnumerable<Ticket>> GetByClientIdAsync(int clientUserId)
     {
@@ -33,3 +33,4 @@ public sealed class TicketRepository : BaseRepository<Ticket>, ITicketRepository
         return await db.QueryAsync<Ticket>(sql, new { Closed = (int)TicketStatus.Closed, Resolved = (int)TicketStatus.Resolved });
     }
 }
+

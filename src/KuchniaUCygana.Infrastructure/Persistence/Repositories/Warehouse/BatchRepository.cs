@@ -1,14 +1,14 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
 public class BatchRepository : BaseRepository<Batch>, IBatchRepository
 {
-    public BatchRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public BatchRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -276,3 +276,5 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
         OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
         """;
 }
+
+

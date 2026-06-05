@@ -1,4 +1,4 @@
-using KuchniaUCygana.Domain.Entities.Logistics;
+﻿using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
@@ -16,8 +16,7 @@ public sealed class ThermalBagRepository : BaseRepository<ThermalBag>, IThermalB
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
-    public ThermalBagRepository(IDbConnectionFactory connectionFactory)
-        : base(connectionFactory)
+    public ThermalBagRepository(IDbConnectionFactory connectionFactory, ICurrentUserService? currentUserService = null) : base(connectionFactory, currentUserService)
     {
         _connectionFactory = connectionFactory;
     }
@@ -29,3 +28,4 @@ public sealed class ThermalBagRepository : BaseRepository<ThermalBag>, IThermalB
         ("SELECT * FROM [ThermalBags] WHERE [SerialNumber] = @SerialNumber AND [IsDeleted] = 0", new { SerialNumber = serialNumber });
     }
 }
+

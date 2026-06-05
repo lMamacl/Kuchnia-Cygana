@@ -7,7 +7,7 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class CustomerProfileRepository : BaseRepository<CustomerProfile>, ICustomerProfileRepository
 {
-    public CustomerProfileRepository(IDbConnectionFactory factory) : base(factory) { }
+    public CustomerProfileRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
     public async Task<CustomerProfile?> GetByUserIdAsync(int userId)
     {
@@ -16,3 +16,5 @@ public sealed class CustomerProfileRepository : BaseRepository<CustomerProfile>,
         return await db.QuerySingleOrDefaultAsync<CustomerProfile>(sql, new { UserId = userId });
     }
 }
+
+

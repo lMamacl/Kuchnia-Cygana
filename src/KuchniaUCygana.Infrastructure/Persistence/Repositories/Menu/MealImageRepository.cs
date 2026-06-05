@@ -2,13 +2,13 @@
 using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
 public sealed class MealImageRepository : BaseRepository<MealImage>, IMealImageRepository
 {
-    public MealImageRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public MealImageRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -34,3 +34,5 @@ public sealed class MealImageRepository : BaseRepository<MealImage>, IMealImageR
         return rows > 0;
     }
 }
+
+

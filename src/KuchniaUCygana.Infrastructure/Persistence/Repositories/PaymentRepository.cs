@@ -2,12 +2,13 @@
 using KuchniaUCygana.Domain.Interfaces.Orders;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using Dapper;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class PaymentRepository : BaseRepository<Payment>, IPaymentRepository
 {
-    public PaymentRepository(IDbConnectionFactory factory) : base(factory) { }
+    public PaymentRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
     public async Task<Payment?> GetByOrderIdAsync(int orderId)
     {
@@ -23,3 +24,5 @@ public sealed class PaymentRepository : BaseRepository<Payment>, IPaymentReposit
         return await db.QuerySingleOrDefaultAsync<Payment>(sql, new { IntentId = stripePaymentIntentId });
     }
 }
+
+

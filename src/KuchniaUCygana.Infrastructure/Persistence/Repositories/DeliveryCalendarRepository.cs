@@ -3,12 +3,13 @@ using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Orders;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using Dapper;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class DeliveryCalendarRepository : BaseRepository<DeliveryCalendar>, IDeliveryCalendarRepository
 {
-    public DeliveryCalendarRepository(IDbConnectionFactory factory) : base(factory) { }
+    public DeliveryCalendarRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
     public async Task<IEnumerable<DeliveryCalendar>> GetByOrderIdAsync(int orderId)
     {
@@ -44,3 +45,5 @@ public sealed class DeliveryCalendarRepository : BaseRepository<DeliveryCalendar
         return Task.FromResult(true);
     }
 }
+
+

@@ -1,4 +1,4 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Admin;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
@@ -7,7 +7,7 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class WorkScheduleRepository : BaseRepository<WorkSchedule>, IWorkScheduleRepository
 {
-    public WorkScheduleRepository(IDbConnectionFactory factory) : base(factory) { }
+    public WorkScheduleRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
     public async Task<IEnumerable<WorkSchedule>> GetByUserIdAsync(int userId)
     {
@@ -25,3 +25,4 @@ public sealed class WorkScheduleRepository : BaseRepository<WorkSchedule>, IWork
             new { Start = start, End = end });
     }
 }
+

@@ -1,4 +1,4 @@
-using KuchniaUCygana.Domain.Entities.Orders;
+﻿using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -9,7 +9,7 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class AddressRepository : BaseRepository<Address>, IAddressRepository
 {
-    public AddressRepository(IDbConnectionFactory factory) : base(factory) { }
+    public AddressRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
     public async Task<IEnumerable<Address>> GetByUserIdAsync(int userId)
 {
@@ -41,7 +41,7 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
 
         try
         {
-            // 1. Resetuj wszystkie obecne domyślne adresy użytkownika
+            // 1. Resetuj wszystkie obecne domyĹ›lne adresy uĹĽytkownika
             var resetSql = @"
                 UPDATE [Addresses]
                 SET [IsDefault] = 0, [UpdatedAt] = @UpdatedAt
@@ -49,7 +49,7 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
 
             await db.ExecuteAsync(resetSql, new { UserId = userId, UpdatedAt = DateTimeOffset.UtcNow }, transaction);
 
-            // 2. Ustaw nowy adres jako domyślny
+            // 2. Ustaw nowy adres jako domyĹ›lny
             var setDefaultSql = @"
                 UPDATE [Addresses]
                 SET [IsDefault] = 1, [UpdatedAt] = @UpdatedAt
@@ -57,7 +57,7 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
 
             var rowsAffected = await db.ExecuteAsync(setDefaultSql, new { AddressId = addressId, UserId = userId, UpdatedAt = DateTimeOffset.UtcNow }, transaction);
 
-            // 3. Jeśli żaden wiersz nie został zaktualizowany (adres nie istnieje lub nie należy do użytkownika), możesz rzucić wyjątek lub zignorować
+            // 3. JeĹ›li ĹĽaden wiersz nie zostaĹ‚ zaktualizowany (adres nie istnieje lub nie naleĹĽy do uĹĽytkownika), moĹĽesz rzuciÄ‡ wyjÄ…tek lub zignorowaÄ‡
             if (rowsAffected == 0)
             {
                 throw new InvalidOperationException($"Address with ID {addressId} not found or does not belong to user {userId}");
@@ -79,3 +79,5 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
             "SELECT * FROM [Addresses] WHERE ([Latitude] IS NULL OR [Longitude] IS NULL) AND [IsDeleted] = 0");
     }
 }
+
+

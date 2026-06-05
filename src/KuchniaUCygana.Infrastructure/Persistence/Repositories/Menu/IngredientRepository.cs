@@ -2,13 +2,13 @@
 using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
 public sealed class IngredientRepository : BaseRepository<Ingredient>, IIngredientRepository
 {
-    public IngredientRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public IngredientRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -30,3 +30,5 @@ public sealed class IngredientRepository : BaseRepository<Ingredient>, IIngredie
         return count == 0;
     }
 }
+
+

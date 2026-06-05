@@ -1,13 +1,14 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Interfaces.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 
 public sealed class PackingManifestIssueRepository : BaseRepository<PackingManifestIssue>, IPackingManifestIssueRepository
 {
-    public PackingManifestIssueRepository(IDbConnectionFactory factory) : base(factory)
+    public PackingManifestIssueRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -31,3 +32,5 @@ public sealed class PackingManifestIssueRepository : BaseRepository<PackingManif
         return issues.ToList();
     }
 }
+
+

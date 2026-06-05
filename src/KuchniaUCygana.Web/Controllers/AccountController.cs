@@ -132,12 +132,7 @@ public sealed class AccountController : Controller
     [HttpGet]
     public IActionResult StaffLogin(string? returnUrl = null)
     {
-        if (!env.IsDevelopment())
-        {
-            return RedirectToAction(nameof(Login), new { returnUrl });
-        }
-
-        return View(new LoginViewModel { ReturnUrl = returnUrl });
+        return RedirectToAction(nameof(Login), new { returnUrl });
     }
 
     [AllowAnonymous]
@@ -310,7 +305,7 @@ public sealed class AccountController : Controller
 
         return role switch
         {
-            UserRoles.Admin => RedirectToAction("Index", "Staff"),
+            UserRoles.Admin => RedirectToAction("Index", "Admin"),
             UserRoles.HR or UserRoles.HRManager => RedirectToAction("Index", "HumanResources"),
             UserRoles.BOK or UserRoles.BOKManager => RedirectToAction("Index", "CustomerSupport"),
             UserRoles.Kitchen or UserRoles.KitchenManager => RedirectToAction("Index", "Production"),

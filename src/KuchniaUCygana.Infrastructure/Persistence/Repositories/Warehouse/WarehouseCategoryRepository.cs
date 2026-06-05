@@ -1,14 +1,14 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
 public sealed class WarehouseCategoryRepository : BaseRepository<WarehouseCategory>, IWarehouseCategoryRepository
 {
-    public WarehouseCategoryRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public WarehouseCategoryRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -82,3 +82,5 @@ public sealed class WarehouseCategoryRepository : BaseRepository<WarehouseCatego
             new { name = legacyCategoryName.Trim() });
     }
 }
+
+

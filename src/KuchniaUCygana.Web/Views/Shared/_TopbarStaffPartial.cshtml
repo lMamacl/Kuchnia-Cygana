@@ -135,6 +135,10 @@
                     <div class="dropdown-header">Preview</div>
                     <a class="dropdown-item" asp-controller="Account" asp-action="Profile">Profil</a>
                     <a class="dropdown-item" asp-controller="Admin" asp-action="Settings">Ustawienia</a>
+                    <div class="dropdown-divider"></div>
+                    <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                        <button type="submit" class="dropdown-item text-danger">Wyloguj</button>
+                    </form>
                 </div>
             </div>
         </div>

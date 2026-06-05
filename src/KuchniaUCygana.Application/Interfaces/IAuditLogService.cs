@@ -6,6 +6,8 @@ public interface IAuditLogService
 {
     Task<IEnumerable<SystemLogDto>> GetSystemLogsAsync();
 
+    Task<SystemLogPageDto> SearchSystemLogsAsync(SystemLogSearchRequest request);
+
     Task<IEnumerable<SystemLogDto>> GetSystemLogsByUserAsync(int userId);
 
     Task<IEnumerable<SystemLogDto>> GetSystemLogsByTargetAsync(string targetEntity, string targetId);

@@ -7,7 +7,7 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class DiscountCodeRepository : BaseRepository<DiscountCode>, IDiscountCodeRepository
 {
-    public DiscountCodeRepository(IDbConnectionFactory factory) : base(factory) { }
+    public DiscountCodeRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
     public async Task<DiscountCode?> GetByCodeAsync(string code)
     {
@@ -23,3 +23,5 @@ public sealed class DiscountCodeRepository : BaseRepository<DiscountCode>, IDisc
         await db.ExecuteAsync(sql, new { Id = discountCodeId, UpdatedAt = DateTimeOffset.UtcNow });
     }
 }
+
+

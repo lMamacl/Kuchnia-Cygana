@@ -1,21 +1,21 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dapper;
 using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Interfaces.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 
 /// <summary>
-/// Repozytorium logów zmian statusów sesji pakowania.
+/// Repozytorium logĂłw zmian statusĂłw sesji pakowania.
 /// </summary>
 public sealed class PackingStatusLogRepository : BaseRepository<PackingStatusLog>, IPackingStatusLogRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
-    public PackingStatusLogRepository(IDbConnectionFactory connectionFactory)
-        : base(connectionFactory)
+    public PackingStatusLogRepository(IDbConnectionFactory connectionFactory, ICurrentUserService? currentUserService = null) : base(connectionFactory, currentUserService)
     {
         _connectionFactory = connectionFactory;
     }
@@ -35,3 +35,5 @@ public sealed class PackingStatusLogRepository : BaseRepository<PackingStatusLog
             new { packingSessionId });
     }
 }
+
+

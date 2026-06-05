@@ -1,21 +1,21 @@
-using System.Data;
+﻿using System.Data;
 using Dapper;
 using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using System.Threading.Tasks;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Repozytorium pojazdów
+/// Repozytorium pojazdĂłw
 /// </summary>
 public sealed class VehicleRepository : BaseRepository<Vehicle>, IVehicleRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
-    public VehicleRepository(IDbConnectionFactory connectionFactory)
-        : base(connectionFactory)
+    public VehicleRepository(IDbConnectionFactory connectionFactory, ICurrentUserService? currentUserService = null) : base(connectionFactory, currentUserService)
     {
         _connectionFactory = connectionFactory;
     }
@@ -29,3 +29,5 @@ public sealed class VehicleRepository : BaseRepository<Vehicle>, IVehicleReposit
         return vehicle;
     }
 }
+
+

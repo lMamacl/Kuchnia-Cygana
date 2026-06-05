@@ -2,12 +2,13 @@
 using KuchniaUCygana.Domain.Interfaces.Orders;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using Dapper;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class OrderRepository : BaseRepository<Order>, IOrderRepository
 {
-    public OrderRepository(IDbConnectionFactory factory) : base(factory) { }
+    public OrderRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
     public async Task<IEnumerable<Order>> GetByCustomerIdAsync(int customerId)
     {
@@ -72,3 +73,5 @@ public sealed class OrderRepository : BaseRepository<Order>, IOrderRepository
         return $"ORD-{dateStr}-{(count + 1):D4}";
     }
 }
+
+
