@@ -2,7 +2,7 @@ using FluentMigrator;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Migrations;
 
-[Migration(508)]
+[Migration(510)]
 public sealed class AddBaseColumnsToModule5Tables : Migration
 {
     public override void Up()
