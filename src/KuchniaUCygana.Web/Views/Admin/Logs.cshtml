@@ -2,13 +2,13 @@
 @{
     Layout = "_LayoutStaff";
 
-    var page = Model.AuditPage;
+    var auditPage = Model.AuditPage;
     var filter = Model.AuditFilter;
-    var logs = page.Items;
+    var logs = auditPage.Items;
     var fromValue = filter.From?.ToString("yyyy-MM-dd");
     var toValue = filter.To?.ToString("yyyy-MM-dd");
-    var previousPage = Math.Max(1, page.Page - 1);
-    var nextPage = Math.Min(page.TotalPages, page.Page + 1);
+    var previousPage = Math.Max(1, auditPage.Page - 1);
+    var nextPage = Math.Min(auditPage.TotalPages, auditPage.Page + 1);
 
     string ShortJson(string? value)
     {
@@ -49,7 +49,7 @@
                         <label class="form-label" for="Action">Akcja</label>
                         <select class="form-select" id="Action" name="Action">
                             <option value="">Wszystkie</option>
-                            @foreach (var action in page.Actions)
+                            @foreach (var action in auditPage.Actions)
                             {
                                 <option value="@action" selected="@(string.Equals(filter.Action, action, StringComparison.OrdinalIgnoreCase))">@action</option>
                             }
@@ -59,7 +59,7 @@
                         <label class="form-label" for="TargetEntity">Encja</label>
                         <select class="form-select" id="TargetEntity" name="TargetEntity">
                             <option value="">Wszystkie</option>
-                            @foreach (var entity in page.TargetEntities)
+                            @foreach (var entity in auditPage.TargetEntities)
                             {
                                 <option value="@entity" selected="@(string.Equals(filter.TargetEntity, entity, StringComparison.OrdinalIgnoreCase))">@entity</option>
                             }
@@ -78,7 +78,7 @@
                         <select class="form-select" id="PageSize" name="PageSize">
                             @foreach (var size in new[] { 10, 25, 50, 100 })
                             {
-                                <option value="@size" selected="@(page.PageSize == size)">@size</option>
+                                <option value="@size" selected="@(auditPage.PageSize == size)">@size</option>
                             }
                         </select>
                     </div>
@@ -97,7 +97,7 @@
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Logi systemowe</h3>
                 <div class="text-secondary small">
-                    Wyniki @logs.Count z @page.TotalCount - strona @page.Page / @page.TotalPages
+                    Wyniki @logs.Count z @auditPage.TotalCount - strona @auditPage.Page / @auditPage.TotalPages
                 </div>
             </div>
             <div class="table-responsive">
@@ -136,9 +136,9 @@
                 </table>
             </div>
             <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <span class="text-secondary small">Zakres strony: @page.PageSize wpisow</span>
+                <span class="text-secondary small">Zakres strony: @auditPage.PageSize wpisow</span>
                 <div class="btn-list">
-                    <a class="btn btn-outline-secondary @(page.Page <= 1 ? "disabled" : string.Empty)"
+                    <a class="btn btn-outline-secondary @(auditPage.Page <= 1 ? "disabled" : string.Empty)"
                        asp-controller="Admin"
                        asp-action="Logs"
                        asp-route-Search="@filter.Search"
@@ -148,8 +148,8 @@
                        asp-route-From="@fromValue"
                        asp-route-To="@toValue"
                        asp-route-Page="@previousPage"
-                       asp-route-PageSize="@page.PageSize">Poprzednia</a>
-                    <a class="btn btn-outline-secondary @(page.Page >= page.TotalPages ? "disabled" : string.Empty)"
+                       asp-route-PageSize="@auditPage.PageSize">Poprzednia</a>
+                    <a class="btn btn-outline-secondary @(auditPage.Page >= auditPage.TotalPages ? "disabled" : string.Empty)"
                        asp-controller="Admin"
                        asp-action="Logs"
                        asp-route-Search="@filter.Search"
@@ -159,7 +159,7 @@
                        asp-route-From="@fromValue"
                        asp-route-To="@toValue"
                        asp-route-Page="@nextPage"
-                       asp-route-PageSize="@page.PageSize">Nastepna</a>
+                       asp-route-PageSize="@auditPage.PageSize">Nastepna</a>
                 </div>
             </div>
         </div>
