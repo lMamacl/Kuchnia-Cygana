@@ -49,6 +49,14 @@ public sealed class PublishedDietPlanItemDto
 
     public decimal? CookedWeightGrams { get; set; }
 
+    public decimal? FinalWeightGrams { get; set; }
+
+    public decimal? FinalWeightAfterMultiplierGrams { get; set; }
+
+    public string NutritionSource { get; set; } = "Aggregated";
+
+    public string? NutritionOverrideReason { get; set; }
+
     public int? ShelfLifeHours { get; set; }
 
     public bool UseEarliestIngredientExpiry { get; set; }
@@ -59,11 +67,19 @@ public sealed class PublishedDietPlanItemDto
 
     public IReadOnlyList<MealComponentVersionDto> Components { get; set; } = Array.Empty<MealComponentVersionDto>();
 
+    public IReadOnlyList<AggregateIngredientDto> AggregateIngredients { get; set; } = Array.Empty<AggregateIngredientDto>();
+
     public IReadOnlyList<PackagingRequirementDto> PackagingRequirements { get; set; } = Array.Empty<PackagingRequirementDto>();
+
+    public IReadOnlyList<int> RecipeComponentVersionIds { get; set; } = Array.Empty<int>();
 
     public IReadOnlyList<ComponentInstructionSectionDto> InstructionSections { get; set; } = Array.Empty<ComponentInstructionSectionDto>();
 
     public IReadOnlyList<string> ValidationWarnings { get; set; } = Array.Empty<string>();
+
+    public string CompletenessStatus { get; set; } = "Incomplete";
+
+    public bool IsAggregated { get; set; }
 
     public bool IsCompleteForProduction { get; set; }
 }
@@ -97,6 +113,18 @@ public sealed class MealComponentVersionDto
     public int? ShelfLifeHours { get; set; }
 
     public bool UseEarliestIngredientExpiry { get; set; }
+
+    public bool AllergensApproved { get; set; }
+
+    public bool IsOptional { get; set; }
+
+    public decimal? RawWeightGrams { get; set; }
+
+    public decimal? CookedWeightGrams { get; set; }
+
+    public decimal? FinalWeightGrams { get; set; }
+
+    public decimal ScaleFactor { get; set; } = 1.0m;
 
     public LabelNutritionDto? Nutrition { get; set; }
 
@@ -140,6 +168,33 @@ public sealed class ComponentIngredientDto
     public string? Notes { get; set; }
 }
 
+public sealed class AggregateIngredientDto
+{
+    public int IngredientId { get; set; }
+
+    public string IngredientName { get; set; } = string.Empty;
+
+    public int? StockItemId { get; set; }
+
+    public int? WarehouseCategoryId { get; set; }
+
+    public string? WarehouseCategoryName { get; set; }
+
+    public decimal NetWeightInGrams { get; set; }
+
+    public decimal GrossWeightInGrams { get; set; }
+
+    public decimal YieldFactor { get; set; } = 1.0m;
+
+    public bool IsOptional { get; set; }
+
+    public string? Notes { get; set; }
+
+    public IReadOnlyList<int> SourceRecipeComponentVersionIds { get; set; } = Array.Empty<int>();
+
+    public IReadOnlyList<string> SourceComponentNames { get; set; } = Array.Empty<string>();
+}
+
 public sealed class ComponentInstructionSectionDto
 {
     public int SectionId { get; set; }
@@ -175,6 +230,8 @@ public sealed class PackagingRequirementDto
     public string OwnerType { get; set; } = string.Empty;
 
     public int? MealId { get; set; }
+
+    public int? MealVariantId { get; set; }
 
     public int? RecipeComponentVersionId { get; set; }
 

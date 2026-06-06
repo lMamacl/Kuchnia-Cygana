@@ -363,6 +363,7 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
                 i.[MealId],
                 i.[MealVariantId],
                 mv.[Name] AS [MealVariantName],
+                mv.[Status] AS [MealVariantStatus],
                 m.[Name] AS [MealName],
                 m.[Status] AS [MealStatus],
                 i.[MealSlot],
@@ -458,6 +459,7 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
                 WHERE pr.[IsDeleted] = 0
                   AND (
                         pr.[MealId] = i.[MealId]
+                        OR pr.[MealVariantId] = i.[MealVariantId]
                         OR pr.[RecipeComponentVersionId] IN (
                             SELECT mrc.[RecipeComponentVersionId]
                             FROM [MealRecipeComponents] mrc

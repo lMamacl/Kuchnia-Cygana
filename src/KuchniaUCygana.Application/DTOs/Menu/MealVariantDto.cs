@@ -38,13 +38,21 @@ public sealed class MealVariantDto
 
     public string? AllergenOverrideReason { get; set; }
 
+    public DateTimeOffset? PublishedAt { get; set; }
+
+    public string? PublishedBy { get; set; }
+
     public bool IsComplete { get; set; }
 
     public List<string> ValidationWarnings { get; set; } = new();
 
     public List<MealVariantComponentDto> Components { get; set; } = new();
 
+    public List<PackagingRequirementEditDto> PackagingRequirements { get; set; } = new();
+
     public List<string> Allergens { get; set; } = new();
+
+    public MealVariantResultDto? Result { get; set; }
 }
 
 public sealed class MealVariantComponentDto
@@ -83,4 +91,73 @@ public sealed class CreateMealVariantRequest
     public string VariantType { get; set; } = "Standard";
 
     public int? SourceMealVariantId { get; set; }
+}
+
+public sealed class UpdateMealVariantRequest
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string VariantType { get; set; } = "Standard";
+
+    public string Status { get; set; } = "Draft";
+
+    public string? Description { get; set; }
+
+    public decimal? RawWeightGrams { get; set; }
+
+    public decimal? CookedWeightGrams { get; set; }
+
+    public decimal? CaloriesPer100g { get; set; }
+
+    public decimal? ProteinPer100g { get; set; }
+
+    public decimal? CarbohydratesPer100g { get; set; }
+
+    public decimal? FatPer100g { get; set; }
+
+    public decimal? FiberPer100g { get; set; }
+
+    public string NutritionSource { get; set; } = "Aggregated";
+
+    public string? NutritionOverrideReason { get; set; }
+
+    public bool AllergensApproved { get; set; }
+
+    public string? AllergenOverrideReason { get; set; }
+}
+
+public sealed class SaveMealVariantComponentRequest
+{
+    public int Id { get; set; }
+
+    public int RecipeComponentVersionId { get; set; }
+
+    public string? Role { get; set; }
+
+    public decimal QuantityPerServing { get; set; } = 1.0m;
+
+    public string Unit { get; set; } = "portion";
+
+    public int SortOrder { get; set; }
+
+    public bool IsOptional { get; set; }
+}
+
+public sealed class SaveMealVariantPackagingRequest
+{
+    public int Id { get; set; }
+
+    public int? StockItemId { get; set; }
+
+    public int? WarehouseCategoryId { get; set; }
+
+    public string ResourceName { get; set; } = string.Empty;
+
+    public decimal Quantity { get; set; } = 1.0m;
+
+    public string Unit { get; set; } = "pcs";
+
+    public string? ContainerRole { get; set; }
+
+    public bool IsCustomerFacing { get; set; } = true;
 }

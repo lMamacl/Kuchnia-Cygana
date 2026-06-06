@@ -183,6 +183,7 @@ public static class DependencyInjection
         services.AddScoped<MenuAppInterfaces.IImageManagementService, MenuAppServices.ImageManagementService>();
         services.AddScoped<MenuAppInterfaces.IIngredientManagementService, MenuAppServices.IngredientManagementService>();
         services.AddScoped<MenuAppInterfaces.IMealManagementService, MenuAppServices.MealManagementService>();
+        services.AddScoped<MenuAppInterfaces.IMealVariantResultCalculator, MenuAppServices.MealVariantResultCalculator>();
         services.AddScoped<MenuAppInterfaces.INutritionService, MenuAppServices.NutritionService>();
         services.AddScoped<MenuAppInterfaces.IRecipeComponentManagementService, MenuAppServices.RecipeComponentManagementService>();
         services.AddScoped<MenuAppInterfaces.IDietMenuPlanManagementService, MenuAppServices.DietMenuPlanManagementService>();

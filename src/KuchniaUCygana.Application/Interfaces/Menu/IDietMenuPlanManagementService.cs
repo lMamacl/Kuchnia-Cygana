@@ -4,7 +4,7 @@ namespace KuchniaUCygana.Application.Interfaces.Menu;
 
 public interface IDietMenuPlanManagementService
 {
-    Task<DietMenuWeekDto> GetWeekAsync(DateOnly startDate);
+    Task<DietMenuWeekDto> GetWeekAsync(DateOnly startDate, int days = 7);
 
     Task<DietMenuDayDto> GetDayAsync(DateOnly date);
 

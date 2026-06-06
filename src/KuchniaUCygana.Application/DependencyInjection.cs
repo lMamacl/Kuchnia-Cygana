@@ -1,6 +1,8 @@
 using FluentValidation;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Application.Interfaces.Menu;
 using KuchniaUCygana.Application.Services;
+using KuchniaUCygana.Application.Services.Menu;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 
@@ -20,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<IDeliveryCalendarService, DeliveryCalendarService>();
         services.AddScoped<IDiscountService, DiscountService>();
         services.AddScoped<ICustomerProfileService, CustomerProfileService>();
+        services.AddScoped<IMealVariantResultCalculator, MealVariantResultCalculator>();
         return services;
     }
 }

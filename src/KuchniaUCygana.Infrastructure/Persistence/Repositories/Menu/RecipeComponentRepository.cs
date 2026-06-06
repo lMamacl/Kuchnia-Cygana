@@ -14,12 +14,16 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
         this.factory = factory;
     }
 
-    public async Task<IReadOnlyList<RecipeComponentListRow>> SearchComponentsAsync(string? query)
+    public async Task<RecipeComponentSearchResult> SearchComponentsAsync(RecipeComponentSearchQuery query)
     {
         using var db = this.factory.CreateConnection();
+        var page = query.Page <= 0 ? 1 : query.Page;
+        var pageSize = Math.Clamp(query.PageSize <= 0 ? 25 : query.PageSize, 1, 100);
+        var (whereSql, parameters) = BuildComponentSearchWhere(query);
+        parameters.Add("Offset", (page - 1) * pageSize);
+        parameters.Add("PageSize", pageSize);
 
-        var rows = await db.QueryAsync<RecipeComponentListRow>(
-            """
+        const string componentRowsSql = """
             WITH LatestVersions AS (
                 SELECT
                     rcv.[RecipeComponentId],
@@ -32,37 +36,124 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                     ) AS [RowNumber]
                 FROM [RecipeComponentVersions] rcv
                 WHERE rcv.[IsDeleted] = 0
+            ),
+            ComponentRows AS (
+                SELECT
+                    rc.[Id],
+                    rc.[CategoryId],
+                    c.[Name] AS [CategoryName],
+                    rc.[Name],
+                    rc.[Description],
+                    rc.[ImageUrl],
+                    rc.[PreparationTimeMinutes],
+                    rc.[IsActive],
+                    COUNT(rcv.[Id]) AS [VersionCount],
+                    lv.[Id] AS [LatestVersionId],
+                    lv.[VersionNumber] AS [LatestVersionNumber],
+                    lv.[Status] AS [LatestVersionStatus],
+                    CAST(CASE WHEN validation.[GapCount] > 0 THEN 1 ELSE 0 END AS bit) AS [HasPublicationGaps],
+                    validation.[GapCount] AS [PublicationGapCount]
+                FROM [RecipeComponents] rc
+                LEFT JOIN [Categories] c ON c.[Id] = rc.[CategoryId]
+                LEFT JOIN [RecipeComponentVersions] rcv ON rcv.[RecipeComponentId] = rc.[Id] AND rcv.[IsDeleted] = 0
+                LEFT JOIN LatestVersions lv ON lv.[RecipeComponentId] = rc.[Id] AND lv.[RowNumber] = 1
+                OUTER APPLY (
+                    SELECT
+                        COUNT(rci.[Id]) AS [IngredientCount],
+                        SUM(CASE
+                            WHEN COALESCE(rci.[WarehouseCategoryId], i.[WarehouseCategoryId], si.[WarehouseCategoryId]) IS NULL THEN 1
+                            ELSE 0
+                        END) AS [MissingWarehouseCategoryCount]
+                    FROM [RecipeComponentIngredients] rci
+                    INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+                    LEFT JOIN [StockItems] si ON si.[BaseIngredientId] = i.[Id] AND si.[IsDeleted] = 0
+                    WHERE rci.[RecipeComponentVersionId] = lv.[Id]
+                      AND rci.[IsDeleted] = 0
+                      AND i.[IsDeleted] = 0
+                ) ingredientStats
+                OUTER APPLY (
+                    SELECT COUNT(pr.[Id]) AS [PackagingCount]
+                    FROM [PackagingRequirements] pr
+                    WHERE pr.[RecipeComponentVersionId] = lv.[Id]
+                      AND pr.[IsDeleted] = 0
+                ) packagingStats
+                OUTER APPLY (
+                    SELECT COUNT(steps.[Id]) AS [StepCount]
+                    FROM [RecipeComponentInstructionSections] sections
+                    INNER JOIN [RecipeComponentInstructionSteps] steps
+                        ON steps.[RecipeComponentInstructionSectionId] = sections.[Id]
+                       AND steps.[IsDeleted] = 0
+                    WHERE sections.[RecipeComponentVersionId] = lv.[Id]
+                      AND sections.[IsDeleted] = 0
+                ) instructionStats
+                OUTER APPLY (
+                    SELECT
+                        (CASE WHEN lv.[Id] IS NULL THEN 1 ELSE 0 END)
+                      + (CASE WHEN lv.[Id] IS NOT NULL AND (
+                                lv.[CaloriesPer100g] IS NULL
+                             OR lv.[ProteinPer100g] IS NULL
+                             OR lv.[CarbohydratesPer100g] IS NULL
+                             OR lv.[FatPer100g] IS NULL
+                             OR lv.[FiberPer100g] IS NULL
+                            ) THEN 1 ELSE 0 END)
+                      + (CASE WHEN lv.[Id] IS NOT NULL AND COALESCE(ingredientStats.[IngredientCount], 0) = 0 THEN 1 ELSE 0 END)
+                      + (CASE WHEN lv.[Id] IS NOT NULL AND COALESCE(ingredientStats.[MissingWarehouseCategoryCount], 0) > 0 THEN 1 ELSE 0 END)
+                      + (CASE WHEN lv.[Id] IS NOT NULL AND COALESCE(packagingStats.[PackagingCount], 0) = 0 THEN 1 ELSE 0 END)
+                      + (CASE WHEN lv.[Id] IS NOT NULL AND lv.[AllergensApproved] = 0 THEN 1 ELSE 0 END)
+                      + (CASE WHEN lv.[Id] IS NOT NULL AND COALESCE(instructionStats.[StepCount], 0) = 0 THEN 1 ELSE 0 END)
+                        AS [GapCount]
+                ) validation
+                WHERE rc.[IsDeleted] = 0
+                GROUP BY
+                    rc.[Id],
+                    rc.[CategoryId],
+                    c.[Name],
+                    rc.[Name],
+                    rc.[Description],
+                    rc.[ImageUrl],
+                    rc.[PreparationTimeMinutes],
+                    rc.[IsActive],
+                    lv.[Id],
+                    lv.[VersionNumber],
+                    lv.[Status],
+                    validation.[GapCount]
             )
-            SELECT
-                rc.[Id],
-                rc.[CategoryId],
-                c.[Name] AS [CategoryName],
-                rc.[Name],
-                rc.[Description],
-                rc.[ImageUrl],
-                rc.[PreparationTimeMinutes],
-                rc.[IsActive],
-                COUNT(rcv.[Id]) AS [VersionCount],
-                lv.[Id] AS [LatestVersionId],
-                lv.[VersionNumber] AS [LatestVersionNumber],
-                lv.[Status] AS [LatestVersionStatus]
-            FROM [RecipeComponents] rc
-            LEFT JOIN [Categories] c ON c.[Id] = rc.[CategoryId]
-            LEFT JOIN [RecipeComponentVersions] rcv ON rcv.[RecipeComponentId] = rc.[Id] AND rcv.[IsDeleted] = 0
-            LEFT JOIN LatestVersions lv ON lv.[RecipeComponentId] = rc.[Id] AND lv.[RowNumber] = 1
-            WHERE rc.[IsDeleted] = 0
-              AND (@query IS NULL OR rc.[Name] LIKE @like OR rc.[Description] LIKE @like)
-            GROUP BY rc.[Id], rc.[CategoryId], c.[Name], rc.[Name], rc.[Description], rc.[ImageUrl],
-                rc.[PreparationTimeMinutes], rc.[IsActive], lv.[Id], lv.[VersionNumber], lv.[Status]
-            ORDER BY rc.[Name];
-            """,
-            new
-            {
-                query = string.IsNullOrWhiteSpace(query) ? null : query,
-                like = $"%{query}%",
-            });
+            """;
 
-        return rows.ToList();
+        var totalCount = await db.ExecuteScalarAsync<int>(
+            $"{componentRowsSql} SELECT COUNT(1) FROM ComponentRows cr WHERE {whereSql};",
+            parameters);
+
+        var rows = await db.QueryAsync<RecipeComponentListRow>(
+            $"""
+            {componentRowsSql}
+            SELECT
+                cr.[Id],
+                cr.[CategoryId],
+                cr.[CategoryName],
+                cr.[Name],
+                cr.[Description],
+                cr.[ImageUrl],
+                cr.[PreparationTimeMinutes],
+                cr.[IsActive],
+                cr.[VersionCount],
+                cr.[LatestVersionId],
+                cr.[LatestVersionNumber],
+                cr.[LatestVersionStatus],
+                cr.[HasPublicationGaps],
+                cr.[PublicationGapCount]
+            FROM ComponentRows cr
+            WHERE {whereSql}
+            ORDER BY cr.[Name], cr.[Id]
+            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+            """,
+            parameters);
+
+        return new RecipeComponentSearchResult
+        {
+            Items = rows.ToList(),
+            TotalCount = totalCount,
+        };
     }
 
     public async Task<RecipeComponentDetailRow?> GetComponentAsync(int componentId)
@@ -133,14 +224,56 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                 wc.[Name] AS [WarehouseCategoryName],
                 rci.[WeightInGrams],
                 rci.[YieldFactor],
+                nf.[CaloriesPer100g],
+                nf.[ProteinPer100g],
+                nf.[CarbohydratesPer100g],
+                nf.[FatPer100g],
+                nf.[FiberPer100g],
                 rci.[IsOptional],
                 rci.[Notes]
             FROM [RecipeComponentIngredients] rci
             INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
             LEFT JOIN [WarehouseCategories] wc ON wc.[Id] = COALESCE(rci.[WarehouseCategoryId], i.[WarehouseCategoryId])
+            OUTER APPLY (
+                SELECT TOP 1
+                    facts.[CaloriesPer100g],
+                    facts.[ProteinPer100g],
+                    facts.[CarbohydratesPer100g],
+                    facts.[FatPer100g],
+                    facts.[FiberPer100g]
+                FROM [NutritionFacts] facts
+                WHERE facts.[IngredientId] = i.[Id]
+                ORDER BY facts.[Id] DESC
+            ) nf
             WHERE rci.[RecipeComponentVersionId] = @versionId
               AND rci.[IsDeleted] = 0
             ORDER BY rci.[Id];
+            """,
+            new { versionId });
+
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<RecipeComponentAllergenRow>> GetVersionAllergensAsync(int versionId)
+    {
+        using var db = this.factory.CreateConnection();
+
+        var rows = await db.QueryAsync<RecipeComponentAllergenRow>(
+            """
+            SELECT
+                a.[Id] AS [AllergenId],
+                a.[Name],
+                ia.[TraceAmount] AS [IsTrace],
+                N'Ingredient' AS [SourceType],
+                i.[Name] AS [SourceName]
+            FROM [RecipeComponentIngredients] rci
+            INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+            INNER JOIN [IngredientAllergens] ia ON ia.[IngredientId] = i.[Id]
+            INNER JOIN [Allergens] a ON a.[Id] = ia.[AllergenId]
+            WHERE rci.[RecipeComponentVersionId] = @versionId
+              AND rci.[IsDeleted] = 0
+              AND i.[IsDeleted] = 0
+            ORDER BY a.[Name], i.[Name];
             """,
             new { versionId });
 
@@ -157,6 +290,7 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                 [Id],
                 [OwnerType],
                 [MealId],
+                [MealVariantId],
                 [RecipeComponentVersionId],
                 [StockItemId],
                 [WarehouseCategoryId],
@@ -171,6 +305,37 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
             ORDER BY [Id];
             """,
             new { versionId });
+
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<PackagingRequirementRow>> GetMealPackagingAsync(int mealId)
+    {
+        using var db = this.factory.CreateConnection();
+
+        var rows = await db.QueryAsync<PackagingRequirementRow>(
+            """
+            SELECT
+                [Id],
+                [OwnerType],
+                [MealId],
+                [MealVariantId],
+                [RecipeComponentVersionId],
+                [StockItemId],
+                [WarehouseCategoryId],
+                [ResourceName],
+                [Quantity],
+                [Unit],
+                [ContainerRole],
+                [IsCustomerFacing]
+            FROM [PackagingRequirements]
+            WHERE [MealId] = @mealId
+              AND [MealVariantId] IS NULL
+              AND [RecipeComponentVersionId] IS NULL
+              AND [IsDeleted] = 0
+            ORDER BY [Id];
+            """,
+            new { mealId });
 
         return rows.ToList();
     }
@@ -270,8 +435,18 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                 mrc.[Unit],
                 mrc.[SortOrder],
                 rcv.[Instructions],
+                rcv.[YieldQuantity],
+                rcv.[YieldUnit],
+                rcv.[RawWeightGrams],
+                rcv.[CookedWeightGrams],
+                rcv.[CaloriesPer100g],
+                rcv.[ProteinPer100g],
+                rcv.[CarbohydratesPer100g],
+                rcv.[FatPer100g],
+                rcv.[FiberPer100g],
                 rcv.[ShelfLifeHours],
                 rcv.[UseEarliestIngredientExpiry],
+                rcv.[AllergensApproved],
                 rci.[IngredientId],
                 i.[Name] AS [IngredientName],
                 COALESCE(rci.[StockItemId], i.[StockItemId], si.[Id]) AS [StockItemId],
@@ -317,8 +492,18 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                 N'portion' AS [Unit],
                 0 AS [SortOrder],
                 m.[PreparationInstructions] AS [Instructions],
+                CAST(1.0 AS decimal(10, 3)) AS [YieldQuantity],
+                N'portion' AS [YieldUnit],
+                m.[RawWeightGrams],
+                m.[CookedWeightGrams],
+                NULL AS [CaloriesPer100g],
+                NULL AS [ProteinPer100g],
+                NULL AS [CarbohydratesPer100g],
+                NULL AS [FatPer100g],
+                NULL AS [FiberPer100g],
                 m.[ShelfLifeHours],
                 m.[UseEarliestIngredientExpiry],
+                CAST(0 AS bit) AS [AllergensApproved],
                 r.[IngredientId],
                 i.[Name] AS [IngredientName],
                 COALESCE(i.[StockItemId], si.[Id]) AS [StockItemId],
@@ -438,11 +623,11 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                   AND [IsDeleted] = 0;
 
                 INSERT INTO [PackagingRequirements]
-                    ([OwnerType], [MealId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
+                    ([OwnerType], [MealId], [MealVariantId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
                      [ResourceName], [Quantity], [Unit], [ContainerRole], [IsCustomerFacing],
                      [CreatedAt], [CreatedBy], [IsDeleted])
                 SELECT
-                    [OwnerType], NULL, @versionId, [StockItemId], [WarehouseCategoryId],
+                    [OwnerType], NULL, NULL, @versionId, [StockItemId], [WarehouseCategoryId],
                     [ResourceName], [Quantity], [Unit], [ContainerRole], [IsCustomerFacing],
                     @createdAt, @createdBy, 0
                 FROM [PackagingRequirements]
@@ -637,7 +822,8 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
             await db.ExecuteAsync(
                 """
                 UPDATE [PackagingRequirements]
-                SET [StockItemId] = @StockItemId,
+                SET [MealVariantId] = @MealVariantId,
+                    [StockItemId] = @StockItemId,
                     [WarehouseCategoryId] = @WarehouseCategoryId,
                     [ResourceName] = @ResourceName,
                     [Quantity] = @Quantity,
@@ -657,11 +843,11 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
         return await db.QuerySingleAsync<int>(
             """
             INSERT INTO [PackagingRequirements]
-                ([OwnerType], [MealId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
+                ([OwnerType], [MealId], [MealVariantId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
                  [ResourceName], [Quantity], [Unit], [ContainerRole], [IsCustomerFacing],
                  [CreatedAt], [CreatedBy], [IsDeleted])
             VALUES
-                (@OwnerType, @MealId, @RecipeComponentVersionId, @StockItemId, @WarehouseCategoryId,
+                (@OwnerType, @MealId, @MealVariantId, @RecipeComponentVersionId, @StockItemId, @WarehouseCategoryId,
                  @ResourceName, @Quantity, @Unit, @ContainerRole, @IsCustomerFacing,
                  @CreatedAt, @CreatedBy, 0);
             SELECT CAST(SCOPE_IDENTITY() AS int);
@@ -888,6 +1074,54 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                  @SortOrder, @IsOptional, @CreatedAt, @CreatedBy, 0);
             """,
             component);
+    }
+
+    private static (string WhereSql, DynamicParameters Parameters) BuildComponentSearchWhere(
+        RecipeComponentSearchQuery query)
+    {
+        var clauses = new List<string> { "1 = 1" };
+        var parameters = new DynamicParameters();
+
+        if (!string.IsNullOrWhiteSpace(query.Query))
+        {
+            clauses.Add("(cr.[Name] LIKE @Like OR cr.[Description] LIKE @Like)");
+            parameters.Add("Like", $"%{query.Query.Trim()}%");
+        }
+
+        if (query.CategoryId.HasValue)
+        {
+            clauses.Add("cr.[CategoryId] = @CategoryId");
+            parameters.Add("CategoryId", query.CategoryId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.VersionStatus))
+        {
+            clauses.Add("cr.[LatestVersionStatus] = @VersionStatus");
+            parameters.Add("VersionStatus", query.VersionStatus.Trim());
+        }
+
+        if (query.AllergenId.HasValue)
+        {
+            clauses.Add(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentIngredients] rci
+                    INNER JOIN [IngredientAllergens] ia ON ia.[IngredientId] = rci.[IngredientId]
+                    WHERE rci.[RecipeComponentVersionId] = cr.[LatestVersionId]
+                      AND rci.[IsDeleted] = 0
+                      AND ia.[AllergenId] = @AllergenId
+                )
+                """);
+            parameters.Add("AllergenId", query.AllergenId.Value);
+        }
+
+        if (query.MissingPublicationData)
+        {
+            clauses.Add("cr.[HasPublicationGaps] = 1");
+        }
+
+        return (string.Join(" AND ", clauses), parameters);
     }
 
     private static string VersionSelectSql()

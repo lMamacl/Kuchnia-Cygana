@@ -150,13 +150,13 @@ public sealed class ProductionService : IProductionService
         var item = await _itemRepository.GetByIdAsync(planItemId)
             ?? throw new InvalidOperationException($"Pozycja planu {planItemId} nie istnieje.");
 
-        var details = await _dietProvider.GetMealCookingDetailsAsync(item.MealId);
         var storedSnapshot = TryDeserializeSnapshotItem(item);
         if (storedSnapshot is not null)
         {
-            return BuildCookingCardFromSnapshot(item, storedSnapshot, details);
+            return BuildCookingCardFromSnapshot(item, storedSnapshot, null);
         }
 
+        var details = await _dietProvider.GetMealCookingDetailsAsync(item.MealId);
         var recipe = (await _dietProvider.GetRecipeForMealAsync(item.MealId)).ToList();
 
         var card = new CookingCardDto
@@ -375,24 +375,22 @@ public sealed class ProductionService : IProductionService
         List<ProductionPlanItem> pendingItems,
         PublishedDietPlanSnapshotDto snapshot)
     {
-        var snapshotItemsByPlanItem = snapshot.Items.ToDictionary(
-            item => (item.MealId, item.DietVariantId),
-            item => item);
         var requirementsByItem = new Dictionary<int, List<SnapshotIngredientRequirement>>();
         var missingMappings = new List<string>();
 
         foreach (var item in pendingItems)
         {
-            if (!snapshotItemsByPlanItem.TryGetValue((item.MealId, item.DietVariantId), out var snapshotItem))
+            var snapshotItem = FindSnapshotItemForProductionItem(snapshot, item);
+            if (snapshotItem is null)
             {
                 throw new InvalidOperationException(
                     $"Brak pozycji snapshotu M2 dla posilku {item.MealName} (MealId {item.MealId}, DietVariantId {item.DietVariantId}).");
             }
 
             var requirements = new List<SnapshotIngredientRequirement>();
-            foreach (var component in snapshotItem.Components)
+            if (snapshotItem.AggregateIngredients.Count > 0)
             {
-                foreach (var ingredient in component.Ingredients)
+                foreach (var ingredient in snapshotItem.AggregateIngredients)
                 {
                     if (!ingredient.StockItemId.HasValue && !ingredient.WarehouseCategoryId.HasValue)
                     {
@@ -401,16 +399,43 @@ public sealed class ProductionService : IProductionService
                     }
 
                     requirements.Add(new SnapshotIngredientRequirement(
-                        component.RecipeComponentVersionId,
-                        component.ComponentName,
+                        ingredient.SourceRecipeComponentVersionIds.Count > 0
+                            ? ingredient.SourceRecipeComponentVersionIds[0]
+                            : null,
+                        ingredient.SourceComponentNames.FirstOrDefault() ?? "Aggregate",
                         ingredient.IngredientId,
                         ingredient.IngredientName,
                         ingredient.StockItemId,
                         ingredient.WarehouseCategoryId,
-                        ingredient.WeightInGrams
-                            * component.QuantityPerServing
+                        ingredient.NetWeightInGrams
                             * snapshotItem.ServingMultiplier
                             * item.PlannedQuantity));
+                }
+            }
+            else
+            {
+                foreach (var component in snapshotItem.Components)
+                {
+                    foreach (var ingredient in component.Ingredients)
+                    {
+                        if (!ingredient.StockItemId.HasValue && !ingredient.WarehouseCategoryId.HasValue)
+                        {
+                            missingMappings.Add($"{ingredient.IngredientName} (IngredientId {ingredient.IngredientId})");
+                            continue;
+                        }
+
+                        requirements.Add(new SnapshotIngredientRequirement(
+                            component.RecipeComponentVersionId,
+                            component.ComponentName,
+                            ingredient.IngredientId,
+                            ingredient.IngredientName,
+                            ingredient.StockItemId,
+                            ingredient.WarehouseCategoryId,
+                            ingredient.WeightInGrams
+                                * component.QuantityPerServing
+                                * snapshotItem.ServingMultiplier
+                                * item.PlannedQuantity));
+                    }
                 }
             }
 
@@ -577,6 +602,8 @@ public sealed class ProductionService : IProductionService
         PublishedDietPlanItemDto snapshotItem,
         MealCookingDetailsEntry? details)
     {
+        var hasAggregateIngredients = snapshotItem.AggregateIngredients.Count > 0;
+        var hasAggregatePackaging = HasAggregatePackaging(snapshotItem);
         var card = new CookingCardDto
         {
             PlanItemId = item.Id,
@@ -641,7 +668,10 @@ public sealed class ProductionService : IProductionService
                 };
 
                 componentDto.Ingredients.Add(ingredientDto);
-                AddAggregatedIngredient(card.Ingredients, ingredientDto);
+                if (!hasAggregateIngredients)
+                {
+                    AddAggregatedIngredient(card.Ingredients, ingredientDto);
+                }
             }
 
             foreach (var packaging in component.PackagingRequirements)
@@ -653,24 +683,55 @@ public sealed class ProductionService : IProductionService
             card.Components.Add(componentDto);
         }
 
-        foreach (var packaging in snapshotItem.PackagingRequirements)
+        if (hasAggregateIngredients)
         {
-            card.PackagingRequirements.Add(MapPackaging(packaging, packaging.Quantity, item.PlannedQuantity));
+            foreach (var ingredient in snapshotItem.AggregateIngredients)
+            {
+                var weightPerServing = ingredient.NetWeightInGrams * snapshotItem.ServingMultiplier;
+                card.Ingredients.Add(new CookingCardIngredientDto
+                {
+                    IngredientId = ingredient.IngredientId,
+                    StockItemId = ingredient.StockItemId,
+                    IngredientName = ingredient.IngredientName,
+                    WarehouseCategoryName = ingredient.WarehouseCategoryName,
+                    WeightPerServing = weightPerServing,
+                    TotalWeight = weightPerServing * item.PlannedQuantity,
+                    YieldFactor = ingredient.YieldFactor,
+                    IsOptional = ingredient.IsOptional,
+                });
+            }
         }
 
-        foreach (var component in card.Components)
+        foreach (var packaging in snapshotItem.PackagingRequirements)
         {
-            card.PackagingRequirements.AddRange(component.PackagingRequirements);
+            card.PackagingRequirements.Add(MapPackaging(
+                packaging,
+                GetPackagingQuantityPerServing(snapshotItem, packaging),
+                item.PlannedQuantity));
+        }
+
+        if (!hasAggregatePackaging)
+        {
+            foreach (var component in card.Components)
+            {
+                card.PackagingRequirements.AddRange(component.PackagingRequirements);
+            }
         }
 
         card.RequiresCoreTemperatureCheck = card.Components.Any(c => c.RequiresCoreTemperatureCheck);
         card.MinimumCoreTemperatureCelsius = MaxTemperature(card.Ingredients);
-        card.MissingWarehouseMappings = snapshotItem.Components
-            .SelectMany(c => c.Ingredients)
-            .Where(i => !i.StockItemId.HasValue && !i.WarehouseCategoryId.HasValue)
-            .Select(i => $"{i.IngredientName} (ID {i.IngredientId})")
-            .Distinct()
-            .ToList();
+        card.MissingWarehouseMappings = hasAggregateIngredients
+            ? snapshotItem.AggregateIngredients
+                .Where(i => !i.StockItemId.HasValue && !i.WarehouseCategoryId.HasValue)
+                .Select(i => $"{i.IngredientName} (ID {i.IngredientId})")
+                .Distinct()
+                .ToList()
+            : snapshotItem.Components
+                .SelectMany(c => c.Ingredients)
+                .Where(i => !i.StockItemId.HasValue && !i.WarehouseCategoryId.HasValue)
+                .Select(i => $"{i.IngredientName} (ID {i.IngredientId})")
+                .Distinct()
+                .ToList();
 
         return card;
     }
@@ -679,9 +740,17 @@ public sealed class ProductionService : IProductionService
         PublishedDietPlanItemDto snapshotItem,
         decimal actualQuantity)
     {
+        var hasAggregatePackaging = HasAggregatePackaging(snapshotItem);
         foreach (var packaging in snapshotItem.PackagingRequirements)
         {
-            yield return CreatePackagingRequirement(packaging, packaging.Quantity * actualQuantity);
+            yield return CreatePackagingRequirement(
+                packaging,
+                GetPackagingQuantityPerServing(snapshotItem, packaging) * actualQuantity);
+        }
+
+        if (hasAggregatePackaging)
+        {
+            yield break;
         }
 
         foreach (var component in snapshotItem.Components)
@@ -710,6 +779,17 @@ public sealed class ProductionService : IProductionService
             requiredQuantity);
     }
 
+    private static bool HasAggregatePackaging(PublishedDietPlanItemDto snapshotItem)
+        => snapshotItem.PackagingRequirements.Any(packaging =>
+            packaging.RecipeComponentVersionId.HasValue);
+
+    private static decimal GetPackagingQuantityPerServing(
+        PublishedDietPlanItemDto snapshotItem,
+        PackagingRequirementDto packaging)
+        => packaging.RecipeComponentVersionId.HasValue
+            ? packaging.Quantity * snapshotItem.ServingMultiplier
+            : packaging.Quantity;
+
     private static PublishedDietPlanSnapshotDto? BuildStoredSnapshot(DateOnly planDate, List<ProductionPlanItem> pendingItems)
     {
         var snapshotItems = pendingItems
@@ -735,6 +815,38 @@ public sealed class ProductionService : IProductionService
             PlanStatus = "Snapshot",
             Items = snapshotItems,
         };
+    }
+
+    private static PublishedDietPlanItemDto? FindSnapshotItemForProductionItem(
+        PublishedDietPlanSnapshotDto snapshot,
+        ProductionPlanItem item)
+    {
+        if (item.DietMenuPlanItemId.HasValue)
+        {
+            var planItemMatch = snapshot.Items.FirstOrDefault(snapshotItem =>
+                snapshotItem.DietMenuPlanItemId == item.DietMenuPlanItemId.Value);
+            if (planItemMatch is not null)
+            {
+                return planItemMatch;
+            }
+        }
+
+        var storedSnapshot = TryDeserializeSnapshotItem(item);
+        if (storedSnapshot?.MealVariantId is int mealVariantId)
+        {
+            var variantMatch = snapshot.Items.FirstOrDefault(snapshotItem =>
+                snapshotItem.MealId == item.MealId &&
+                snapshotItem.DietVariantId == item.DietVariantId &&
+                snapshotItem.MealVariantId == mealVariantId);
+            if (variantMatch is not null)
+            {
+                return variantMatch;
+            }
+        }
+
+        return snapshot.Items.FirstOrDefault(snapshotItem =>
+            snapshotItem.MealId == item.MealId &&
+            snapshotItem.DietVariantId == item.DietVariantId);
     }
 
     private static PublishedDietPlanItemDto? TryDeserializeSnapshotItem(ProductionPlanItem item)
@@ -1034,12 +1146,18 @@ public sealed class ProductionService : IProductionService
             ComponentCount = snapshot?.Components.Count ?? CountComponentIds(item.RecipeComponentVersionIds),
             PackagingRequirementCount = packagingCount,
             ValidationWarningCount = validationWarningCount,
-            HasMissingWarehouseMappings = snapshot?.Components
-                .SelectMany(component => component.Ingredients)
-                .Any(ingredient => !ingredient.StockItemId.HasValue && !ingredient.WarehouseCategoryId.HasValue) == true,
+            HasMissingWarehouseMappings = snapshot is not null && HasMissingWarehouseMappings(snapshot),
             SnapshotWarning = snapshotWarning,
         };
     }
+
+    private static bool HasMissingWarehouseMappings(PublishedDietPlanItemDto snapshot)
+        => snapshot.AggregateIngredients.Count > 0
+            ? snapshot.AggregateIngredients.Any(ingredient =>
+                !ingredient.StockItemId.HasValue && !ingredient.WarehouseCategoryId.HasValue)
+            : snapshot.Components
+                .SelectMany(component => component.Ingredients)
+                .Any(ingredient => !ingredient.StockItemId.HasValue && !ingredient.WarehouseCategoryId.HasValue);
 
     private static PublishedDietPlanItemDto? TryReadSnapshotForDashboard(
         ProductionPlanItem item,
@@ -1070,7 +1188,7 @@ public sealed class ProductionService : IProductionService
                 .Length;
 
     private sealed record SnapshotIngredientRequirement(
-        int RecipeComponentVersionId,
+        int? RecipeComponentVersionId,
         string ComponentName,
         int IngredientId,
         string IngredientName,

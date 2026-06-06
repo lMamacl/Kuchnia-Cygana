@@ -26,10 +26,10 @@ public sealed class DietMenuPlanController : Controller
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(DateOnly? startDate)
+    public async Task<IActionResult> Index(DateOnly? startDate, int days = 7)
     {
         var start = startDate ?? DateOnly.FromDateTime(DateTime.Today);
-        var model = await this.menuPlanService.GetWeekAsync(start);
+        var model = await this.menuPlanService.GetWeekAsync(start, days);
         this.SetHeader("Plan menu", "Tygodniowy plan M2 do publikacji snapshotu.");
         return this.View("~/Views/DietEditor/MenuPlanWeek.cshtml", model);
     }
@@ -154,7 +154,15 @@ public sealed class DietMenuPlanController : Controller
     private async Task LoadLookupsAsync()
     {
         this.ViewBag.Diets = await this.dietService.GetActiveDietsAsync();
-        this.ViewBag.Meals = await this.mealService.GetPublishedMealsAsync();
+        var meals = (await this.mealService.GetPublishedMealsAsync()).ToList();
+        var mealVariants = new List<MealVariantPlanOptionDto>();
+        foreach (var meal in meals)
+        {
+            mealVariants.AddRange(await this.mealService.GetMealVariantOptionsAsync(meal.Id));
+        }
+
+        this.ViewBag.Meals = meals;
+        this.ViewBag.MealVariants = mealVariants;
         this.ViewBag.Slots = Slots;
     }
 

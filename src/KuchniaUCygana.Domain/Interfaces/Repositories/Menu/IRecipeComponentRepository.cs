@@ -4,7 +4,7 @@ namespace KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 
 public interface IRecipeComponentRepository
 {
-    Task<IReadOnlyList<RecipeComponentListRow>> SearchComponentsAsync(string? query);
+    Task<RecipeComponentSearchResult> SearchComponentsAsync(RecipeComponentSearchQuery query);
 
     Task<RecipeComponentDetailRow?> GetComponentAsync(int componentId);
 
@@ -14,7 +14,11 @@ public interface IRecipeComponentRepository
 
     Task<IReadOnlyList<RecipeComponentIngredientRow>> GetVersionIngredientsAsync(int versionId);
 
+    Task<IReadOnlyList<RecipeComponentAllergenRow>> GetVersionAllergensAsync(int versionId);
+
     Task<IReadOnlyList<PackagingRequirementRow>> GetVersionPackagingAsync(int versionId);
+
+    Task<IReadOnlyList<PackagingRequirementRow>> GetMealPackagingAsync(int mealId);
 
     Task<IReadOnlyList<RecipeComponentInstructionSectionRow>> GetVersionInstructionSectionsAsync(int versionId);
 
@@ -53,6 +57,30 @@ public interface IRecipeComponentRepository
     Task AttachComponentToMealAsync(MealRecipeComponent component);
 }
 
+public sealed class RecipeComponentSearchQuery
+{
+    public string? Query { get; set; }
+
+    public int? CategoryId { get; set; }
+
+    public string? VersionStatus { get; set; }
+
+    public int? AllergenId { get; set; }
+
+    public bool MissingPublicationData { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 25;
+}
+
+public sealed class RecipeComponentSearchResult
+{
+    public IReadOnlyList<RecipeComponentListRow> Items { get; set; } = Array.Empty<RecipeComponentListRow>();
+
+    public int TotalCount { get; set; }
+}
+
 public sealed class RecipeComponentListRow
 {
     public int Id { get; set; }
@@ -78,6 +106,10 @@ public sealed class RecipeComponentListRow
     public int? LatestVersionNumber { get; set; }
 
     public string? LatestVersionStatus { get; set; }
+
+    public bool HasPublicationGaps { get; set; }
+
+    public int PublicationGapCount { get; set; }
 }
 
 public sealed class RecipeComponentDetailRow
@@ -178,6 +210,16 @@ public sealed class RecipeComponentIngredientRow
 
     public decimal YieldFactor { get; set; } = 1.0m;
 
+    public decimal? CaloriesPer100g { get; set; }
+
+    public decimal? ProteinPer100g { get; set; }
+
+    public decimal? CarbohydratesPer100g { get; set; }
+
+    public decimal? FatPer100g { get; set; }
+
+    public decimal? FiberPer100g { get; set; }
+
     public bool IsOptional { get; set; }
 
     public string? Notes { get; set; }
@@ -190,6 +232,8 @@ public sealed class PackagingRequirementRow
     public string OwnerType { get; set; } = string.Empty;
 
     public int? MealId { get; set; }
+
+    public int? MealVariantId { get; set; }
 
     public int? RecipeComponentVersionId { get; set; }
 
@@ -206,6 +250,19 @@ public sealed class PackagingRequirementRow
     public string? ContainerRole { get; set; }
 
     public bool IsCustomerFacing { get; set; }
+}
+
+public sealed class RecipeComponentAllergenRow
+{
+    public int? AllergenId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public bool IsTrace { get; set; }
+
+    public string SourceType { get; set; } = "Ingredient";
+
+    public string? SourceName { get; set; }
 }
 
 public sealed class RecipeComponentVersionOptionRow
@@ -241,9 +298,29 @@ public sealed class MealRecipeComponentDetailsRow
 
     public string? Instructions { get; set; }
 
+    public decimal YieldQuantity { get; set; } = 1.0m;
+
+    public string YieldUnit { get; set; } = "portion";
+
+    public decimal? RawWeightGrams { get; set; }
+
+    public decimal? CookedWeightGrams { get; set; }
+
+    public decimal? CaloriesPer100g { get; set; }
+
+    public decimal? ProteinPer100g { get; set; }
+
+    public decimal? CarbohydratesPer100g { get; set; }
+
+    public decimal? FatPer100g { get; set; }
+
+    public decimal? FiberPer100g { get; set; }
+
     public int? ShelfLifeHours { get; set; }
 
     public bool UseEarliestIngredientExpiry { get; set; }
+
+    public bool AllergensApproved { get; set; }
 
     public int IngredientId { get; set; }
 

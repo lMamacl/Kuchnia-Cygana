@@ -1,4 +1,5 @@
 using KuchniaUCygana.Application.DTOs.Menu;
+using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces.Menu;
 using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces;
@@ -19,10 +20,31 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         this.currentUser = currentUser;
     }
 
-    public async Task<IReadOnlyList<RecipeComponentListItemDto>> SearchAsync(string? query)
+    public async Task<PagedResultDto<RecipeComponentListItemDto>> SearchAsync(RecipeComponentSearchFilterDto filter)
     {
-        var rows = await this.repository.SearchComponentsAsync(query);
-        return rows.Select(MapListItem).ToList();
+        var page = filter.Page <= 0 ? 1 : filter.Page;
+        var pageSize = Math.Clamp(filter.PageSize <= 0 ? 25 : filter.PageSize, 1, 100);
+        var rows = await this.repository.SearchComponentsAsync(new RecipeComponentSearchQuery
+        {
+            Query = Normalize(filter.Query),
+            CategoryId = filter.CategoryId,
+            VersionStatus = Normalize(filter.VersionStatus),
+            AllergenId = filter.AllergenId,
+            MissingPublicationData = filter.MissingPublicationData,
+            Page = page,
+            PageSize = pageSize,
+        });
+
+        filter.Page = page;
+        filter.PageSize = pageSize;
+
+        return new PagedResultDto<RecipeComponentListItemDto>
+        {
+            Items = rows.Items.Select(MapListItem).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = rows.TotalCount,
+        };
     }
 
     public async Task<IReadOnlyList<RecipeComponentVersionOptionDto>> GetPublishedVersionOptionsAsync()
@@ -151,6 +173,22 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
     {
         var existing = await this.repository.GetVersionAsync(versionId)
             ?? throw new InvalidOperationException($"Wersja #{versionId} nie istnieje.");
+        var nutritionSource = NormalizeNutritionSource(request.NutritionSource);
+        var nutritionOverrideReason = request.NutritionOverrideReason?.Trim();
+        var allergenApprovalSource = NormalizeAllergenApprovalSource(request.AllergenApprovalSource);
+        var allergenOverrideReason = request.AllergenOverrideReason?.Trim();
+
+        if (nutritionSource == "Override" && string.IsNullOrWhiteSpace(nutritionOverrideReason))
+        {
+            throw new InvalidOperationException("NutritionSource Override wymaga powodu.");
+        }
+
+        if (request.AllergensApproved
+            && allergenApprovalSource == "Override"
+            && string.IsNullOrWhiteSpace(allergenOverrideReason))
+        {
+            throw new InvalidOperationException("Zatwierdzenie alergenow poza danymi skladnikow wymaga powodu.");
+        }
 
         if (existing.Status == "Draft")
         {
@@ -169,10 +207,10 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
                 FiberPer100g = request.FiberPer100g,
                 ShelfLifeHours = request.ShelfLifeHours,
                 UseEarliestIngredientExpiry = request.UseEarliestIngredientExpiry,
-                NutritionSource = NormalizeNutritionSource(request.NutritionSource),
-                NutritionOverrideReason = request.NutritionOverrideReason?.Trim(),
+                NutritionSource = nutritionSource,
+                NutritionOverrideReason = nutritionOverrideReason,
                 AllergensApproved = request.AllergensApproved,
-                AllergenOverrideReason = request.AllergenOverrideReason?.Trim(),
+                AllergenOverrideReason = allergenOverrideReason,
                 AllergensApprovedAt = request.AllergensApproved ? DateTimeOffset.UtcNow : null,
                 AllergensApprovedBy = request.AllergensApproved ? this.UserName() : null,
                 ChangeSummary = request.ChangeSummary?.Trim(),
@@ -279,6 +317,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         {
             Id = request.Id,
             OwnerType = "RecipeComponentVersion",
+            MealVariantId = request.MealVariantId,
             RecipeComponentVersionId = request.RecipeComponentVersionId,
             StockItemId = request.StockItemId,
             WarehouseCategoryId = request.WarehouseCategoryId,
@@ -420,6 +459,8 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             LatestVersionId = row.LatestVersionId,
             LatestVersionNumber = row.LatestVersionNumber,
             LatestVersionStatus = row.LatestVersionStatus,
+            HasPublicationGaps = row.HasPublicationGaps,
+            PublicationGapCount = row.PublicationGapCount,
         };
     }
 
@@ -476,6 +517,9 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             NutritionSource = version.NutritionSource,
             NutritionOverrideReason = version.NutritionOverrideReason,
             AllergensApproved = version.AllergensApproved,
+            AllergenApprovalSource = string.IsNullOrWhiteSpace(version.AllergenOverrideReason)
+                ? "DerivedFromIngredients"
+                : "Override",
             AllergenOverrideReason = version.AllergenOverrideReason,
             AllergensApprovedAt = version.AllergensApprovedAt,
             AllergensApprovedBy = version.AllergensApprovedBy,
@@ -487,6 +531,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             Ingredients = ingredients.Select(MapIngredient).ToList(),
             PackagingRequirements = packaging.Select(MapPackaging).ToList(),
             InstructionSections = sections.Select(MapInstructionSection).ToList(),
+            Comparison = BuildComparison(version, ingredients),
             ValidationWarnings = warnings,
         };
     }
@@ -516,6 +561,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             Id = row.Id,
             OwnerType = row.OwnerType,
             MealId = row.MealId,
+            MealVariantId = row.MealVariantId,
             RecipeComponentVersionId = row.RecipeComponentVersionId,
             StockItemId = row.StockItemId,
             WarehouseCategoryId = row.WarehouseCategoryId,
@@ -576,6 +622,12 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             warnings.Add("brak pelnego nutrition na 100 g");
         }
 
+        if (string.Equals(version.NutritionSource, "Override", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(version.NutritionOverrideReason))
+        {
+            warnings.Add("override nutrition wymaga powodu");
+        }
+
         if (ingredients.Count == 0)
         {
             warnings.Add("brak skladnikow");
@@ -634,5 +686,91 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
     }
 
     private static string NormalizeNutritionSource(string? value)
-        => string.IsNullOrWhiteSpace(value) ? "Manual" : value.Trim();
+    {
+        var source = Normalize(value) ?? "Manual";
+        return source.Equals("Override", StringComparison.OrdinalIgnoreCase)
+            ? "Override"
+            : source.Equals("Aggregated", StringComparison.OrdinalIgnoreCase)
+                ? "Aggregated"
+                : "Manual";
+    }
+
+    private static string NormalizeAllergenApprovalSource(string? value)
+    {
+        var source = Normalize(value) ?? "DerivedFromIngredients";
+        return source.Equals("Override", StringComparison.OrdinalIgnoreCase)
+            ? "Override"
+            : "DerivedFromIngredients";
+    }
+
+    private static RecipeComponentVersionComparisonDto BuildComparison(
+        RecipeComponentVersionRow version,
+        IReadOnlyList<RecipeComponentIngredientRow> ingredients)
+    {
+        var ingredientWeight = ingredients.Sum(ingredient => ingredient.WeightInGrams);
+        var grossWeight = ingredients.Sum(ingredient =>
+            ingredient.YieldFactor > 0
+                ? ingredient.WeightInGrams / ingredient.YieldFactor
+                : ingredient.WeightInGrams);
+        var ingredientReferenceWeight = ingredientWeight > 0 ? (decimal?)ingredientWeight : null;
+        var referenceWeight = version.CookedWeightGrams
+            ?? version.RawWeightGrams
+            ?? ingredientReferenceWeight;
+        var missingNutrition = ingredients.Count(ingredient =>
+            !ingredient.CaloriesPer100g.HasValue
+            || !ingredient.ProteinPer100g.HasValue
+            || !ingredient.CarbohydratesPer100g.HasValue
+            || !ingredient.FatPer100g.HasValue
+            || !ingredient.FiberPer100g.HasValue);
+
+        return new RecipeComponentVersionComparisonDto
+        {
+            IngredientWeightGrams = ingredientWeight,
+            IngredientGrossWeightGrams = grossWeight,
+            ReferenceWeightGrams = referenceWeight,
+            ReferenceWeightSource = version.CookedWeightGrams.HasValue
+                ? "Cooked"
+                : version.RawWeightGrams.HasValue
+                    ? "Raw"
+                    : "Ingredients",
+            YieldQuantity = version.YieldQuantity,
+            YieldUnit = version.YieldUnit,
+            ManualNutritionPer100g = new RecipeComponentNutritionValuesDto
+            {
+                CaloriesPer100g = version.CaloriesPer100g,
+                ProteinPer100g = version.ProteinPer100g,
+                CarbohydratesPer100g = version.CarbohydratesPer100g,
+                FatPer100g = version.FatPer100g,
+                FiberPer100g = version.FiberPer100g,
+            },
+            CalculatedNutritionPer100g = CalculateIngredientNutritionPer100g(ingredients, referenceWeight, missingNutrition),
+            MissingNutritionIngredientCount = missingNutrition,
+        };
+    }
+
+    private static RecipeComponentNutritionValuesDto? CalculateIngredientNutritionPer100g(
+        IReadOnlyList<RecipeComponentIngredientRow> ingredients,
+        decimal? referenceWeight,
+        int missingNutrition)
+    {
+        if (!referenceWeight.HasValue || referenceWeight.Value <= 0 || ingredients.Count == 0 || missingNutrition > 0)
+        {
+            return null;
+        }
+
+        var factor = 100m / referenceWeight.Value;
+        return new RecipeComponentNutritionValuesDto
+        {
+            CaloriesPer100g = ingredients.Sum(i => i.CaloriesPer100g!.Value * i.WeightInGrams / 100m) * factor,
+            ProteinPer100g = ingredients.Sum(i => i.ProteinPer100g!.Value * i.WeightInGrams / 100m) * factor,
+            CarbohydratesPer100g = ingredients.Sum(i => i.CarbohydratesPer100g!.Value * i.WeightInGrams / 100m) * factor,
+            FatPer100g = ingredients.Sum(i => i.FatPer100g!.Value * i.WeightInGrams / 100m) * factor,
+            FiberPer100g = ingredients.Sum(i => i.FiberPer100g!.Value * i.WeightInGrams / 100m) * factor,
+        };
+    }
+
+    private static string? Normalize(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
 }

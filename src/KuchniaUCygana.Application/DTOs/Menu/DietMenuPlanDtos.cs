@@ -6,6 +6,8 @@ public sealed class DietMenuWeekDto
 
     public DateOnly EndDate { get; set; }
 
+    public int DaysCount { get; set; } = 7;
+
     public List<DietMenuDayDto> Days { get; set; } = new();
 }
 
@@ -52,6 +54,8 @@ public sealed class DietMenuPlanItemDto
 
     public string? MealVariantName { get; set; }
 
+    public string? MealVariantStatus { get; set; }
+
     public string MealName { get; set; } = string.Empty;
 
     public string MealStatus { get; set; } = string.Empty;
@@ -59,6 +63,16 @@ public sealed class DietMenuPlanItemDto
     public string MealSlot { get; set; } = string.Empty;
 
     public decimal ServingSizeMultiplier { get; set; } = 1.0m;
+
+    public bool UsesSpecialMealVariant => MealVariantId.HasValue;
+
+    public bool UsesServingMultiplier => ServingSizeMultiplier != 1.0m;
+
+    public decimal? FinalWeightGrams { get; set; }
+
+    public decimal? FinalWeightAfterMultiplierGrams { get; set; }
+
+    public string CompletenessStatus { get; set; } = "Incomplete";
 
     public int SortOrder { get; set; }
 
@@ -72,7 +86,22 @@ public sealed class DietMenuPlanItemDto
 
     public bool IsRecipeValid { get; set; }
 
+    public bool IsResultComplete { get; set; }
+
     public List<string> ValidationWarnings { get; set; } = new();
+}
+
+public sealed class MealVariantPlanOptionDto
+{
+    public int MealId { get; set; }
+
+    public int MealVariantId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public string Status { get; set; } = "Draft";
+
+    public bool IsDefault { get; set; }
 }
 
 public sealed class DietMenuPlanValidationDto

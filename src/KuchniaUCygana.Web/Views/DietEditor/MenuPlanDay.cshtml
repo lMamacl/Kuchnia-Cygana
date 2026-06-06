@@ -4,6 +4,7 @@
     Layout = "_LayoutStaff";
     var diets = ViewBag.Diets as IEnumerable<DietDto> ?? Enumerable.Empty<DietDto>();
     var meals = ViewBag.Meals as IEnumerable<MealDto> ?? Enumerable.Empty<MealDto>();
+    var mealVariants = ViewBag.MealVariants as IEnumerable<MealVariantPlanOptionDto> ?? Enumerable.Empty<MealVariantPlanOptionDto>();
     var slots = ViewBag.Slots as IEnumerable<string> ?? new[] { "Breakfast", "Snack1", "Lunch", "Snack2", "Dinner" };
     var variants = diets.SelectMany(d => d.Variants.Select(v => new { Diet = d.Name, Variant = v })).ToList();
 }
@@ -74,6 +75,7 @@
                                 <th>Slot</th>
                                 <th>Wariant</th>
                                 <th>Posilek</th>
+                                <th class="text-end">Gramatura</th>
                                 <th class="text-center">Skladowe</th>
                                 <th>Status</th>
                                 <th class="w-1"></th>
@@ -82,7 +84,7 @@
                         <tbody>
                             @if (Model.Items.Count == 0)
                             {
-                                <tr><td colspan="6" class="text-center text-secondary py-4">Brak pozycji w dniu menu.</td></tr>
+                                <tr><td colspan="7" class="text-center text-secondary py-4">Brak pozycji w dniu menu.</td></tr>
                             }
                             @foreach (var item in Model.Items.OrderBy(i => i.SortOrder).ThenBy(i => i.Id))
                             {
@@ -97,7 +99,26 @@
                                     </td>
                                     <td>
                                         <div class="fw-bold">@item.MealName</div>
-                                        <div class="text-secondary small">@(item.MealVariantName ?? "wariant bazowy") | x @item.ServingSizeMultiplier.ToString("0.##") | @item.MealStatus</div>
+                                        <div class="text-secondary small">@item.MealStatus</div>
+                                        <div class="d-flex flex-wrap gap-1 mt-1">
+                                            <span class="badge @(item.UsesSpecialMealVariant ? "bg-purple-lt text-purple" : "bg-secondary-lt text-secondary")">
+                                                @(item.MealVariantName ?? "wariant bazowy")
+                                            </span>
+                                            <span class="badge @(item.UsesServingMultiplier ? "bg-orange-lt text-orange" : "bg-secondary-lt text-secondary")">
+                                                multiplier x @item.ServingSizeMultiplier.ToString("0.##")
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td class="text-end">
+                                        @if (item.FinalWeightAfterMultiplierGrams.HasValue)
+                                        {
+                                            <div class="fw-bold">@item.FinalWeightAfterMultiplierGrams.Value.ToString("0.##") g</div>
+                                            <div class="text-secondary small">baza @item.FinalWeightGrams?.ToString("0.##") g</div>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-secondary">-</span>
+                                        }
                                     </td>
                                     <td class="text-center">
                                         <span class="badge bg-blue-lt">@item.ComponentCount</span>
@@ -109,11 +130,11 @@
                                     <td>
                                         @if (item.ValidationWarnings.Count == 0)
                                         {
-                                            <span class="badge bg-success-lt text-success">OK</span>
+                                            <span class="badge bg-success-lt text-success">@item.CompletenessStatus</span>
                                         }
                                         else
                                         {
-                                            <span class="badge bg-warning-lt text-warning">@item.ValidationWarnings.Count brakow</span>
+                                            <span class="badge bg-warning-lt text-warning">@item.CompletenessStatus / @item.ValidationWarnings.Count brakow</span>
                                             <div class="text-secondary small">@string.Join("; ", item.ValidationWarnings)</div>
                                         }
                                     </td>
@@ -143,7 +164,7 @@
                     <div class="card-body">
                         @foreach (var item in Model.Items.OrderBy(i => i.SortOrder).ThenBy(i => i.Id))
                         {
-                            <form asp-controller="DietMenuPlan" asp-action="UpdateItem" asp-route-planId="@Model.Id" asp-route-itemId="@item.Id" method="post" class="row g-2 align-items-end mb-3">
+                            <form asp-controller="DietMenuPlan" asp-action="UpdateItem" asp-route-planId="@Model.Id" asp-route-itemId="@item.Id" method="post" class="row g-2 align-items-end mb-3 menu-plan-item-form">
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
                                 <div class="col-md-3">
@@ -166,10 +187,24 @@
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Posilek</label>
-                                    <select name="MealId" class="form-select form-select-sm" required>
+                                    <select name="MealId" class="form-select form-select-sm js-meal-select" required>
                                         @foreach (var meal in meals)
                                         {
                                             <option value="@meal.Id" selected="@(meal.Id == item.MealId)">@meal.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Wariant dania</label>
+                                    <select name="MealVariantId" class="form-select form-select-sm js-meal-variant-select">
+                                        <option value="" data-meal-id="" selected="@(!item.MealVariantId.HasValue ? "selected" : null)">bazowy</option>
+                                        @foreach (var mealVariant in mealVariants)
+                                        {
+                                            <option value="@mealVariant.MealVariantId"
+                                                    data-meal-id="@mealVariant.MealId"
+                                                    selected="@(mealVariant.MealVariantId == item.MealVariantId)">
+                                                @mealVariant.Name (@mealVariant.Status)
+                                            </option>
                                         }
                                     </select>
                                 </div>
@@ -220,7 +255,7 @@
                         <h3 class="card-title">Dodaj pozycje</h3>
                     </div>
                     <div class="card-body">
-                        <form asp-controller="DietMenuPlan" asp-action="AddItem" asp-route-planId="@Model.Id" method="post">
+                        <form asp-controller="DietMenuPlan" asp-action="AddItem" asp-route-planId="@Model.Id" method="post" class="menu-plan-item-form">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
                             <div class="mb-3">
@@ -244,11 +279,23 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Posilek</label>
-                                <select name="MealId" class="form-select" required>
+                                <select name="MealId" class="form-select js-meal-select" required>
                                     <option value="">Wybierz posilek</option>
                                     @foreach (var meal in meals)
                                     {
                                         <option value="@meal.Id">@meal.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Wariant dania</label>
+                                <select name="MealVariantId" class="form-select js-meal-variant-select">
+                                    <option value="" data-meal-id="">wariant bazowy</option>
+                                    @foreach (var mealVariant in mealVariants)
+                                    {
+                                        <option value="@mealVariant.MealVariantId" data-meal-id="@mealVariant.MealId">
+                                            @mealVariant.Name (@mealVariant.Status)
+                                        </option>
                                     }
                                 </select>
                             </div>
@@ -285,3 +332,35 @@
         </div>
     }
 </div>
+
+<script>
+document.querySelectorAll('.menu-plan-item-form').forEach(function (form) {
+    const mealSelect = form.querySelector('.js-meal-select');
+    const variantSelect = form.querySelector('.js-meal-variant-select');
+    if (!mealSelect || !variantSelect) {
+        return;
+    }
+
+    const syncVariants = function () {
+        const selectedMealId = mealSelect.value;
+        let selectedOptionIsVisible = false;
+
+        Array.from(variantSelect.options).forEach(function (option) {
+            const optionMealId = option.dataset.mealId || '';
+            const isBase = option.value === '';
+            const isVisible = isBase || optionMealId === selectedMealId;
+            option.hidden = !isVisible;
+            if (option.selected && isVisible) {
+                selectedOptionIsVisible = true;
+            }
+        });
+
+        if (!selectedOptionIsVisible) {
+            variantSelect.value = '';
+        }
+    };
+
+    mealSelect.addEventListener('change', syncVariants);
+    syncVariants();
+});
+</script>

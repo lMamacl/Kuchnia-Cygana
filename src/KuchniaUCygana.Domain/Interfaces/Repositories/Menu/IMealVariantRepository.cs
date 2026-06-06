@@ -12,7 +12,23 @@ public interface IMealVariantRepository
 
     Task<int> CreateAsync(MealVariant variant, int? sourceMealVariantId, string? userName);
 
+    Task UpdateAsync(MealVariant variant);
+
     Task<IReadOnlyList<MealVariantComponentRow>> GetComponentsAsync(int mealVariantId);
+
+    Task<int> SaveComponentAsync(MealVariantComponent component);
+
+    Task DeleteComponentAsync(int componentId, string? deletedBy);
+
+    Task<IReadOnlyList<PackagingRequirementRow>> GetPackagingAsync(int mealVariantId);
+
+    Task<int> SavePackagingAsync(PackagingRequirement packaging);
+
+    Task DeletePackagingAsync(int mealVariantId, int packagingRequirementId, string? deletedBy);
+
+    Task<IReadOnlyList<MealVariantAllergenRow>> GetAllergensAsync(int mealVariantId);
+
+    Task ReplaceAllergensAsync(int mealVariantId, IReadOnlyList<MealVariantAllergenRow> allergens);
 }
 
 public sealed class MealVariantRow
@@ -83,4 +99,41 @@ public sealed class MealVariantComponentRow
     public int SortOrder { get; set; }
 
     public bool IsOptional { get; set; }
+
+    public decimal YieldQuantity { get; set; } = 1.0m;
+
+    public string YieldUnit { get; set; } = "portion";
+
+    public decimal? RawWeightGrams { get; set; }
+
+    public decimal? CookedWeightGrams { get; set; }
+
+    public decimal? CaloriesPer100g { get; set; }
+
+    public decimal? ProteinPer100g { get; set; }
+
+    public decimal? CarbohydratesPer100g { get; set; }
+
+    public decimal? FatPer100g { get; set; }
+
+    public decimal? FiberPer100g { get; set; }
+
+    public int? ShelfLifeHours { get; set; }
+
+    public bool UseEarliestIngredientExpiry { get; set; }
+
+    public bool AllergensApproved { get; set; }
+}
+
+public sealed class MealVariantAllergenRow
+{
+    public int? AllergenId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public bool IsTrace { get; set; }
+
+    public string SourceType { get; set; } = "Variant";
+
+    public string? SourceName { get; set; }
 }

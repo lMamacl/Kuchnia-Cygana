@@ -79,6 +79,115 @@ public sealed class MealsController : Controller
         return RedirectToAction(nameof(Details), new { id = mealId });
     }
 
+    [HttpPost("{mealId:int}/variants/{variantId:int}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateVariant(int mealId, int variantId, UpdateMealVariantRequest request)
+    {
+        try
+        {
+            await _mealService.UpdateMealVariantAsync(variantId, request);
+            TempData["Success"] = "Wariant posilku zostal zapisany.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Details), new { id = mealId });
+    }
+
+    [HttpPost("{mealId:int}/variants/{variantId:int}/components")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveVariantComponent(
+        int mealId,
+        int variantId,
+        SaveMealVariantComponentRequest request)
+    {
+        try
+        {
+            await _mealService.SaveMealVariantComponentAsync(variantId, request);
+            TempData["Success"] = "Skladowa wariantu zostala zapisana.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Details), new { id = mealId });
+    }
+
+    [HttpPost("{mealId:int}/variants/{variantId:int}/components/{componentId:int}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteVariantComponent(int mealId, int variantId, int componentId)
+    {
+        await _mealService.DeleteMealVariantComponentAsync(componentId);
+        TempData["Success"] = "Skladowa wariantu zostala usunieta.";
+        return RedirectToAction(nameof(Details), new { id = mealId });
+    }
+
+    [HttpPost("{mealId:int}/variants/{variantId:int}/packaging")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveVariantPackaging(
+        int mealId,
+        int variantId,
+        SaveMealVariantPackagingRequest request)
+    {
+        try
+        {
+            await _mealService.SaveMealVariantPackagingAsync(variantId, request);
+            TempData["Success"] = "Opakowanie wariantu zostalo zapisane.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Details), new { id = mealId });
+    }
+
+    [HttpPost("{mealId:int}/variants/{variantId:int}/packaging/{packagingId:int}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteVariantPackaging(int mealId, int variantId, int packagingId)
+    {
+        await _mealService.DeleteMealVariantPackagingAsync(variantId, packagingId);
+        TempData["Success"] = "Opakowanie wariantu zostalo usuniete.";
+        return RedirectToAction(nameof(Details), new { id = mealId });
+    }
+
+    [HttpPost("{mealId:int}/variants/{variantId:int}/publish")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PublishVariant(int mealId, int variantId)
+    {
+        try
+        {
+            await _mealService.PublishMealVariantAsync(variantId);
+            TempData["Success"] = "Wariant posilku zostal opublikowany.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Details), new { id = mealId });
+    }
+
+    [HttpPost("{mealId:int}/variants/{variantId:int}/archive")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ArchiveVariant(int mealId, int variantId)
+    {
+        try
+        {
+            await _mealService.ArchiveMealVariantAsync(variantId);
+            TempData["Success"] = "Wariant posilku zostal zarchiwizowany.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Details), new { id = mealId });
+    }
+
     [HttpGet("{id:int}")]
     public async Task<IActionResult> Details(int id)
     {
@@ -125,9 +234,17 @@ public sealed class MealsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Publish(int id)
     {
-        await _mealService.PublishMealAsync(id);
-        TempData["Success"] = "Posiłek opublikowany.";
-        return RedirectToAction(nameof(Index));
+        try
+        {
+            await _mealService.PublishMealAsync(id);
+            TempData["Success"] = "Posilek opublikowany.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Details), new { id });
     }
 
     [HttpPost("archive/{id:int}")]

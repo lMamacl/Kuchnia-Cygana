@@ -35,4 +35,12 @@ public sealed class IngredientDto
     public decimal? MinimumCoreTemperatureCelsius { get; set; }
 
     public bool IsActive { get; set; }
+
+    public NutritionFactDto Nutrition { get; set; } = new();
+
+    public List<IngredientAllergenDto> Allergens { get; set; } = new();
+
+    public List<int> SelectedAllergenIds { get; set; } = new();
+
+    public List<int> TraceAllergenIds { get; set; } = new();
 }
