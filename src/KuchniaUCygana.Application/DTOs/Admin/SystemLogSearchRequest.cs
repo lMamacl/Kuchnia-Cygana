@@ -14,6 +14,8 @@ public sealed class SystemLogSearchRequest
 
     public DateTime? To { get; set; }
 
+    public bool IncludeArchived { get; set; }
+
     public int Page { get; set; } = 1;
 
     public int PageSize { get; set; } = 25;

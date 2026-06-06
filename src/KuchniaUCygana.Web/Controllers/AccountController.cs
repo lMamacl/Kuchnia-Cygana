@@ -211,6 +211,7 @@ public sealed class AccountController : Controller
 
     [Authorize]
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);

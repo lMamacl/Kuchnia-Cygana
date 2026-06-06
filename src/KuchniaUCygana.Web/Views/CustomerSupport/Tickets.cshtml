@@ -1,6 +1,31 @@
 @model CustomerSupportDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+    var ticketsPage = Model.TicketsPage;
+    var clientUsers = Model.Users
+        .Where(user => string.Equals(user.Role, "Client", StringComparison.Ordinal))
+        .OrderBy(user => user.FullName)
+        .ToArray();
+    var supportUsers = Model.Users
+        .Where(user => user.Role is "BOK" or "BOKManager" or "Admin")
+        .OrderBy(user => user.FullName)
+        .ToArray();
+
+    string PriorityClass(string priority) => priority switch
+    {
+        "Critical" => "bg-red-lt text-red",
+        "High" => "bg-orange-lt text-orange",
+        "Medium" => "bg-blue-lt text-blue",
+        _ => "bg-secondary-lt text-secondary",
+    };
+
+    string StatusClass(string status) => status switch
+    {
+        "Resolved" or "Closed" => "bg-green-lt text-green",
+        "Pending" => "bg-yellow-lt text-yellow",
+        "Open" => "bg-blue-lt text-blue",
+        _ => "bg-secondary-lt text-secondary",
+    };
 }
 
 <div class="row row-cards">
@@ -15,12 +40,16 @@
                     <div class="mb-3">
                         <label class="form-label" for="ticket-client">Klient</label>
                         <select id="ticket-client" class="form-select" name="ClientUserId" required>
-                            <option value="">Wybierz uzytkownika</option>
-                            @foreach (var user in Model.Users.OrderBy(x => x.FullName))
+                            <option value="">Wybierz klienta</option>
+                            @foreach (var user in clientUsers)
                             {
-                                <option value="@user.Id">@user.FullName (@user.Email)</option>
+                                <option value="@user.Id" selected="@(Model.NewTicket.ClientUserId == user.Id)">@user.FullName (@user.Email)</option>
                             }
                         </select>
+                        @if (clientUsers.Length == 0)
+                        {
+                            <div class="form-hint text-warning">Brak kont klienckich w bazie.</div>
+                        }
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="ticket-title">Tytul</label>
@@ -31,7 +60,7 @@
                         <select id="ticket-priority" class="form-select" name="Priority">
                             @foreach (var priority in Enum.GetValues<TicketPriority>())
                             {
-                                <option value="@priority">@priority</option>
+                                <option value="@priority" selected="@(Model.NewTicket.Priority == priority)">@priority</option>
                             }
                         </select>
                     </div>
@@ -48,8 +77,9 @@
     </div>
     <div class="col-xl-8">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Zgloszenia</h3>
+                <span class="text-secondary small">Pokazuje @ticketsPage.FirstItem-@ticketsPage.LastItem z @ticketsPage.TotalCount</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -64,16 +94,19 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var ticket in Model.Tickets.OrderByDescending(x => x.CreatedAt))
+                        @foreach (var ticket in ticketsPage.Items)
                         {
                             <tr>
                                 <td>
                                     <div class="fw-semibold">@ticket.Title</div>
                                     <div class="text-secondary small">@ticket.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                    <div class="text-secondary small">
+                                        @(ticket.Description.Length > 100 ? ticket.Description[..100] + "..." : ticket.Description)
+                                    </div>
                                 </td>
                                 <td>@(ticket.ClientFullName ?? $"#{ticket.ClientUserId}")</td>
-                                <td><span class="badge bg-blue-lt text-blue">@ticket.Status</span></td>
-                                <td>@ticket.Priority</td>
+                                <td><span class="badge @StatusClass(ticket.Status)">@ticket.Status</span></td>
+                                <td><span class="badge @PriorityClass(ticket.Priority)">@ticket.Priority</span></td>
                                 <td>@(ticket.AssignedToFullName ?? "-")</td>
                                 <td class="text-end">
                                     <div class="d-inline-flex flex-wrap justify-content-end gap-2">
@@ -81,9 +114,9 @@
                                             @Html.AntiForgeryToken()
                                             <select class="form-select form-select-sm" name="assignedToUserId" required>
                                                 <option value="">Pracownik</option>
-                                                @foreach (var user in Model.Users.Where(x => x.Role is "BOK" or "BOKManager" or "Admin").OrderBy(x => x.FullName))
+                                                @foreach (var user in supportUsers)
                                                 {
-                                                    <option value="@user.Id">@user.FullName</option>
+                                                    <option value="@user.Id" selected="@(ticket.AssignedToUserId == user.Id)">@user.FullName</option>
                                                 }
                                             </select>
                                             <button class="btn btn-sm btn-outline-primary" type="submit">Przypisz</button>
@@ -93,7 +126,7 @@
                                             <select class="form-select form-select-sm" name="status">
                                                 @foreach (var status in Enum.GetValues<TicketStatus>())
                                                 {
-                                                    <option value="@status">@status</option>
+                                                    <option value="@status" selected="@(string.Equals(ticket.Status, status.ToString(), StringComparison.Ordinal))">@status</option>
                                                 }
                                             </select>
                                             <button class="btn btn-sm btn-outline-secondary" type="submit">Zmien</button>
@@ -102,15 +135,35 @@
                                 </td>
                             </tr>
                         }
-                        @if (Model.Tickets.Count == 0)
+                        @if (ticketsPage.TotalCount == 0)
                         {
                             <tr>
-                                <td colspan="6" class="text-secondary text-center py-4">Brak zgloszen.</td>
+                                <td colspan="6" class="text-secondary text-center py-4">
+                                    Brak zgloszen w bazie. Seeder dodaje startowa kolejke BOK dla kont klienckich.
+                                </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
+            @if (ticketsPage.TotalCount > 0)
+            {
+                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <span class="text-secondary small">Strona @ticketsPage.Page / @ticketsPage.TotalPages, po @ticketsPage.PageSize rekordow</span>
+                    <div class="btn-list">
+                        <a class="btn btn-outline-secondary @(ticketsPage.HasPrevious ? string.Empty : "disabled")"
+                           asp-controller="CustomerSupport"
+                           asp-action="Tickets"
+                           asp-route-page="@ticketsPage.PreviousPage"
+                           asp-route-pageSize="@ticketsPage.PageSize">Poprzednia</a>
+                        <a class="btn btn-outline-secondary @(ticketsPage.HasNext ? string.Empty : "disabled")"
+                           asp-controller="CustomerSupport"
+                           asp-action="Tickets"
+                           asp-route-page="@ticketsPage.NextPage"
+                           asp-route-pageSize="@ticketsPage.PageSize">Nastepna</a>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>

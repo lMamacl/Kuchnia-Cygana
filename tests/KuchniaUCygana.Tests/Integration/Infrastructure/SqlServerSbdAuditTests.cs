@@ -50,6 +50,14 @@ public sealed class SqlServerSbdAuditTests
             ("Payments", "UX_Payments_StripePaymentIntentId"),
             ("Addresses", "IX_Addresses_User_IsDeleted_IsDefault"),
             ("SystemLogs", "IX_SystemLogs_Timestamp_Action_TargetEntity_UserId"),
+            ("SystemLogs", "IX_SystemLogs_Window"),
+            ("SystemLogs", "IX_SystemLogs_User_Window"),
+            ("SystemLogs", "IX_SystemLogs_Action_Window"),
+            ("SystemLogs", "IX_SystemLogs_Target_Window"),
+            ("SystemLogsArchive", "IX_SystemLogsArchive_Window"),
+            ("SystemLogsArchive", "IX_SystemLogsArchive_User_Window"),
+            ("SystemLogsArchive", "IX_SystemLogsArchive_Action_Window"),
+            ("SystemLogsArchive", "IX_SystemLogsArchive_Target_Window"),
             ("Batches", "IX_Batches_StockItem_Active_Expiry"),
         };
 

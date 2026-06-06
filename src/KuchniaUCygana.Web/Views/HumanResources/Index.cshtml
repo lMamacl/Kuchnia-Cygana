@@ -126,8 +126,9 @@
 
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Pracownicy wedlug dzialow</h3>
+                <span class="text-secondary small">@Model.Employees.Count pracownikow w @Model.Departments.Count dzialach</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -137,6 +138,7 @@
                             <th class="text-end">Aktywni</th>
                             <th class="text-end">Wszyscy</th>
                             <th>Kierownik</th>
+                            <th>Przykladowe osoby</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -148,12 +150,26 @@
                                 <td class="text-end">@employees.Count(x => x.IsActive)</td>
                                 <td class="text-end">@employees.Length</td>
                                 <td>@(department.HeadEmployeeFullName ?? "-")</td>
+                                <td class="text-secondary">
+                                    @if (employees.Length == 0)
+                                    {
+                                        <span>Brak przypisanych osob</span>
+                                    }
+                                    else
+                                    {
+                                        @string.Join(", ", employees.OrderBy(x => x.FullName).Take(4).Select(x => x.FullName))
+                                        @if (employees.Length > 4)
+                                        {
+                                            <span> +@(employees.Length - 4)</span>
+                                        }
+                                    }
+                                </td>
                             </tr>
                         }
                         @if (Model.Departments.Count == 0)
                         {
                             <tr>
-                                <td colspan="4" class="text-secondary text-center py-4">Brak dzialow.</td>
+                                <td colspan="5" class="text-secondary text-center py-4">Brak dzialow. Seeder powinien utworzyc podstawowa strukture HR.</td>
                             </tr>
                         }
                     </tbody>

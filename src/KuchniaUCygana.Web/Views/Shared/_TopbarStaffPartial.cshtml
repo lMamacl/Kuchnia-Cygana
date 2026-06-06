@@ -137,6 +137,7 @@
                     <a class="dropdown-item" asp-controller="Admin" asp-action="Settings">Ustawienia</a>
                     <div class="dropdown-divider"></div>
                     <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                        @Html.AntiForgeryToken()
                         <button type="submit" class="dropdown-item text-danger">Wyloguj</button>
                     </form>
                 </div>

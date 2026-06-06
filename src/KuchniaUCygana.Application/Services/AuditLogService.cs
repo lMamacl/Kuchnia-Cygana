@@ -9,12 +9,14 @@ namespace KuchniaUCygana.Application.Services;
 
 public sealed class AuditLogService : IAuditLogService
 {
-    private readonly IRepository<SystemLog> systemLogRepository;
+    private const int DefaultSearchDays = 30;
+
+    private readonly ISystemLogRepository systemLogRepository;
     private readonly IRepository<User> userRepository;
     private readonly IMapper mapper;
 
     public AuditLogService(
-        IRepository<SystemLog> systemLogRepository,
+        ISystemLogRepository systemLogRepository,
         IRepository<User> userRepository,
         IMapper mapper)
     {
@@ -25,119 +27,60 @@ public sealed class AuditLogService : IAuditLogService
 
     public async Task<IEnumerable<SystemLogDto>> GetSystemLogsAsync()
     {
-        var logs = await systemLogRepository.GetAllAsync();
-        return await MapSystemLogsAsync(logs.OrderByDescending(log => log.Timestamp));
+        var logs = await systemLogRepository.GetLatestAsync(50);
+        return logs.Select(MapRow).ToArray();
     }
 
     public async Task<SystemLogPageDto> SearchSystemLogsAsync(SystemLogSearchRequest request)
     {
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize <= 0 ? 25 : request.PageSize, 10, 100);
-        var logs = await MapSystemLogsAsync(
-            (await systemLogRepository.GetAllAsync()).OrderByDescending(log => log.Timestamp));
-
-        var actions = logs
-            .Select(log => log.Action)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(value => value)
-            .ToArray();
-        var targetEntities = logs
-            .Select(log => log.TargetEntity)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(value => value)
-            .ToArray();
-
-        IEnumerable<SystemLogDto> query = logs;
-
-        if (request.UserId is > 0)
+        var from = request.From?.Date ?? DateTime.Today.AddDays(-DefaultSearchDays);
+        var result = await systemLogRepository.SearchAsync(new SystemLogSearchQuery
         {
-            query = query.Where(log => log.UserId == request.UserId.Value);
-        }
+            Search = request.Search,
+            UserId = request.UserId,
+            Action = request.Action,
+            TargetEntity = request.TargetEntity,
+            From = ToDateTimeOffset(from),
+            ToExclusive = request.To.HasValue
+                ? ToDateTimeOffset(request.To.Value.Date.AddDays(1))
+                : null,
+            IncludeArchived = request.IncludeArchived,
+            Page = page,
+            PageSize = pageSize,
+        });
 
-        if (!string.IsNullOrWhiteSpace(request.Action))
-        {
-            query = query.Where(log => string.Equals(log.Action, request.Action.Trim(), StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.TargetEntity))
-        {
-            query = query.Where(log => string.Equals(log.TargetEntity, request.TargetEntity.Trim(), StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (request.From.HasValue)
-        {
-            var from = request.From.Value.Date;
-            query = query.Where(log => log.Timestamp.LocalDateTime >= from);
-        }
-
-        if (request.To.HasValue)
-        {
-            var toExclusive = request.To.Value.Date.AddDays(1);
-            query = query.Where(log => log.Timestamp.LocalDateTime < toExclusive);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var search = request.Search.Trim();
-            query = query.Where(log =>
-                Contains(log.Action, search) ||
-                Contains(log.TargetEntity, search) ||
-                Contains(log.TargetId, search) ||
-                Contains(log.UserFullName, search) ||
-                Contains(log.IPAddress, search) ||
-                Contains(log.OldValue, search) ||
-                Contains(log.NewValue, search));
-        }
-
-        var filtered = query.ToArray();
-        var totalCount = filtered.Length;
-        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
-        page = Math.Min(page, totalPages);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
 
         return new SystemLogPageDto
         {
-            Items = filtered
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToArray(),
-            TotalCount = totalCount,
-            Page = page,
-            PageSize = pageSize,
+            Items = result.Items.Select(MapRow).ToArray(),
+            TotalCount = result.TotalCount,
+            Page = result.Page,
+            PageSize = result.PageSize,
             TotalPages = totalPages,
-            Actions = actions,
-            TargetEntities = targetEntities,
+            Actions = result.Actions,
+            TargetEntities = result.TargetEntities,
         };
     }
 
     public async Task<IEnumerable<SystemLogDto>> GetSystemLogsByUserAsync(int userId)
     {
-        var logs = await systemLogRepository.GetAllAsync();
-        return await MapSystemLogsAsync(logs
-            .Where(log => log.UserId == userId)
-            .OrderByDescending(log => log.Timestamp));
+        var logs = await systemLogRepository.GetByUserAsync(userId, 500);
+        return logs.Select(MapRow).ToArray();
     }
 
     public async Task<IEnumerable<SystemLogDto>> GetSystemLogsByTargetAsync(string targetEntity, string targetId)
     {
-        var logs = await systemLogRepository.GetAllAsync();
-        return await MapSystemLogsAsync(logs
-            .Where(log =>
-                log.TargetEntity.Equals(targetEntity, StringComparison.OrdinalIgnoreCase) &&
-                log.TargetId.Equals(targetId, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(log => log.Timestamp));
+        var logs = await systemLogRepository.GetByTargetAsync(targetEntity, targetId, 500);
+        return logs.Select(MapRow).ToArray();
     }
 
     public async Task<SystemLogDto?> GetSystemLogByIdAsync(int id)
     {
-        var log = await systemLogRepository.GetByIdAsync(id);
-        if (log is null)
-        {
-            return null;
-        }
-
-        return (await MapSystemLogsAsync(new[] { log })).Single();
+        var log = await systemLogRepository.GetRowByIdAsync(id);
+        return log is null ? null : MapRow(log);
     }
 
     public async Task<SystemLogDto> CreateSystemLogAsync(CreateSystemLogRequest request)
@@ -148,23 +91,8 @@ public sealed class AuditLogService : IAuditLogService
         var id = await systemLogRepository.InsertAsync(log);
         log.Id = id;
 
-        return (await MapSystemLogsAsync(new[] { log })).Single();
-    }
-
-    private async Task<List<SystemLogDto>> MapSystemLogsAsync(IEnumerable<SystemLog> logs)
-    {
-        var list = mapper.Map<List<SystemLogDto>>(logs);
-        var users = (await userRepository.GetAllAsync()).ToDictionary(user => user.Id);
-
-        foreach (var log in list)
-        {
-            if (users.TryGetValue(log.UserId, out var user))
-            {
-                log.UserFullName = BuildUserFullName(user);
-            }
-        }
-
-        return list;
+        var row = await systemLogRepository.GetRowByIdAsync(id);
+        return row is null ? mapper.Map<SystemLogDto>(log) : MapRow(row);
     }
 
     private async Task EnsureUserExistsAsync(int userId)
@@ -175,14 +103,26 @@ public sealed class AuditLogService : IAuditLogService
         }
     }
 
-    private static string BuildUserFullName(User user)
+    private static SystemLogDto MapRow(SystemLogRow row)
     {
-        var fullName = $"{user.FirstName} {user.LastName}".Trim();
-        return string.IsNullOrWhiteSpace(fullName) ? user.Email : fullName;
+        return new SystemLogDto
+        {
+            Id = row.Id,
+            UserId = row.UserId,
+            UserFullName = row.UserFullName,
+            Action = row.Action,
+            TargetEntity = row.TargetEntity,
+            TargetId = row.TargetId,
+            OldValue = row.OldValue,
+            NewValue = row.NewValue,
+            Timestamp = row.Timestamp,
+            IPAddress = row.IPAddress,
+            IsArchived = row.IsArchived,
+        };
     }
 
-    private static bool Contains(string? value, string search)
+    private static DateTimeOffset ToDateTimeOffset(DateTime value)
     {
-        return value?.Contains(search, StringComparison.OrdinalIgnoreCase) == true;
+        return new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Local));
     }
 }

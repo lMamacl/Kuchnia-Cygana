@@ -3,12 +3,8 @@
     Layout = "_LayoutStaff";
 
     var roles = Model.AvailableRoles.OrderBy(role => role).ToArray();
-    var users = Model.Users
-        .OrderBy(user => user.Role)
-        .ThenBy(user => user.LastName)
-        .ThenBy(user => user.FirstName)
-        .ThenBy(user => user.Email)
-        .ToArray();
+    var usersPage = Model.UsersPage;
+    var users = usersPage.Items;
 
     string NameOrEmail(KuchniaUCygana.Application.DTOs.UserDto user)
     {
@@ -62,7 +58,7 @@
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Uzytkownicy</h3>
-                <span class="text-secondary small">@users.Length kont</span>
+                <span class="text-secondary small">Pokazuje @usersPage.FirstItem-@usersPage.LastItem z @usersPage.TotalCount</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -129,15 +125,35 @@
                                 </td>
                             </tr>
                         }
-                        @if (users.Length == 0)
+                        @if (usersPage.TotalCount == 0)
                         {
                             <tr>
-                                <td colspan="5" class="text-secondary text-center py-4">Brak kont uzytkownikow.</td>
+                                <td colspan="5" class="text-secondary text-center py-4">
+                                    Brak kont uzytkownikow. Seeder tworzy podstawowe konta dla HR, BOK, Admin i pozostalych rol.
+                                </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
+            @if (usersPage.TotalCount > 0)
+            {
+                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <span class="text-secondary small">Strona @usersPage.Page / @usersPage.TotalPages, po @usersPage.PageSize rekordow</span>
+                    <div class="btn-list">
+                        <a class="btn btn-outline-secondary @(usersPage.HasPrevious ? string.Empty : "disabled")"
+                           asp-controller="Admin"
+                           asp-action="Users"
+                           asp-route-page="@usersPage.PreviousPage"
+                           asp-route-pageSize="@usersPage.PageSize">Poprzednia</a>
+                        <a class="btn btn-outline-secondary @(usersPage.HasNext ? string.Empty : "disabled")"
+                           asp-controller="Admin"
+                           asp-action="Users"
+                           asp-route-page="@usersPage.NextPage"
+                           asp-route-pageSize="@usersPage.PageSize">Nastepna</a>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>

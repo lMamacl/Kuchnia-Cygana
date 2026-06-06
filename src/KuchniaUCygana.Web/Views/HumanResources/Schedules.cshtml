@@ -1,6 +1,12 @@
 @model HumanResourcesDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+    var workSchedulesPage = Model.WorkSchedulesPage;
+    var usersById = Model.Users.ToDictionary(user => user.Id);
+    var staffUsers = Model.Users
+        .Where(user => !string.Equals(user.Role, "Client", StringComparison.Ordinal))
+        .OrderBy(user => user.FullName)
+        .ToArray();
 }
 
 <div class="row row-cards">
@@ -15,10 +21,10 @@
                     <div class="mb-3">
                         <label class="form-label" for="schedule-user">Uzytkownik</label>
                         <select id="schedule-user" class="form-select" name="UserId" required>
-                            <option value="">Wybierz uzytkownika</option>
-                            @foreach (var user in Model.Users.OrderBy(x => x.FullName))
+                            <option value="">Wybierz pracownika</option>
+                            @foreach (var user in staffUsers)
                             {
-                                <option value="@user.Id">@user.FullName (@user.Role)</option>
+                                <option value="@user.Id" selected="@(Model.NewWorkSchedule.UserId == user.Id)">@user.FullName (@user.Role)</option>
                             }
                         </select>
                     </div>
@@ -31,7 +37,7 @@
                         <select id="schedule-shift" class="form-select" name="Shift" required>
                             @foreach (var shift in Enum.GetValues<WorkShift>())
                             {
-                                <option value="@shift">@shift</option>
+                                <option value="@shift" selected="@(Model.NewWorkSchedule.Shift == shift)">@shift</option>
                             }
                         </select>
                     </div>
@@ -48,8 +54,9 @@
     </div>
     <div class="col-lg-8">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Grafik</h3>
+                <span class="text-secondary small">Pokazuje @workSchedulesPage.FirstItem-@workSchedulesPage.LastItem z @workSchedulesPage.TotalCount</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -58,17 +65,22 @@
                             <th>Data</th>
                             <th>Zmiana</th>
                             <th>Pracownik</th>
-                            <th>Rola</th>
+                            <th>Konto</th>
+                            <th>Rola na zmianie</th>
                             <th class="text-end">Akcje</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var schedule in Model.WorkSchedules.OrderBy(x => x.ShiftDate))
+                        @foreach (var schedule in workSchedulesPage.Items)
                         {
+                            var accountRole = usersById.TryGetValue(schedule.UserId, out var account)
+                                ? account.Role
+                                : "-";
                             <tr>
-                                <td>@schedule.ShiftDate.ToString("dd.MM.yyyy")</td>
+                                <td class="text-nowrap">@schedule.ShiftDate.ToString("dd.MM.yyyy")</td>
                                 <td>@schedule.Shift</td>
                                 <td>@(schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}")</td>
+                                <td><span class="badge bg-blue-lt text-blue">@accountRole</span></td>
                                 <td>@(schedule.RoleAtShift ?? "-")</td>
                                 <td class="text-end">
                                     @if (User.IsInRole("HRManager") || User.IsInRole("Admin"))
@@ -81,15 +93,35 @@
                                 </td>
                             </tr>
                         }
-                        @if (Model.WorkSchedules.Count == 0)
+                        @if (workSchedulesPage.TotalCount == 0)
                         {
                             <tr>
-                                <td colspan="5" class="text-secondary text-center py-4">Brak zmian w grafiku.</td>
+                                <td colspan="6" class="text-secondary text-center py-4">
+                                    Brak zmian w grafiku. Seeder dodaje startowy grafik dla podstawowych rol.
+                                </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
+            @if (workSchedulesPage.TotalCount > 0)
+            {
+                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <span class="text-secondary small">Strona @workSchedulesPage.Page / @workSchedulesPage.TotalPages, po @workSchedulesPage.PageSize rekordow</span>
+                    <div class="btn-list">
+                        <a class="btn btn-outline-secondary @(workSchedulesPage.HasPrevious ? string.Empty : "disabled")"
+                           asp-controller="HumanResources"
+                           asp-action="Schedules"
+                           asp-route-page="@workSchedulesPage.PreviousPage"
+                           asp-route-pageSize="@workSchedulesPage.PageSize">Poprzednia</a>
+                        <a class="btn btn-outline-secondary @(workSchedulesPage.HasNext ? string.Empty : "disabled")"
+                           asp-controller="HumanResources"
+                           asp-action="Schedules"
+                           asp-route-page="@workSchedulesPage.NextPage"
+                           asp-route-pageSize="@workSchedulesPage.PageSize">Nastepna</a>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>

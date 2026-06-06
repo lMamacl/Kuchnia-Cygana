@@ -75,6 +75,31 @@ public sealed class SqlServerMigrationAndSeedingTests
         rolesCommand.CommandText = "SELECT COUNT(1) FROM [Users] WHERE [Role] IN (N'Admin', N'Kitchen', N'Driver')";
         var knownRolesCount = (int)(await rolesCommand.ExecuteScalarAsync() ?? 0);
         knownRolesCount.Should().BeGreaterThanOrEqualTo(3);
+
+        var employeeCount = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(1) FROM [Employees] WHERE [IsDeleted] = 0;");
+        employeeCount.Should().BeGreaterThanOrEqualTo(15);
+
+        var ticketCount = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(1) FROM [Tickets] WHERE [CreatedBy] = N'DatabaseSeeder' AND [IsDeleted] = 0;");
+        ticketCount.Should().BeGreaterThanOrEqualTo(12);
+
+        var auditLogCount = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(1) FROM [SystemLogs] WHERE [TargetId] LIKE N'seed:%';");
+        auditLogCount.Should().BeGreaterThanOrEqualTo(6);
+
+        var userNotificationCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [UserNotifications] un
+            INNER JOIN [Notifications] n ON n.[Id] = un.[NotificationId]
+            WHERE n.[DeduplicationKey] LIKE N'seed:m5:%';
+            """);
+        userNotificationCount.Should().BeGreaterThan(0);
     }
 
     [Fact]

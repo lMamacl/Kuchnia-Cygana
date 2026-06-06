@@ -11,6 +11,8 @@ public sealed class AdminDashboardViewModel
 
     public IReadOnlyList<string> AvailableRoles { get; init; } = [];
 
+    public PagedList<UserDto> UsersPage { get; init; } = new();
+
     public SystemLogPageDto AuditPage { get; init; } = new();
 
     public AuditLogFilterViewModel AuditFilter { get; init; } = new();
@@ -59,9 +61,11 @@ public sealed class AuditLogFilterViewModel
 
     public string? TargetEntity { get; set; }
 
-    public DateTime? From { get; set; }
+    public DateTime? From { get; set; } = DateTime.Today.AddDays(-30);
 
     public DateTime? To { get; set; }
+
+    public bool IncludeArchived { get; set; }
 
     public int Page { get; set; } = 1;
 
@@ -77,6 +81,7 @@ public sealed class AuditLogFilterViewModel
             TargetEntity = TargetEntity,
             From = From,
             To = To,
+            IncludeArchived = IncludeArchived,
             Page = Page,
             PageSize = PageSize,
         };

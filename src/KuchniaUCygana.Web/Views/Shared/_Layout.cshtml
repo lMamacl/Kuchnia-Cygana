@@ -59,6 +59,7 @@
                         {
                             <a class="nav-link text-dark" asp-controller="Account" asp-action="Profile">Konto</a>
                             <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                                @Html.AntiForgeryToken()
                                 <button type="submit" class="btn btn-outline-danger btn-sm">Wyloguj</button>
                             </form>
                         }

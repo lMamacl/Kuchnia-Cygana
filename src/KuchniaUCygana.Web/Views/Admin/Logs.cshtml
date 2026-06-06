@@ -82,7 +82,13 @@
                             }
                         </select>
                     </div>
-                    <div class="col-md-6 d-flex align-items-end justify-content-md-end gap-2">
+                    <div class="col-md-2 d-flex align-items-end">
+                        <label class="form-check mb-2" for="IncludeArchived">
+                            <input class="form-check-input" id="IncludeArchived" name="IncludeArchived" type="checkbox" value="true" checked="@filter.IncludeArchived" />
+                            <span class="form-check-label">Archiwum</span>
+                        </label>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end justify-content-md-end gap-2">
                         <input type="hidden" name="Page" value="1" />
                         <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Logs">Wyczysc</a>
                         <button class="btn btn-primary" type="submit">Filtruj</button>
@@ -117,7 +123,13 @@
                         @foreach (var log in logs)
                         {
                             <tr>
-                                <td class="text-nowrap">@log.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                <td class="text-nowrap">
+                                    <div>@log.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                    @if (log.IsArchived)
+                                    {
+                                        <span class="badge bg-secondary-lt text-secondary">Archiwum</span>
+                                    }
+                                </td>
                                 <td>@(log.UserFullName ?? $"#{log.UserId}")</td>
                                 <td><span class="badge bg-blue-lt text-blue">@log.Action</span></td>
                                 <td>@log.TargetEntity #@log.TargetId</td>
@@ -147,6 +159,7 @@
                        asp-route-TargetEntity="@filter.TargetEntity"
                        asp-route-From="@fromValue"
                        asp-route-To="@toValue"
+                       asp-route-IncludeArchived="@filter.IncludeArchived"
                        asp-route-Page="@previousPage"
                        asp-route-PageSize="@auditPage.PageSize">Poprzednia</a>
                     <a class="btn btn-outline-secondary @(auditPage.Page >= auditPage.TotalPages ? "disabled" : string.Empty)"
@@ -158,6 +171,7 @@
                        asp-route-TargetEntity="@filter.TargetEntity"
                        asp-route-From="@fromValue"
                        asp-route-To="@toValue"
+                       asp-route-IncludeArchived="@filter.IncludeArchived"
                        asp-route-Page="@nextPage"
                        asp-route-PageSize="@auditPage.PageSize">Nastepna</a>
                 </div>

@@ -15,6 +15,14 @@ public sealed class HumanResourcesDashboardViewModel
 
     public IReadOnlyList<UserDto> Users { get; init; } = [];
 
+    public PagedList<DepartmentDto> DepartmentsPage { get; init; } = new();
+
+    public PagedList<EmployeeDto> EmployeesPage { get; init; } = new();
+
+    public PagedList<LeaveRequestDto> LeaveRequestsPage { get; init; } = new();
+
+    public PagedList<WorkScheduleDto> WorkSchedulesPage { get; init; } = new();
+
     public CreateDepartmentRequest NewDepartment { get; init; } = new();
 
     public CreateEmployeeRequest NewEmployee { get; init; } = new()

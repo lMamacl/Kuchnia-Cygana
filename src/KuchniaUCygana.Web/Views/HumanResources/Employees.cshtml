@@ -1,6 +1,12 @@
 @model HumanResourcesDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+    var employeesPage = Model.EmployeesPage;
+    var usersById = Model.Users.ToDictionary(user => user.Id);
+    var staffUsers = Model.Users
+        .Where(user => !string.Equals(user.Role, "Client", StringComparison.Ordinal))
+        .OrderBy(user => user.FullName)
+        .ToArray();
 }
 
 <div class="row row-cards">
@@ -16,12 +22,18 @@
                     <div class="mb-3">
                         <label class="form-label" for="employee-user">Uzytkownik</label>
                         <select id="employee-user" class="form-select" name="UserId" required>
-                            <option value="">Wybierz konto</option>
-                            @foreach (var user in Model.Users.OrderBy(x => x.FullName))
+                            <option value="">Wybierz konto pracownicze</option>
+                            @foreach (var user in staffUsers)
                             {
-                                <option value="@user.Id">@user.FullName (@user.Email, @user.Role)</option>
+                                <option value="@user.Id" selected="@(Model.NewEmployee.UserId == user.Id)">
+                                    @user.FullName (@user.Email, @user.Role)
+                                </option>
                             }
                         </select>
+                        @if (staffUsers.Length == 0)
+                        {
+                            <div class="form-hint text-warning">Brak kont pracowniczych w bazie.</div>
+                        }
                     </div>
                     <div class="row g-2">
                         <div class="col-sm-6">
@@ -52,7 +64,7 @@
                                 <option value="">Wybierz dzial</option>
                                 @foreach (var department in Model.Departments.OrderBy(x => x.Name))
                                 {
-                                    <option value="@department.Id">@department.Name</option>
+                                    <option value="@department.Id" selected="@(Model.NewEmployee.DepartmentId == department.Id)">@department.Name</option>
                                 }
                             </select>
                         </div>
@@ -71,8 +83,9 @@
     </div>
     <div class="col-xl-8">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Pracownicy</h3>
+                <span class="text-secondary small">Pokazuje @employeesPage.FirstItem-@employeesPage.LastItem z @employeesPage.TotalCount</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -81,20 +94,31 @@
                             <th>Pracownik</th>
                             <th>Dzial</th>
                             <th>Stanowisko</th>
+                            <th>Konto</th>
+                            <th>Zatrudnienie</th>
                             <th>Status</th>
                             <th class="text-end">Akcje</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var employee in Model.Employees.OrderBy(x => x.LastName).ThenBy(x => x.FirstName))
+                        @foreach (var employee in employeesPage.Items)
                         {
+                            var accountRole = usersById.TryGetValue(employee.UserId, out var account)
+                                ? account.Role
+                                : "-";
                             <tr>
                                 <td>
                                     <div class="fw-semibold">@employee.FullName</div>
                                     <div class="text-secondary small">@employee.Email</div>
+                                    @if (!string.IsNullOrWhiteSpace(employee.PhoneNumber))
+                                    {
+                                        <div class="text-secondary small">@employee.PhoneNumber</div>
+                                    }
                                 </td>
                                 <td>@(employee.DepartmentName ?? "-")</td>
                                 <td>@employee.Position</td>
+                                <td><span class="badge bg-blue-lt text-blue">@accountRole</span></td>
+                                <td class="text-nowrap">@employee.HireDate.ToString("dd.MM.yyyy")</td>
                                 <td>
                                     <span class="badge @(employee.IsActive ? "bg-green-lt text-green" : "bg-secondary-lt text-secondary")">
                                         @(employee.IsActive ? "Aktywny" : "Nieaktywny")
@@ -111,15 +135,35 @@
                                 </td>
                             </tr>
                         }
-                        @if (Model.Employees.Count == 0)
+                        @if (employeesPage.TotalCount == 0)
                         {
                             <tr>
-                                <td colspan="5" class="text-secondary text-center py-4">Brak pracownikow.</td>
+                                <td colspan="7" class="text-secondary text-center py-4">
+                                    Brak pracownikow w bazie. Uruchom seeding albo dodaj pierwszego pracownika formularzem.
+                                </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
+            @if (employeesPage.TotalCount > 0)
+            {
+                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <span class="text-secondary small">Strona @employeesPage.Page / @employeesPage.TotalPages, po @employeesPage.PageSize rekordow</span>
+                    <div class="btn-list">
+                        <a class="btn btn-outline-secondary @(employeesPage.HasPrevious ? string.Empty : "disabled")"
+                           asp-controller="HumanResources"
+                           asp-action="Employees"
+                           asp-route-page="@employeesPage.PreviousPage"
+                           asp-route-pageSize="@employeesPage.PageSize">Poprzednia</a>
+                        <a class="btn btn-outline-secondary @(employeesPage.HasNext ? string.Empty : "disabled")"
+                           asp-controller="HumanResources"
+                           asp-action="Employees"
+                           asp-route-page="@employeesPage.NextPage"
+                           asp-route-pageSize="@employeesPage.PageSize">Nastepna</a>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>

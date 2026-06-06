@@ -1,6 +1,30 @@
 @model HumanResourcesDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+    var leaveRequestsPage = Model.LeaveRequestsPage;
+
+    string LeaveTypeName(int value) => value switch
+    {
+        0 => "Wypoczynkowy",
+        1 => "Chorobowy",
+        2 => "Okolicznosciowy",
+        _ => $"Typ {value}",
+    };
+
+    string LeaveStatusName(int value) => value switch
+    {
+        0 => "Oczekuje",
+        1 => "Zaakceptowany",
+        2 => "Odrzucony",
+        _ => $"Status {value}",
+    };
+
+    string LeaveStatusClass(int value) => value switch
+    {
+        1 => "bg-green-lt text-green",
+        2 => "bg-red-lt text-red",
+        _ => "bg-blue-lt text-blue",
+    };
 }
 
 <div class="row row-cards">
@@ -18,16 +42,16 @@
                             <option value="">Wybierz pracownika</option>
                             @foreach (var employee in Model.Employees.Where(x => x.IsActive).OrderBy(x => x.FullName))
                             {
-                                <option value="@employee.Id">@employee.FullName</option>
+                                <option value="@employee.Id" selected="@(Model.NewLeaveRequest.EmployeeId == employee.Id)">@employee.FullName</option>
                             }
                         </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="leave-type">Typ urlopu</label>
                         <select id="leave-type" class="form-select" name="LeaveType">
-                            <option value="0">Wypoczynkowy</option>
-                            <option value="1">Chorobowy</option>
-                            <option value="2">Okolicznosciowy</option>
+                            <option value="0" selected="@(Model.NewLeaveRequest.LeaveType == 0)">Wypoczynkowy</option>
+                            <option value="1" selected="@(Model.NewLeaveRequest.LeaveType == 1)">Chorobowy</option>
+                            <option value="2" selected="@(Model.NewLeaveRequest.LeaveType == 2)">Okolicznosciowy</option>
                         </select>
                     </div>
                     <div class="row g-2">
@@ -49,8 +73,9 @@
     </div>
     <div class="col-lg-8">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Wnioski urlopowe</h3>
+                <span class="text-secondary small">Pokazuje @leaveRequestsPage.FirstItem-@leaveRequestsPage.LastItem z @leaveRequestsPage.TotalCount</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -60,17 +85,32 @@
                             <th>Zakres</th>
                             <th>Typ</th>
                             <th>Status</th>
-                            <th class="text-end">Decyzja</th>
+                            <th>Decyzja</th>
+                            <th class="text-end">Akcja</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var leave in Model.LeaveRequests.OrderByDescending(x => x.CreatedAt))
+                        @foreach (var leave in leaveRequestsPage.Items)
                         {
                             <tr>
                                 <td>@(leave.EmployeeFullName ?? $"#{leave.EmployeeId}")</td>
-                                <td>@leave.StartDate.ToString("dd.MM.yyyy") - @leave.EndDate.ToString("dd.MM.yyyy")</td>
-                                <td>@leave.LeaveType</td>
-                                <td><span class="badge bg-blue-lt text-blue">@leave.Status</span></td>
+                                <td class="text-nowrap">@leave.StartDate.ToString("dd.MM.yyyy") - @leave.EndDate.ToString("dd.MM.yyyy")</td>
+                                <td>@LeaveTypeName(leave.LeaveType)</td>
+                                <td><span class="badge @LeaveStatusClass(leave.Status)">@LeaveStatusName(leave.Status)</span></td>
+                                <td>
+                                    @if (leave.ApprovedByEmployeeId.HasValue)
+                                    {
+                                        <span>@(leave.ApprovedByEmployeeFullName ?? $"#{leave.ApprovedByEmployeeId}")</span>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(leave.RejectionReason))
+                                    {
+                                        <span class="text-secondary">@leave.RejectionReason</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-secondary">-</span>
+                                    }
+                                </td>
                                 <td class="text-end">
                                     @if (User.IsInRole("HRManager") || User.IsInRole("Admin"))
                                     {
@@ -90,15 +130,35 @@
                                 </td>
                             </tr>
                         }
-                        @if (Model.LeaveRequests.Count == 0)
+                        @if (leaveRequestsPage.TotalCount == 0)
                         {
                             <tr>
-                                <td colspan="5" class="text-secondary text-center py-4">Brak wnioskow.</td>
+                                <td colspan="6" class="text-secondary text-center py-4">
+                                    Brak wnioskow urlopowych. Seeder dodaje przykladowe pozycje, gdy baza jest pusta.
+                                </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
+            @if (leaveRequestsPage.TotalCount > 0)
+            {
+                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <span class="text-secondary small">Strona @leaveRequestsPage.Page / @leaveRequestsPage.TotalPages, po @leaveRequestsPage.PageSize rekordow</span>
+                    <div class="btn-list">
+                        <a class="btn btn-outline-secondary @(leaveRequestsPage.HasPrevious ? string.Empty : "disabled")"
+                           asp-controller="HumanResources"
+                           asp-action="Leaves"
+                           asp-route-page="@leaveRequestsPage.PreviousPage"
+                           asp-route-pageSize="@leaveRequestsPage.PageSize">Poprzednia</a>
+                        <a class="btn btn-outline-secondary @(leaveRequestsPage.HasNext ? string.Empty : "disabled")"
+                           asp-controller="HumanResources"
+                           asp-action="Leaves"
+                           asp-route-page="@leaveRequestsPage.NextPage"
+                           asp-route-pageSize="@leaveRequestsPage.PageSize">Nastepna</a>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>
