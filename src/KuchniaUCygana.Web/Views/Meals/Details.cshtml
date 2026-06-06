@@ -1,35 +1,58 @@
 @model KuchniaUCygana.Application.DTOs.Menu.MealDetailDto
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = $"Posiłek #{Model.Id}";
+    ViewData["Title"] = $"Posilek #{Model.Id}";
     ViewData["Section"] = "Katalog Menu";
-    ViewData["Description"] = "Zarządzanie recepturą, zdjęciami i opisami AI potrawy.";
-}
+    ViewData["Description"] = "Zarzadzanie receptura, wariantami, opakowaniami i wynikiem kalkulatora.";
 
-@{
     var componentVersions = ViewBag.ComponentVersions as IEnumerable<KuchniaUCygana.Application.DTOs.Menu.RecipeComponentVersionOptionDto>
         ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Menu.RecipeComponentVersionOptionDto>();
+}
+
+@functions {
+    string FormatDecimal(decimal? value, string suffix = "") => value.HasValue ? $"{value.Value:0.##}{suffix}" : "-";
+
+    string FormatInt(int? value, string suffix = "") => value.HasValue ? $"{value.Value}{suffix}" : "-";
+
+    string StatusColor(string status) => status switch
+    {
+        "Published" => "success",
+        "Ready" => "azure",
+        "Archived" => "danger",
+        _ => "secondary"
+    };
 }
 
 <div class="row row-cards">
     <div class="col-lg-8">
         <div class="card card-premium">
             <div class="card-body">
-                <div class="row align-items-center mb-3">
-                    <div class="col">
-                        <h2 class="h1 mb-0 text-dark">@Model.Name</h2>
-                        <span class="badge bg-indigo-lt text-indigo mt-2">Kategoria: @Model.CategoryId</span>
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                    <div>
+                        <h2 class="h1 mb-1 text-dark">@Model.Name</h2>
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="badge bg-indigo-lt text-indigo">Kategoria: @Model.CategoryId</span>
+                            <span class="badge bg-@StatusColor(Model.Status)-lt text-@StatusColor(Model.Status)">Status: @Model.Status</span>
+                            <span class="badge bg-secondary-lt text-secondary">Shelf-life: @FormatInt(Model.ShelfLifeHours, " h")</span>
+                        </div>
                     </div>
-                    <div class="col-auto">
-                        <span class="badge bg-secondary">Status: @Model.Status</span>
+                    <div class="btn-list">
+                        <form asp-action="Publish" asp-route-id="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-success btn-sm">Publikuj</button>
+                        </form>
+                        <form asp-action="Archive" asp-route-id="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Archiwizuj</button>
+                        </form>
                     </div>
                 </div>
 
-                <h4 class="mt-4 mb-2 text-primary">Opis marketingowy (AI/Ręczny)</h4>
+                <h4 class="mt-4 mb-2 text-primary">Opis marketingowy</h4>
                 @if (string.IsNullOrWhiteSpace(Model.MarketingDescription))
                 {
                     <div class="alert alert-warning mb-3">
-                        Brak opisu marketingowego. Możesz wygenerować go automatycznie za pomocą AI.
+                        Brak opisu marketingowego.
                     </div>
                 }
                 else
@@ -41,112 +64,88 @@
 
                 <form asp-action="GenerateDescription" asp-route-mealId="@Model.Id" method="post" class="d-inline">
                     @Html.AntiForgeryToken()
-                    <button type="submit" class="btn btn-indigo btn-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M4 20l10 -10m0 -5v5h5m-9 -1v5h5m-9 -1v5h5" /><path d="M13 5l1 3l3 1l-3 1l-1 3l-1 -3l-3 -1l3 -1z" /></svg>
-                        Generuj Opis AI (Smart Content)
-                    </button>
+                    <button type="submit" class="btn btn-indigo btn-sm">Generuj opis AI</button>
                 </form>
             </div>
         </div>
 
         <div class="card card-premium mt-3">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Wynik posilku bazowego</h3>
+                @if (Model.Result is not null)
+                {
+                    <span class="badge @(Model.Result.IsComplete ? "bg-success-lt text-success" : "bg-warning-lt text-warning")">
+                        @Model.Result.CompletenessStatus
+                    </span>
+                }
+            </div>
+            <div class="card-body">
+                @if (Model.Result is null)
+                {
+                    <div class="alert alert-warning mb-0">Brak wyniku kalkulatora.</div>
+                }
+                else
+                {
+                    await Html.RenderPartialAsync("_MealVariantResultSummary", Model.Result);
+                }
+            </div>
+        </div>
+
+        <div class="card card-premium mt-3">
             <div class="card-header">
-                <h3 class="card-title">Przepisy-składowe</h3>
+                <h3 class="card-title">Przepisy-skladowe posilku</h3>
             </div>
             <div class="card-body">
                 @if (!Model.Components.Any())
                 {
                     <div class="alert alert-warning mb-0">
-                        Brak wersjonowanych składowych. Do czasu migracji M2 ten posiłek może korzystać z legacy `Recipes`.
+                        Brak wersjonowanych skladowych. Publikacja zostanie zablokowana przez kalkulator.
                     </div>
                 }
                 else
                 {
-                    <div class="accordion" id="mealComponents">
-                        @foreach (var component in Model.Components)
-                        {
-                            var collapseId = $"component-{component.RecipeComponentVersionId}";
-                            <div class="accordion-item">
-                                <h2 class="accordion-header" id="heading-@collapseId">
-                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="false" aria-controls="@collapseId">
-                                        <span class="me-2 fw-bold">@component.ComponentName</span>
-                                        <span class="badge bg-blue-lt text-blue me-2">v@component.VersionNumber</span>
-                                        <span class="badge bg-secondary-lt text-secondary">@component.VersionStatus</span>
-                                    </button>
-                                </h2>
-                                <div id="@collapseId" class="accordion-collapse collapse" aria-labelledby="heading-@collapseId" data-bs-parent="#mealComponents">
-                                    <div class="accordion-body">
-                                        <div class="d-flex flex-wrap gap-2 mb-3">
-                                            <span class="badge bg-indigo-lt text-indigo">Rola: @(component.Role ?? "składowa")</span>
-                                            <span class="badge bg-green-lt text-green">Ilość: @component.QuantityPerServing.ToString("0.###") @component.Unit</span>
-                                            @if (component.ShelfLifeHours.HasValue)
-                                            {
-                                                <span class="badge bg-orange-lt text-orange">Shelf-life: @component.ShelfLifeHours h</span>
-                                            }
+                    <div class="table-responsive">
+                        <table class="table table-vcenter table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Skladowa</th>
+                                    <th>Rola</th>
+                                    <th class="text-end">Ilosc</th>
+                                    <th>Shelf-life</th>
+                                    <th class="w-1"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var component in Model.Components)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="fw-bold">@component.ComponentName</div>
+                                            <div class="text-secondary small">v@component.VersionNumber / @component.VersionStatus</div>
+                                        </td>
+                                        <td>@(component.Role ?? "skladowa")</td>
+                                        <td class="text-end">@component.QuantityPerServing.ToString("0.###") @component.Unit</td>
+                                        <td>
+                                            @FormatInt(component.ShelfLifeHours, " h")
                                             @if (component.UseEarliestIngredientExpiry)
                                             {
-                                                <span class="badge bg-red-lt text-red">Ważność z najwcześniejszego surowca</span>
+                                                <span class="badge bg-red-lt text-red ms-1">FEFO</span>
                                             }
+                                        </td>
+                                        <td>
                                             @if (!component.IsLegacyFallback)
                                             {
-                                                <a asp-controller="RecipeComponents" asp-action="Version" asp-route-componentId="@component.RecipeComponentId" asp-route-versionId="@component.RecipeComponentVersionId" class="btn btn-sm btn-outline-primary ms-auto">Szczegóły</a>
+                                                <a asp-controller="RecipeComponents"
+                                                   asp-action="Version"
+                                                   asp-route-componentId="@component.RecipeComponentId"
+                                                   asp-route-versionId="@component.RecipeComponentVersionId"
+                                                   class="btn btn-sm btn-outline-primary">Wersja</a>
                                             }
-                                        </div>
-
-                                        @if (!string.IsNullOrWhiteSpace(component.Instructions))
-                                        {
-                                            <div class="bg-light p-3 border rounded mb-3">@component.Instructions</div>
-                                        }
-
-                                        <div class="table-responsive">
-                                            <table class="table table-vcenter table-sm">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Składnik</th>
-                                                        <th>Mapowanie</th>
-                                                        <th class="text-end">Gramatura</th>
-                                                        <th class="text-center">Opcjonalny</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    @if (!component.Ingredients.Any())
-                                                    {
-                                                        <tr><td colspan="4" class="text-center text-muted">Brak składników w składowej.</td></tr>
-                                                    }
-                                                    @foreach (var ingredient in component.Ingredients)
-                                                    {
-                                                        <tr>
-                                                            <td class="fw-bold">@ingredient.IngredientName (ID: @ingredient.IngredientId)</td>
-                                                            <td>
-                                                                @if (ingredient.WarehouseCategoryId.HasValue)
-                                                                {
-                                                                    <span class="badge bg-green-lt text-green">Kategoria: @(ingredient.WarehouseCategoryName ?? ingredient.WarehouseCategoryId.ToString())</span>
-                                                                }
-                                                                else
-                                                                {
-                                                                    <span class="badge bg-red-lt text-red">Brak kategorii</span>
-                                                                }
-                                                                @if (ingredient.StockItemId.HasValue)
-                                                                {
-                                                                    <span class="badge bg-blue-lt text-blue">StockItem: @ingredient.StockItemId</span>
-                                                                }
-                                                            </td>
-                                                            <td class="text-end">@ingredient.WeightInGrams.ToString("F2") g</td>
-                                                            <td class="text-center">
-                                                                @if (ingredient.IsOptional)
-                                                                {
-                                                                    <span class="badge bg-yellow-lt text-yellow">Tak</span>
-                                                                }
-                                                            </td>
-                                                        </tr>
-                                                    }
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
                     </div>
                 }
             </div>
@@ -194,45 +193,295 @@
                 }
                 else
                 {
-                    <div class="table-responsive mb-3">
-                        <table class="table table-vcenter table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Nazwa</th>
-                                    <th>Status</th>
-                                    <th>Gramatura</th>
-                                    <th>Kompletnosc</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var variant in Model.Variants)
-                                {
-                                    <tr>
-                                        <td>
-                                            <div class="fw-bold">@variant.Name</div>
-                                            <div class="text-secondary small">@variant.VariantType @(variant.IsDefault ? "/ domyslny" : "")</div>
-                                        </td>
-                                        <td><span class="badge bg-blue-lt">@variant.Status</span></td>
-                                        <td>@variant.CookedWeightGrams g</td>
-                                        <td>
-                                            @if (variant.IsComplete)
-                                            {
-                                                <span class="badge bg-success-lt text-success">Kompletny</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-warning-lt text-warning">@variant.ValidationWarnings.Count brakow</span>
-                                                <div class="text-secondary small">@string.Join("; ", variant.ValidationWarnings)</div>
-                                            }
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
+                    <div class="accordion" id="mealVariants">
+                        @foreach (var variant in Model.Variants)
+                        {
+                            var result = variant.Result;
+                            var collapseId = $"variant-{variant.Id}";
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="heading-@collapseId">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="false" aria-controls="@collapseId">
+                                        <span class="me-2 fw-bold">@variant.Name</span>
+                                        <span class="badge bg-@StatusColor(variant.Status)-lt text-@StatusColor(variant.Status) me-2">@variant.Status</span>
+                                        <span class="badge @(variant.IsComplete ? "bg-success-lt text-success" : "bg-warning-lt text-warning") me-2">
+                                            @(variant.IsComplete ? "Kompletny" : $"{variant.ValidationWarnings.Count} brakow")
+                                        </span>
+                                        <span class="text-secondary small">@FormatDecimal(result?.FinalWeightGrams, " g")</span>
+                                    </button>
+                                </h2>
+                                <div id="@collapseId" class="accordion-collapse collapse" aria-labelledby="heading-@collapseId" data-bs-parent="#mealVariants">
+                                    <div class="accordion-body">
+                                        <form asp-action="UpdateVariant" asp-route-mealId="@Model.Id" asp-route-variantId="@variant.Id" method="post" class="row g-2 mb-3">
+                                            @Html.AntiForgeryToken()
+                                            <div class="col-md-4">
+                                                <label class="form-label">Nazwa</label>
+                                                <input name="Name" value="@variant.Name" class="form-control" maxlength="160" required />
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Typ</label>
+                                                <input name="VariantType" value="@variant.VariantType" class="form-control" maxlength="60" />
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Status</label>
+                                                <select name="Status" class="form-select">
+                                                    <option value="Draft" selected="@(variant.Status == "Draft" ? "selected" : null)">Draft</option>
+                                                    <option value="Ready" selected="@(variant.Status == "Ready" ? "selected" : null)">Ready</option>
+                                                    <option value="Published" selected="@(variant.Status == "Published" ? "selected" : null)">Published</option>
+                                                    <option value="Archived" selected="@(variant.Status == "Archived" ? "selected" : null)">Archived</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Raw g</label>
+                                                <input name="RawWeightGrams" type="number" step="0.01" value="@variant.RawWeightGrams" class="form-control" />
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Cooked g</label>
+                                                <input name="CookedWeightGrams" type="number" step="0.01" value="@variant.CookedWeightGrams" class="form-control" />
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label">Opis</label>
+                                                <textarea name="Description" class="form-control" rows="2">@variant.Description</textarea>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Nutrition source</label>
+                                                <select name="NutritionSource" class="form-select">
+                                                    <option value="Aggregated" selected="@(variant.NutritionSource == "Aggregated" ? "selected" : null)">Aggregated</option>
+                                                    <option value="Override" selected="@(variant.NutritionSource == "Override" || variant.NutritionSource == "Manual" ? "selected" : null)">Override</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-9">
+                                                <label class="form-label">Powod override</label>
+                                                <input name="NutritionOverrideReason" value="@variant.NutritionOverrideReason" class="form-control" maxlength="500" />
+                                            </div>
+                                            <div class="col-md">
+                                                <label class="form-label">kcal / 100 g</label>
+                                                <input name="CaloriesPer100g" type="number" step="0.01" value="@variant.CaloriesPer100g" class="form-control" />
+                                            </div>
+                                            <div class="col-md">
+                                                <label class="form-label">Bialko</label>
+                                                <input name="ProteinPer100g" type="number" step="0.01" value="@variant.ProteinPer100g" class="form-control" />
+                                            </div>
+                                            <div class="col-md">
+                                                <label class="form-label">Wegle</label>
+                                                <input name="CarbohydratesPer100g" type="number" step="0.01" value="@variant.CarbohydratesPer100g" class="form-control" />
+                                            </div>
+                                            <div class="col-md">
+                                                <label class="form-label">Tluszcz</label>
+                                                <input name="FatPer100g" type="number" step="0.01" value="@variant.FatPer100g" class="form-control" />
+                                            </div>
+                                            <div class="col-md">
+                                                <label class="form-label">Blonnik</label>
+                                                <input name="FiberPer100g" type="number" step="0.01" value="@variant.FiberPer100g" class="form-control" />
+                                            </div>
+                                            <div class="col-md-3 d-flex align-items-end">
+                                                <label class="form-check mb-2">
+                                                    <input type="hidden" name="AllergensApproved" value="false" />
+                                                    <input class="form-check-input" type="checkbox" name="AllergensApproved" value="true" checked="@(variant.AllergensApproved ? "checked" : null)" />
+                                                    <span class="form-check-label">Alergeny zatwierdzone</span>
+                                                </label>
+                                            </div>
+                                            <div class="col-md-9">
+                                                <label class="form-label">Powod override alergenow</label>
+                                                <input name="AllergenOverrideReason" value="@variant.AllergenOverrideReason" class="form-control" maxlength="500" />
+                                            </div>
+                                            <div class="col-12 d-flex flex-wrap gap-2">
+                                                <button type="submit" class="btn btn-primary">Zapisz wariant</button>
+                                            </div>
+                                        </form>
+
+                                        <div class="btn-list mb-3">
+                                            <form asp-action="PublishVariant" asp-route-mealId="@Model.Id" asp-route-variantId="@variant.Id" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-success btn-sm">Publikuj wariant</button>
+                                            </form>
+                                            <form asp-action="ArchiveVariant" asp-route-mealId="@Model.Id" asp-route-variantId="@variant.Id" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-danger btn-sm">Archiwizuj wariant</button>
+                                            </form>
+                                        </div>
+
+                                        @if (result is not null)
+                                        {
+                                            await Html.RenderPartialAsync("_MealVariantResultSummary", result);
+                                        }
+
+                                        <h4 class="mt-4">Skladowe wariantu</h4>
+                                        @foreach (var component in variant.Components.OrderBy(c => c.SortOrder))
+                                        {
+                                            <form asp-action="SaveVariantComponent" asp-route-mealId="@Model.Id" asp-route-variantId="@variant.Id" method="post" class="row g-2 align-items-end border rounded p-2 mb-2">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="Id" value="@component.Id" />
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Wersja skladowej</label>
+                                                    <select name="RecipeComponentVersionId" class="form-select" required>
+                                                        @foreach (var option in componentVersions)
+                                                        {
+                                                            <option value="@option.RecipeComponentVersionId" selected="@(option.RecipeComponentVersionId == component.RecipeComponentVersionId ? "selected" : null)">
+                                                                @option.ComponentName v@option.VersionNumber
+                                                            </option>
+                                                        }
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Rola</label>
+                                                    <input name="Role" value="@component.Role" class="form-control" maxlength="80" />
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Ilosc</label>
+                                                    <input name="QuantityPerServing" type="number" step="0.001" min="0" value="@component.QuantityPerServing" class="form-control" />
+                                                </div>
+                                                <div class="col-md-1">
+                                                    <label class="form-label">Unit</label>
+                                                    <input name="Unit" value="@component.Unit" class="form-control" maxlength="40" />
+                                                </div>
+                                                <div class="col-md-1">
+                                                    <label class="form-label">Sort</label>
+                                                    <input name="SortOrder" type="number" value="@component.SortOrder" class="form-control" />
+                                                </div>
+                                                <div class="col-md-1 d-flex align-items-end">
+                                                    <label class="form-check mb-2">
+                                                        <input type="hidden" name="IsOptional" value="false" />
+                                                        <input class="form-check-input" type="checkbox" name="IsOptional" value="true" checked="@(component.IsOptional ? "checked" : null)" />
+                                                    </label>
+                                                </div>
+                                                <div class="col-md-1">
+                                                    <button type="submit" class="btn btn-outline-primary w-100">Zapisz</button>
+                                                </div>
+                                            </form>
+                                            <form asp-action="DeleteVariantComponent" asp-route-mealId="@Model.Id" asp-route-variantId="@variant.Id" asp-route-componentId="@component.Id" method="post" class="mb-2">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-link text-danger p-0">Usun skladowa @component.ComponentName</button>
+                                            </form>
+                                        }
+
+                                        <form asp-action="SaveVariantComponent" asp-route-mealId="@Model.Id" asp-route-variantId="@variant.Id" method="post" class="row g-2 align-items-end border rounded p-2 mb-3">
+                                            @Html.AntiForgeryToken()
+                                            <div class="col-md-4">
+                                                <label class="form-label">Dodaj skladowa</label>
+                                                <select name="RecipeComponentVersionId" class="form-select" required>
+                                                    <option value="">Wybierz wersje</option>
+                                                    @foreach (var option in componentVersions)
+                                                    {
+                                                        <option value="@option.RecipeComponentVersionId">@option.ComponentName v@option.VersionNumber</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Rola</label>
+                                                <input name="Role" class="form-control" maxlength="80" />
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Ilosc</label>
+                                                <input name="QuantityPerServing" type="number" step="0.001" min="0" value="1" class="form-control" />
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Unit</label>
+                                                <select name="Unit" class="form-select">
+                                                    <option value="portion">portion</option>
+                                                    <option value="g">g</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-1">
+                                                <label class="form-label">Sort</label>
+                                                <input name="SortOrder" type="number" value="0" class="form-control" />
+                                            </div>
+                                            <div class="col-md-1">
+                                                <button type="submit" class="btn btn-primary w-100">Dodaj</button>
+                                            </div>
+                                        </form>
+
+                                        <h4 class="mt-4">Opakowania wariantu</h4>
+                                        @foreach (var packaging in variant.PackagingRequirements)
+                                        {
+                                            <form asp-action="SaveVariantPackaging" asp-route-mealId="@Model.Id" asp-route-variantId="@variant.Id" method="post" class="row g-2 align-items-end border rounded p-2 mb-2">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="Id" value="@packaging.Id" />
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Nazwa</label>
+                                                    <input name="ResourceName" value="@packaging.ResourceName" class="form-control" maxlength="200" required />
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">StockItemId</label>
+                                                    <input name="StockItemId" type="number" value="@packaging.StockItemId" class="form-control" />
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">WarehouseCategoryId</label>
+                                                    <input name="WarehouseCategoryId" type="number" value="@packaging.WarehouseCategoryId" class="form-control" />
+                                                </div>
+                                                <div class="col-md-1">
+                                                    <label class="form-label">Ilosc</label>
+                                                    <input name="Quantity" type="number" step="0.001" min="0" value="@packaging.Quantity" class="form-control" />
+                                                </div>
+                                                <div class="col-md-1">
+                                                    <label class="form-label">Unit</label>
+                                                    <input name="Unit" value="@packaging.Unit" class="form-control" maxlength="20" />
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Rola</label>
+                                                    <input name="ContainerRole" value="@packaging.ContainerRole" class="form-control" maxlength="80" />
+                                                </div>
+                                                <div class="col-md-1">
+                                                    <button type="submit" class="btn btn-outline-primary w-100">Zapisz</button>
+                                                </div>
+                                                <div class="col-12">
+                                                    <label class="form-check">
+                                                        <input type="hidden" name="IsCustomerFacing" value="false" />
+                                                        <input class="form-check-input" type="checkbox" name="IsCustomerFacing" value="true" checked="@(packaging.IsCustomerFacing ? "checked" : null)" />
+                                                        <span class="form-check-label">Widoczne dla klienta</span>
+                                                    </label>
+                                                </div>
+                                            </form>
+                                            <form asp-action="DeleteVariantPackaging" asp-route-mealId="@Model.Id" asp-route-variantId="@variant.Id" asp-route-packagingId="@packaging.Id" method="post" class="mb-2">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-link text-danger p-0">Usun opakowanie @packaging.ResourceName</button>
+                                            </form>
+                                        }
+
+                                        <form asp-action="SaveVariantPackaging" asp-route-mealId="@Model.Id" asp-route-variantId="@variant.Id" method="post" class="row g-2 align-items-end border rounded p-2">
+                                            @Html.AntiForgeryToken()
+                                            <div class="col-md-3">
+                                                <label class="form-label">Dodaj opakowanie</label>
+                                                <input name="ResourceName" class="form-control" maxlength="200" required />
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">StockItemId</label>
+                                                <input name="StockItemId" type="number" class="form-control" />
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">WarehouseCategoryId</label>
+                                                <input name="WarehouseCategoryId" type="number" class="form-control" />
+                                            </div>
+                                            <div class="col-md-1">
+                                                <label class="form-label">Ilosc</label>
+                                                <input name="Quantity" type="number" step="0.001" min="0" value="1" class="form-control" />
+                                            </div>
+                                            <div class="col-md-1">
+                                                <label class="form-label">Unit</label>
+                                                <input name="Unit" value="pcs" class="form-control" maxlength="20" />
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Rola</label>
+                                                <input name="ContainerRole" class="form-control" maxlength="80" />
+                                            </div>
+                                            <div class="col-md-1">
+                                                <button type="submit" class="btn btn-primary w-100">Dodaj</button>
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-check">
+                                                    <input type="hidden" name="IsCustomerFacing" value="false" />
+                                                    <input class="form-check-input" type="checkbox" name="IsCustomerFacing" value="true" checked="checked" />
+                                                    <span class="form-check-label">Widoczne dla klienta</span>
+                                                </label>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        }
                     </div>
                 }
 
-                <form asp-action="CreateVariant" asp-route-mealId="@Model.Id" method="post" class="row g-2 align-items-end">
+                <form asp-action="CreateVariant" asp-route-mealId="@Model.Id" method="post" class="row g-2 align-items-end mt-3">
                     @Html.AntiForgeryToken()
                     <div class="col-md-4">
                         <label class="form-label">Nazwa wariantu</label>
@@ -275,8 +524,7 @@
                 @if (!Model.Images.Any())
                 {
                     <div class="text-center p-3 text-muted border border-dashed rounded mb-3">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-lg text-muted mb-2" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M15 8h.01" /><path d="M11.5 21h-5.5a3 3 0 0 1 -3 -3v-12a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v5.5" /><path d="M3 16l5 -5c.928 -.893 2.072 -.893 3 0l4 4" /><path d="M14 14l1 -1c.928 -.893 2.072 -.893 3 0" /></svg>
-                        <br />Brak zdjęć
+                        Brak zdjec
                     </div>
                 }
                 else
@@ -285,22 +533,24 @@
                         @foreach (var img in Model.Images)
                         {
                             <div class="col-6 position-relative">
-                                <img src="@img.Url" class="img-fluid rounded border @(img.IsMain ? "border-primary border-2" : "")" alt="Zdjęcie posiłku" />
+                                <img src="@img.Url" class="img-fluid rounded border @(img.IsMain ? "border-primary border-2" : "")" alt="Zdjecie posilku" />
                                 @if (img.IsMain)
                                 {
-                                    <span class="badge bg-primary position-absolute top-0 start-0 m-1">Główne</span>
+                                    <span class="badge bg-primary position-absolute top-0 start-0 m-1">Glowne</span>
                                 }
                                 <div class="mt-1 d-flex gap-1 justify-content-center">
                                     @if (!img.IsMain)
                                     {
                                         <form asp-action="SetMainImage" asp-route-imageId="@img.Id" method="post">
+                                            @Html.AntiForgeryToken()
                                             <input type="hidden" name="mealId" value="@Model.Id" />
-                                            <button type="submit" class="btn btn-xs btn-outline-primary" title="Ustaw jako główne">🌟</button>
+                                            <button type="submit" class="btn btn-xs btn-outline-primary">Glowne</button>
                                         </form>
                                     }
-                                    <form asp-action="DeleteImage" asp-route-imageId="@img.Id" method="post" onsubmit="return confirm('Usunąć to zdjęcie?');">
+                                    <form asp-action="DeleteImage" asp-route-imageId="@img.Id" method="post">
+                                        @Html.AntiForgeryToken()
                                         <input type="hidden" name="mealId" value="@Model.Id" />
-                                        <button type="submit" class="btn btn-xs btn-outline-danger" title="Usuń">🗑</button>
+                                        <button type="submit" class="btn btn-xs btn-outline-danger">Usun</button>
                                     </form>
                                 </div>
                             </div>
@@ -311,15 +561,13 @@
                 <form asp-action="UploadImage" asp-route-mealId="@Model.Id" method="post" enctype="multipart/form-data">
                     @Html.AntiForgeryToken()
                     <div class="mb-3">
-                        <label class="form-label">Dodaj nowe zdjęcie</label>
+                        <label class="form-label">Dodaj nowe zdjecie</label>
                         <input type="file" name="file" class="form-control" accept="image/*" required />
                     </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" name="isMain" value="true" id="isMainCheck">
-                        <label class="form-check-label" for="isMainCheck">
-                            Ustaw jako zdjęcie główne
-                        </label>
-                    </div>
+                    <label class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="isMain" value="true" />
+                        <span class="form-check-label">Ustaw jako glowne</span>
+                    </label>
                     <button type="submit" class="btn btn-primary w-100">Wgraj plik</button>
                 </form>
             </div>
@@ -327,7 +575,7 @@
 
         <div class="card mt-3 border-0 bg-transparent shadow-none">
             <div class="card-body p-0">
-                <a asp-action="Index" class="btn btn-outline-secondary w-100">Powrót do listy</a>
+                <a asp-action="Index" class="btn btn-outline-secondary w-100">Powrot do listy</a>
             </div>
         </div>
     </div>

@@ -13,17 +13,20 @@ public sealed class DietEditorController : Controller
     private readonly IMealManagementService _mealService;
     private readonly IRecipeComponentManagementService _recipeComponentService;
     private readonly ICategoryService _categoryService;
+    private readonly IAllergenManagementService _allergenService;
 
     public DietEditorController(
         IDietManagementService dietService,
         IMealManagementService mealService,
         IRecipeComponentManagementService recipeComponentService,
-        ICategoryService categoryService)
+        ICategoryService categoryService,
+        IAllergenManagementService allergenService)
     {
         _dietService = dietService;
         _mealService = mealService;
         _recipeComponentService = recipeComponentService;
         _categoryService = categoryService;
+        _allergenService = allergenService;
     }
 
     // GET
@@ -66,14 +69,17 @@ public sealed class DietEditorController : Controller
     }
 
     [HttpGet("recipes")]
-    public async Task<IActionResult> Recipes(string? query)
+    public async Task<IActionResult> Recipes([FromQuery] RecipeComponentSearchFilterDto filter)
     {
         ViewData["Title"] = "Przepisy";
         ViewData["Section"] = "Diety";
         ViewData["Description"] = "Wersjonowane przepisy-skladowe uzywane przez posilki.";
-        ViewBag.Query = query;
-        ViewBag.Categories = await _categoryService.GetAllAsync();
-        return View(await _recipeComponentService.SearchAsync(query));
+        ViewBag.Filter = filter;
+        ViewBag.Allergens = await _allergenService.GetAllAsync();
+        ViewBag.SelectedCategoryName = filter.CategoryId.HasValue
+            ? (await _categoryService.GetAsync(filter.CategoryId.Value))?.Name
+            : null;
+        return View(await _recipeComponentService.SearchAsync(filter));
     }
 
     [HttpGet("recipe")]

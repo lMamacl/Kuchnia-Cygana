@@ -113,15 +113,41 @@ public sealed class FoodCostCalculator
     }
 
     public FoodCostReport CalculateFromSnapshot(
-        Dictionary<(int MealId, int DietVariantId), int> mealQuantities,
+        IReadOnlyDictionary<ProductionMealKey, int> mealQuantities,
         PublishedDietPlanSnapshotDto snapshot)
     {
         var aggregated = new Dictionary<string, FoodCostEntry>();
 
         foreach (var item in snapshot.Items)
         {
-            if (!mealQuantities.TryGetValue((item.MealId, item.DietVariantId), out var orderedPortions))
+            var key = new ProductionMealKey(
+                item.MealId,
+                item.DietVariantId,
+                item.DietMenuPlanItemId,
+                item.MealVariantId);
+            if (!mealQuantities.TryGetValue(key, out var orderedPortions))
             {
+                continue;
+            }
+
+            if (item.AggregateIngredients.Count > 0)
+            {
+                foreach (var ingredient in item.AggregateIngredients)
+                {
+                    AddSnapshotIngredient(
+                        aggregated,
+                        ingredient.IngredientId,
+                        ingredient.IngredientName,
+                        ingredient.StockItemId,
+                        ingredient.WarehouseCategoryId,
+                        ingredient.WarehouseCategoryName,
+                        ingredient.SourceRecipeComponentVersionIds.Count > 0
+                            ? ingredient.SourceRecipeComponentVersionIds[0]
+                            : null,
+                        ingredient.SourceComponentNames.FirstOrDefault(),
+                        ingredient.NetWeightInGrams * item.ServingMultiplier * orderedPortions);
+                }
+
                 continue;
             }
 
@@ -129,38 +155,19 @@ public sealed class FoodCostCalculator
             {
                 foreach (var ingredient in component.Ingredients)
                 {
-                    if (!ingredient.StockItemId.HasValue && !ingredient.WarehouseCategoryId.HasValue)
-                    {
-                        throw new InvalidOperationException(
-                            $"Skladnik '{ingredient.IngredientName}' (ID {ingredient.IngredientId}) nie ma mapowania magazynowego.");
-                    }
-
-                    var aggregateKey = ingredient.StockItemId.HasValue
-                        ? $"S:{ingredient.StockItemId.Value}"
-                        : $"C:{ingredient.WarehouseCategoryId!.Value}";
-                    var totalGrams = ingredient.WeightInGrams
-                        * component.QuantityPerServing
-                        * item.ServingMultiplier
-                        * orderedPortions;
-
-                    if (aggregated.TryGetValue(aggregateKey, out var existing))
-                    {
-                        existing.TotalWeightGrams += totalGrams;
-                    }
-                    else
-                    {
-                        aggregated[aggregateKey] = new FoodCostEntry
-                        {
-                            IngredientId = ingredient.IngredientId,
-                            StockItemId = ingredient.StockItemId,
-                            WarehouseCategoryId = ingredient.WarehouseCategoryId,
-                            WarehouseCategoryName = ingredient.WarehouseCategoryName,
-                            RecipeComponentVersionId = component.RecipeComponentVersionId,
-                            ComponentName = component.ComponentName,
-                            IngredientName = ingredient.IngredientName,
-                            TotalWeightGrams = totalGrams,
-                        };
-                    }
+                    AddSnapshotIngredient(
+                        aggregated,
+                        ingredient.IngredientId,
+                        ingredient.IngredientName,
+                        ingredient.StockItemId,
+                        ingredient.WarehouseCategoryId,
+                        ingredient.WarehouseCategoryName,
+                        component.RecipeComponentVersionId,
+                        component.ComponentName,
+                        ingredient.WeightInGrams
+                            * component.QuantityPerServing
+                            * item.ServingMultiplier
+                            * orderedPortions);
                 }
             }
         }
@@ -170,6 +177,46 @@ public sealed class FoodCostCalculator
             Entries = aggregated.Values
                 .OrderByDescending(e => e.TotalWeightGrams)
                 .ToList(),
+        };
+    }
+
+    private static void AddSnapshotIngredient(
+        Dictionary<string, FoodCostEntry> aggregated,
+        int ingredientId,
+        string ingredientName,
+        int? stockItemId,
+        int? warehouseCategoryId,
+        string? warehouseCategoryName,
+        int? recipeComponentVersionId,
+        string? componentName,
+        decimal totalGrams)
+    {
+        if (!stockItemId.HasValue && !warehouseCategoryId.HasValue)
+        {
+            throw new InvalidOperationException(
+                $"Skladnik '{ingredientName}' (ID {ingredientId}) nie ma mapowania magazynowego.");
+        }
+
+        var aggregateKey = stockItemId.HasValue
+            ? $"S:{stockItemId.Value}"
+            : $"C:{warehouseCategoryId!.Value}";
+
+        if (aggregated.TryGetValue(aggregateKey, out var existing))
+        {
+            existing.TotalWeightGrams += totalGrams;
+            return;
+        }
+
+        aggregated[aggregateKey] = new FoodCostEntry
+        {
+            IngredientId = ingredientId,
+            StockItemId = stockItemId,
+            WarehouseCategoryId = warehouseCategoryId,
+            WarehouseCategoryName = warehouseCategoryName,
+            RecipeComponentVersionId = recipeComponentVersionId,
+            ComponentName = componentName,
+            IngredientName = ingredientName,
+            TotalWeightGrams = totalGrams,
         };
     }
 

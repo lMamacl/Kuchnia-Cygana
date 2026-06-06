@@ -1,12 +1,12 @@
 @model KuchniaUCygana.Application.DTOs.Menu.IngredientDto
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Edycja składnika";
+    ViewData["Title"] = "Edycja skladnika";
     ViewData["Section"] = "Katalog Menu";
 }
 
 <div class="row justify-content-center">
-    <div class="col-lg-7">
+    <div class="col-lg-9">
         <div class="card card-premium">
             <div class="card-header"><h3 class="card-title">@Model.Name</h3></div>
             <div class="card-body">
@@ -15,7 +15,7 @@
                     <input type="hidden" asp-for="Id" />
                     <partial name="_IngredientForm" model="Model" />
                     <div class="d-flex justify-content-between">
-                        <a asp-action="Index" class="btn btn-outline-secondary">Powrót</a>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Powrot</a>
                         <button type="submit" class="btn btn-warning">Zapisz</button>
                     </div>
                 </form>

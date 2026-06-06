@@ -12,15 +12,18 @@ public sealed class RecipeComponentsController : Controller
 {
     private readonly IRecipeComponentManagementService recipeComponentService;
     private readonly IIngredientManagementService ingredientService;
+    private readonly ICategoryService categoryService;
     private readonly IWarehouseCategoryService warehouseCategoryService;
 
     public RecipeComponentsController(
         IRecipeComponentManagementService recipeComponentService,
         IIngredientManagementService ingredientService,
+        ICategoryService categoryService,
         IWarehouseCategoryService warehouseCategoryService)
     {
         this.recipeComponentService = recipeComponentService;
         this.ingredientService = ingredientService;
+        this.categoryService = categoryService;
         this.warehouseCategoryService = warehouseCategoryService;
     }
 
@@ -86,6 +89,65 @@ public sealed class RecipeComponentsController : Controller
         ViewData["Title"] = $"{version.ComponentName} v{version.VersionNumber}";
         ViewData["Section"] = "Diety";
         return View("~/Views/DietEditor/RecipeComponentVersion.cshtml", version);
+    }
+
+    [HttpGet("lookups/ingredients")]
+    public async Task<IActionResult> IngredientLookup(string? term, int page = 1)
+    {
+        var result = await this.ingredientService.SearchAsync(new IngredientSearchFilterDto
+        {
+            Search = term,
+            IsActive = true,
+            Page = page <= 0 ? 1 : page,
+            PageSize = 20,
+        });
+
+        return Json(result.Items
+            .Where(item => item.ResourceType is "Food" or "Spice")
+            .Select(item => new
+            {
+                id = item.Id,
+                text = item.Name,
+                unit = item.Unit,
+                stockItemId = item.StockItemId,
+                warehouseCategoryId = item.WarehouseCategoryId,
+                warehouseCategoryName = item.WarehouseCategoryName,
+            }));
+    }
+
+    [HttpGet("lookups/categories")]
+    public async Task<IActionResult> CategoryLookup(string? term)
+    {
+        var categories = await this.categoryService.GetAllAsync();
+        var normalized = term?.Trim();
+        return Json(categories
+            .Where(category => string.IsNullOrWhiteSpace(normalized)
+                || category.Name.Contains(normalized, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(category => category.Name)
+            .Take(20)
+            .Select(category => new
+            {
+                id = category.Id,
+                text = category.Name,
+            }));
+    }
+
+    [HttpGet("lookups/warehouse-categories")]
+    public async Task<IActionResult> WarehouseCategoryLookup(string? term)
+    {
+        var categories = await this.warehouseCategoryService.GetActiveAsync();
+        var normalized = term?.Trim();
+        return Json(categories
+            .Where(category => string.IsNullOrWhiteSpace(normalized)
+                || category.Name.Contains(normalized, StringComparison.OrdinalIgnoreCase)
+                || category.Code.Contains(normalized, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(category => category.Name)
+            .Take(20)
+            .Select(category => new
+            {
+                id = category.Id,
+                text = category.Name,
+            }));
     }
 
     [HttpPost("{componentId:int}/versions/{versionId:int}")]
@@ -265,7 +327,6 @@ public sealed class RecipeComponentsController : Controller
 
     private async Task LoadVersionLookupsAsync()
     {
-        ViewBag.Ingredients = await this.ingredientService.GetAllAsync();
-        ViewBag.WarehouseCategories = await this.warehouseCategoryService.GetActiveAsync();
+        await Task.CompletedTask;
     }
 }

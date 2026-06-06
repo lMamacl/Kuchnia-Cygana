@@ -1,10 +1,11 @@
 using KuchniaUCygana.Application.DTOs.Menu;
+using KuchniaUCygana.Application.DTOs.Warehouse;
 
 namespace KuchniaUCygana.Application.Interfaces.Menu;
 
 public interface IRecipeComponentManagementService
 {
-    Task<IReadOnlyList<RecipeComponentListItemDto>> SearchAsync(string? query);
+    Task<PagedResultDto<RecipeComponentListItemDto>> SearchAsync(RecipeComponentSearchFilterDto filter);
 
     Task<IReadOnlyList<RecipeComponentVersionOptionDto>> GetPublishedVersionOptionsAsync();
 

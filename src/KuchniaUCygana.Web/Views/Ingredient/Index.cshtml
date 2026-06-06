@@ -1,46 +1,208 @@
-@model IEnumerable<KuchniaUCygana.Application.DTOs.Menu.IngredientDto>
+@using KuchniaUCygana.Application.DTOs.Menu
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<KuchniaUCygana.Application.DTOs.Menu.IngredientListItemDto>
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Katalog składników";
+    ViewData["Title"] = "Katalog skladnikow";
     ViewData["Section"] = "Katalog Menu";
+
+    var filter = ViewBag.Filter as IngredientSearchFilterDto ?? new IngredientSearchFilterDto();
+    var allergens = ViewBag.Allergens as IEnumerable<AllergenDto> ?? Enumerable.Empty<AllergenDto>();
+    var selectedAllergenId = ViewBag.SelectedAllergenId as int?;
+    var foodCategories = ViewBag.FoodCategories as IEnumerable<SelectListItem> ?? Enumerable.Empty<SelectListItem>();
+    var warehouseCategories = ViewBag.WarehouseCategories as IEnumerable<SelectListItem> ?? Enumerable.Empty<SelectListItem>();
+    var resourceTypes = new List<SelectListItem>
+    {
+        new("Wszystkie", "", string.IsNullOrWhiteSpace(filter.ResourceType)),
+        new("Skladniki spozywcze", "Food", filter.ResourceType == "Food"),
+        new("Przyprawy", "Spice", filter.ResourceType == "Spice"),
+        new("Opakowania", "Packaging", filter.ResourceType == "Packaging"),
+        new("Pojemniki", "Container", filter.ResourceType == "Container"),
+        new("Inne", "Other", filter.ResourceType == "Other"),
+    };
+    var activeOptions = new List<SelectListItem>
+    {
+        new("Wszystkie", "", !filter.IsActive.HasValue),
+        new("Aktywne", "true", filter.IsActive == true),
+        new("Wstrzymane", "false", filter.IsActive == false),
+    };
+    var allergenOptions = new List<SelectListItem> { new("Wszystkie", "", !selectedAllergenId.HasValue) };
+    allergenOptions.AddRange(allergens.Select(a => new SelectListItem(a.Name, a.Id.ToString(), selectedAllergenId == a.Id)));
 }
 
-<div class="card card-premium">
+<div class="card card-premium mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h3 class="card-title">Składniki</h3>
-        <a asp-action="Create" class="btn btn-primary">Nowy składnik</a>
+        <h3 class="card-title">Skladniki</h3>
+        <a asp-action="Create" class="btn btn-primary">Nowy skladnik</a>
     </div>
+    <div class="card-body">
+        <form asp-action="Index" method="get" class="row g-3 align-items-end">
+            <input type="hidden" name="Page" value="1" />
+            <div class="col-md-3">
+                <label class="form-label">Szukaj</label>
+                <input name="Search" value="@filter.Search" class="form-control" placeholder="Nazwa, opis, sklad" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Typ zasobu</label>
+                <select name="ResourceType" class="form-select" asp-items="resourceTypes"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Kategoria zywn.</label>
+                <select name="FoodCategoryId" class="form-select" asp-items="foodCategories">
+                    <option value="">Wszystkie</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Kategoria magaz.</label>
+                <select name="WarehouseCategoryId" class="form-select" asp-items="warehouseCategories">
+                    <option value="">Wszystkie</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Alergen</label>
+                <select name="AllergenId" class="form-select" asp-items="allergenOptions"></select>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label">Status</label>
+                <select name="IsActive" class="form-select" asp-items="activeOptions"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Na strone</label>
+                <input name="PageSize" value="@Model.PageSize" type="number" min="5" max="100" class="form-control" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="MissingWarehouseMapping" value="true" checked="@filter.MissingWarehouseMapping" />
+                    <span class="form-check-label">Brak mapowania magazynowego</span>
+                </label>
+            </div>
+            <div class="col-md-7 d-flex gap-2 flex-wrap">
+                <button type="submit" class="btn btn-primary">Filtruj</button>
+                <a asp-action="Index" class="btn btn-outline-secondary">Wyczysc</a>
+                <a asp-action="Index" asp-route-ResourceType="Food" class="btn btn-outline-primary">Spozywcze</a>
+                <a asp-action="Index" asp-route-ResourceType="Packaging" class="btn btn-outline-primary">Opakowania</a>
+                <a asp-action="Index" asp-route-ResourceType="Container" class="btn btn-outline-primary">Pojemniki</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card card-premium">
     <div class="table-responsive">
         <table class="table table-vcenter card-table">
             <thead>
                 <tr>
                     <th>Nazwa</th>
                     <th>Typ</th>
-                    <th>Jednostka</th>
-                    <th>Koszt</th>
+                    <th>Mapowanie</th>
+                    <th>Nutrition / 100 g</th>
+                    <th>Alergeny</th>
                     <th>Status</th>
                     <th class="text-end">Akcje</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var item in Model)
+                @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td><strong>@item.Name</strong><div class="text-secondary small">@item.Notes</div></td>
-                        <td>@item.ResourceType</td>
-                        <td>@item.Unit</td>
-                        <td>@item.CostPerUnit.ToString("F2")</td>
-                        <td>@(item.IsActive ? "Aktywny" : "Wstrzymany")</td>
-                        <td class="text-end">
-                            <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Edytuj</a>
-                            <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm('Usunąć składnik?');">
-                                @Html.AntiForgeryToken()
-                                <button type="submit" class="btn btn-sm btn-outline-danger">Usuń</button>
-                            </form>
-                        </td>
+                        <td colspan="7" class="text-center text-secondary py-4">Brak skladnikow dla wybranych filtrow.</td>
                     </tr>
+                }
+                else
+                {
+                    foreach (var item in Model.Items)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@item.Name</strong>
+                                <div class="text-secondary small">@item.FoodCategoryName</div>
+                                @if (!string.IsNullOrWhiteSpace(item.Notes))
+                                {
+                                    <div class="text-secondary small">@item.Notes</div>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-blue-lt">@item.ResourceType</span>
+                                <div class="text-secondary small">@item.Unit / @item.CostPerUnit.ToString("0.##")</div>
+                            </td>
+                            <td>
+                                @if (item.MissingWarehouseMapping)
+                                {
+                                    <span class="badge bg-red-lt text-red">Brak mapowania</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-green-lt text-green">OK</span>
+                                }
+                                <div class="text-secondary small">@item.WarehouseCategoryName</div>
+                            </td>
+                            <td>
+                                @if (item.HasNutrition)
+                                {
+                                    <div>@item.CaloriesPer100g?.ToString("0.##") kcal</div>
+                                    <div class="text-secondary small">
+                                        B @item.ProteinPer100g?.ToString("0.##") /
+                                        W @item.CarbohydratesPer100g?.ToString("0.##") /
+                                        T @item.FatPer100g?.ToString("0.##") /
+                                        Bl @item.FiberPer100g?.ToString("0.##")
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-secondary">Brak danych</span>
+                                }
+                            </td>
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(item.AllergenNames))
+                                {
+                                    <span class="text-secondary">Brak</span>
+                                }
+                                else
+                                {
+                                    @item.AllergenNames
+                                }
+                            </td>
+                            <td>@(item.IsActive ? "Aktywny" : "Wstrzymany")</td>
+                            <td class="text-end">
+                                <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Edytuj</a>
+                                <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm('Usunac skladnik?');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Usun</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
                 }
             </tbody>
         </table>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+        <span class="text-secondary">
+            Strona @Model.Page z @(Model.TotalPages == 0 ? 1 : Model.TotalPages), rekordow: @Model.TotalCount
+        </span>
+        <div class="btn-list">
+            <a asp-action="Index"
+               asp-route-Search="@filter.Search"
+               asp-route-ResourceType="@filter.ResourceType"
+               asp-route-FoodCategoryId="@filter.FoodCategoryId"
+               asp-route-WarehouseCategoryId="@filter.WarehouseCategoryId"
+               asp-route-AllergenId="@filter.AllergenId"
+               asp-route-MissingWarehouseMapping="@filter.MissingWarehouseMapping"
+               asp-route-IsActive="@filter.IsActive"
+               asp-route-Page="@(Model.Page - 1)"
+               asp-route-PageSize="@Model.PageSize"
+               class="btn btn-outline-secondary @(Model.Page <= 1 ? "disabled" : string.Empty)">Poprzednia</a>
+            <a asp-action="Index"
+               asp-route-Search="@filter.Search"
+               asp-route-ResourceType="@filter.ResourceType"
+               asp-route-FoodCategoryId="@filter.FoodCategoryId"
+               asp-route-WarehouseCategoryId="@filter.WarehouseCategoryId"
+               asp-route-AllergenId="@filter.AllergenId"
+               asp-route-MissingWarehouseMapping="@filter.MissingWarehouseMapping"
+               asp-route-IsActive="@filter.IsActive"
+               asp-route-Page="@(Model.Page + 1)"
+               asp-route-PageSize="@Model.PageSize"
+               class="btn btn-outline-secondary @(Model.Page >= Model.TotalPages ? "disabled" : string.Empty)">Nastepna</a>
+        </div>
     </div>
 </div>

@@ -16,6 +16,8 @@ public sealed class MealDetailDto : MealDto
 
     public decimal? MinimumCoreTemperatureCelsius { get; set; }
 
+    public MealVariantResultDto? Result { get; set; }
+
     public List<RecipeItemDto> Recipe { get; set; } = new();
 
     public List<MealRecipeComponentDto> Components { get; set; } = new();

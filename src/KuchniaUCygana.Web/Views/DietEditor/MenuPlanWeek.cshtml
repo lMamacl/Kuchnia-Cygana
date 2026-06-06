@@ -7,9 +7,10 @@
     <div class="col-12">
         <div class="card card-premium">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <h3 class="card-title">Plan menu @Model.StartDate.ToString("yyyy-MM-dd") - @Model.EndDate.ToString("yyyy-MM-dd")</h3>
+                <h3 class="card-title">Plan menu @Model.StartDate.ToString("yyyy-MM-dd") - @Model.EndDate.ToString("yyyy-MM-dd") (@Model.DaysCount dni)</h3>
                 <form method="get" asp-controller="DietMenuPlan" asp-action="Index" class="d-flex gap-2">
                     <input type="date" name="startDate" value="@Model.StartDate.ToString("yyyy-MM-dd")" class="form-control form-control-sm" />
+                    <input type="number" name="days" min="7" step="1" value="@Model.DaysCount" class="form-control form-control-sm" style="width: 90px;" />
                     <button type="submit" class="btn btn-sm btn-outline-primary">Pokaz</button>
                 </form>
             </div>

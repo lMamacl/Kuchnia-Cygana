@@ -12,6 +12,8 @@ public sealed class PackagingRequirement : AuditableEntity
 
     public int? MealId { get; set; }
 
+    public int? MealVariantId { get; set; }
+
     public int? RecipeComponentVersionId { get; set; }
 
     public int? StockItemId { get; set; }

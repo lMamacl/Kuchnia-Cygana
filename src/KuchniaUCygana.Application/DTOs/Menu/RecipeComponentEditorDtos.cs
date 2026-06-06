@@ -1,5 +1,22 @@
 namespace KuchniaUCygana.Application.DTOs.Menu;
 
+public sealed class RecipeComponentSearchFilterDto
+{
+    public string? Query { get; set; }
+
+    public int? CategoryId { get; set; }
+
+    public string? VersionStatus { get; set; }
+
+    public int? AllergenId { get; set; }
+
+    public bool MissingPublicationData { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 25;
+}
+
 public sealed class RecipeComponentListItemDto
 {
     public int Id { get; set; }
@@ -25,6 +42,10 @@ public sealed class RecipeComponentListItemDto
     public int? LatestVersionNumber { get; set; }
 
     public string? LatestVersionStatus { get; set; }
+
+    public bool HasPublicationGaps { get; set; }
+
+    public int PublicationGapCount { get; set; }
 }
 
 public sealed class RecipeComponentDetailDto
@@ -105,6 +126,8 @@ public sealed class RecipeComponentVersionDetailDto
 
     public bool AllergensApproved { get; set; }
 
+    public string AllergenApprovalSource { get; set; } = "DerivedFromIngredients";
+
     public string? AllergenOverrideReason { get; set; }
 
     public DateTimeOffset? AllergensApprovedAt { get; set; }
@@ -129,9 +152,45 @@ public sealed class RecipeComponentVersionDetailDto
 
     public List<RecipeComponentInstructionSectionDto> InstructionSections { get; set; } = new();
 
+    public RecipeComponentVersionComparisonDto Comparison { get; set; } = new();
+
     public List<string> ValidationWarnings { get; set; } = new();
 
     public bool IsComplete => ValidationWarnings.Count == 0;
+}
+
+public sealed class RecipeComponentVersionComparisonDto
+{
+    public decimal IngredientWeightGrams { get; set; }
+
+    public decimal IngredientGrossWeightGrams { get; set; }
+
+    public decimal? ReferenceWeightGrams { get; set; }
+
+    public string ReferenceWeightSource { get; set; } = "Ingredients";
+
+    public decimal YieldQuantity { get; set; }
+
+    public string YieldUnit { get; set; } = "portion";
+
+    public RecipeComponentNutritionValuesDto ManualNutritionPer100g { get; set; } = new();
+
+    public RecipeComponentNutritionValuesDto? CalculatedNutritionPer100g { get; set; }
+
+    public int MissingNutritionIngredientCount { get; set; }
+}
+
+public sealed class RecipeComponentNutritionValuesDto
+{
+    public decimal? CaloriesPer100g { get; set; }
+
+    public decimal? ProteinPer100g { get; set; }
+
+    public decimal? CarbohydratesPer100g { get; set; }
+
+    public decimal? FatPer100g { get; set; }
+
+    public decimal? FiberPer100g { get; set; }
 }
 
 public sealed class RecipeComponentIngredientEditDto
@@ -166,6 +225,8 @@ public sealed class PackagingRequirementEditDto
     public string OwnerType { get; set; } = "RecipeComponentVersion";
 
     public int? MealId { get; set; }
+
+    public int? MealVariantId { get; set; }
 
     public int? RecipeComponentVersionId { get; set; }
 
@@ -249,6 +310,8 @@ public sealed class UpdateRecipeComponentVersionRequest
 
     public bool AllergensApproved { get; set; }
 
+    public string AllergenApprovalSource { get; set; } = "DerivedFromIngredients";
+
     public string? AllergenOverrideReason { get; set; }
 
     public string? ChangeSummary { get; set; }
@@ -284,6 +347,8 @@ public sealed class SavePackagingRequirementRequest
     public int Id { get; set; }
 
     public int? RecipeComponentVersionId { get; set; }
+
+    public int? MealVariantId { get; set; }
 
     public int? StockItemId { get; set; }
 

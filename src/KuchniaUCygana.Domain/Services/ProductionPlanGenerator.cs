@@ -27,6 +27,12 @@ public sealed class PlanGenerationResult
     public bool HasShortages => FoodCostReport?.Shortages.Count > 0;
 }
 
+public readonly record struct ProductionMealKey(
+    int MealId,
+    int DietVariantId,
+    int? DietMenuPlanItemId,
+    int? MealVariantId);
+
 /// <summary>
 /// Generator Planu Produkcji — tworzy dzienny plan na podstawie:
 /// - zamówień z M1 (IOrderDataProvider — mock)
@@ -115,14 +121,15 @@ public sealed class ProductionPlanGenerator
         // 6. Utwórz pozycje planu z grupami produkcyjnymi i ETA
         var items = new List<ProductionPlanItem>();
         foreach (var (key, quantity) in mealQuantities
-            .OrderBy(kv => GetPlanSortOrder(kv.Key.MealId, kv.Key.DietVariantId, dietPlan))
-            .ThenBy(kv => kv.Key.MealId))
+            .OrderBy(kv => GetPlanSortOrder(kv.Key, dietPlan))
+            .ThenBy(kv => kv.Key.DietVariantId)
+            .ThenBy(kv => kv.Key.MealId)
+            .ThenBy(kv => kv.Key.MealVariantId ?? 0))
         {
-            var dietEntry = dietPlan.FirstOrDefault(d =>
-                d.MealId == key.MealId && d.DietVariantId == key.DietVariantId);
-            var snapshotItem = snapshot.Items.FirstOrDefault(i =>
-                i.MealId == key.MealId && i.DietVariantId == key.DietVariantId);
+            var dietEntry = FindDietPlanEntry(key, dietPlan);
+            var snapshotItem = FindSnapshotItem(key, snapshot.Items);
             var snapshotPayload = snapshotItem is null ? null : CreateSnapshotPayload(snapshotItem);
+            var productionGroup = AssignProductionGroup(key, dietPlan);
 
             items.Add(new ProductionPlanItem
             {
@@ -133,16 +140,21 @@ public sealed class ProductionPlanGenerator
                 DietMenuPlanItemId = snapshotItem?.DietMenuPlanItemId,
                 RecipeComponentVersionIds = snapshotItem is null
                     ? null
-                    : string.Join(",", snapshotItem.Components.Select(c => c.RecipeComponentVersionId).Distinct()),
+                    : string.Join(
+                        ",",
+                        (snapshotItem.RecipeComponentVersionIds.Count > 0
+                            ? snapshotItem.RecipeComponentVersionIds
+                            : snapshotItem.Components.Select(c => c.RecipeComponentVersionId))
+                        .Where(id => id > 0)
+                        .Distinct()),
                 M2SnapshotJson = snapshotPayload?.Json,
                 M2SnapshotHash = snapshotPayload?.Hash,
                 PlannedQuantity = quantity,
                 CookedQuantity = 0,
                 Status = ProductionItemStatus.Planned,
                 // Model B-lite: grupa produkcyjna i ETA
-                ProductionGroup = AssignProductionGroup(key.MealId, key.DietVariantId, dietPlan),
-                EstimatedReadyTime = EstimateReadyTime(
-                    AssignProductionGroup(key.MealId, key.DietVariantId, dietPlan), quantity),
+                ProductionGroup = productionGroup,
+                EstimatedReadyTime = EstimateReadyTime(productionGroup, quantity),
             });
         }
 
@@ -172,13 +184,17 @@ public sealed class ProductionPlanGenerator
             MealSlot = item.MealSlot,
             SortOrder = item.SortOrder,
             ServingMultiplier = item.ServingMultiplier,
-            ServingWeightGrams = item.CookedWeightGrams ?? item.RawWeightGrams ?? item.ServingMultiplier * 100m,
+            ServingWeightGrams = item.FinalWeightAfterMultiplierGrams
+                ?? item.FinalWeightGrams
+                ?? item.CookedWeightGrams
+                ?? item.RawWeightGrams
+                ?? item.ServingMultiplier * 100m,
         };
 
     /// <summary>
     /// Agreguje: ile porcji każdego posiłku (MealId+DietVariantId) potrzeba.
     /// </summary>
-    private async Task<Dictionary<(int MealId, int DietVariantId), int>> CalculateMealQuantitiesAsync(
+    private async Task<Dictionary<ProductionMealKey, int>> CalculateMealQuantitiesAsync(
         DateOnly productionDate,
         List<ActiveOrderEntry> orders,
         List<DietPlanEntry> dietPlan)
@@ -189,12 +205,12 @@ public sealed class ProductionPlanGenerator
             : CalculateLegacyDietVariantQuantities(orders, dietPlan);
     }
 
-    private async Task<Dictionary<(int MealId, int DietVariantId), int>> CalculateExplicitOrderItemQuantitiesAsync(
+    private async Task<Dictionary<ProductionMealKey, int>> CalculateExplicitOrderItemQuantitiesAsync(
         DateOnly productionDate,
         List<DietPlanEntry> dietPlan)
     {
         var deliveries = await _orderDataProvider.GetDeliveriesForDateAsync(productionDate.ToDateTime(TimeOnly.MinValue));
-        var quantities = new Dictionary<(int, int), int>();
+        var quantities = new Dictionary<ProductionMealKey, int>();
 
         foreach (var item in deliveries.SelectMany(delivery => delivery.Items))
         {
@@ -220,20 +236,20 @@ public sealed class ProductionPlanGenerator
                 planItem.MealId == item.MealId.Value &&
                 planItem.DietVariantId == item.DietVariantId);
 
-            var key = (
-                item.MealId.Value,
-                matchedPlanItem?.DietVariantId ?? item.DietVariantId);
+            var key = matchedPlanItem is null
+                ? new ProductionMealKey(item.MealId.Value, item.DietVariantId, item.DietMenuPlanItemId, item.MealVariantId)
+                : CreateKey(matchedPlanItem);
             quantities[key] = quantities.GetValueOrDefault(key) + 1;
         }
 
         return quantities;
     }
 
-    private static Dictionary<(int MealId, int DietVariantId), int> CalculateLegacyDietVariantQuantities(
+    private static Dictionary<ProductionMealKey, int> CalculateLegacyDietVariantQuantities(
         List<ActiveOrderEntry> orders,
         List<DietPlanEntry> dietPlan)
     {
-        var quantities = new Dictionary<(int, int), int>();
+        var quantities = new Dictionary<ProductionMealKey, int>();
 
         foreach (var order in orders)
         {
@@ -244,7 +260,7 @@ public sealed class ProductionPlanGenerator
 
             foreach (var meal in mealsForVariant)
             {
-                var key = (meal.MealId, meal.DietVariantId);
+                var key = CreateKey(meal);
                 quantities[key] = quantities.GetValueOrDefault(key) + 1;
             }
         }
@@ -257,11 +273,10 @@ public sealed class ProductionPlanGenerator
     /// Grupy: 1=zimne/śniadania (pierwsze), 2=zupy, 3=dania główne, 4=sałatki/desery.
     /// W przyszłości: inteligentne przypisanie na podstawie kategorii posiłku z M2.
     /// </summary>
-    private static int AssignProductionGroup(int mealId, int dietVariantId, List<DietPlanEntry> dietPlan)
+    private static int AssignProductionGroup(ProductionMealKey key, List<DietPlanEntry> dietPlan)
     {
         // Prosty algorytm: podział wg SortOrder/pozycji w planie diet
-        var entry = dietPlan.FirstOrDefault(d => d.MealId == mealId && d.DietVariantId == dietVariantId)
-            ?? dietPlan.FirstOrDefault(d => d.MealId == mealId);
+        var entry = FindDietPlanEntry(key, dietPlan);
         var slot = entry?.MealSlot ?? string.Empty;
 
         if (slot.Contains("breakfast", StringComparison.OrdinalIgnoreCase)
@@ -281,7 +296,7 @@ public sealed class ProductionPlanGenerator
             return 3;
         }
 
-        var index = entry?.SortOrder - 1 ?? dietPlan.FindIndex(d => d.MealId == mealId);
+        var index = entry?.SortOrder - 1 ?? dietPlan.FindIndex(d => d.MealId == key.MealId);
 
         return index switch
         {
@@ -310,10 +325,57 @@ public sealed class ProductionPlanGenerator
         };
     }
 
-    private static int GetPlanSortOrder(int mealId, int dietVariantId, List<DietPlanEntry> dietPlan)
-        => dietPlan.FirstOrDefault(d => d.MealId == mealId && d.DietVariantId == dietVariantId)?.SortOrder
-            ?? dietPlan.FirstOrDefault(d => d.MealId == mealId)?.SortOrder
-            ?? int.MaxValue;
+    private static int GetPlanSortOrder(ProductionMealKey key, List<DietPlanEntry> dietPlan)
+        => FindDietPlanEntry(key, dietPlan)?.SortOrder ?? int.MaxValue;
+
+    private static ProductionMealKey CreateKey(DietPlanEntry entry)
+        => new(entry.MealId, entry.DietVariantId, entry.DietMenuPlanItemId, entry.MealVariantId);
+
+    private static DietPlanEntry? FindDietPlanEntry(ProductionMealKey key, List<DietPlanEntry> dietPlan)
+    {
+        if (key.DietMenuPlanItemId.HasValue)
+        {
+            var planItemMatch = dietPlan.FirstOrDefault(item =>
+                item.DietMenuPlanItemId == key.DietMenuPlanItemId.Value);
+            if (planItemMatch is not null)
+            {
+                return planItemMatch;
+            }
+        }
+
+        var variantMatch = dietPlan.FirstOrDefault(item =>
+            item.MealId == key.MealId &&
+            item.DietVariantId == key.DietVariantId &&
+            item.MealVariantId == key.MealVariantId);
+
+        return variantMatch
+            ?? dietPlan.FirstOrDefault(item => item.MealId == key.MealId && item.DietVariantId == key.DietVariantId)
+            ?? dietPlan.FirstOrDefault(item => item.MealId == key.MealId);
+    }
+
+    private static PublishedDietPlanItemDto? FindSnapshotItem(
+        ProductionMealKey key,
+        IReadOnlyList<PublishedDietPlanItemDto> snapshotItems)
+    {
+        if (key.DietMenuPlanItemId.HasValue)
+        {
+            var planItemMatch = snapshotItems.FirstOrDefault(item =>
+                item.DietMenuPlanItemId == key.DietMenuPlanItemId.Value);
+            if (planItemMatch is not null)
+            {
+                return planItemMatch;
+            }
+        }
+
+        var variantMatch = snapshotItems.FirstOrDefault(item =>
+            item.MealId == key.MealId &&
+            item.DietVariantId == key.DietVariantId &&
+            item.MealVariantId == key.MealVariantId);
+
+        return variantMatch
+            ?? snapshotItems.FirstOrDefault(item => item.MealId == key.MealId && item.DietVariantId == key.DietVariantId)
+            ?? snapshotItems.FirstOrDefault(item => item.MealId == key.MealId);
+    }
 
     private static SnapshotPayload CreateSnapshotPayload(PublishedDietPlanItemDto item)
     {

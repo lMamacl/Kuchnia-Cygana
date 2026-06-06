@@ -1,4 +1,7 @@
 using Dapper;
+using KuchniaUCygana.Application.DTOs.Menu;
+using KuchniaUCygana.Application.Interfaces.Menu;
+using KuchniaUCygana.Application.Services.Menu;
 using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 
@@ -11,10 +14,19 @@ namespace KuchniaUCygana.Infrastructure.Adapters;
 public sealed class DietDataAdapter : IDietDataProvider
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly IMealVariantResultCalculator _resultCalculator;
 
     public DietDataAdapter(IDbConnectionFactory connectionFactory)
+        : this(connectionFactory, new MealVariantResultCalculator())
+    {
+    }
+
+    public DietDataAdapter(
+        IDbConnectionFactory connectionFactory,
+        IMealVariantResultCalculator resultCalculator)
     {
         _connectionFactory = connectionFactory;
+        _resultCalculator = resultCalculator;
     }
 
     public async Task<PublishedDietPlanSnapshotDto?> GetPublishedPlanSnapshotAsync(DateOnly date)
@@ -55,6 +67,7 @@ public sealed class DietDataAdapter : IDietDataProvider
                 i.[DietVariantId],
                 i.[MealVariantId],
                 mv.[Name] AS [MealVariantName],
+                mv.[VariantType] AS [MealVariantType],
                 i.[MealSlot],
                 i.[SortOrder],
                 i.[ServingSizeMultiplier] AS [ServingMultiplier],
@@ -66,7 +79,17 @@ public sealed class DietDataAdapter : IDietDataProvider
                 nf.[ProteinPer100g],
                 nf.[CarbohydratesPer100g],
                 nf.[FatPer100g],
-                nf.[FiberPer100g]
+                nf.[FiberPer100g],
+                mv.[RawWeightGrams] AS [VariantRawWeightGrams],
+                mv.[CookedWeightGrams] AS [VariantCookedWeightGrams],
+                mv.[CaloriesPer100g] AS [VariantCaloriesPer100g],
+                mv.[ProteinPer100g] AS [VariantProteinPer100g],
+                mv.[CarbohydratesPer100g] AS [VariantCarbohydratesPer100g],
+                mv.[FatPer100g] AS [VariantFatPer100g],
+                mv.[FiberPer100g] AS [VariantFiberPer100g],
+                mv.[NutritionSource] AS [VariantNutritionSource],
+                mv.[NutritionOverrideReason] AS [VariantNutritionOverrideReason],
+                COALESCE(mv.[AllergensApproved], CAST(0 AS bit)) AS [VariantAllergensApproved]
             FROM [DietMenuPlans] p
             INNER JOIN [DietMenuPlanItems] i ON i.[DietMenuPlanId] = p.[Id]
             INNER JOIN [Meals] m ON m.[Id] = i.[MealId]
@@ -84,6 +107,12 @@ public sealed class DietDataAdapter : IDietDataProvider
             new { plan.DietMenuPlanId })).ToList();
 
         var mealIds = itemRows.Select(i => i.MealId).Distinct().ToArray();
+        var mealVariantIds = itemRows
+            .Select(i => i.MealVariantId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToArray();
         var allergensByMeal = await GetAllergensByMealAsync(db, mealIds);
         var componentRows = (await QueryPublishedComponentRowsAsync(db, plan.DietMenuPlanId)).ToList();
         var componentsByItem = componentRows
@@ -95,10 +124,13 @@ public sealed class DietDataAdapter : IDietDataProvider
             .Distinct()
             .ToArray();
         var componentIngredientsByVersion = await GetComponentIngredientsByVersionAsync(db, componentVersionIds);
+        var componentAllergensByVersion = await GetComponentAllergensByVersionAsync(db, componentVersionIds);
         var instructionSectionsByVersion = await GetInstructionSectionsByVersionAsync(db, componentVersionIds);
         var legacyIngredientsByMeal = await GetLegacyIngredientsByMealAsync(db, mealIds);
         var packagingByMeal = await GetPackagingByMealAsync(db, mealIds);
+        var packagingByMealVariant = await GetPackagingByMealVariantAsync(db, mealVariantIds);
         var packagingByComponentVersion = await GetPackagingByComponentVersionAsync(db, componentVersionIds);
+        var allergensByMealVariant = await GetAllergensByMealVariantAsync(db, mealVariantIds);
         var alerts = (await db.QueryAsync<PlanChangeAlertDto>(
             """
             SELECT
@@ -133,11 +165,27 @@ public sealed class DietDataAdapter : IDietDataProvider
                 row,
                 componentsByItem.GetValueOrDefault(row.DietMenuPlanItemId) ?? new List<ComponentRow>(),
                 componentIngredientsByVersion,
+                componentAllergensByVersion,
                 instructionSectionsByVersion,
                 legacyIngredientsByMeal,
                 packagingByComponentVersion);
             var mealPackaging = packagingByMeal.GetValueOrDefault(row.MealId) ?? new List<PackagingRequirementDto>();
-            var warnings = BuildItemWarnings(row, components, allergensByMeal, mealPackaging);
+            var variantPackaging = new List<PackagingRequirementDto>();
+            if (row.MealVariantId.HasValue
+                && packagingByMealVariant.TryGetValue(row.MealVariantId.Value, out var foundVariantPackaging))
+            {
+                variantPackaging = foundVariantPackaging;
+            }
+
+            var result = _resultCalculator.Calculate(BuildCalculationRequest(
+                row,
+                components,
+                mealPackaging,
+                variantPackaging,
+                allergensByMeal,
+                allergensByMealVariant,
+                componentAllergensByVersion));
+            var projectedComponents = ApplyResultToComponents(components, result);
 
             snapshotItems.Add(new PublishedDietPlanItemDto
             {
@@ -154,16 +202,29 @@ public sealed class DietDataAdapter : IDietDataProvider
                 MealSlot = row.MealSlot,
                 SortOrder = row.SortOrder,
                 ServingMultiplier = row.ServingMultiplier,
-                RawWeightGrams = row.RawWeightGrams,
-                CookedWeightGrams = row.CookedWeightGrams,
+                RawWeightGrams = result.FinalRawWeightGrams,
+                CookedWeightGrams = result.FinalCookedWeightGrams,
+                FinalWeightGrams = result.FinalWeightGrams,
+                FinalWeightAfterMultiplierGrams = ScaleNullable(result.FinalWeightGrams, row.ServingMultiplier),
+                NutritionSource = result.NutritionSource,
+                NutritionOverrideReason = result.OverrideReason,
                 ShelfLifeHours = row.ShelfLifeHours,
                 UseEarliestIngredientExpiry = row.UseEarliestIngredientExpiry,
-                Nutrition = MapNutrition(row),
-                Allergens = allergensByMeal.GetValueOrDefault(row.MealId) ?? Array.Empty<string>(),
-                Components = components,
-                PackagingRequirements = mealPackaging,
-                ValidationWarnings = warnings,
-                IsCompleteForProduction = warnings.Count == 0 && components.All(c => c.IsCompleteForProduction),
+                Nutrition = MapNutrition(result, row.ServingMultiplier),
+                Allergens = result.Allergens.Select(allergen => allergen.Name).ToList(),
+                Components = projectedComponents,
+                AggregateIngredients = result.Ingredients.Select(MapAggregateIngredient).ToList(),
+                PackagingRequirements = result.PackagingRequirements.Select(MapPackagingRequirement).ToList(),
+                RecipeComponentVersionIds = result.Components
+                    .Select(component => component.RecipeComponentVersionId)
+                    .Where(id => id > 0)
+                    .Distinct()
+                    .OrderBy(id => id)
+                    .ToList(),
+                ValidationWarnings = result.ValidationWarnings,
+                CompletenessStatus = result.CompletenessStatus,
+                IsAggregated = result.IsAggregated,
+                IsCompleteForProduction = result.IsComplete,
             });
         }
 
@@ -411,9 +472,11 @@ public sealed class DietDataAdapter : IDietDataProvider
                 mrc.[QuantityPerServing],
                 mrc.[Unit],
                 mrc.[SortOrder],
+                mrc.[IsOptional],
                 rcv.[Instructions],
                 rcv.[YieldQuantity],
                 rcv.[YieldUnit],
+                rcv.[RawWeightGrams],
                 rcv.[CookedWeightGrams],
                 rcv.[CaloriesPer100g],
                 rcv.[ProteinPer100g],
@@ -421,7 +484,8 @@ public sealed class DietDataAdapter : IDietDataProvider
                 rcv.[FatPer100g],
                 rcv.[FiberPer100g],
                 rcv.[ShelfLifeHours],
-                rcv.[UseEarliestIngredientExpiry]
+                rcv.[UseEarliestIngredientExpiry],
+                rcv.[AllergensApproved]
             FROM [DietMenuPlanItems] i
             INNER JOIN (
                 SELECT
@@ -432,6 +496,7 @@ public sealed class DietDataAdapter : IDietDataProvider
                     mrc.[QuantityPerServing],
                     mrc.[Unit],
                     mrc.[SortOrder],
+                    mrc.[IsOptional],
                     mrc.[IsDeleted]
                 FROM [DietMenuPlanItems] i2
                 INNER JOIN [MealRecipeComponents] mrc ON mrc.[MealId] = i2.[MealId]
@@ -447,6 +512,7 @@ public sealed class DietDataAdapter : IDietDataProvider
                     mvc.[QuantityPerServing],
                     mvc.[Unit],
                     mvc.[SortOrder],
+                    mvc.[IsOptional],
                     mvc.[IsDeleted]
                 FROM [DietMenuPlanItems] i2
                 INNER JOIN [MealVariantComponents] mvc ON mvc.[MealVariantId] = i2.[MealVariantId]
@@ -509,6 +575,76 @@ public sealed class DietDataAdapter : IDietDataProvider
             .ToDictionary(
                 g => g.Key,
                 g => (IReadOnlyList<string>)g.Select(r => r.Name).Distinct().OrderBy(name => name).ToList());
+    }
+
+    private static async Task<Dictionary<int, List<MealVariantResultAllergenInputDto>>> GetComponentAllergensByVersionAsync(
+        System.Data.IDbConnection db,
+        int[] componentVersionIds)
+    {
+        if (componentVersionIds.Length == 0)
+        {
+            return new Dictionary<int, List<MealVariantResultAllergenInputDto>>();
+        }
+
+        var rows = await db.QueryAsync<ComponentAllergenRow>(
+            """
+            SELECT
+                rci.[RecipeComponentVersionId],
+                a.[Id] AS [AllergenId],
+                a.[Name],
+                ia.[TraceAmount] AS [IsTrace],
+                N'Ingredient' AS [SourceType],
+                i.[Name] AS [SourceName]
+            FROM [RecipeComponentIngredients] rci
+            INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+            INNER JOIN [IngredientAllergens] ia ON ia.[IngredientId] = i.[Id]
+            INNER JOIN [Allergens] a ON a.[Id] = ia.[AllergenId]
+            WHERE rci.[RecipeComponentVersionId] IN @componentVersionIds
+              AND rci.[IsDeleted] = 0
+              AND i.[IsDeleted] = 0
+              AND i.[IsActive] = 1
+            ORDER BY rci.[RecipeComponentVersionId], a.[Name], i.[Name];
+            """,
+            new { componentVersionIds });
+
+        return rows
+            .GroupBy(row => row.RecipeComponentVersionId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(MapAllergenInput).ToList());
+    }
+
+    private static async Task<Dictionary<int, List<MealVariantResultAllergenInputDto>>> GetAllergensByMealVariantAsync(
+        System.Data.IDbConnection db,
+        int[] mealVariantIds)
+    {
+        if (mealVariantIds.Length == 0)
+        {
+            return new Dictionary<int, List<MealVariantResultAllergenInputDto>>();
+        }
+
+        var rows = await db.QueryAsync<MealVariantAllergenRow>(
+            """
+            SELECT
+                mva.[MealVariantId],
+                a.[Id] AS [AllergenId],
+                a.[Name],
+                mva.[IsTrace],
+                mva.[SourceType],
+                mv.[Name] AS [SourceName]
+            FROM [MealVariantAllergens] mva
+            INNER JOIN [Allergens] a ON a.[Id] = mva.[AllergenId]
+            INNER JOIN [MealVariants] mv ON mv.[Id] = mva.[MealVariantId]
+            WHERE mva.[MealVariantId] IN @mealVariantIds
+            ORDER BY mva.[MealVariantId], a.[Name];
+            """,
+            new { mealVariantIds });
+
+        return rows
+            .GroupBy(row => row.MealVariantId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(MapAllergenInput).ToList());
     }
 
     private static async Task<Dictionary<int, List<ComponentIngredientDto>>> GetComponentIngredientsByVersionAsync(
@@ -685,6 +821,7 @@ public sealed class DietDataAdapter : IDietDataProvider
             SELECT
                 [OwnerType],
                 [MealId],
+                [MealVariantId],
                 [RecipeComponentVersionId],
                 [StockItemId],
                 [WarehouseCategoryId],
@@ -706,6 +843,42 @@ public sealed class DietDataAdapter : IDietDataProvider
             .ToDictionary(g => g.Key, g => g.Select(MapPackagingRequirement).ToList());
     }
 
+    private static async Task<Dictionary<int, List<PackagingRequirementDto>>> GetPackagingByMealVariantAsync(
+        System.Data.IDbConnection db,
+        int[] mealVariantIds)
+    {
+        if (mealVariantIds.Length == 0)
+        {
+            return new Dictionary<int, List<PackagingRequirementDto>>();
+        }
+
+        var rows = await db.QueryAsync<PackagingRequirementRow>(
+            """
+            SELECT
+                [OwnerType],
+                [MealId],
+                [MealVariantId],
+                [RecipeComponentVersionId],
+                [StockItemId],
+                [WarehouseCategoryId],
+                [ResourceName],
+                [Quantity],
+                [Unit],
+                [ContainerRole],
+                [IsCustomerFacing]
+            FROM [PackagingRequirements]
+            WHERE [MealVariantId] IN @mealVariantIds
+              AND [IsDeleted] = 0
+            ORDER BY [MealVariantId], [Id];
+            """,
+            new { mealVariantIds });
+
+        return rows
+            .Where(r => r.MealVariantId.HasValue)
+            .GroupBy(r => r.MealVariantId!.Value)
+            .ToDictionary(g => g.Key, g => g.Select(MapPackagingRequirement).ToList());
+    }
+
     private static async Task<Dictionary<int, List<PackagingRequirementDto>>> GetPackagingByComponentVersionAsync(
         System.Data.IDbConnection db,
         int[] componentVersionIds)
@@ -720,6 +893,7 @@ public sealed class DietDataAdapter : IDietDataProvider
             SELECT
                 [OwnerType],
                 [MealId],
+                [MealVariantId],
                 [RecipeComponentVersionId],
                 [StockItemId],
                 [WarehouseCategoryId],
@@ -745,6 +919,7 @@ public sealed class DietDataAdapter : IDietDataProvider
         PublishedPlanItemRow item,
         List<ComponentRow> componentRows,
         Dictionary<int, List<ComponentIngredientDto>> componentIngredientsByVersion,
+        Dictionary<int, List<MealVariantResultAllergenInputDto>> componentAllergensByVersion,
         Dictionary<int, List<ComponentInstructionSectionDto>> instructionSectionsByVersion,
         Dictionary<int, List<ComponentIngredientDto>> legacyIngredientsByMeal,
         Dictionary<int, List<PackagingRequirementDto>> packagingByComponentVersion)
@@ -768,8 +943,11 @@ public sealed class DietDataAdapter : IDietDataProvider
                     QuantityPerServing = 1.0m,
                     Unit = "portion",
                     SortOrder = 0,
+                    RawWeightGrams = item.RawWeightGrams,
+                    CookedWeightGrams = item.CookedWeightGrams,
                     ShelfLifeHours = item.ShelfLifeHours,
                     UseEarliestIngredientExpiry = item.UseEarliestIngredientExpiry,
+                    AllergensApproved = false,
                     Ingredients = legacyIngredients,
                     PackagingRequirements = Array.Empty<PackagingRequirementDto>(),
                     ValidationWarnings = warnings,
@@ -786,6 +964,8 @@ public sealed class DietDataAdapter : IDietDataProvider
                 ?? new List<ComponentInstructionSectionDto>();
             var packaging = packagingByComponentVersion.GetValueOrDefault(row.RecipeComponentVersionId)
                 ?? new List<PackagingRequirementDto>();
+            var allergens = componentAllergensByVersion.GetValueOrDefault(row.RecipeComponentVersionId)
+                ?? new List<MealVariantResultAllergenInputDto>();
             var warnings = BuildComponentWarnings(ingredients, packaging);
 
             return new MealComponentVersionDto
@@ -799,18 +979,141 @@ public sealed class DietDataAdapter : IDietDataProvider
                 QuantityPerServing = row.QuantityPerServing,
                 Unit = row.Unit,
                 SortOrder = row.SortOrder,
+                IsOptional = row.IsOptional,
                 Instructions = row.Instructions,
                 YieldQuantity = row.YieldQuantity <= 0 ? 1.0m : row.YieldQuantity,
                 YieldUnit = row.YieldUnit,
+                RawWeightGrams = row.RawWeightGrams,
+                CookedWeightGrams = row.CookedWeightGrams,
                 Nutrition = MapComponentNutrition(row),
                 ShelfLifeHours = row.ShelfLifeHours,
                 UseEarliestIngredientExpiry = row.UseEarliestIngredientExpiry,
+                AllergensApproved = row.AllergensApproved,
+                Allergens = allergens.Select(allergen => allergen.Name).Distinct().OrderBy(name => name).ToList(),
                 Ingredients = ingredients,
                 PackagingRequirements = packaging,
                 InstructionSections = instructionSections,
                 ValidationWarnings = warnings,
                 IsCompleteForProduction = warnings.Count == 0,
             };
+        }).ToList();
+    }
+
+    private static MealVariantResultCalculationRequest BuildCalculationRequest(
+        PublishedPlanItemRow row,
+        IReadOnlyList<MealComponentVersionDto> components,
+        IReadOnlyList<PackagingRequirementDto> mealPackaging,
+        IReadOnlyList<PackagingRequirementDto> variantPackaging,
+        Dictionary<int, IReadOnlyList<string>> allergensByMeal,
+        Dictionary<int, List<MealVariantResultAllergenInputDto>> allergensByMealVariant,
+        Dictionary<int, List<MealVariantResultAllergenInputDto>> componentAllergensByVersion)
+    {
+        var componentInputs = components.Select(component => MapComponentInput(component, componentAllergensByVersion)).ToList();
+
+        return new MealVariantResultCalculationRequest
+        {
+            MealId = row.MealId,
+            MealName = row.MealName,
+            MealVariantId = row.MealVariantId,
+            MealVariantName = row.MealVariantName,
+            VariantType = row.MealVariantType,
+            NutritionSource = row.MealVariantId.HasValue
+                ? row.VariantNutritionSource ?? "Aggregated"
+                : "Aggregated",
+            OverrideReason = row.MealVariantId.HasValue ? row.VariantNutritionOverrideReason : null,
+            ManualRawWeightGrams = row.MealVariantId.HasValue
+                ? row.VariantRawWeightGrams ?? row.RawWeightGrams
+                : row.RawWeightGrams,
+            ManualCookedWeightGrams = row.MealVariantId.HasValue
+                ? row.VariantCookedWeightGrams ?? row.CookedWeightGrams
+                : row.CookedWeightGrams,
+            ManualNutritionPer100g = row.MealVariantId.HasValue ? MapVariantNutrition(row) : null,
+            AllergensApproved = row.MealVariantId.HasValue
+                ? row.VariantAllergensApproved
+                : componentInputs.All(component => component.AllergensApproved),
+            BaseComponents = row.MealVariantId.HasValue
+                ? Array.Empty<MealVariantResultComponentInputDto>()
+                : componentInputs,
+            VariantComponents = row.MealVariantId.HasValue
+                ? componentInputs
+                : Array.Empty<MealVariantResultComponentInputDto>(),
+            MealPackagingRequirements = mealPackaging.Select(MapPackagingInput).ToList(),
+            VariantPackagingRequirements = variantPackaging.Select(MapPackagingInput).ToList(),
+            MealAllergens = (allergensByMeal.GetValueOrDefault(row.MealId) ?? Array.Empty<string>())
+                .Select(name => new MealVariantResultAllergenInputDto
+                {
+                    Name = name,
+                    SourceType = "Meal",
+                })
+                .ToList(),
+            VariantAllergens = row.MealVariantId.HasValue
+                ? allergensByMealVariant.GetValueOrDefault(row.MealVariantId.Value) ?? new List<MealVariantResultAllergenInputDto>()
+                : Array.Empty<MealVariantResultAllergenInputDto>(),
+        };
+    }
+
+    private static MealVariantResultComponentInputDto MapComponentInput(
+        MealComponentVersionDto component,
+        Dictionary<int, List<MealVariantResultAllergenInputDto>> componentAllergensByVersion)
+    {
+        return new MealVariantResultComponentInputDto
+        {
+            RecipeComponentId = component.RecipeComponentId,
+            RecipeComponentVersionId = component.RecipeComponentVersionId,
+            ComponentName = component.ComponentName,
+            VersionNumber = component.VersionNumber,
+            VersionStatus = component.VersionStatus,
+            Role = component.Role,
+            QuantityPerServing = component.QuantityPerServing,
+            Unit = component.Unit,
+            SortOrder = component.SortOrder,
+            IsOptional = component.IsOptional,
+            YieldQuantity = component.YieldQuantity <= 0 ? 1.0m : component.YieldQuantity,
+            YieldUnit = string.IsNullOrWhiteSpace(component.YieldUnit) ? "portion" : component.YieldUnit,
+            RawWeightGrams = component.RawWeightGrams,
+            CookedWeightGrams = component.CookedWeightGrams,
+            NutritionPer100g = MapNutritionInput(component.Nutrition),
+            AllergensApproved = component.AllergensApproved,
+            Ingredients = component.Ingredients.Select(MapIngredientInput).ToList(),
+            PackagingRequirements = component.PackagingRequirements.Select(MapPackagingInput).ToList(),
+            Allergens = componentAllergensByVersion.GetValueOrDefault(component.RecipeComponentVersionId)
+                ?? new List<MealVariantResultAllergenInputDto>(),
+        };
+    }
+
+    private static IReadOnlyList<MealComponentVersionDto> ApplyResultToComponents(
+        IReadOnlyList<MealComponentVersionDto> components,
+        MealVariantResultDto result)
+    {
+        var resultsByVersion = result.Components
+            .GroupBy(component => component.RecipeComponentVersionId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        return components.Select(component =>
+        {
+            MealVariantResultComponentDto? resultComponent = null;
+            if (resultsByVersion.TryGetValue(component.RecipeComponentVersionId, out var matching)
+                && matching.Count > 0)
+            {
+                resultComponent = matching[0];
+                matching.RemoveAt(0);
+            }
+
+            if (resultComponent is null)
+            {
+                return component;
+            }
+
+            component.RawWeightGrams = resultComponent.RawWeightGrams;
+            component.CookedWeightGrams = resultComponent.CookedWeightGrams;
+            component.FinalWeightGrams = resultComponent.FinalWeightGrams;
+            component.ScaleFactor = resultComponent.ScaleFactor;
+            component.Nutrition = MapNutrition(resultComponent.NutritionPer100g, resultComponent.NutritionPerServing);
+            component.Allergens = resultComponent.Allergens.Select(allergen => allergen.Name).ToList();
+            component.PackagingRequirements = resultComponent.PackagingRequirements.Select(MapPackagingRequirement).ToList();
+            component.ValidationWarnings = resultComponent.ValidationWarnings;
+            component.IsCompleteForProduction = resultComponent.IsComplete;
+            return component;
         }).ToList();
     }
 
@@ -888,6 +1191,7 @@ public sealed class DietDataAdapter : IDietDataProvider
         {
             OwnerType = row.OwnerType,
             MealId = row.MealId,
+            MealVariantId = row.MealVariantId,
             RecipeComponentVersionId = row.RecipeComponentVersionId,
             StockItemId = row.StockItemId,
             WarehouseCategoryId = row.WarehouseCategoryId,
@@ -897,6 +1201,123 @@ public sealed class DietDataAdapter : IDietDataProvider
             ContainerRole = row.ContainerRole,
             IsCustomerFacing = row.IsCustomerFacing,
         };
+
+    private static PackagingRequirementDto MapPackagingRequirement(MealVariantResultPackagingDto row)
+        => new()
+        {
+            OwnerType = row.OwnerType,
+            MealId = row.MealId,
+            MealVariantId = row.MealVariantId,
+            RecipeComponentVersionId = row.RecipeComponentVersionId,
+            StockItemId = row.StockItemId,
+            WarehouseCategoryId = row.WarehouseCategoryId,
+            ResourceName = row.ResourceName,
+            Quantity = row.Quantity,
+            Unit = row.Unit,
+            ContainerRole = row.ContainerRole,
+            IsCustomerFacing = row.IsCustomerFacing,
+        };
+
+    private static MealVariantResultPackagingInputDto MapPackagingInput(PackagingRequirementDto row)
+        => new()
+        {
+            OwnerType = row.OwnerType,
+            MealId = row.MealId,
+            MealVariantId = row.MealVariantId,
+            RecipeComponentVersionId = row.RecipeComponentVersionId,
+            StockItemId = row.StockItemId,
+            WarehouseCategoryId = row.WarehouseCategoryId,
+            ResourceName = row.ResourceName,
+            Quantity = row.Quantity,
+            Unit = row.Unit,
+            ContainerRole = row.ContainerRole,
+            IsCustomerFacing = row.IsCustomerFacing,
+        };
+
+    private static MealVariantResultIngredientInputDto MapIngredientInput(ComponentIngredientDto row)
+        => new()
+        {
+            IngredientId = row.IngredientId,
+            IngredientName = row.IngredientName,
+            StockItemId = row.StockItemId,
+            WarehouseCategoryId = row.WarehouseCategoryId,
+            WarehouseCategoryName = row.WarehouseCategoryName,
+            WeightInGrams = row.WeightInGrams,
+            YieldFactor = row.YieldFactor <= 0 ? 1.0m : row.YieldFactor,
+            IsOptional = row.IsOptional,
+            Notes = row.Notes,
+        };
+
+    private static AggregateIngredientDto MapAggregateIngredient(MealVariantResultIngredientDto row)
+        => new()
+        {
+            IngredientId = row.IngredientId,
+            IngredientName = row.IngredientName,
+            StockItemId = row.StockItemId,
+            WarehouseCategoryId = row.WarehouseCategoryId,
+            WarehouseCategoryName = row.WarehouseCategoryName,
+            NetWeightInGrams = row.NetWeightInGrams,
+            GrossWeightInGrams = row.GrossWeightInGrams,
+            YieldFactor = row.YieldFactor,
+            IsOptional = row.IsOptional,
+            Notes = row.Notes,
+            SourceRecipeComponentVersionIds = row.SourceRecipeComponentVersionIds,
+            SourceComponentNames = row.SourceComponentNames,
+        };
+
+    private static MealVariantResultAllergenInputDto MapAllergenInput(ComponentAllergenRow row)
+        => new()
+        {
+            AllergenId = row.AllergenId,
+            Name = row.Name,
+            IsTrace = row.IsTrace,
+            SourceType = row.SourceType,
+            SourceName = row.SourceName,
+        };
+
+    private static MealVariantResultAllergenInputDto MapAllergenInput(MealVariantAllergenRow row)
+        => new()
+        {
+            AllergenId = row.AllergenId,
+            Name = row.Name,
+            IsTrace = row.IsTrace,
+            SourceType = row.SourceType,
+            SourceName = row.SourceName,
+        };
+
+    private static MealVariantNutritionDto? MapNutritionInput(LabelNutritionDto? nutrition)
+        => nutrition is null
+            ? null
+            : new MealVariantNutritionDto
+            {
+                Calories = nutrition.CaloriesPer100g,
+                Protein = nutrition.ProteinPer100g,
+                Carbohydrates = nutrition.CarbohydratesPer100g,
+                Fat = nutrition.FatPer100g,
+                Fiber = nutrition.FiberPer100g,
+            };
+
+    private static MealVariantNutritionDto? MapVariantNutrition(PublishedPlanItemRow row)
+    {
+        if (!HasCompleteNutrition(
+            row.VariantCaloriesPer100g,
+            row.VariantProteinPer100g,
+            row.VariantCarbohydratesPer100g,
+            row.VariantFatPer100g,
+            row.VariantFiberPer100g))
+        {
+            return null;
+        }
+
+        return new MealVariantNutritionDto
+        {
+            Calories = row.VariantCaloriesPer100g!.Value,
+            Protein = row.VariantProteinPer100g!.Value,
+            Carbohydrates = row.VariantCarbohydratesPer100g!.Value,
+            Fat = row.VariantFatPer100g!.Value,
+            Fiber = row.VariantFiberPer100g!.Value,
+        };
+    }
 
     private static LabelNutritionDto? MapNutrition(PublishedPlanItemRow row)
     {
@@ -923,6 +1344,37 @@ public sealed class DietDataAdapter : IDietDataProvider
         };
     }
 
+    private static LabelNutritionDto? MapNutrition(MealVariantResultDto result, decimal servingMultiplier)
+        => MapNutrition(
+            result.NutritionPer100g,
+            result.NutritionPerServing is null
+                ? null
+                : ScaleNutrition(result.NutritionPerServing, servingMultiplier));
+
+    private static LabelNutritionDto? MapNutrition(
+        MealVariantNutritionDto? nutritionPer100g,
+        MealVariantNutritionDto? nutritionPerServing)
+    {
+        if (nutritionPer100g is null)
+        {
+            return null;
+        }
+
+        return new LabelNutritionDto
+        {
+            CaloriesPer100g = nutritionPer100g.Calories,
+            ProteinPer100g = nutritionPer100g.Protein,
+            CarbohydratesPer100g = nutritionPer100g.Carbohydrates,
+            FatPer100g = nutritionPer100g.Fat,
+            FiberPer100g = nutritionPer100g.Fiber,
+            CaloriesPerServing = nutritionPerServing?.Calories,
+            ProteinPerServing = nutritionPerServing?.Protein,
+            CarbohydratesPerServing = nutritionPerServing?.Carbohydrates,
+            FatPerServing = nutritionPerServing?.Fat,
+            FiberPerServing = nutritionPerServing?.Fiber,
+        };
+    }
+
     private static LabelNutritionDto? MapComponentNutrition(ComponentRow row)
     {
         if (!row.CaloriesPer100g.HasValue)
@@ -946,6 +1398,22 @@ public sealed class DietDataAdapter : IDietDataProvider
             FiberPerServing = servingFactor * row.FiberPer100g.GetValueOrDefault(),
         };
     }
+
+    private static MealVariantNutritionDto ScaleNutrition(MealVariantNutritionDto nutrition, decimal factor)
+        => new()
+        {
+            Calories = nutrition.Calories * factor,
+            Protein = nutrition.Protein * factor,
+            Carbohydrates = nutrition.Carbohydrates * factor,
+            Fat = nutrition.Fat * factor,
+            Fiber = nutrition.Fiber * factor,
+        };
+
+    private static decimal? ScaleNullable(decimal? value, decimal factor)
+        => value.HasValue ? value.Value * factor : null;
+
+    private static bool HasCompleteNutrition(params decimal?[] values)
+        => values.All(value => value.HasValue);
 
     private static DietPlanEntry MapDietPlanRow(DietPlanRow row)
         => new()
@@ -992,6 +1460,8 @@ public sealed class DietDataAdapter : IDietDataProvider
 
         public string? MealVariantName { get; set; }
 
+        public string? MealVariantType { get; set; }
+
         public string MealName { get; set; } = string.Empty;
 
         public int? CategoryId { get; set; }
@@ -1023,6 +1493,26 @@ public sealed class DietDataAdapter : IDietDataProvider
         public decimal? FatPer100g { get; set; }
 
         public decimal? FiberPer100g { get; set; }
+
+        public decimal? VariantRawWeightGrams { get; set; }
+
+        public decimal? VariantCookedWeightGrams { get; set; }
+
+        public decimal? VariantCaloriesPer100g { get; set; }
+
+        public decimal? VariantProteinPer100g { get; set; }
+
+        public decimal? VariantCarbohydratesPer100g { get; set; }
+
+        public decimal? VariantFatPer100g { get; set; }
+
+        public decimal? VariantFiberPer100g { get; set; }
+
+        public string? VariantNutritionSource { get; set; }
+
+        public string? VariantNutritionOverrideReason { get; set; }
+
+        public bool VariantAllergensApproved { get; set; }
     }
 
     private sealed class ComponentRow
@@ -1047,11 +1537,15 @@ public sealed class DietDataAdapter : IDietDataProvider
 
         public int SortOrder { get; set; }
 
+        public bool IsOptional { get; set; }
+
         public string? Instructions { get; set; }
 
         public decimal YieldQuantity { get; set; }
 
         public string YieldUnit { get; set; } = "portion";
+
+        public decimal? RawWeightGrams { get; set; }
 
         public decimal? CookedWeightGrams { get; set; }
 
@@ -1068,6 +1562,8 @@ public sealed class DietDataAdapter : IDietDataProvider
         public int? ShelfLifeHours { get; set; }
 
         public bool UseEarliestIngredientExpiry { get; set; }
+
+        public bool AllergensApproved { get; set; }
     }
 
     private sealed class InstructionSectionRow
@@ -1107,6 +1603,36 @@ public sealed class DietDataAdapter : IDietDataProvider
         public int MealId { get; set; }
 
         public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class ComponentAllergenRow
+    {
+        public int RecipeComponentVersionId { get; set; }
+
+        public int? AllergenId { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public bool IsTrace { get; set; }
+
+        public string SourceType { get; set; } = string.Empty;
+
+        public string? SourceName { get; set; }
+    }
+
+    private sealed class MealVariantAllergenRow
+    {
+        public int MealVariantId { get; set; }
+
+        public int? AllergenId { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public bool IsTrace { get; set; }
+
+        public string SourceType { get; set; } = string.Empty;
+
+        public string? SourceName { get; set; }
     }
 
     private class ComponentIngredientRow
@@ -1151,6 +1677,8 @@ public sealed class DietDataAdapter : IDietDataProvider
         public string OwnerType { get; set; } = string.Empty;
 
         public int? MealId { get; set; }
+
+        public int? MealVariantId { get; set; }
 
         public int? RecipeComponentVersionId { get; set; }
 

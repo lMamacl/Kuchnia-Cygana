@@ -3,7 +3,6 @@ using KuchniaUCygana.Application.Interfaces.Menu;
 using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
-using KuchniaUCygana.Domain.Interfaces.Services.Menu;
 
 namespace KuchniaUCygana.Application.Services.Menu;
 
@@ -19,32 +18,33 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
     ];
 
     private readonly IDietMenuPlanRepository repository;
-    private readonly IRecipeEngine recipeEngine;
+    private readonly IMealManagementService mealManagementService;
     private readonly ICurrentUserService currentUser;
 
     public DietMenuPlanManagementService(
         IDietMenuPlanRepository repository,
-        IRecipeEngine recipeEngine,
+        IMealManagementService mealManagementService,
         ICurrentUserService currentUser)
     {
         this.repository = repository;
-        this.recipeEngine = recipeEngine;
+        this.mealManagementService = mealManagementService;
         this.currentUser = currentUser;
     }
 
-    public async Task<DietMenuWeekDto> GetWeekAsync(DateOnly startDate)
+    public async Task<DietMenuWeekDto> GetWeekAsync(DateOnly startDate, int days = 7)
     {
-        var endDate = startDate.AddDays(6);
+        var daysCount = Math.Max(days, 7);
+        var endDate = startDate.AddDays(daysCount - 1);
         var plans = await this.repository.GetPlansAsync(startDate, endDate);
         var byDate = plans.ToDictionary(p => p.PlanDate);
-        var days = new List<DietMenuDayDto>();
+        var dayDtos = new List<DietMenuDayDto>();
 
-        for (var offset = 0; offset < 7; offset++)
+        for (var offset = 0; offset < daysCount; offset++)
         {
             var date = startDate.AddDays(offset);
             if (!byDate.TryGetValue(date, out var row))
             {
-                days.Add(new DietMenuDayDto
+                dayDtos.Add(new DietMenuDayDto
                 {
                     PlanDate = date,
                     Status = "Missing",
@@ -58,14 +58,15 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
             }
 
             var day = await this.MapDayAsync(row);
-            days.Add(day);
+            dayDtos.Add(day);
         }
 
         return new DietMenuWeekDto
         {
             StartDate = startDate,
             EndDate = endDate,
-            Days = days,
+            DaysCount = daysCount,
+            Days = dayDtos,
         };
     }
 
@@ -102,7 +103,12 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
         var plan = await this.repository.GetPlanByIdAsync(request.DietMenuPlanId)
             ?? throw new InvalidOperationException($"Plan menu #{request.DietMenuPlanId} nie istnieje.");
         this.EnsureEditable(plan);
-        this.ValidateItemInput(request.DietVariantId, request.MealId, request.ServingSizeMultiplier, request.MealSlot);
+        await this.ValidateItemInputAsync(
+            request.DietVariantId,
+            request.MealId,
+            request.MealVariantId,
+            request.ServingSizeMultiplier,
+            request.MealSlot);
 
         await this.repository.AddItemAsync(new DietMenuPlanItem
         {
@@ -126,7 +132,12 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
         var plan = await this.repository.GetPlanByIdAsync(existing.DietMenuPlanId)
             ?? throw new InvalidOperationException($"Plan menu #{existing.DietMenuPlanId} nie istnieje.");
         this.EnsureEditable(plan);
-        this.ValidateItemInput(request.DietVariantId, request.MealId, request.ServingSizeMultiplier, request.MealSlot);
+        await this.ValidateItemInputAsync(
+            request.DietVariantId,
+            request.MealId,
+            request.MealVariantId,
+            request.ServingSizeMultiplier,
+            request.MealSlot);
 
         await this.repository.UpdateItemAsync(new DietMenuPlanItem
         {
@@ -224,37 +235,21 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
             warnings.Add("posilek nie jest opublikowany");
         }
 
-        if (row.ComponentCount == 0 && row.LegacyRecipeCount == 0)
+        if (row.MealVariantId.HasValue && !IsPublishedMealStatus(row.MealVariantStatus ?? string.Empty))
         {
-            warnings.Add("posilek nie ma skladowych ani legacy receptury");
+            warnings.Add("wariant dania nie jest opublikowany");
         }
 
-        if (!row.HasNutrition)
+        var result = await this.mealManagementService.GetMealVariantResultAsync(row.MealId, row.MealVariantId);
+        if (result is null)
         {
-            warnings.Add("brak kompletnego nutrition posilku");
+            warnings.Add(row.MealVariantId.HasValue
+                ? "wskazany wariant dania nie istnieje dla wybranego posilku"
+                : "brak wyniku kalkulatora dla posilku");
         }
-
-        if (row.AllergenCount == 0)
+        else if (!result.IsComplete)
         {
-            warnings.Add("brak alergenow posilku lub skladowych");
-        }
-
-        if (row.PackagingRequirementCount == 0)
-        {
-            warnings.Add("brak opakowania produkcyjnego");
-        }
-
-        if (row.MissingWarehouseCategoryCount > 0)
-        {
-            warnings.Add($"brak kategorii magazynowej dla {row.MissingWarehouseCategoryCount} skladnikow");
-        }
-
-        var isRecipeValid = row.ComponentCount > 0 || row.LegacyRecipeCount > 0
-            ? await this.recipeEngine.ValidateRecipeAsync(row.MealId)
-            : false;
-        if (!isRecipeValid)
-        {
-            warnings.Add("receptura/skladowe nie sa kompletne produkcyjnie");
+            warnings.AddRange(result.ValidationWarnings);
         }
 
         return new DietMenuPlanItemDto
@@ -267,15 +262,22 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
             MealId = row.MealId,
             MealVariantId = row.MealVariantId,
             MealVariantName = row.MealVariantName,
+            MealVariantStatus = row.MealVariantStatus,
             MealName = row.MealName,
             MealStatus = row.MealStatus,
             MealSlot = row.MealSlot,
             ServingSizeMultiplier = row.ServingSizeMultiplier,
+            FinalWeightGrams = result?.FinalWeightGrams,
+            FinalWeightAfterMultiplierGrams = result?.FinalWeightGrams is null
+                ? null
+                : result.FinalWeightGrams.Value * row.ServingSizeMultiplier,
+            CompletenessStatus = result?.CompletenessStatus ?? "Incomplete",
             SortOrder = row.SortOrder,
             ComponentCount = row.ComponentCount,
             LegacyRecipeCount = row.LegacyRecipeCount,
             IsMealPublished = isMealPublished,
-            IsRecipeValid = isRecipeValid,
+            IsRecipeValid = result?.IsComplete ?? false,
+            IsResultComplete = result?.IsComplete ?? false,
             ValidationWarnings = warnings.Distinct().ToList(),
         };
     }
@@ -353,7 +355,12 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
         return new EditState(false, "Edycja opublikowanego planu jest zablokowana po polnocy D-3. W kolejnym etapie obsluzy to override managera i alert M3.");
     }
 
-    private void ValidateItemInput(int dietVariantId, int mealId, decimal multiplier, string? mealSlot)
+    private async Task ValidateItemInputAsync(
+        int dietVariantId,
+        int mealId,
+        int? mealVariantId,
+        decimal multiplier,
+        string? mealSlot)
     {
         if (dietVariantId <= 0)
         {
@@ -373,6 +380,15 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
         if (string.IsNullOrWhiteSpace(mealSlot))
         {
             throw new InvalidOperationException("Slot posilku jest wymagany.");
+        }
+
+        if (mealVariantId.HasValue)
+        {
+            var result = await this.mealManagementService.GetMealVariantResultAsync(mealId, mealVariantId.Value);
+            if (result is null)
+            {
+                throw new InvalidOperationException("Wariant dania nie nalezy do wybranego posilku.");
+            }
         }
     }
 

@@ -1,15 +1,41 @@
 using FluentAssertions;
 using KuchniaUCygana.Application.DTOs.Menu;
+using KuchniaUCygana.Application.Interfaces.Menu;
 using KuchniaUCygana.Application.Services.Menu;
+using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
-using KuchniaUCygana.Domain.Interfaces.Services.Menu;
 using Moq;
 
 namespace KuchniaUCygana.Tests.Unit.Application;
 
 public sealed class DietMenuPlanManagementServiceTests
 {
+    [Fact]
+    public async Task GetWeekAsync_UsesAtLeastSevenDays()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        DateOnly capturedStart = default;
+        DateOnly capturedEnd = default;
+        repository
+            .Setup(r => r.GetPlansAsync(It.IsAny<DateOnly>(), It.IsAny<DateOnly>()))
+            .Callback<DateOnly, DateOnly>((start, end) =>
+            {
+                capturedStart = start;
+                capturedEnd = end;
+            })
+            .ReturnsAsync(Array.Empty<DietMenuPlanDayRow>());
+        var service = CreateService(repository);
+        var startDate = DateOnly.FromDateTime(DateTime.Today);
+
+        var result = await service.GetWeekAsync(startDate, 3);
+
+        result.DaysCount.Should().Be(7);
+        result.Days.Should().HaveCount(7);
+        capturedStart.Should().Be(startDate);
+        capturedEnd.Should().Be(startDate.AddDays(6));
+    }
+
     [Fact]
     public async Task PublishAsync_RejectsEmptyPlan()
     {
@@ -26,25 +52,7 @@ public sealed class DietMenuPlanManagementServiceTests
     }
 
     [Fact]
-    public async Task PublishAsync_PublishesCompletePlan()
-    {
-        var repository = new Mock<IDietMenuPlanRepository>();
-        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreateDraftPlan());
-        repository.Setup(r => r.GetPlanItemsAsync(10)).ReturnsAsync(new[]
-        {
-            CreateValidItem(),
-        });
-        var recipeEngine = new Mock<IRecipeEngine>();
-        recipeEngine.Setup(r => r.ValidateRecipeAsync(5)).ReturnsAsync(true);
-        var service = CreateService(repository, recipeEngine);
-
-        await service.PublishAsync(new PublishDietMenuPlanRequest { DietMenuPlanId = 10 });
-
-        repository.Verify(r => r.PublishAsync(10, "test-user"), Times.Once);
-    }
-
-    [Fact]
-    public async Task PublishAsync_RejectsPlanItemWithoutLabelData()
+    public async Task PublishAsync_PublishesWhenCalculatorResultIsComplete_EvenWhenSqlCountsAreMissing()
     {
         var repository = new Mock<IDietMenuPlanRepository>();
         var item = CreateValidItem();
@@ -52,50 +60,45 @@ public sealed class DietMenuPlanManagementServiceTests
         item.AllergenCount = 0;
         item.PackagingRequirementCount = 0;
         repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreateDraftPlan());
-        repository.Setup(r => r.GetPlanItemsAsync(10)).ReturnsAsync(new[]
+        repository.Setup(r => r.GetPlanItemsAsync(10)).ReturnsAsync(new[] { item });
+        var mealService = new Mock<IMealManagementService>();
+        mealService.Setup(s => s.GetMealVariantResultAsync(5, null)).ReturnsAsync(CreateCompleteResult());
+        var service = CreateService(repository, mealService);
+
+        await service.PublishAsync(new PublishDietMenuPlanRequest { DietMenuPlanId = 10 });
+
+        repository.Verify(r => r.PublishAsync(10, "test-user"), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_RejectsPlanItemWhenCalculatorResultIsIncomplete()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreateDraftPlan());
+        repository.Setup(r => r.GetPlanItemsAsync(10)).ReturnsAsync(new[] { CreateValidItem() });
+        var mealService = new Mock<IMealManagementService>();
+        mealService.Setup(s => s.GetMealVariantResultAsync(5, null)).ReturnsAsync(new MealVariantResultDto
         {
-            item,
+            MealId = 5,
+            MealName = "Lunch testowy",
+            IsComplete = false,
+            CompletenessStatus = "Incomplete",
+            ValidationWarnings = ["brak opakowania produkcyjnego", "brak kompletnego nutrition"],
         });
-        var recipeEngine = new Mock<IRecipeEngine>();
-        recipeEngine.Setup(r => r.ValidateRecipeAsync(5)).ReturnsAsync(true);
-        var service = CreateService(repository, recipeEngine);
+        var service = CreateService(repository, mealService);
 
         var act = async () => await service.PublishAsync(new PublishDietMenuPlanRequest { DietMenuPlanId = 10 });
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*nutrition*alergenow*opakowania*");
+            .WithMessage("*brak opakowania produkcyjnego*brak kompletnego nutrition*");
         repository.Verify(r => r.PublishAsync(It.IsAny<int>(), It.IsAny<string?>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task CopyDayAsync_RejectsEmptySourceDay()
-    {
-        var repository = new Mock<IDietMenuPlanRepository>();
-        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreateDraftPlan());
-        repository.Setup(r => r.GetPlanItemsAsync(10)).ReturnsAsync(Array.Empty<DietMenuPlanItemRow>());
-        var service = CreateService(repository);
-
-        var act = async () => await service.CopyDayAsync(new CopyDietMenuDayRequest
-        {
-            SourcePlanId = 10,
-            TargetDate = DateOnly.FromDateTime(DateTime.Today).AddDays(1),
-        });
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*pustego dnia*");
-        repository.Verify(r => r.CopyDayAsync(It.IsAny<int>(), It.IsAny<DateOnly>(), It.IsAny<string?>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
     public async Task AddItemAsync_BlocksPublishedPlanAfterDMinusThree()
     {
         var repository = new Mock<IDietMenuPlanRepository>();
-        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(new DietMenuPlanDayRow
-        {
-            Id = 10,
-            PlanDate = DateOnly.FromDateTime(DateTime.Today).AddDays(1),
-            Status = "Published",
-        });
+        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreatePublishedBlockedPlan());
         var service = CreateService(repository);
 
         var act = async () => await service.AddItemAsync(new AddDietMenuPlanItemRequest
@@ -109,19 +112,124 @@ public sealed class DietMenuPlanManagementServiceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*D-3*");
-        repository.Verify(r => r.AddItemAsync(It.IsAny<KuchniaUCygana.Domain.Entities.Menu.DietMenuPlanItem>()), Times.Never);
+        repository.Verify(r => r.AddItemAsync(It.IsAny<DietMenuPlanItem>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateItemAsync_BlocksPublishedPlanAfterDMinusThree()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        repository.Setup(r => r.GetPlanItemAsync(1)).ReturnsAsync(CreateValidItem());
+        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreatePublishedBlockedPlan());
+        var service = CreateService(repository);
+
+        var act = async () => await service.UpdateItemAsync(new UpdateDietMenuPlanItemRequest
+        {
+            Id = 1,
+            DietMenuPlanId = 10,
+            DietVariantId = 2,
+            MealId = 5,
+            MealSlot = "Lunch",
+            ServingSizeMultiplier = 1m,
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*D-3*");
+        repository.Verify(r => r.UpdateItemAsync(It.IsAny<DietMenuPlanItem>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteItemAsync_BlocksPublishedPlanAfterDMinusThree()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        repository.Setup(r => r.GetPlanItemAsync(1)).ReturnsAsync(CreateValidItem());
+        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreatePublishedBlockedPlan());
+        var service = CreateService(repository);
+
+        var act = async () => await service.DeleteItemAsync(1);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*D-3*");
+        repository.Verify(r => r.SoftDeleteItemAsync(It.IsAny<int>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CopyDayAsync_BlocksPublishedTargetPlanAfterDMinusThree()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreateDraftPlan());
+        repository.Setup(r => r.GetPlanItemsAsync(10)).ReturnsAsync(new[] { CreateValidItem() });
+        repository.Setup(r => r.GetPlanByDateAsync(It.IsAny<DateOnly>())).ReturnsAsync(CreatePublishedBlockedPlan());
+        var service = CreateService(repository);
+
+        var act = async () => await service.CopyDayAsync(new CopyDietMenuDayRequest
+        {
+            SourcePlanId = 10,
+            TargetDate = DateOnly.FromDateTime(DateTime.Today).AddDays(1),
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*D-3*");
+        repository.Verify(r => r.CopyDayAsync(It.IsAny<int>(), It.IsAny<DateOnly>(), It.IsAny<string?>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishAsync_BlocksPublishedPlanAfterDMinusThree()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreatePublishedBlockedPlan());
+        var service = CreateService(repository);
+
+        var act = async () => await service.PublishAsync(new PublishDietMenuPlanRequest { DietMenuPlanId = 10 });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*D-3*");
+        repository.Verify(r => r.PublishAsync(It.IsAny<int>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AddItemAsync_RejectsMealVariantFromDifferentMeal()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreateDraftPlan());
+        var mealService = new Mock<IMealManagementService>();
+        mealService.Setup(s => s.GetMealVariantResultAsync(5, 99)).ReturnsAsync((MealVariantResultDto?)null);
+        var service = CreateService(repository, mealService);
+
+        var act = async () => await service.AddItemAsync(new AddDietMenuPlanItemRequest
+        {
+            DietMenuPlanId = 10,
+            DietVariantId = 2,
+            MealId = 5,
+            MealVariantId = 99,
+            MealSlot = "Lunch",
+            ServingSizeMultiplier = 1m,
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Wariant dania nie nalezy*");
+        repository.Verify(r => r.AddItemAsync(It.IsAny<DietMenuPlanItem>()), Times.Never);
     }
 
     private static DietMenuPlanManagementService CreateService(
         Mock<IDietMenuPlanRepository> repository,
-        Mock<IRecipeEngine>? recipeEngine = null)
+        Mock<IMealManagementService>? mealService = null)
     {
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.Setup(u => u.GetUserName()).Returns("test-user");
         return new DietMenuPlanManagementService(
             repository.Object,
-            recipeEngine?.Object ?? Mock.Of<IRecipeEngine>(),
+            mealService?.Object ?? CreateDefaultMealService().Object,
             currentUser.Object);
+    }
+
+    private static Mock<IMealManagementService> CreateDefaultMealService()
+    {
+        var mealService = new Mock<IMealManagementService>();
+        mealService
+            .Setup(s => s.GetMealVariantResultAsync(It.IsAny<int>(), It.IsAny<int?>()))
+            .ReturnsAsync(CreateCompleteResult());
+        return mealService;
     }
 
     private static DietMenuPlanDayRow CreateDraftPlan()
@@ -131,6 +239,16 @@ public sealed class DietMenuPlanManagementServiceTests
             Id = 10,
             PlanDate = DateOnly.FromDateTime(DateTime.Today).AddDays(7),
             Status = "Draft",
+        };
+    }
+
+    private static DietMenuPlanDayRow CreatePublishedBlockedPlan()
+    {
+        return new DietMenuPlanDayRow
+        {
+            Id = 10,
+            PlanDate = DateOnly.FromDateTime(DateTime.Today).AddDays(1),
+            Status = "Published",
         };
     }
 
@@ -157,6 +275,46 @@ public sealed class DietMenuPlanManagementServiceTests
             AllergenCount = 1,
             PackagingRequirementCount = 1,
             MissingWarehouseCategoryCount = 0,
+        };
+    }
+
+    private static MealVariantResultDto CreateCompleteResult()
+    {
+        return new MealVariantResultDto
+        {
+            MealId = 5,
+            MealName = "Lunch testowy",
+            FinalWeightGrams = 350m,
+            IsComplete = true,
+            CompletenessStatus = "Complete",
+            ValidationWarnings = Array.Empty<string>(),
+            NutritionPer100g = new MealVariantNutritionDto
+            {
+                Calories = 120m,
+                Protein = 20m,
+                Carbohydrates = 5m,
+                Fat = 4m,
+                Fiber = 1m,
+            },
+            NutritionPerServing = new MealVariantNutritionDto
+            {
+                Calories = 420m,
+                Protein = 70m,
+                Carbohydrates = 17.5m,
+                Fat = 14m,
+                Fiber = 3.5m,
+            },
+            PackagingRequirements =
+            [
+                new MealVariantResultPackagingDto
+                {
+                    OwnerType = "Meal",
+                    MealId = 5,
+                    ResourceName = "Pojemnik",
+                    WarehouseCategoryId = 8,
+                    Quantity = 1m,
+                },
+            ],
         };
     }
 }

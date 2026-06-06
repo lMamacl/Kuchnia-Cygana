@@ -21,6 +21,26 @@ public sealed class MealAllergenRepository : IMealAllergenRepository
         return await db.QueryAsync<MealAllergen>(sql, new { MealId = mealId });
     }
 
+    public async Task<IReadOnlyList<MealAllergenRow>> GetDetailsByMealIdAsync(int mealId)
+    {
+        using var db = this.factory.CreateConnection();
+
+        var rows = await db.QueryAsync<MealAllergenRow>(
+            """
+            SELECT
+                a.[Id] AS [AllergenId],
+                a.[Name],
+                ma.[IsTrace]
+            FROM [MealAllergens] ma
+            INNER JOIN [Allergens] a ON a.[Id] = ma.[AllergenId]
+            WHERE ma.[MealId] = @mealId
+            ORDER BY a.[Name];
+            """,
+            new { mealId });
+
+        return rows.ToList();
+    }
+
     public async Task RecalculateForMealAsync(int mealId)
     {
         using var db = this.factory.CreateConnection();
