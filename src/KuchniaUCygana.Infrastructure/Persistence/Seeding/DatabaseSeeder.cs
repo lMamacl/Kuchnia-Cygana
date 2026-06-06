@@ -288,6 +288,10 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await SeedMenuAsync(db, now, auditUser, cancellationToken);
         await EnsureIngredientWarehouseMappingsAsync(db, cancellationToken);
         await EnsureDemoPackagingRequirementsAsync(db, now, auditUser, cancellationToken);
+        await EnsureDemoRecipeComponentsAsync(db, now, auditUser, cancellationToken);
+        await EnsureDefaultMealVariantsAsync(db, now, auditUser, cancellationToken);
+        await EnsureDemoMealVariantComponentsAsync(db, now, auditUser, cancellationToken);
+        await EnsureDietMenuPlanItemsHaveMealVariantsAsync(db, now, auditUser, cancellationToken);
         await SeedUnifiedDemoScenarioAsync(db, now, auditUser, cancellationToken);
     }
 
@@ -493,7 +497,28 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             DELETE FROM [Diets]
             WHERE [Name] = N'Demo Lifecycle';
 
+            DELETE FROM [MealVariantComponents]
+            WHERE [MealVariantId] IN
+            (
+                SELECT mv.[Id]
+                FROM [MealVariants] mv
+                INNER JOIN [Meals] m ON m.[Id] = mv.[MealId]
+                WHERE m.[Name] LIKE N'Demo %'
+            );
+
+            DELETE FROM [PackagingRequirements]
+            WHERE [MealVariantId] IN
+            (
+                SELECT mv.[Id]
+                FROM [MealVariants] mv
+                INNER JOIN [Meals] m ON m.[Id] = mv.[MealId]
+                WHERE m.[Name] LIKE N'Demo %'
+            );
+
             DELETE FROM [MealVariants]
+            WHERE [MealId] IN (SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'Demo %');
+
+            DELETE FROM [MealRecipeComponents]
             WHERE [MealId] IN (SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'Demo %');
 
             DELETE FROM [MealAllergens]
@@ -1489,6 +1514,381 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             cancellationToken: cancellationToken));
     }
 
+    private static async Task EnsureDemoRecipeComponentsAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO [IngredientAllergens] ([IngredientId], [AllergenId], [TraceAmount])
+            SELECT v.[IngredientId], v.[AllergenId], 0
+            FROM (VALUES
+                (2, 3),
+                (4, 2),
+                (5, 2),
+                (6, 2),
+                (7, 2),
+                (12, 1),
+                (15, 1)
+            ) AS v([IngredientId], [AllergenId])
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM [IngredientAllergens] ia
+                WHERE ia.[IngredientId] = v.[IngredientId]
+                  AND ia.[AllergenId] = v.[AllergenId]);
+
+            INSERT INTO [NutritionFacts]
+                ([IngredientId], [CaloriesPer100g], [ProteinPer100g], [CarbohydratesPer100g], [FatPer100g], [FiberPer100g], [CreatedAt])
+            SELECT v.[IngredientId], v.[CaloriesPer100g], v.[ProteinPer100g], v.[CarbohydratesPer100g], v.[FatPer100g], v.[FiberPer100g], @now
+            FROM (VALUES
+                (1, CAST(110.00 AS decimal(8,2)), CAST(23.00 AS decimal(8,2)), CAST(0.00 AS decimal(8,2)), CAST(2.00 AS decimal(8,2)), CAST(0.00 AS decimal(8,2))),
+                (2, CAST(208.00 AS decimal(8,2)), CAST(20.00 AS decimal(8,2)), CAST(0.00 AS decimal(8,2)), CAST(13.00 AS decimal(8,2)), CAST(0.00 AS decimal(8,2))),
+                (3, CAST(250.00 AS decimal(8,2)), CAST(20.00 AS decimal(8,2)), CAST(0.00 AS decimal(8,2)), CAST(18.00 AS decimal(8,2)), CAST(0.00 AS decimal(8,2))),
+                (4, CAST(292.00 AS decimal(8,2)), CAST(2.00 AS decimal(8,2)), CAST(3.00 AS decimal(8,2)), CAST(30.00 AS decimal(8,2)), CAST(0.00 AS decimal(8,2))),
+                (5, CAST(748.00 AS decimal(8,2)), CAST(0.50 AS decimal(8,2)), CAST(0.50 AS decimal(8,2)), CAST(82.00 AS decimal(8,2)), CAST(0.00 AS decimal(8,2))),
+                (6, CAST(356.00 AS decimal(8,2)), CAST(25.00 AS decimal(8,2)), CAST(2.00 AS decimal(8,2)), CAST(27.00 AS decimal(8,2)), CAST(0.00 AS decimal(8,2))),
+                (7, CAST(61.00 AS decimal(8,2)), CAST(3.50 AS decimal(8,2)), CAST(4.70 AS decimal(8,2)), CAST(3.30 AS decimal(8,2)), CAST(0.00 AS decimal(8,2))),
+                (8, CAST(34.00 AS decimal(8,2)), CAST(2.80 AS decimal(8,2)), CAST(6.60 AS decimal(8,2)), CAST(0.40 AS decimal(8,2)), CAST(2.60 AS decimal(8,2))),
+                (9, CAST(45.00 AS decimal(8,2)), CAST(1.00 AS decimal(8,2)), CAST(12.00 AS decimal(8,2)), CAST(0.10 AS decimal(8,2)), CAST(2.00 AS decimal(8,2))),
+                (10, CAST(86.00 AS decimal(8,2)), CAST(1.60 AS decimal(8,2)), CAST(20.00 AS decimal(8,2)), CAST(0.10 AS decimal(8,2)), CAST(3.00 AS decimal(8,2))),
+                (11, CAST(57.00 AS decimal(8,2)), CAST(0.70 AS decimal(8,2)), CAST(14.50 AS decimal(8,2)), CAST(0.30 AS decimal(8,2)), CAST(2.40 AS decimal(8,2))),
+                (12, CAST(364.00 AS decimal(8,2)), CAST(10.00 AS decimal(8,2)), CAST(76.00 AS decimal(8,2)), CAST(1.00 AS decimal(8,2)), CAST(2.70 AS decimal(8,2))),
+                (13, CAST(365.00 AS decimal(8,2)), CAST(7.00 AS decimal(8,2)), CAST(80.00 AS decimal(8,2)), CAST(0.70 AS decimal(8,2)), CAST(1.30 AS decimal(8,2))),
+                (14, CAST(32.00 AS decimal(8,2)), CAST(1.60 AS decimal(8,2)), CAST(5.00 AS decimal(8,2)), CAST(0.20 AS decimal(8,2)), CAST(1.20 AS decimal(8,2))),
+                (15, CAST(350.00 AS decimal(8,2)), CAST(12.00 AS decimal(8,2)), CAST(72.00 AS decimal(8,2)), CAST(1.50 AS decimal(8,2)), CAST(3.00 AS decimal(8,2)))
+            ) AS v([IngredientId], [CaloriesPer100g], [ProteinPer100g], [CarbohydratesPer100g], [FatPer100g], [FiberPer100g])
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM [NutritionFacts] nf
+                WHERE nf.[IngredientId] = v.[IngredientId]);
+
+            ;WITH MealWeights AS (
+                SELECT
+                    r.[MealId],
+                    SUM(r.[WeightInGrams]) AS [RawWeightGrams]
+                FROM [Recipes] r
+                WHERE r.[IsDeleted] = 0
+                GROUP BY r.[MealId]
+            )
+            UPDATE m
+            SET [RawWeightGrams] = COALESCE(m.[RawWeightGrams], mw.[RawWeightGrams], CAST(350 AS decimal(10,2))),
+                [CookedWeightGrams] = COALESCE(m.[CookedWeightGrams], mw.[RawWeightGrams], CAST(350 AS decimal(10,2))),
+                [ShelfLifeHours] = COALESCE(m.[ShelfLifeHours], 48),
+                [UseEarliestIngredientExpiry] = COALESCE(m.[UseEarliestIngredientExpiry], 0),
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [Meals] m
+            LEFT JOIN MealWeights mw ON mw.[MealId] = m.[Id]
+            WHERE m.[IsDeleted] = 0
+              AND EXISTS (SELECT 1 FROM [Recipes] r WHERE r.[MealId] = m.[Id] AND r.[IsDeleted] = 0)
+              AND (
+                    m.[RawWeightGrams] IS NULL
+                 OR m.[CookedWeightGrams] IS NULL
+                 OR m.[ShelfLifeHours] IS NULL
+              );
+
+            INSERT INTO [RecipeComponents]
+                ([Name], [Description], [CategoryId], [ImageUrl], [PreparationTimeMinutes],
+                 [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                CONCAT(m.[Name], N' - składowa bazowa'),
+                CONCAT(N'Demo składowa technologiczna utworzona z legacy Recipes dla posiłku: ', m.[Name]),
+                m.[CategoryId],
+                NULL,
+                m.[PreparationTimeMinutes],
+                1,
+                @now,
+                @auditUser,
+                0
+            FROM [Meals] m
+            WHERE m.[IsDeleted] = 0
+              AND m.[IsActive] = 1
+              AND EXISTS (SELECT 1 FROM [Recipes] r WHERE r.[MealId] = m.[Id] AND r.[IsDeleted] = 0)
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponents] rc
+                    WHERE rc.[Name] = CONCAT(m.[Name], N' - składowa bazowa')
+                      AND rc.[IsDeleted] = 0);
+
+            INSERT INTO [RecipeComponentVersions]
+                ([RecipeComponentId], [VersionNumber], [Status], [Instructions], [YieldQuantity], [YieldUnit],
+                 [RawWeightGrams], [CookedWeightGrams], [CaloriesPer100g], [ProteinPer100g],
+                 [CarbohydratesPer100g], [FatPer100g], [FiberPer100g], [ShelfLifeHours],
+                 [UseEarliestIngredientExpiry], [NutritionSource], [NutritionOverrideReason],
+                 [AllergensApproved], [AllergenOverrideReason], [AllergensApprovedAt], [AllergensApprovedBy],
+                 [ChangeSummary], [IsTechnologyChange], [NonTechnologyChangeReason],
+                 [PublishedAt], [PublishedBy], [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                rc.[Id],
+                1,
+                N'Published',
+                CONCAT(N'Przygotuj składową bazową dla posiłku: ', m.[Name], N'. Użyj ilości składników z tabeli zapotrzebowania.'),
+                1.000,
+                N'portion',
+                COALESCE(m.[RawWeightGrams], mw.[RawWeightGrams], CAST(350 AS decimal(10,2))),
+                COALESCE(m.[CookedWeightGrams], m.[RawWeightGrams], mw.[RawWeightGrams], CAST(350 AS decimal(10,2))),
+                nf.[CaloriesPer100g],
+                nf.[ProteinPer100g],
+                nf.[CarbohydratesPer100g],
+                nf.[FatPer100g],
+                nf.[FiberPer100g],
+                COALESCE(m.[ShelfLifeHours], 48),
+                COALESCE(m.[UseEarliestIngredientExpiry], 0),
+                N'Manual',
+                N'Demo seeder: nutrition przepisane z NutritionFacts posiłku do wersji składowej.',
+                1,
+                N'Demo seeder: alergeny zatwierdzone na podstawie danych posiłku/składników.',
+                @now,
+                @auditUser,
+                N'Demo seeder: wersja bazowa z legacy Recipes.',
+                1,
+                NULL,
+                @now,
+                @auditUser,
+                @now,
+                @auditUser,
+                0
+            FROM [Meals] m
+            INNER JOIN [RecipeComponents] rc ON rc.[Name] = CONCAT(m.[Name], N' - składowa bazowa') AND rc.[IsDeleted] = 0
+            OUTER APPLY (
+                SELECT SUM(r.[WeightInGrams]) AS [RawWeightGrams]
+                FROM [Recipes] r
+                WHERE r.[MealId] = m.[Id]
+                  AND r.[IsDeleted] = 0
+            ) mw
+            OUTER APPLY (
+                SELECT TOP 1
+                    facts.[CaloriesPer100g],
+                    facts.[ProteinPer100g],
+                    facts.[CarbohydratesPer100g],
+                    facts.[FatPer100g],
+                    facts.[FiberPer100g]
+                FROM [NutritionFacts] facts
+                WHERE facts.[MealId] = m.[Id]
+                ORDER BY facts.[Id] DESC
+            ) nf
+            WHERE m.[IsDeleted] = 0
+              AND EXISTS (SELECT 1 FROM [Recipes] r WHERE r.[MealId] = m.[Id] AND r.[IsDeleted] = 0)
+              AND nf.[CaloriesPer100g] IS NOT NULL
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentVersions] rcv
+                    WHERE rcv.[RecipeComponentId] = rc.[Id]
+                      AND rcv.[VersionNumber] = 1
+                      AND rcv.[IsDeleted] = 0);
+
+            UPDATE rcv
+            SET [Status] = N'Published',
+                [RawWeightGrams] = COALESCE(rcv.[RawWeightGrams], m.[RawWeightGrams], mw.[RawWeightGrams], CAST(350 AS decimal(10,2))),
+                [CookedWeightGrams] = COALESCE(rcv.[CookedWeightGrams], m.[CookedWeightGrams], m.[RawWeightGrams], mw.[RawWeightGrams], CAST(350 AS decimal(10,2))),
+                [CaloriesPer100g] = COALESCE(rcv.[CaloriesPer100g], nf.[CaloriesPer100g]),
+                [ProteinPer100g] = COALESCE(rcv.[ProteinPer100g], nf.[ProteinPer100g]),
+                [CarbohydratesPer100g] = COALESCE(rcv.[CarbohydratesPer100g], nf.[CarbohydratesPer100g]),
+                [FatPer100g] = COALESCE(rcv.[FatPer100g], nf.[FatPer100g]),
+                [FiberPer100g] = COALESCE(rcv.[FiberPer100g], nf.[FiberPer100g]),
+                [ShelfLifeHours] = COALESCE(rcv.[ShelfLifeHours], m.[ShelfLifeHours], 48),
+                [NutritionSource] = COALESCE(NULLIF(rcv.[NutritionSource], N''), N'Manual'),
+                [NutritionOverrideReason] = COALESCE(rcv.[NutritionOverrideReason], N'Demo seeder: nutrition przepisane z NutritionFacts posiłku do wersji składowej.'),
+                [AllergensApproved] = 1,
+                [AllergenOverrideReason] = COALESCE(rcv.[AllergenOverrideReason], N'Demo seeder: alergeny zatwierdzone na podstawie danych posiłku/składników.'),
+                [AllergensApprovedAt] = COALESCE(rcv.[AllergensApprovedAt], @now),
+                [AllergensApprovedBy] = COALESCE(rcv.[AllergensApprovedBy], @auditUser),
+                [PublishedAt] = COALESCE(rcv.[PublishedAt], @now),
+                [PublishedBy] = COALESCE(rcv.[PublishedBy], @auditUser),
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [RecipeComponentVersions] rcv
+            INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+            INNER JOIN [Meals] m ON rc.[Name] = CONCAT(m.[Name], N' - składowa bazowa')
+            OUTER APPLY (
+                SELECT SUM(r.[WeightInGrams]) AS [RawWeightGrams]
+                FROM [Recipes] r
+                WHERE r.[MealId] = m.[Id]
+                  AND r.[IsDeleted] = 0
+            ) mw
+            OUTER APPLY (
+                SELECT TOP 1 *
+                FROM [NutritionFacts] facts
+                WHERE facts.[MealId] = m.[Id]
+                ORDER BY facts.[Id] DESC
+            ) nf
+            WHERE rcv.[VersionNumber] = 1
+              AND rcv.[IsDeleted] = 0
+              AND rc.[IsDeleted] = 0
+              AND m.[IsDeleted] = 0
+              AND nf.[CaloriesPer100g] IS NOT NULL;
+
+            INSERT INTO [RecipeComponentIngredients]
+                ([RecipeComponentVersionId], [IngredientId], [StockItemId], [WarehouseCategoryId],
+                 [WeightInGrams], [YieldFactor], [IsOptional], [Notes], [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                rcv.[Id],
+                r.[IngredientId],
+                COALESCE(i.[StockItemId], si.[Id]),
+                COALESCE(i.[WarehouseCategoryId], si.[WarehouseCategoryId]),
+                r.[WeightInGrams],
+                CASE WHEN i.[YieldFactor] <= 0 THEN 1.0000 ELSE COALESCE(i.[YieldFactor], 1.0000) END,
+                r.[IsOptional],
+                r.[Notes],
+                @now,
+                @auditUser,
+                0
+            FROM [Recipes] r
+            INNER JOIN [Meals] m ON m.[Id] = r.[MealId]
+            INNER JOIN [RecipeComponents] rc ON rc.[Name] = CONCAT(m.[Name], N' - składowa bazowa') AND rc.[IsDeleted] = 0
+            INNER JOIN [RecipeComponentVersions] rcv ON rcv.[RecipeComponentId] = rc.[Id] AND rcv.[VersionNumber] = 1 AND rcv.[IsDeleted] = 0
+            INNER JOIN [Ingredients] i ON i.[Id] = r.[IngredientId]
+            LEFT JOIN [StockItems] si ON si.[BaseIngredientId] = i.[Id]
+                OR si.[Name] COLLATE Latin1_General_100_CI_AI = i.[Name] COLLATE Latin1_General_100_CI_AI
+            WHERE r.[IsDeleted] = 0
+              AND i.[IsDeleted] = 0
+              AND COALESCE(i.[WarehouseCategoryId], si.[WarehouseCategoryId]) IS NOT NULL
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentIngredients] existing
+                    WHERE existing.[RecipeComponentVersionId] = rcv.[Id]
+                      AND existing.[IngredientId] = r.[IngredientId]
+                      AND existing.[IsDeleted] = 0);
+
+            INSERT INTO [RecipeComponentInstructionSections]
+                ([RecipeComponentVersionId], [Title], [SortOrder], [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                rcv.[Id],
+                N'Przygotowanie',
+                1,
+                @now,
+                @auditUser,
+                0
+            FROM [RecipeComponentVersions] rcv
+            INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+            WHERE rc.[Name] LIKE N'% - składowa bazowa'
+              AND rcv.[IsDeleted] = 0
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentInstructionSections] existing
+                    WHERE existing.[RecipeComponentVersionId] = rcv.[Id]
+                      AND existing.[IsDeleted] = 0);
+
+            INSERT INTO [RecipeComponentInstructionSteps]
+                ([RecipeComponentInstructionSectionId], [StepText], [SortOrder], [RequiresControl],
+                 [ControlType], [ExpectedValue], [ExpectedUnit], [IsCritical], [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                sectionRows.[Id],
+                CONCAT(N'Przygotuj składniki i wykonaj składową zgodnie z kartą demo dla: ', rc.[Name]),
+                1,
+                CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentIngredients] rci
+                    INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+                    WHERE rci.[RecipeComponentVersionId] = rcv.[Id]
+                      AND i.[RequiresCoreTemperatureCheck] = 1
+                ) THEN 1 ELSE 0 END,
+                CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentIngredients] rci
+                    INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+                    WHERE rci.[RecipeComponentVersionId] = rcv.[Id]
+                      AND i.[RequiresCoreTemperatureCheck] = 1
+                ) THEN N'Temperature' ELSE NULL END,
+                CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentIngredients] rci
+                    INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+                    WHERE rci.[RecipeComponentVersionId] = rcv.[Id]
+                      AND i.[RequiresCoreTemperatureCheck] = 1
+                ) THEN CAST(75.000 AS decimal(10,3)) ELSE NULL END,
+                CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentIngredients] rci
+                    INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+                    WHERE rci.[RecipeComponentVersionId] = rcv.[Id]
+                      AND i.[RequiresCoreTemperatureCheck] = 1
+                ) THEN N'C' ELSE NULL END,
+                CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentIngredients] rci
+                    INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+                    WHERE rci.[RecipeComponentVersionId] = rcv.[Id]
+                      AND i.[RequiresCoreTemperatureCheck] = 1
+                ) THEN 1 ELSE 0 END,
+                @now,
+                @auditUser,
+                0
+            FROM [RecipeComponentVersions] rcv
+            INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+            INNER JOIN [RecipeComponentInstructionSections] sectionRows
+                ON sectionRows.[RecipeComponentVersionId] = rcv.[Id]
+               AND sectionRows.[IsDeleted] = 0
+            WHERE rc.[Name] LIKE N'% - składowa bazowa'
+              AND rcv.[IsDeleted] = 0
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentInstructionSteps] existing
+                    WHERE existing.[RecipeComponentInstructionSectionId] = sectionRows.[Id]
+                      AND existing.[IsDeleted] = 0);
+
+            INSERT INTO [PackagingRequirements]
+                ([OwnerType], [MealId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
+                 [ResourceName], [Quantity], [Unit], [ContainerRole], [IsCustomerFacing],
+                 [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                N'RecipeComponentVersion',
+                NULL,
+                rcv.[Id],
+                pr.[StockItemId],
+                pr.[WarehouseCategoryId],
+                pr.[ResourceName],
+                pr.[Quantity],
+                pr.[Unit],
+                COALESCE(pr.[ContainerRole], N'MealBox'),
+                pr.[IsCustomerFacing],
+                @now,
+                @auditUser,
+                0
+            FROM [Meals] m
+            INNER JOIN [RecipeComponents] rc ON rc.[Name] = CONCAT(m.[Name], N' - składowa bazowa') AND rc.[IsDeleted] = 0
+            INNER JOIN [RecipeComponentVersions] rcv ON rcv.[RecipeComponentId] = rc.[Id] AND rcv.[VersionNumber] = 1 AND rcv.[IsDeleted] = 0
+            INNER JOIN [PackagingRequirements] pr ON pr.[MealId] = m.[Id]
+                AND pr.[RecipeComponentVersionId] IS NULL
+                AND pr.[MealVariantId] IS NULL
+                AND pr.[IsDeleted] = 0
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM [PackagingRequirements] existing
+                WHERE existing.[RecipeComponentVersionId] = rcv.[Id]
+                  AND existing.[OwnerType] = N'RecipeComponentVersion'
+                  AND existing.[IsDeleted] = 0);
+
+            INSERT INTO [MealRecipeComponents]
+                ([MealId], [RecipeComponentVersionId], [Role], [QuantityPerServing], [Unit],
+                 [SortOrder], [IsOptional], [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                m.[Id],
+                rcv.[Id],
+                N'Składowa bazowa',
+                1.000,
+                N'portion',
+                1,
+                0,
+                @now,
+                @auditUser,
+                0
+            FROM [Meals] m
+            INNER JOIN [RecipeComponents] rc ON rc.[Name] = CONCAT(m.[Name], N' - składowa bazowa') AND rc.[IsDeleted] = 0
+            INNER JOIN [RecipeComponentVersions] rcv ON rcv.[RecipeComponentId] = rc.[Id] AND rcv.[VersionNumber] = 1 AND rcv.[IsDeleted] = 0
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM [MealRecipeComponents] existing
+                WHERE existing.[MealId] = m.[Id]
+                  AND existing.[RecipeComponentVersionId] = rcv.[Id]
+                  AND existing.[IsDeleted] = 0);
+            """,
+            new { now, auditUser },
+            cancellationToken: cancellationToken));
+    }
+
     // ── Rejestry temperatur (TemperatureLog) ─────────────────────
 
     private async Task SeedTemperatureLogsAsync(IDbConnection db, DateTimeOffset now, string auditUser, CancellationToken cancellationToken)
@@ -1584,10 +1984,177 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         this.logger.LogInformation("Seeded {Count} temperature logs (7 days, {DeviceCount} devices).", logs.Count, devices.Length);
     }
 
+    private async Task EnsureCoreMenuRowsAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            SET IDENTITY_INSERT [Categories] ON;
+            INSERT INTO [Categories] ([Id], [Name], [Description], [SortOrder], [CreatedAt])
+            SELECT v.[Id], v.[Name], v.[Description], v.[SortOrder], @now
+            FROM (VALUES
+                (1, N'Śniadanie', N'Pierwszy posiłek dnia', 1),
+                (2, N'Drugie Śniadanie', N'Lekka przekąska przedpołudniowa', 2),
+                (3, N'Obiad', N'Główny ciepły posiłek', 3),
+                (4, N'Podwieczorek', N'Słodka lub słona przekąska popołudniowa', 4),
+                (5, N'Kolacja', N'Ostatni posiłek dnia', 5)
+            ) AS v([Id], [Name], [Description], [SortOrder])
+            WHERE NOT EXISTS (SELECT 1 FROM [Categories] c WHERE c.[Id] = v.[Id]);
+            SET IDENTITY_INSERT [Categories] OFF;
+
+            SET IDENTITY_INSERT [Allergens] ON;
+            INSERT INTO [Allergens] ([Id], [Name], [Code], [IconUrl], [CreatedAt])
+            SELECT v.[Id], v.[Name], v.[Code], NULL, @now
+            FROM (VALUES
+                (1, N'Gluten', N'GLU'),
+                (2, N'Laktoza', N'LAC'),
+                (3, N'Ryby', N'FIS'),
+                (4, N'Orzechy', N'NUT'),
+                (5, N'Jaja', N'EGG')
+            ) AS v([Id], [Name], [Code])
+            WHERE NOT EXISTS (SELECT 1 FROM [Allergens] a WHERE a.[Id] = v.[Id]);
+            SET IDENTITY_INSERT [Allergens] OFF;
+
+            SET IDENTITY_INSERT [Ingredients] ON;
+            INSERT INTO [Ingredients] ([Id], [Name], [Unit], [CostPerUnit], [IsActive], [CreatedAt], [CreatedBy])
+            SELECT v.[Id], v.[Name], v.[Unit], v.[CostPerUnit], 1, @now, @auditUser
+            FROM (VALUES
+                (1, N'Pierś z kurczaka świeża', N'kg', CAST(24.50 AS decimal(10,4))),
+                (2, N'Łosoś filet świeży', N'kg', CAST(89.00 AS decimal(10,4))),
+                (3, N'Mięso mielone wołowe', N'kg', CAST(32.00 AS decimal(10,4))),
+                (4, N'Śmietanka UHT 30%', N'L', CAST(14.20 AS decimal(10,4))),
+                (5, N'Masło Extra 82%', N'kg', CAST(35.00 AS decimal(10,4))),
+                (6, N'Ser żółty Gouda', N'kg', CAST(28.00 AS decimal(10,4))),
+                (7, N'Jogurt naturalny', N'L', CAST(6.50 AS decimal(10,4))),
+                (8, N'Brokuły świeże', N'kg', CAST(12.00 AS decimal(10,4))),
+                (9, N'Dynia piżmowa', N'kg', CAST(8.00 AS decimal(10,4))),
+                (10, N'Bataty (słodkie ziemniaki)', N'kg', CAST(9.50 AS decimal(10,4))),
+                (11, N'Jagody mrożone', N'kg', CAST(18.00 AS decimal(10,4))),
+                (12, N'Mąka pszenna typ 500', N'kg', CAST(3.20 AS decimal(10,4))),
+                (13, N'Ryż jaśminowy', N'kg', CAST(7.80 AS decimal(10,4))),
+                (14, N'Pomidory krojone (puszka)', N'szt', CAST(4.50 AS decimal(10,4))),
+                (15, N'Makaron penne', N'kg', CAST(6.00 AS decimal(10,4)))
+            ) AS v([Id], [Name], [Unit], [CostPerUnit])
+            WHERE NOT EXISTS (SELECT 1 FROM [Ingredients] i WHERE i.[Id] = v.[Id]);
+            SET IDENTITY_INSERT [Ingredients] OFF;
+
+            SET IDENTITY_INSERT [Meals] ON;
+            INSERT INTO [Meals] ([Id], [CategoryId], [Name], [Description], [Status], [PreparationTimeMinutes], [IsActive], [CreatedAt], [CreatedBy])
+            SELECT v.[Id], v.[CategoryId], v.[Name], v.[Description], N'Published', v.[PreparationTimeMinutes], 1, @now, @auditUser
+            FROM (VALUES
+                (1, 1, N'Jajecznica z szczypiorkiem na maśle', N'Klasyczna jajecznica z 3 jaj na prawdziwym maśle ze świeżym szczypiorkiem i pieczywem.', 10),
+                (2, 2, N'Pudding chia z jagodami i śmietanką', N'Kremowy deser chia na bazie jogurtu i śmietanki ze słodkim musem z mrożonych jagód.', 15),
+                (3, 3, N'Pikantna zupa pomidorowa z makaronem', N'Rozgrzewająca, aromatyczna zupa ze słodkich pomidorów krojonych z makaronem penne i nutą śmietanki.', 25),
+                (4, 3, N'Pieczony filet z łososia z ryżem i brokułami', N'Delikatny łosoś pieczony w ziołach, podawany z sypkim ryżem jaśminowym i gotowanymi brokułami.', 35),
+                (5, 5, N'Bowl z wołowiną, dynią i batatami', N'Pożywna kolacja z pieczonym mięsem wołowym, batatami i słodką dynią piżmową z przyprawami.', 30)
+            ) AS v([Id], [CategoryId], [Name], [Description], [PreparationTimeMinutes])
+            WHERE NOT EXISTS (SELECT 1 FROM [Meals] m WHERE m.[Id] = v.[Id]);
+            SET IDENTITY_INSERT [Meals] OFF;
+
+            SET IDENTITY_INSERT [Diets] ON;
+            INSERT INTO [Diets] ([Id], [Name], [Description], [MarketingDescription], [Status], [IsActive], [CreatedAt], [CreatedBy])
+            SELECT v.[Id], v.[Name], v.[Description], v.[MarketingDescription], N'Active', 1, @now, @auditUser
+            FROM (VALUES
+                (1, N'Standard', N'Zbilansowana dieta dla każdego.', N'Zdrowy catering na każdy dzień.'),
+                (2, N'Sport / High Protein', N'Dieta o podwyższonej zawartości białka dla aktywnych.', N'Zbuduj formę z Cyganem.')
+            ) AS v([Id], [Name], [Description], [MarketingDescription])
+            WHERE NOT EXISTS (SELECT 1 FROM [Diets] d WHERE d.[Id] = v.[Id]);
+            SET IDENTITY_INSERT [Diets] OFF;
+
+            SET IDENTITY_INSERT [DietVariants] ON;
+            INSERT INTO [DietVariants] ([Id], [DietId], [Name], [TargetCalories], [PriceMultiplier], [IsDefault], [CreatedAt], [CreatedBy])
+            SELECT v.[Id], v.[DietId], v.[Name], v.[TargetCalories], v.[PriceMultiplier], v.[IsDefault], @now, @auditUser
+            FROM (VALUES
+                (1, 1, N'Standard 1500', 1500, CAST(1.00 AS decimal(5,2)), CAST(0 AS bit)),
+                (2, 1, N'Standard 1800', 1800, CAST(1.10 AS decimal(5,2)), CAST(1 AS bit)),
+                (3, 1, N'Standard 2000', 2000, CAST(1.20 AS decimal(5,2)), CAST(0 AS bit)),
+                (4, 2, N'Sport 2200', 2200, CAST(1.30 AS decimal(5,2)), CAST(0 AS bit)),
+                (5, 2, N'Sport 2500', 2500, CAST(1.40 AS decimal(5,2)), CAST(1 AS bit))
+            ) AS v([Id], [DietId], [Name], [TargetCalories], [PriceMultiplier], [IsDefault])
+            WHERE NOT EXISTS (SELECT 1 FROM [DietVariants] dv WHERE dv.[Id] = v.[Id]);
+            SET IDENTITY_INSERT [DietVariants] OFF;
+
+            INSERT INTO [DietVariantMeals] ([DietVariantId], [MealId], [ServingSizeMultiplier], [SortOrder])
+            SELECT v.[DietVariantId], v.[MealId], v.[ServingSizeMultiplier], v.[SortOrder]
+            FROM (VALUES
+                (1, 1, CAST(0.85 AS decimal(5,2)), 1), (1, 2, CAST(0.85 AS decimal(5,2)), 2), (1, 3, CAST(0.85 AS decimal(5,2)), 3), (1, 4, CAST(0.85 AS decimal(5,2)), 4), (1, 5, CAST(0.85 AS decimal(5,2)), 5),
+                (2, 1, CAST(1.00 AS decimal(5,2)), 1), (2, 2, CAST(1.00 AS decimal(5,2)), 2), (2, 3, CAST(1.00 AS decimal(5,2)), 3), (2, 4, CAST(1.00 AS decimal(5,2)), 4), (2, 5, CAST(1.00 AS decimal(5,2)), 5),
+                (3, 1, CAST(1.15 AS decimal(5,2)), 1), (3, 2, CAST(1.15 AS decimal(5,2)), 2), (3, 3, CAST(1.15 AS decimal(5,2)), 3), (3, 4, CAST(1.15 AS decimal(5,2)), 4), (3, 5, CAST(1.15 AS decimal(5,2)), 5),
+                (4, 1, CAST(1.25 AS decimal(5,2)), 1), (4, 2, CAST(1.25 AS decimal(5,2)), 2), (4, 3, CAST(1.25 AS decimal(5,2)), 3), (4, 4, CAST(1.25 AS decimal(5,2)), 4), (4, 5, CAST(1.25 AS decimal(5,2)), 5),
+                (5, 1, CAST(1.40 AS decimal(5,2)), 1), (5, 2, CAST(1.40 AS decimal(5,2)), 2), (5, 3, CAST(1.40 AS decimal(5,2)), 3), (5, 4, CAST(1.40 AS decimal(5,2)), 4), (5, 5, CAST(1.40 AS decimal(5,2)), 5)
+            ) AS v([DietVariantId], [MealId], [ServingSizeMultiplier], [SortOrder])
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM [DietVariantMeals] dvm
+                WHERE dvm.[DietVariantId] = v.[DietVariantId]
+                  AND dvm.[MealId] = v.[MealId]);
+
+            INSERT INTO [Recipes] ([MealId], [IngredientId], [WeightInGrams], [IsOptional], [Notes])
+            SELECT v.[MealId], v.[IngredientId], v.[WeightInGrams], 0, v.[Notes]
+            FROM (VALUES
+                (1, 5, CAST(15.00 AS decimal(8,2)), N'Masło do smażenia jajecznicy'),
+                (2, 7, CAST(120.00 AS decimal(8,2)), N'Baza jogurtowa'),
+                (2, 4, CAST(50.00 AS decimal(8,2)), N'Dodatek śmietanki'),
+                (2, 11, CAST(40.00 AS decimal(8,2)), N'Jagody na wierzch'),
+                (3, 14, CAST(1.00 AS decimal(8,2)), N'Pomidory puszka'),
+                (3, 15, CAST(60.00 AS decimal(8,2)), N'Makaron'),
+                (3, 4, CAST(30.00 AS decimal(8,2)), N'Zabielenie zupy'),
+                (4, 2, CAST(150.00 AS decimal(8,2)), N'Filet z łososia'),
+                (4, 8, CAST(100.00 AS decimal(8,2)), N'Brokuł'),
+                (4, 13, CAST(75.00 AS decimal(8,2)), N'Ryż jaśminowy'),
+                (5, 3, CAST(120.00 AS decimal(8,2)), N'Mielona wołowina'),
+                (5, 9, CAST(80.00 AS decimal(8,2)), N'Kawałki dyni'),
+                (5, 10, CAST(80.00 AS decimal(8,2)), N'Słupki batatów')
+            ) AS v([MealId], [IngredientId], [WeightInGrams], [Notes])
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM [Recipes] r
+                WHERE r.[MealId] = v.[MealId]
+                  AND r.[IngredientId] = v.[IngredientId]
+                  AND r.[IsDeleted] = 0);
+
+            INSERT INTO [NutritionFacts] ([MealId], [CaloriesPer100g], [ProteinPer100g], [CarbohydratesPer100g], [FatPer100g], [FiberPer100g], [CreatedAt])
+            SELECT v.[MealId], v.[CaloriesPer100g], v.[ProteinPer100g], v.[CarbohydratesPer100g], v.[FatPer100g], v.[FiberPer100g], @now
+            FROM (VALUES
+                (1, CAST(180.00 AS decimal(8,2)), CAST(12.50 AS decimal(8,2)), CAST(1.20 AS decimal(8,2)), CAST(14.00 AS decimal(8,2)), CAST(0.00 AS decimal(8,2))),
+                (2, CAST(210.00 AS decimal(8,2)), CAST(4.50 AS decimal(8,2)), CAST(18.00 AS decimal(8,2)), CAST(12.00 AS decimal(8,2)), CAST(3.50 AS decimal(8,2))),
+                (3, CAST(95.00 AS decimal(8,2)), CAST(3.20 AS decimal(8,2)), CAST(14.50 AS decimal(8,2)), CAST(2.80 AS decimal(8,2)), CAST(1.20 AS decimal(8,2))),
+                (4, CAST(150.00 AS decimal(8,2)), CAST(18.20 AS decimal(8,2)), CAST(16.00 AS decimal(8,2)), CAST(6.50 AS decimal(8,2)), CAST(1.80 AS decimal(8,2))),
+                (5, CAST(165.00 AS decimal(8,2)), CAST(14.00 AS decimal(8,2)), CAST(15.00 AS decimal(8,2)), CAST(8.20 AS decimal(8,2)), CAST(2.50 AS decimal(8,2)))
+            ) AS v([MealId], [CaloriesPer100g], [ProteinPer100g], [CarbohydratesPer100g], [FatPer100g], [FiberPer100g])
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM [NutritionFacts] nf
+                WHERE nf.[MealId] = v.[MealId]);
+
+            INSERT INTO [MealAllergens] ([MealId], [AllergenId], [IsTrace])
+            SELECT v.[MealId], v.[AllergenId], 0
+            FROM (VALUES
+                (1, 5),
+                (2, 2),
+                (3, 1),
+                (3, 2),
+                (4, 3)
+            ) AS v([MealId], [AllergenId])
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM [MealAllergens] ma
+                WHERE ma.[MealId] = v.[MealId]
+                  AND ma.[AllergenId] = v.[AllergenId]);
+            """,
+            new { now, auditUser },
+            cancellationToken: cancellationToken));
+    }
+
     private async Task SeedMenuAsync(IDbConnection db, DateTimeOffset now, string auditUser, CancellationToken cancellationToken)
     {
         if (await CountRowsAsync(db, "Categories", cancellationToken) > 0)
         {
+            await EnsureCoreMenuRowsAsync(db, now, auditUser, cancellationToken);
+            await SeedDietMenuPlansAsync(db, now, auditUser, cancellationToken);
             return;
         }
 
@@ -1835,7 +2402,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 nf.[CarbohydratesPer100g],
                 nf.[FatPer100g],
                 nf.[FiberPer100g],
-                N'Meal',
+                N'Aggregated',
                 1,
                 @now,
                 @auditUser,
@@ -1843,7 +2410,17 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 @auditUser,
                 0
             FROM [Meals] m
-            LEFT JOIN [NutritionFacts] nf ON nf.[MealId] = m.[Id]
+            OUTER APPLY (
+                SELECT TOP 1
+                    facts.[CaloriesPer100g],
+                    facts.[ProteinPer100g],
+                    facts.[CarbohydratesPer100g],
+                    facts.[FatPer100g],
+                    facts.[FiberPer100g]
+                FROM [NutritionFacts] facts
+                WHERE facts.[MealId] = m.[Id]
+                ORDER BY facts.[Id] DESC
+            ) nf
             WHERE m.[IsDeleted] = 0
               AND NOT EXISTS
               (
@@ -1852,6 +2429,115 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                   WHERE mv.[MealId] = m.[Id]
                     AND mv.[IsDeleted] = 0
               );
+            """,
+            new { now, auditUser },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task EnsureDemoMealVariantComponentsAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE mv
+            SET [RawWeightGrams] = COALESCE(mv.[RawWeightGrams], m.[RawWeightGrams], mw.[RawWeightGrams]),
+                [CookedWeightGrams] = COALESCE(mv.[CookedWeightGrams], m.[CookedWeightGrams], m.[RawWeightGrams], mw.[RawWeightGrams]),
+                [CaloriesPer100g] = COALESCE(mv.[CaloriesPer100g], nf.[CaloriesPer100g]),
+                [ProteinPer100g] = COALESCE(mv.[ProteinPer100g], nf.[ProteinPer100g]),
+                [CarbohydratesPer100g] = COALESCE(mv.[CarbohydratesPer100g], nf.[CarbohydratesPer100g]),
+                [FatPer100g] = COALESCE(mv.[FatPer100g], nf.[FatPer100g]),
+                [FiberPer100g] = COALESCE(mv.[FiberPer100g], nf.[FiberPer100g]),
+                [NutritionSource] = CASE
+                    WHEN mv.[NutritionSource] IS NULL OR mv.[NutritionSource] = N'' OR mv.[NutritionSource] = N'Meal'
+                        THEN N'Aggregated'
+                    ELSE mv.[NutritionSource]
+                END,
+                [AllergensApproved] = 1,
+                [AllergenOverrideReason] = COALESCE(mv.[AllergenOverrideReason], N'Demo seeder: alergeny wariantu zatwierdzone na podstawie składowych.'),
+                [PublishedAt] = COALESCE(mv.[PublishedAt], @now),
+                [PublishedBy] = COALESCE(mv.[PublishedBy], @auditUser),
+                [Status] = N'Published',
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [MealVariants] mv
+            INNER JOIN [Meals] m ON m.[Id] = mv.[MealId]
+            OUTER APPLY (
+                SELECT SUM(r.[WeightInGrams]) AS [RawWeightGrams]
+                FROM [Recipes] r
+                WHERE r.[MealId] = m.[Id]
+                  AND r.[IsDeleted] = 0
+            ) mw
+            OUTER APPLY (
+                SELECT TOP 1 *
+                FROM [NutritionFacts] facts
+                WHERE facts.[MealId] = m.[Id]
+                ORDER BY facts.[Id] DESC
+            ) nf
+            WHERE mv.[IsDeleted] = 0
+              AND m.[IsDeleted] = 0
+              AND EXISTS (
+                    SELECT 1
+                    FROM [MealRecipeComponents] mrc
+                    WHERE mrc.[MealId] = m.[Id]
+                      AND mrc.[IsDeleted] = 0);
+
+            INSERT INTO [MealVariantComponents]
+                ([MealVariantId], [RecipeComponentVersionId], [Role], [QuantityPerServing], [Unit],
+                 [SortOrder], [IsOptional], [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                mv.[Id],
+                mrc.[RecipeComponentVersionId],
+                mrc.[Role],
+                mrc.[QuantityPerServing],
+                mrc.[Unit],
+                mrc.[SortOrder],
+                mrc.[IsOptional],
+                @now,
+                @auditUser,
+                0
+            FROM [MealVariants] mv
+            INNER JOIN [MealRecipeComponents] mrc ON mrc.[MealId] = mv.[MealId] AND mrc.[IsDeleted] = 0
+            INNER JOIN [RecipeComponentVersions] rcv ON rcv.[Id] = mrc.[RecipeComponentVersionId] AND rcv.[IsDeleted] = 0
+            WHERE mv.[IsDeleted] = 0
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [MealVariantComponents] existing
+                    WHERE existing.[MealVariantId] = mv.[Id]
+                      AND existing.[RecipeComponentVersionId] = mrc.[RecipeComponentVersionId]
+                      AND existing.[IsDeleted] = 0);
+            """,
+            new { now, auditUser },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task EnsureDietMenuPlanItemsHaveMealVariantsAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE dpi
+            SET [MealVariantId] = mv.[Id],
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [DietMenuPlanItems] dpi
+            OUTER APPLY
+            (
+                SELECT TOP 1 [Id]
+                FROM [MealVariants]
+                WHERE [MealId] = dpi.[MealId]
+                  AND [Status] IN (N'Published', N'Active')
+                  AND [IsDeleted] = 0
+                ORDER BY [IsDefault] DESC, [Id]
+            ) mv
+            WHERE dpi.[IsDeleted] = 0
+              AND dpi.[MealVariantId] IS NULL
+              AND mv.[Id] IS NOT NULL;
             """,
             new { now, auditUser },
             cancellationToken: cancellationToken));

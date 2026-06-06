@@ -30,6 +30,12 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
                     rcv.[Id],
                     rcv.[VersionNumber],
                     rcv.[Status],
+                    rcv.[CaloriesPer100g],
+                    rcv.[ProteinPer100g],
+                    rcv.[CarbohydratesPer100g],
+                    rcv.[FatPer100g],
+                    rcv.[FiberPer100g],
+                    rcv.[AllergensApproved],
                     ROW_NUMBER() OVER (
                         PARTITION BY rcv.[RecipeComponentId]
                         ORDER BY rcv.[VersionNumber] DESC, rcv.[Id] DESC

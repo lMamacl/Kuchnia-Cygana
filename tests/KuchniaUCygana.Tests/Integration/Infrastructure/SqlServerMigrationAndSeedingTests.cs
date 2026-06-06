@@ -189,6 +189,108 @@ public sealed class SqlServerMigrationAndSeedingTests
             ("@orderNumberPrefix", orderNumberPrefix));
         orderItemsWithoutPackagingRequirements.Should().Be(0);
 
+        var requiredM2MigrationCount = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(1) FROM [VersionInfo] WHERE [Version] IN (306, 508, 510, 511);");
+        requiredM2MigrationCount.Should().Be(4);
+
+        var recipeComponentVersionColumnCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'[dbo].[RecipeComponentVersions]')
+              AND name IN
+              (
+                  N'CaloriesPer100g',
+                  N'ProteinPer100g',
+                  N'CarbohydratesPer100g',
+                  N'FatPer100g',
+                  N'FiberPer100g',
+                  N'NutritionSource',
+                  N'NutritionOverrideReason',
+                  N'AllergensApproved',
+                  N'AllergenOverrideReason',
+                  N'AllergensApprovedAt',
+                  N'AllergensApprovedBy'
+              );
+            """);
+        recipeComponentVersionColumnCount.Should().Be(11);
+
+        var recipeComponentVersionCount = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(1) FROM [RecipeComponentVersions] WHERE [IsDeleted] = 0;");
+        recipeComponentVersionCount.Should().BeGreaterThan(0);
+
+        var mealVariantComponentCount = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(1) FROM [MealVariantComponents] WHERE [IsDeleted] = 0;");
+        mealVariantComponentCount.Should().BeGreaterThan(0);
+
+        var incompleteDemoComponentCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [RecipeComponentVersions] rcv
+            INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+            WHERE rc.[Name] LIKE N'% - składowa bazowa'
+              AND rc.[IsDeleted] = 0
+              AND rcv.[IsDeleted] = 0
+              AND
+              (
+                  rcv.[Status] <> N'Published'
+                  OR rcv.[RawWeightGrams] IS NULL
+                  OR rcv.[CookedWeightGrams] IS NULL
+                  OR rcv.[CaloriesPer100g] IS NULL
+                  OR rcv.[ProteinPer100g] IS NULL
+                  OR rcv.[CarbohydratesPer100g] IS NULL
+                  OR rcv.[FatPer100g] IS NULL
+                  OR rcv.[FiberPer100g] IS NULL
+                  OR rcv.[AllergensApproved] = 0
+                  OR NOT EXISTS
+                  (
+                      SELECT 1
+                      FROM [RecipeComponentIngredients] rci
+                      WHERE rci.[RecipeComponentVersionId] = rcv.[Id]
+                        AND rci.[IsDeleted] = 0
+                        AND (rci.[StockItemId] IS NOT NULL OR rci.[WarehouseCategoryId] IS NOT NULL)
+                  )
+                  OR NOT EXISTS
+                  (
+                      SELECT 1
+                      FROM [RecipeComponentInstructionSections] sections
+                      INNER JOIN [RecipeComponentInstructionSteps] steps
+                          ON steps.[RecipeComponentInstructionSectionId] = sections.[Id]
+                         AND steps.[IsDeleted] = 0
+                      WHERE sections.[RecipeComponentVersionId] = rcv.[Id]
+                        AND sections.[IsDeleted] = 0
+                  )
+                  OR NOT EXISTS
+                  (
+                      SELECT 1
+                      FROM [PackagingRequirements] pr
+                      WHERE pr.[RecipeComponentVersionId] = rcv.[Id]
+                        AND pr.[IsDeleted] = 0
+                        AND (pr.[StockItemId] IS NOT NULL OR pr.[WarehouseCategoryId] IS NOT NULL)
+                  )
+              );
+            """);
+        incompleteDemoComponentCount.Should().Be(0);
+
+        var activePlanItemsWithoutMealVariant = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [DietMenuPlanItems] dpi
+            INNER JOIN [DietMenuPlans] dp ON dp.[Id] = dpi.[DietMenuPlanId]
+            WHERE dp.[Status] = N'Published'
+              AND dp.[IsDeleted] = 0
+              AND dpi.[IsDeleted] = 0
+              AND dpi.[IsActive] = 1
+              AND dpi.[MealVariantId] IS NULL;
+            """);
+        activePlanItemsWithoutMealVariant.Should().Be(0);
+
         var bialystokStopCount = await ScalarIntAsync(
             connection,
             """
