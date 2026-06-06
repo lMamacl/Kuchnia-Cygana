@@ -18,7 +18,8 @@
         avatarText = "PU";
     }
 
-    var searchItems = StaffNavigationCatalog.Sections
+    var visibleSections = StaffNavigationCatalog.VisibleSections(User);
+    var searchItems = visibleSections
         .SelectMany(section => section.Items.Select(item => new
         {
             title = item.Label,

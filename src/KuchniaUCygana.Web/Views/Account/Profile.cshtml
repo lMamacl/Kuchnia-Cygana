@@ -1,2 +1,182 @@
-@await Html.PartialAsync("_CustomerPlaceholder")
+@model EmployeeProfileViewModel
+@{
+    var isStaff = Model.Roles.Any(role => role is not "Client");
+    Layout = isStaff ? "_LayoutStaff" : "_Layout";
 
+    string LeaveTypeName(int value) => value switch
+    {
+        0 => "Wypoczynkowy",
+        1 => "Chorobowy",
+        2 => "Okolicznosciowy",
+        _ => $"Typ {value}",
+    };
+
+    string LeaveStatusName(int value) => value switch
+    {
+        0 => "Oczekuje",
+        1 => "Zaakceptowany",
+        2 => "Odrzucony",
+        _ => $"Status {value}",
+    };
+
+    string LeaveStatusClass(int value) => value switch
+    {
+        1 => "bg-green-lt text-green",
+        2 => "bg-red-lt text-red",
+        _ => "bg-yellow-lt text-yellow",
+    };
+}
+
+@if (!isStaff)
+{
+    @await Html.PartialAsync("_StaffAlertsPartial")
+}
+
+<div class="row row-cards">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Profil</h3>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <span class="avatar avatar-lg">@(new string(Model.DisplayName.Where(char.IsLetterOrDigit).Take(2).Select(char.ToUpperInvariant).DefaultIfEmpty('P').ToArray()))</span>
+                    <div>
+                        <div class="h3 mb-1">@Model.DisplayName</div>
+                        <div class="text-secondary">@Model.Email</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="text-secondary small text-uppercase fw-bold">Role</div>
+                    <div class="mt-2 d-flex flex-wrap gap-2">
+                        @foreach (var role in Model.Roles)
+                        {
+                            <span class="badge bg-blue-lt text-blue">@role</span>
+                        }
+                    </div>
+                </div>
+                @if (Model.Employee is not null)
+                {
+                    <dl class="row mb-0">
+                        <dt class="col-5">Dzial</dt>
+                        <dd class="col-7">@(Model.Employee.DepartmentName ?? "-")</dd>
+                        <dt class="col-5">Stanowisko</dt>
+                        <dd class="col-7">@Model.Employee.Position</dd>
+                        <dt class="col-5">Zatrudnienie</dt>
+                        <dd class="col-7">@Model.Employee.HireDate.ToString("dd.MM.yyyy")</dd>
+                    </dl>
+                }
+                else
+                {
+                    <div class="alert alert-warning mb-0">
+                        Konto nie ma jeszcze kartoteki pracownika. HR musi przypisac konto do pracownika.
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h3 class="card-title">Zglos urlop</h3>
+            </div>
+            <form asp-controller="Account" asp-action="RequestLeave" method="post">
+                @Html.AntiForgeryToken()
+                <div class="card-body">
+                    <fieldset disabled="@(Model.Employee is null ? "disabled" : null)">
+                        <div class="mb-3">
+                            <label class="form-label" for="leave-type">Typ</label>
+                            <select id="leave-type" class="form-select" name="LeaveType">
+                                <option value="0">Wypoczynkowy</option>
+                                <option value="1">Chorobowy</option>
+                                <option value="2">Okolicznosciowy</option>
+                            </select>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-sm-6">
+                                <label class="form-label" for="leave-start">Od</label>
+                                <input id="leave-start" class="form-control" name="StartDate" type="date" value="@Model.NewLeaveRequest.StartDate.ToString("yyyy-MM-dd")" required />
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label" for="leave-end">Do</label>
+                                <input id="leave-end" class="form-control" name="EndDate" type="date" value="@Model.NewLeaveRequest.EndDate.ToString("yyyy-MM-dd")" required />
+                            </div>
+                        </div>
+                    </fieldset>
+                </div>
+                <div class="card-footer text-end">
+                    <button class="btn btn-primary" type="submit" disabled="@(Model.Employee is null ? "disabled" : null)">Wyslij wniosek</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Moj grafik</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Zmiana</th>
+                            <th>Rola na zmianie</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var schedule in Model.WorkSchedules)
+                        {
+                            <tr>
+                                <td>@schedule.ShiftDate.ToString("dd.MM.yyyy")</td>
+                                <td>@schedule.Shift</td>
+                                <td>@(schedule.RoleAtShift ?? "-")</td>
+                            </tr>
+                        }
+                        @if (Model.WorkSchedules.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="3" class="text-secondary text-center py-4">Brak zaplanowanych zmian.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h3 class="card-title">Moje wnioski urlopowe</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Zakres</th>
+                            <th>Typ</th>
+                            <th>Status</th>
+                            <th>Decyzja</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var leave in Model.LeaveRequests)
+                        {
+                            <tr>
+                                <td>@leave.StartDate.ToString("dd.MM.yyyy") - @leave.EndDate.ToString("dd.MM.yyyy")</td>
+                                <td>@LeaveTypeName(leave.LeaveType)</td>
+                                <td><span class="badge @LeaveStatusClass(leave.Status)">@LeaveStatusName(leave.Status)</span></td>
+                                <td>@(leave.ApprovedByEmployeeFullName ?? leave.RejectionReason ?? "-")</td>
+                            </tr>
+                        }
+                        @if (Model.LeaveRequests.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-secondary text-center py-4">Nie masz jeszcze wnioskow urlopowych.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

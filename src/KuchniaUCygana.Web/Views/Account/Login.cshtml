@@ -1,168 +1,74 @@
-@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 @model KuchniaUCygana.Web.Models.LoginViewModel
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 @{
-    ViewData["Title"] = "Zaloguj się";
+    ViewData["Title"] = "Zaloguj sie";
 }
 
-<style>
-    .auth-shell {
-        min-height: 74vh;
-        color: #17211b;
-    }
+<div class="row justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <h2 class="fw-bold">Logowanie</h2>
+                    <p class="text-muted">Wpisz dane konta, aby wejsc do systemu.</p>
+                </div>
 
-    .auth-card {
-        overflow: hidden;
-        border: 1px solid rgba(23, 33, 27, .1);
-        border-radius: 26px;
-        background: #fff;
-        box-shadow: 0 24px 70px rgba(23, 33, 27, .12);
-    }
+                <form asp-action="Login" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                    <input type="hidden" asp-for="ReturnUrl" />
+                    <div asp-validation-summary="ModelOnly" class="text-danger small mb-3"></div>
 
-    .auth-aside {
-        min-height: 100%;
-        background:
-            linear-gradient(145deg, rgba(31, 122, 77, .94), rgba(23, 33, 27, .93)),
-            url('@Url.Content("~/img/pumpkin_soup.png")') center/cover;
-        color: #fff;
-    }
+                    <div class="mb-3">
+                        <label asp-for="Email" class="form-label">Adres email</label>
+                        <input asp-for="Email" class="form-control" placeholder="nazwa@kuchnia.local" autocomplete="username" required />
+                        <span asp-validation-for="Email" class="text-danger small"></span>
+                    </div>
 
-    .auth-kicker {
-        color: rgba(255, 255, 255, .72);
-        font-size: .75rem;
-        font-weight: 800;
-        letter-spacing: .08em;
-        text-transform: uppercase;
-    }
+                    <div class="mb-4">
+                        <label asp-for="Password" class="form-label">Haslo</label>
+                        <input asp-for="Password" class="form-control" type="password" placeholder="********" autocomplete="current-password" required />
+                        <span asp-validation-for="Password" class="text-danger small"></span>
+                    </div>
 
-    .auth-form .form-control {
-        min-height: 48px;
-        border-radius: 14px;
-        border-color: rgba(23, 33, 27, .14);
-    }
+                    <button type="submit" class="btn btn-primary w-100 py-2 mb-3">Zaloguj sie</button>
+                </form>
 
-    .auth-form .form-control:focus {
-        border-color: #1f7a4d;
-        box-shadow: 0 0 0 .2rem rgba(31, 122, 77, .12);
-    }
+                @if (Env.IsDevelopment())
+                {
+                    var devRoles = new[]
+                    {
+                        ("Admin", "Administrator"),
+                        ("KitchenManager", "Szef kuchni"),
+                        ("Kitchen", "Kucharz"),
+                        ("WarehouseManager", "Kierownik magazynu"),
+                        ("Warehouse", "Magazynier"),
+                        ("PackingManager", "Kierownik kompletacji"),
+                        ("Packing", "Pakowacz"),
+                        ("Dietitian", "Dietetyk"),
+                        ("LogisticsManager", "Kierownik logistyki"),
+                        ("Logistics", "Logistyk"),
+                        ("Driver", "Kierowca"),
+                        ("HRManager", "Kierownik HR"),
+                        ("HR", "HR"),
+                        ("BOKManager", "Kierownik BOK"),
+                        ("BOK", "BOK"),
+                    };
 
-    .btn-auth {
-        border: 0;
-        border-radius: 14px;
-        background: #1f7a4d;
-        color: #fff;
-        box-shadow: 0 14px 26px rgba(31, 122, 77, .22);
-    }
-
-    .btn-auth:hover {
-        background: #17623d;
-        color: #fff;
-    }
-</style>
-
-<div class="auth-shell d-flex align-items-center py-4">
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-xl-10">
-                <div class="auth-card">
-                    <div class="row g-0">
-                        <div class="col-lg-5 d-none d-lg-block">
-                            <div class="auth-aside h-100 p-5 d-flex flex-column justify-content-between">
-                                <div>
-                                    <div class="auth-kicker mb-3">Panel klienta</div>
-                                    <h1 class="display-6 fw-bold mb-3">Wróć do swojego planu dostaw.</h1>
-                                    <p class="mb-0 opacity-75">
-                                        Zamówienia, adresy i płatności są w jednym miejscu, bez szukania po panelu.
-                                    </p>
-                                </div>
-                                <div class="pt-5">
-                                    <div class="border-top border-light border-opacity-25 pt-4 small opacity-75">
-                                        Stripe, koszyk i kalendarz dostaw działają w bieżącym module e-commerce.
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-lg-7">
-                            <div class="p-4 p-md-5">
-                                <div class="mb-4">
-                                    <div class="text-success small fw-bold text-uppercase mb-2">Kuchnia u Cygana</div>
-                                    <h2 class="fw-bold mb-1">Zaloguj się</h2>
-                                    <p class="text-muted mb-0">Wpisz dane konta, aby przejść do zamówień i płatności.</p>
-                                </div>
-
-                                <form asp-action="Login" method="post" asp-route-returnUrl="@Model.ReturnUrl" class="auth-form">
-                                    <input type="hidden" asp-for="ReturnUrl" />
-                                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
-
-                                    <div class="mb-3">
-                                        <label asp-for="Email" class="form-label fw-semibold">Adres e-mail</label>
-                                        <input asp-for="Email" class="form-control" placeholder="nazwa@example.com" autocomplete="email" required />
-                                        <span asp-validation-for="Email" class="text-danger small"></span>
-                                    </div>
-
-                                    <div class="mb-4">
-                                        <label asp-for="Password" class="form-label fw-semibold">Hasło</label>
-                                        <input asp-for="Password" class="form-control" type="password" placeholder="Wpisz hasło" autocomplete="current-password" required />
-                                        <span asp-validation-for="Password" class="text-danger small"></span>
-                                    </div>
-
-                                    <button type="submit" class="btn btn-auth btn-lg w-100 mb-3">Zaloguj się</button>
+                    <hr class="my-4" />
+                    <div class="developer-bypass-panel text-center">
+                        <h5 class="text-warning fw-bold mb-3">
+                            <span class="badge bg-warning text-dark me-2">DEV</span> Logowanie testowe
+                        </h5>
+                        <div class="d-flex flex-wrap justify-content-center gap-2">
+                            @foreach (var (role, label) in devRoles)
+                            {
+                                <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
+                                    <input type="hidden" name="role" value="@role" />
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary">@label</button>
                                 </form>
-
-                                <p class="text-center small mb-0">
-                                    Nie masz konta?
-                                    <a asp-action="Register" class="fw-semibold text-success">Zarejestruj się</a>
-                                </p>
-
-                                @if (Env.IsDevelopment())
-                                {
-                                    <div class="dev-panel p-3 mt-4">
-                                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                                            <span class="badge text-bg-warning">DEV</span>
-                                            <strong>Panel programisty</strong>
-                                        </div>
-                                        <p class="text-muted small mb-3">Role testowe zostają na teraz bez zmian; dopracujemy je później.</p>
-
-                                        <div class="d-flex flex-wrap gap-2">
-                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
-                                                <input type="hidden" name="role" value="KitchenManager" />
-                                                <button type="submit" class="btn btn-sm btn-outline-warning">KitchenManager</button>
-                                            </form>
-                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
-                                                <input type="hidden" name="role" value="Kitchen" />
-                                                <button type="submit" class="btn btn-sm btn-outline-secondary">Kitchen</button>
-                                            </form>
-                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
-                                                <input type="hidden" name="role" value="WarehouseManager" />
-                                                <button type="submit" class="btn btn-sm btn-outline-primary">WarehouseManager</button>
-                                            </form>
-                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
-                                                <input type="hidden" name="role" value="Warehouse" />
-                                                <button type="submit" class="btn btn-sm btn-outline-info">Warehouse</button>
-                                            </form>
-                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
-                                                <input type="hidden" name="role" value="PackingManager" />
-                                                <button type="submit" class="btn btn-sm btn-outline-success">PackingManager</button>
-                                            </form>
-                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
-                                                <input type="hidden" name="role" value="Packing" />
-                                                <button type="submit" class="btn btn-sm btn-outline-success opacity-75">Packing</button>
-                                            </form>
-                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
-                                                <input type="hidden" name="role" value="Driver" />
-                                                <button type="submit" class="btn btn-sm btn-outline-primary">Driver</button>
-                                            </form>
-                                            <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
-                                                <input type="hidden" name="role" value="Admin" />
-                                                <button type="submit" class="btn btn-sm btn-outline-danger">Admin</button>
-                                            </form>
-                                        </div>
-                                    </div>
-                                }
-                            </div>
+                            }
                         </div>
                     </div>
-                </div>
+                }
             </div>
         </div>
     </div>

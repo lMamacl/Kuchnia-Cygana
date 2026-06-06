@@ -1,0 +1,164 @@
+@model HumanResourcesDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+    var today = DateOnly.FromDateTime(DateTime.Today);
+    var pendingLeaves = Model.LeaveRequests.Where(x => x.Status == 0).OrderBy(x => x.StartDate).ToArray();
+    var todaySchedules = Model.WorkSchedules.Where(x => x.ShiftDate == today).OrderBy(x => x.Shift).ToArray();
+    var activeEmployees = Model.Employees.Count(x => x.IsActive);
+    var inactiveEmployees = Model.Employees.Count(x => !x.IsActive);
+
+    string LeaveTypeName(int value) => value switch
+    {
+        0 => "Wypoczynkowy",
+        1 => "Chorobowy",
+        2 => "Okolicznosciowy",
+        _ => $"Typ {value}",
+    };
+}
+
+<div class="row row-cards">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Wnioski do decyzji</div>
+                <div class="h1 mb-0">@pendingLeaves.Length</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Aktywni pracownicy</div>
+                <div class="h1 mb-0">@activeEmployees</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Dzisiejsze zmiany</div>
+                <div class="h1 mb-0">@todaySchedules.Length</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Nieaktywni</div>
+                <div class="h1 mb-0">@inactiveEmployees</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-7">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Urlopy oczekujace na decyzje</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Pracownik</th>
+                            <th>Zakres</th>
+                            <th>Typ</th>
+                            <th class="text-end">Akcja</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var leave in pendingLeaves.Take(8))
+                        {
+                            <tr>
+                                <td>@(leave.EmployeeFullName ?? $"#{leave.EmployeeId}")</td>
+                                <td>@leave.StartDate.ToString("dd.MM.yyyy") - @leave.EndDate.ToString("dd.MM.yyyy")</td>
+                                <td>@LeaveTypeName(leave.LeaveType)</td>
+                                <td class="text-end">
+                                    <a class="btn btn-sm btn-outline-primary" asp-controller="HumanResources" asp-action="Leaves">Przejdz</a>
+                                </td>
+                            </tr>
+                        }
+                        @if (pendingLeaves.Length == 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-secondary text-center py-4">Brak oczekujacych wnioskow.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-5">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Dzisiejszy grafik</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Zmiana</th>
+                            <th>Pracownik</th>
+                            <th>Rola</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var schedule in todaySchedules.Take(8))
+                        {
+                            <tr>
+                                <td>@schedule.Shift</td>
+                                <td>@(schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}")</td>
+                                <td>@(schedule.RoleAtShift ?? "-")</td>
+                            </tr>
+                        }
+                        @if (todaySchedules.Length == 0)
+                        {
+                            <tr>
+                                <td colspan="3" class="text-secondary text-center py-4">Brak zmian na dzisiaj.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Pracownicy wedlug dzialow</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Dzial</th>
+                            <th class="text-end">Aktywni</th>
+                            <th class="text-end">Wszyscy</th>
+                            <th>Kierownik</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var department in Model.Departments.OrderBy(x => x.Name))
+                        {
+                            var employees = Model.Employees.Where(x => x.DepartmentId == department.Id).ToArray();
+                            <tr>
+                                <td class="fw-semibold">@department.Name</td>
+                                <td class="text-end">@employees.Count(x => x.IsActive)</td>
+                                <td class="text-end">@employees.Length</td>
+                                <td>@(department.HeadEmployeeFullName ?? "-")</td>
+                            </tr>
+                        }
+                        @if (Model.Departments.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-secondary text-center py-4">Brak dzialow.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,137 @@
+@model CustomerSupportDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+    int PriorityRank(string priority) => priority switch
+    {
+        "Critical" => 4,
+        "High" => 3,
+        "Medium" => 2,
+        _ => 1,
+    };
+
+    var waitingTickets = Model.Tickets
+        .Where(x => x.Status is "New" or "Open" or "Pending")
+        .OrderByDescending(x => PriorityRank(x.Priority))
+        .ThenBy(x => x.CreatedAt)
+        .ToArray();
+    var unassignedTickets = waitingTickets.Where(x => !x.AssignedToUserId.HasValue).ToArray();
+    var criticalTickets = waitingTickets.Where(x => x.Priority is "High" or "Critical").ToArray();
+    var closedToday = Model.Tickets.Count(x =>
+        x.ClosedAt.HasValue &&
+        DateOnly.FromDateTime(x.ClosedAt.Value.LocalDateTime) == DateOnly.FromDateTime(DateTime.Today));
+
+    string PriorityClass(string priority) => priority switch
+    {
+        "Critical" => "bg-red-lt text-red",
+        "High" => "bg-orange-lt text-orange",
+        "Medium" => "bg-blue-lt text-blue",
+        _ => "bg-secondary-lt text-secondary",
+    };
+}
+
+<div class="row row-cards">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Oczekujace</div>
+                <div class="h1 mb-0">@waitingTickets.Length</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Nieprzypisane</div>
+                <div class="h1 mb-0">@unassignedTickets.Length</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Wysoki priorytet</div>
+                <div class="h1 mb-0">@criticalTickets.Length</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Zamkniete dzisiaj</div>
+                <div class="h1 mb-0">@closedToday</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Kolejka BOK</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Zgloszenie</th>
+                            <th>Klient</th>
+                            <th>Status</th>
+                            <th>Priorytet</th>
+                            <th>Przypisane</th>
+                            <th class="text-end">Akcja</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ticket in waitingTickets.Take(10))
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@ticket.Title</div>
+                                    <div class="text-secondary small">@ticket.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                </td>
+                                <td>@(ticket.ClientFullName ?? $"#{ticket.ClientUserId}")</td>
+                                <td><span class="badge bg-blue-lt text-blue">@ticket.Status</span></td>
+                                <td><span class="badge @PriorityClass(ticket.Priority)">@ticket.Priority</span></td>
+                                <td>@(ticket.AssignedToFullName ?? "Nieprzypisane")</td>
+                                <td class="text-end">
+                                    <a class="btn btn-sm btn-outline-primary" asp-controller="CustomerSupport" asp-action="Tickets">Obsluz</a>
+                                </td>
+                            </tr>
+                        }
+                        @if (waitingTickets.Length == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="text-secondary text-center py-4">Brak aktywnych zgloszen.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Nieprzypisane zgloszenia</h3>
+            </div>
+            <div class="list-group list-group-flush">
+                @foreach (var ticket in unassignedTickets.Take(8))
+                {
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between gap-3">
+                            <div class="fw-semibold">@ticket.Title</div>
+                            <span class="badge @PriorityClass(ticket.Priority)">@ticket.Priority</span>
+                        </div>
+                        <div class="text-secondary small">
+                            @(ticket.ClientFullName ?? $"Klient #{ticket.ClientUserId}") - @ticket.CreatedAt.ToLocalTime().ToString("dd.MM HH:mm")
+                        </div>
+                    </div>
+                }
+                @if (unassignedTickets.Length == 0)
+                {
+                    <div class="list-group-item text-secondary">Brak nieprzypisanych zgloszen.</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

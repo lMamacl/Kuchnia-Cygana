@@ -21,10 +21,12 @@
     {
         return section.IsActive(controller) ? "true" : "false";
     }
+
+    var visibleSections = StaffNavigationCatalog.VisibleSections(User);
 }
 
 <ul class="navbar-nav staff-sidebar-nav pt-lg-3">
-    @foreach (var navSection in StaffNavigationCatalog.Sections)
+    @foreach (var navSection in visibleSections)
     {
         if (navSection.Items.Count == 1 || navSection.Key == "mobile")
         {

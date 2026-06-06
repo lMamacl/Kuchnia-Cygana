@@ -1,8 +1,15 @@
+/*
+ * Plik: Entities/HR/LeaveRequest.cs
+ * Opis: Wniosek urlopowy pracownika – typ urlopu, zakres dat, status, osoba zatwierdzająca, ewentualny powód odrzucenia.
+ */
+
+using System.ComponentModel.DataAnnotations.Schema;
 using KuchniaUCygana.Domain.Common;
 
 namespace KuchniaUCygana.Domain.Entities.HR;
 
 
+[Table("LeaveRequests")]
 public sealed class LeaveRequest : AuditableEntity
 {
 

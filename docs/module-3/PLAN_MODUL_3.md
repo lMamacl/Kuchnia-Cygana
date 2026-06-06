@@ -37,7 +37,7 @@ Moduł 3 realizuje pełny cykl operacyjny kuchni cateringowej:
 ### Domain Layer ✅
 - `BaseEntity<TId>` + `AuditableEntity<TId>` + `ISoftDeletable` — kompletne
 - `IDomainEvent` — interfejs gotowy
-- `IRepository<T, TId>` — generyczny interfejs z `FindAsync`
+- `IRepository<T, TId>` — generyczny interfejs CRUD bez dynamicznych wyrazen LINQ
 - Encje Warehouse: `UnitOfMeasure`, `StockItem`, `Batch`, `InventoryTransaction`, `TemperatureLog`
 - `InventoryTransactionType` enum
 - `IBatchRepository`, `IInventoryTransactionRepository` — dedykowane interfejsy

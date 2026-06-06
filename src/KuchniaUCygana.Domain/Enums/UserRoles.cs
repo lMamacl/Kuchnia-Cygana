@@ -21,8 +21,15 @@ public static class UserRoles
     public const string Dietitian = "Dietitian";
 
     // ── Logistyka (M4) ────────────────────────────
+    public const string Logistics = "Logistics";
+    public const string LogisticsManager = "LogisticsManager";
     public const string Driver = "Driver";
+    public const string DriverManager = "DriverManager";
 
     // ── Administracja (M5) ────────────────────────
     public const string Admin = "Admin";
+    public const string HR = "HR";
+    public const string HRManager = "HRManager";
+    public const string BOK = "BOK";
+    public const string BOKManager = "BOKManager";
 }

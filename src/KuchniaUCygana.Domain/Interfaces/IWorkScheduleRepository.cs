@@ -1,3 +1,8 @@
+/*
+ * Plik: Interfaces/IWorkScheduleRepository.cs
+ * Opis: Kontrakt dla repozytorium grafików – dodaje metody GetByUserIdAsync oraz GetByDateRangeAsync.
+ */
+
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;

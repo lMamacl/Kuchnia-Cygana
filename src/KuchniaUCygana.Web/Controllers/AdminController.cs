@@ -10,20 +10,27 @@ namespace KuchniaUCygana.Web.Controllers;
 [Route("admin")]
 public sealed class AdminController : Controller
 {
+    private readonly IAuditLogService auditLogService;
+    private readonly IUserService userService;
     private readonly IPackingIncidentService packingIncidentService;
 
-    public AdminController(IPackingIncidentService packingIncidentService)
+    public AdminController(
+        IAuditLogService auditLogService,
+        IUserService userService,
+        IPackingIncidentService packingIncidentService)
     {
+        this.auditLogService = auditLogService;
+        this.userService = userService;
         this.packingIncidentService = packingIncidentService;
     }
 
     [HttpGet("")]
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
         ViewData["Title"] = "Admin";
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Dashboard administracyjny systemu.";
-        return View();
+        return View(await BuildModelAsync());
     }
 
     [HttpGet("users")]
@@ -44,6 +51,15 @@ public sealed class AdminController : Controller
         return View();
     }
 
+    [HttpGet("logs")]
+    public async Task<IActionResult> Logs()
+    {
+        ViewData["Title"] = "Logi systemowe";
+        ViewData["Section"] = "Administracja";
+        ViewData["Description"] = "Audyt zmian w systemie.";
+        return View(await BuildModelAsync());
+    }
+
     [HttpGet("settings")]
     public IActionResult Settings()
     {
@@ -58,7 +74,7 @@ public sealed class AdminController : Controller
     {
         ViewData["Title"] = "Awarie kompletacji";
         ViewData["Section"] = "Administracja";
-        ViewData["Description"] = "Obsługa zgłoszeń z kompletacji pudełek i toreb.";
+        ViewData["Description"] = "Obsluga zgloszen z kompletacji pudelek i toreb.";
 
         return View(new PackingIncidentListViewModel
         {
@@ -72,7 +88,7 @@ public sealed class AdminController : Controller
     public async Task<IActionResult> AssignPackingIncident(int incidentId)
     {
         await packingIncidentService.AssignToCurrentUserAsync(incidentId);
-        TempData["Success"] = $"Przypisano zgłoszenie #{incidentId}.";
+        TempData["Success"] = $"Przypisano zgloszenie #{incidentId}.";
         return RedirectToAction(nameof(PackingIncidents));
     }
 
@@ -85,7 +101,7 @@ public sealed class AdminController : Controller
             IncidentId = incidentId,
             Notes = notes,
         });
-        TempData["Success"] = $"Dodano notatkę do zgłoszenia #{incidentId}.";
+        TempData["Success"] = $"Dodano notatke do zgloszenia #{incidentId}.";
         return RedirectToAction(nameof(PackingIncidents));
     }
 
@@ -100,7 +116,7 @@ public sealed class AdminController : Controller
                 IncidentId = incidentId,
                 Notes = notes,
             });
-            TempData["Success"] = $"Zarejestrowano rozchód magazynowy dla zgłoszenia #{incidentId}.";
+            TempData["Success"] = $"Zarejestrowano rozchod magazynowy dla zgloszenia #{incidentId}.";
         }
         catch (InvalidOperationException ex)
         {
@@ -121,7 +137,7 @@ public sealed class AdminController : Controller
                 IncidentId = incidentId,
                 Notes = notes,
             });
-            TempData["Success"] = $"Ponowiono zadanie kuchni dla zgłoszenia #{incidentId}.";
+            TempData["Success"] = $"Ponowiono zadanie kuchni dla zgloszenia #{incidentId}.";
         }
         catch (InvalidOperationException ex)
         {
@@ -140,8 +156,16 @@ public sealed class AdminController : Controller
             IncidentId = incidentId,
             ResolutionNotes = resolutionNotes,
         });
-        TempData["Success"] = $"Zamknięto zgłoszenie #{incidentId}.";
+        TempData["Success"] = $"Zamknieto zgloszenie #{incidentId}.";
         return RedirectToAction(nameof(PackingIncidents));
     }
-}
 
+    private async Task<AdminDashboardViewModel> BuildModelAsync()
+    {
+        return new AdminDashboardViewModel
+        {
+            SystemLogs = (await auditLogService.GetSystemLogsAsync()).Take(100).ToArray(),
+            Users = (await userService.GetAllAsync()).ToArray(),
+        };
+    }
+}
