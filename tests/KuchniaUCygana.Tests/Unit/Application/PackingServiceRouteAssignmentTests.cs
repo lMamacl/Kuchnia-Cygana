@@ -1836,6 +1836,24 @@ public sealed class PackingServiceRouteAssignmentTests
                 SnapshotItems = items.Count(item => !string.IsNullOrWhiteSpace(item.M2SnapshotJson)),
             });
         }
+
+        public Task ReplacePlanItemsAsync(int planId, IReadOnlyList<ProductionPlanItem> items, string requestedBy)
+        {
+            foreach (var item in this._items.Where(item => item.ProductionPlanId == planId && !item.IsDeleted))
+            {
+                item.IsDeleted = true;
+                item.DeletedBy = requestedBy;
+                item.DeletedAt = DateTimeOffset.UtcNow;
+            }
+
+            foreach (var item in items)
+            {
+                item.ProductionPlanId = planId;
+                this.AddPlanItem(item);
+            }
+
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class InMemoryPackingBagRepository : InMemoryRepository<PackingBag>, IPackingBagRepository

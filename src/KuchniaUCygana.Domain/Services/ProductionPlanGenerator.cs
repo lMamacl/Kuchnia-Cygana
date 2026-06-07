@@ -2,10 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using System.Threading.Tasks;
 using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Enums;
@@ -44,12 +40,6 @@ public readonly record struct ProductionMealKey(
 /// </summary>
 public sealed class ProductionPlanGenerator
 {
-    private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
-    {
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        WriteIndented = false,
-    };
-
     private readonly IOrderDataProvider _orderDataProvider;
     private readonly IDietDataProvider _dietDataProvider;
     private readonly FoodCostCalculator _foodCostCalculator;
@@ -129,7 +119,7 @@ public sealed class ProductionPlanGenerator
         {
             var dietEntry = FindDietPlanEntry(key, dietPlan);
             var snapshotItem = FindSnapshotItem(key, snapshot.Items);
-            var snapshotPayload = snapshotItem is null ? null : CreateSnapshotPayload(snapshotItem);
+            var snapshotPayload = snapshotItem is null ? null : ProductionSnapshotPayloadFactory.Create(snapshotItem);
             var productionGroup = AssignProductionGroup(key, dietPlan);
 
             items.Add(new ProductionPlanItem
@@ -167,6 +157,94 @@ public sealed class ProductionPlanGenerator
             Plan = plan,
             Items = items,
             FoodCostReport = foodCostReport,
+        };
+    }
+
+    public async Task<PlanGenerationResult> GeneratePlanItemsForExistingPlanAsync(
+        DateOnly productionDate,
+        int planId)
+    {
+        if (planId <= 0)
+        {
+            throw new ArgumentException("Plan produkcji musi miec poprawny identyfikator.", nameof(planId));
+        }
+
+        var orders = (await _orderDataProvider.GetActiveOrdersAsync(productionDate)).ToList();
+        if (orders.Count == 0)
+        {
+            throw new InvalidOperationException($"Brak aktywnych zamowien na dzien {productionDate}.");
+        }
+
+        var snapshot = await _dietDataProvider.GetPublishedPlanSnapshotAsync(productionDate);
+        if (snapshot is null)
+        {
+            throw new InvalidOperationException(
+                $"Brak opublikowanego snapshotu M2 na dzien {productionDate:yyyy-MM-dd}. " +
+                "M3 nie odswieza operacyjnego planu produkcji z legacy GetPlanForDateAsync.");
+        }
+
+        var dietPlan = snapshot.Items.Select(MapSnapshotItemToDietPlanEntry).ToList();
+        if (dietPlan.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Brak opublikowanego planu diet z M2 na dzien {productionDate:yyyy-MM-dd}.");
+        }
+
+        var mealQuantities = await CalculateMealQuantitiesAsync(productionDate, orders, dietPlan);
+        if (mealQuantities.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Opublikowany plan M2 na dzien {productionDate:yyyy-MM-dd} nie pasuje do aktywnych zamowien.");
+        }
+
+        var items = new List<ProductionPlanItem>();
+        foreach (var (key, quantity) in mealQuantities
+            .OrderBy(kv => GetPlanSortOrder(kv.Key, dietPlan))
+            .ThenBy(kv => kv.Key.DietVariantId)
+            .ThenBy(kv => kv.Key.MealId)
+            .ThenBy(kv => kv.Key.MealVariantId ?? 0))
+        {
+            var dietEntry = FindDietPlanEntry(key, dietPlan);
+            var snapshotItem = FindSnapshotItem(key, snapshot.Items);
+            var snapshotPayload = snapshotItem is null ? null : ProductionSnapshotPayloadFactory.Create(snapshotItem);
+            var productionGroup = AssignProductionGroup(key, dietPlan);
+
+            items.Add(new ProductionPlanItem
+            {
+                ProductionPlanId = planId,
+                MealId = key.MealId,
+                MealName = snapshotItem?.MealName ?? dietEntry?.MealName ?? $"Posilek #{key.MealId}",
+                DietVariantId = key.DietVariantId,
+                DietMenuPlanItemId = snapshotItem?.DietMenuPlanItemId,
+                RecipeComponentVersionIds = snapshotItem is null
+                    ? null
+                    : string.Join(
+                        ",",
+                        (snapshotItem.RecipeComponentVersionIds.Count > 0
+                            ? snapshotItem.RecipeComponentVersionIds
+                            : snapshotItem.Components.Select(c => c.RecipeComponentVersionId))
+                        .Where(id => id > 0)
+                        .Distinct()),
+                M2SnapshotJson = snapshotPayload?.Json,
+                M2SnapshotHash = snapshotPayload?.Hash,
+                PlannedQuantity = quantity,
+                CookedQuantity = 0,
+                Status = ProductionItemStatus.Planned,
+                ProductionGroup = productionGroup,
+                EstimatedReadyTime = EstimateReadyTime(productionGroup, quantity),
+            });
+        }
+
+        return new PlanGenerationResult
+        {
+            Plan = new ProductionPlan
+            {
+                Id = planId,
+                ProductionDate = productionDate,
+                Status = ProductionPlanStatus.Draft,
+            },
+            Items = items,
+            FoodCostReport = _foodCostCalculator.CalculateFromSnapshot(mealQuantities, snapshot),
         };
     }
 
@@ -401,13 +479,4 @@ public sealed class ProductionPlanGenerator
             ?? snapshotItems.FirstOrDefault(item => item.MealId == key.MealId);
     }
 
-    private static SnapshotPayload CreateSnapshotPayload(PublishedDietPlanItemDto item)
-    {
-        var json = JsonSerializer.Serialize(item, SnapshotJsonOptions);
-        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
-        var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
-        return new SnapshotPayload(json, hash);
-    }
-
-    private sealed record SnapshotPayload(string Json, string Hash);
 }

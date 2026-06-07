@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using KuchniaUCygana.Application.DTOs.Production;
 using KuchniaUCygana.Application.DTOs.Packing;
+using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -15,12 +16,13 @@ namespace KuchniaUCygana.Web.Controllers;
 /// Kontroler produkcji — plan dnia, karty gotowania, zatwierdzanie.
 /// TASK-M3-024 | Stanowisko: Kitchen | Szef: KitchenManager
 /// </summary>
-[Authorize(Roles = "Kitchen,KitchenManager,Admin")]
+[Authorize(Roles = "Kitchen,KitchenManager,Warehouse,WarehouseManager,Admin")]
 [Route("production")]
 public sealed class ProductionController : Controller
 {
     private readonly IProductionService productionService;
     private readonly ICookingSessionService cookingSessionService;
+    private readonly IWarehouseDemandService warehouseDemandService;
     private readonly IPackingService packingService;
     private readonly IPackingIncidentService packingIncidentService;
     private readonly IPackingSynchronizationService packingSynchronizationService;
@@ -28,12 +30,14 @@ public sealed class ProductionController : Controller
     public ProductionController(
         IProductionService productionService,
         ICookingSessionService cookingSessionService,
+        IWarehouseDemandService warehouseDemandService,
         IPackingService packingService,
         IPackingIncidentService packingIncidentService,
         IPackingSynchronizationService packingSynchronizationService)
     {
         this.productionService = productionService;
         this.cookingSessionService = cookingSessionService;
+        this.warehouseDemandService = warehouseDemandService;
         this.packingService = packingService;
         this.packingIncidentService = packingIncidentService;
         this.packingSynchronizationService = packingSynchronizationService;
@@ -54,12 +58,14 @@ public sealed class ProductionController : Controller
         }
 
         var dashboard = await productionService.GetKitchenDashboardAsync(filter);
+        var m2PlanOverview = await productionService.GetM2PlanOverviewAsync(filter.Date, 7);
 
         var viewModel = new ProductionDashboardViewModel
         {
             SelectedDate = dashboard.Filter.Date,
             DailyPlan = dashboard.Plan,
             Dashboard = dashboard,
+            M2PlanOverview = m2PlanOverview,
         };
 
         return View(viewModel);
@@ -127,6 +133,95 @@ public sealed class ProductionController : Controller
         }
 
         return View(planDto);
+    }
+
+    [HttpGet("m2-plan")]
+    public async Task<IActionResult> M2Plan([FromQuery] M2PlanOverviewFilterDto filter)
+    {
+        if (filter.StartDate == default)
+        {
+            filter.StartDate = DateOnly.FromDateTime(DateTime.Today);
+        }
+
+        var overview = await productionService.GetM2PlanOverviewAsync(filter.StartDate, filter.Days);
+        return View(overview);
+    }
+
+    [HttpPost("m2-plan/alerts/{alertId:int}/ack")]
+    [Authorize(Roles = "KitchenManager,WarehouseManager,Admin")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AcknowledgeM2PlanAlert(int alertId, DateOnly startDate, int days = 7)
+    {
+        try
+        {
+            await productionService.AcknowledgePlanAlertAsync(alertId, GetOperatorName());
+            TempData["Success"] = $"Potwierdzono odbior alertu M2 #{alertId}.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(M2Plan), new { startDate, days });
+    }
+
+    [HttpPost("m2-plan/refresh-day")]
+    [Authorize(Roles = "Admin")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RefreshM2PlanDay(DateOnly date, DateOnly startDate, int days = 7)
+    {
+        try
+        {
+            var result = await productionService.RefreshProductionPlanFromM2Async(date, GetOperatorName());
+            if (result.Status == "Blocked")
+            {
+                TempData["Error"] = $"Nie mozna odswiezyc planu na {date:dd.MM.yyyy}: "
+                    + string.Join(" | ", result.Blockers.Take(3));
+            }
+            else
+            {
+                TempData["Success"] =
+                    $"Odświeżono plan produkcji na {date:dd.MM.yyyy}: {result.Status}, pozycje: {result.ItemCount}.";
+            }
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(M2Plan), new { startDate, days });
+    }
+
+    [HttpPost("m2-plan/refresh-range")]
+    [Authorize(Roles = "Admin")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RefreshM2PlanRange(DateOnly startDate, int days = 7)
+    {
+        try
+        {
+            var result = await productionService.RefreshProductionPlansFromM2Async(startDate, days, GetOperatorName());
+            TempData["Success"] =
+                $"Refresh zakresu M2: utworzone {result.CreatedCount}, odświeżone {result.RefreshedCount}, " +
+                $"pominięte {result.SkippedCount}, zablokowane {result.BlockedCount}.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(M2Plan), new { startDate, days });
+    }
+
+    [HttpGet("warehouse-demand")]
+    public async Task<IActionResult> WarehouseDemand([FromQuery] WarehouseDemandFilterDto filter)
+    {
+        if (filter.StartDate == default)
+        {
+            filter.StartDate = DateOnly.FromDateTime(DateTime.Today);
+        }
+
+        var demand = await warehouseDemandService.GetDemandAsync(filter.StartDate, filter.Days);
+        return View(demand);
     }
 
     [HttpGet("cooking-cards")]

@@ -3,6 +3,23 @@
 Data: 2026-06-07  
 Cel: rozdzielić prace, które możemy wdrażać od razu, od prac zależnych od domknięcia M2 przez Gabriela.
 
+## 0. Aktualizacja 07.06.2026 — etap 1 i etap 2
+
+Etap 1 został częściowo wykonany w kodzie M3:
+
+- istnieje widok `/production/m2-plan` jako podgląd planu M2 na 7+ dni;
+- istnieje `WarehouseDemandService` V1 z agregacją składników i opakowań z opłaconych zamówień oraz snapshotu M2;
+- karta gotowania pokazuje progres sesji składowych;
+- etykiety foliowe korzystają ze snapshotu M2.
+
+Etap 2 dopina operacyjność panelu:
+
+- `/production` pokazuje kompaktowy panel „Plan M2 na 7 dni”;
+- pełny widok `/production/m2-plan` pokazuje świeżość snapshotu produkcyjnego względem aktualnego M2;
+- admin może odświeżyć plan produkcji z faktycznego M2 + M1 przed startem FEFO/gotowania;
+- refresh blokuje się, jeśli plan ma już FEFO, opakowania, gotowanie albo ugotowane ilości;
+- repozytorium produkcji podmienia pozycje planu transakcyjnie przez soft-delete starych pozycji i insert nowych.
+
 ## 1. Decyzja wykonawcza
 
 M3 może już pracować na obecnym snapshotcie M2 w zakresie V1: karta gotowania, etykiety foliowe, podstawowe spięcie z produkcją i pakowaniem. Nie powinniśmy jednak zaczynać ciężkich migracji sesji gotowania ani pełnego `WarehouseDemandService` 7+ dni, dopóki M2 nie domknie stabilnego UX planu dnia, wariantów i publikacji.

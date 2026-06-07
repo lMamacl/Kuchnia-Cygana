@@ -132,6 +132,18 @@ public sealed class CookingCardComponentDto
     public List<CookingCardIngredientDto> Ingredients { get; set; } = new();
 
     public List<CookingCardPackagingDto> PackagingRequirements { get; set; } = new();
+
+    public string SessionStatus { get; set; } = "NotStarted";
+
+    public int TotalStepCount { get; set; }
+
+    public int CheckedStepCount { get; set; }
+
+    public int RequiredStepCount { get; set; }
+
+    public int RequiredCheckedStepCount { get; set; }
+
+    public bool IsSessionCompleted => string.Equals(SessionStatus, "Completed", StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed class CookingComponentCardDto

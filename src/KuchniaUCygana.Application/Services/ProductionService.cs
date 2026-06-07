@@ -3,6 +3,7 @@ using System.Text.Json;
 using KuchniaUCygana.Application.DTOs.Production;
 using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
@@ -21,6 +22,8 @@ public sealed class ProductionService : IProductionService
     private readonly IDietDataProvider _dietProvider;
     private readonly IPackingService _packingService;
     private readonly FefoService _fefoService;
+    private readonly IRepository<PlanChangeAlert> _planAlertRepository;
+    private readonly ICookingSessionService _cookingSessionService;
     private readonly IMapper _mapper;
     private readonly ILogger<ProductionService> _logger;
 
@@ -31,6 +34,8 @@ public sealed class ProductionService : IProductionService
         IDietDataProvider dietProvider,
         IPackingService packingService,
         FefoService fefoService,
+        IRepository<PlanChangeAlert> planAlertRepository,
+        ICookingSessionService cookingSessionService,
         IMapper mapper,
         ILogger<ProductionService> logger)
     {
@@ -40,6 +45,8 @@ public sealed class ProductionService : IProductionService
         _dietProvider = dietProvider;
         _packingService = packingService;
         _fefoService = fefoService;
+        _planAlertRepository = planAlertRepository;
+        _cookingSessionService = cookingSessionService;
         _mapper = mapper;
         _logger = logger;
     }
@@ -145,6 +152,208 @@ public sealed class ProductionService : IProductionService
         return dashboard;
     }
 
+    public async Task<M2PlanOverviewDto> GetM2PlanOverviewAsync(DateOnly startDate, int days)
+    {
+        var normalizedDays = Math.Clamp(days <= 0 ? 7 : days, 1, 31);
+        var overview = new M2PlanOverviewDto
+        {
+            StartDate = startDate,
+            TotalDays = normalizedDays,
+        };
+
+        for (var offset = 0; offset < normalizedDays; offset++)
+        {
+            var planDate = startDate.AddDays(offset);
+            var snapshot = await _dietProvider.GetPublishedPlanSnapshotAsync(planDate);
+            var productionPlan = await _planRepository.GetByDateAsync(planDate);
+            var productionItems = productionPlan is null
+                ? new List<ProductionPlanItem>()
+                : (await _planRepository.GetPlanItemsAsync(productionPlan.Id)).ToList();
+
+            var day = new M2PlanOverviewDayDto
+            {
+                PlanDate = planDate,
+                DietMenuPlanId = snapshot?.DietMenuPlanId,
+                PlanStatus = snapshot?.PlanStatus ?? "Missing",
+                IsPublished = snapshot is not null
+                    && string.Equals(snapshot.PlanStatus, "Published", StringComparison.OrdinalIgnoreCase),
+                PublishedAt = snapshot?.PublishedAt,
+                PublishedBy = snapshot?.PublishedBy,
+                ProductionPlanId = productionPlan?.Id,
+                Alerts = snapshot?.Alerts.ToList() ?? new List<PlanChangeAlertDto>(),
+            };
+            var refreshBlockers = GetRefreshBlockers(productionItems);
+
+            if (snapshot is not null)
+            {
+                foreach (var snapshotItem in snapshot.Items
+                    .OrderBy(item => item.PlanDate)
+                    .ThenBy(item => item.SortOrder)
+                    .ThenBy(item => item.DietMenuPlanItemId))
+                {
+                    var productionItem = FindProductionItemForSnapshotItem(productionItems, snapshotItem);
+                    var freshSnapshot = ProductionSnapshotPayloadFactory.Create(snapshotItem);
+                    var hasProductionSnapshot = productionItem is not null
+                        && !string.IsNullOrWhiteSpace(productionItem.M2SnapshotJson);
+                    var isCurrent = hasProductionSnapshot
+                        && string.Equals(productionItem!.M2SnapshotHash, freshSnapshot.Hash, StringComparison.OrdinalIgnoreCase);
+                    day.Items.Add(new M2PlanOverviewItemDto
+                    {
+                        DietMenuPlanItemId = snapshotItem.DietMenuPlanItemId,
+                        MealId = snapshotItem.MealId,
+                        MealVariantId = snapshotItem.MealVariantId,
+                        MealVariantName = snapshotItem.MealVariantName,
+                        MealName = snapshotItem.MealName,
+                        DietVariantId = snapshotItem.DietVariantId,
+                        MealSlot = snapshotItem.MealSlot,
+                        SortOrder = snapshotItem.SortOrder,
+                        ServingMultiplier = snapshotItem.ServingMultiplier,
+                        CompletenessStatus = snapshotItem.CompletenessStatus,
+                        IsCompleteForProduction = snapshotItem.IsCompleteForProduction,
+                        ComponentCount = snapshotItem.Components.Count,
+                        PackagingRequirementCount = snapshotItem.PackagingRequirements.Count
+                            + snapshotItem.Components.Sum(component => component.PackagingRequirements.Count),
+                        ValidationWarningCount = snapshotItem.ValidationWarnings.Count,
+                        ValidationWarnings = snapshotItem.ValidationWarnings.ToList(),
+                        HasProductionSnapshot = hasProductionSnapshot,
+                        ProductionPlanItemId = productionItem?.Id,
+                        PlannedQuantity = productionItem?.PlannedQuantity,
+                        ProductionStatus = productionItem?.Status.ToString(),
+                        SnapshotHash = productionItem?.M2SnapshotHash,
+                        FreshSnapshotHash = freshSnapshot.Hash,
+                        IsProductionSnapshotCurrent = isCurrent,
+                        NeedsRefresh = !isCurrent,
+                        CanRefresh = refreshBlockers.Count == 0,
+                        RefreshBlockers = refreshBlockers.ToList(),
+                    });
+                }
+            }
+
+            day.TotalItems = day.Items.Count;
+            day.SnapshotItemCount = day.Items.Count(item => item.HasProductionSnapshot);
+            day.MissingSnapshotItemCount = day.TotalItems - day.SnapshotItemCount;
+            day.AlertCount = day.Alerts.Count;
+            day.UnacknowledgedAlertCount = day.Alerts.Count(alert =>
+                alert.RequiresAcknowledgement && !alert.AcknowledgedAt.HasValue);
+
+            overview.Days.Add(day);
+        }
+
+        overview.PublishedDays = overview.Days.Count(day => day.IsPublished);
+        overview.MissingPublishedDays = overview.TotalDays - overview.PublishedDays;
+        overview.TotalPlanItems = overview.Days.Sum(day => day.TotalItems);
+        overview.SnapshotItemCount = overview.Days.Sum(day => day.SnapshotItemCount);
+        overview.MissingSnapshotItemCount = overview.Days.Sum(day => day.MissingSnapshotItemCount);
+        overview.AlertCount = overview.Days.Sum(day => day.AlertCount);
+        overview.UnacknowledgedAlertCount = overview.Days.Sum(day => day.UnacknowledgedAlertCount);
+
+        return overview;
+    }
+
+    public async Task<ProductionPlanRefreshResultDto> RefreshProductionPlanFromM2Async(
+        DateOnly date,
+        string requestedBy)
+    {
+        var actor = string.IsNullOrWhiteSpace(requestedBy) ? "Admin" : requestedBy.Trim();
+        var existingPlan = await _planRepository.GetByDateAsync(date);
+
+        if (existingPlan is null)
+        {
+            var generated = await _planGenerator.GeneratePlanAsync(date, actor);
+            foreach (var item in generated.Items)
+            {
+                await _itemRepository.InsertAsync(item);
+            }
+
+            return new ProductionPlanRefreshResultDto
+            {
+                ProductionDate = date,
+                ProductionPlanId = generated.Plan.Id,
+                Status = "Created",
+                ItemCount = generated.Items.Count,
+            };
+        }
+
+        var existingItems = (await _planRepository.GetPlanItemsAsync(existingPlan.Id)).ToList();
+        var blockers = GetRefreshBlockers(existingItems);
+        if (blockers.Count > 0)
+        {
+            return new ProductionPlanRefreshResultDto
+            {
+                ProductionDate = date,
+                ProductionPlanId = existingPlan.Id,
+                Status = "Blocked",
+                ItemCount = existingItems.Count,
+                Blockers = blockers,
+            };
+        }
+
+        var generatedForExisting = await _planGenerator.GeneratePlanItemsForExistingPlanAsync(date, existingPlan.Id);
+        if (IsSameProductionSnapshotSet(existingItems, generatedForExisting.Items))
+        {
+            return new ProductionPlanRefreshResultDto
+            {
+                ProductionDate = date,
+                ProductionPlanId = existingPlan.Id,
+                Status = "Skipped",
+                ItemCount = existingItems.Count,
+            };
+        }
+
+        await _planRepository.ReplacePlanItemsAsync(existingPlan.Id, generatedForExisting.Items, actor);
+
+        return new ProductionPlanRefreshResultDto
+        {
+            ProductionDate = date,
+            ProductionPlanId = existingPlan.Id,
+            Status = "Refreshed",
+            ItemCount = generatedForExisting.Items.Count,
+        };
+    }
+
+    public async Task<ProductionPlanRefreshRangeResultDto> RefreshProductionPlansFromM2Async(
+        DateOnly startDate,
+        int days,
+        string requestedBy)
+    {
+        var normalizedDays = Math.Clamp(days <= 0 ? 7 : days, 1, 31);
+        var result = new ProductionPlanRefreshRangeResultDto
+        {
+            StartDate = startDate,
+            Days = normalizedDays,
+        };
+
+        for (var offset = 0; offset < normalizedDays; offset++)
+        {
+            var dayResult = await RefreshProductionPlanFromM2Async(startDate.AddDays(offset), requestedBy);
+            result.Results.Add(dayResult);
+        }
+
+        result.CreatedCount = result.Results.Count(item => item.Status == "Created");
+        result.RefreshedCount = result.Results.Count(item => item.Status == "Refreshed");
+        result.SkippedCount = result.Results.Count(item => item.Status == "Skipped");
+        result.BlockedCount = result.Results.Count(item => item.Status == "Blocked");
+        return result;
+    }
+
+    public async Task AcknowledgePlanAlertAsync(int alertId, string acknowledgedBy)
+    {
+        var alert = await _planAlertRepository.GetByIdAsync(alertId)
+            ?? throw new InvalidOperationException($"Alert planu M2 {alertId} nie istnieje.");
+
+        if (alert.AcknowledgedAt.HasValue)
+        {
+            return;
+        }
+
+        alert.AcknowledgedAt = DateTimeOffset.UtcNow;
+        alert.AcknowledgedBy = string.IsNullOrWhiteSpace(acknowledgedBy)
+            ? "Kitchen"
+            : acknowledgedBy.Trim();
+
+        await _planAlertRepository.UpdateAsync(alert);
+    }
+
     public async Task<CookingCardDto> GetCookingCardAsync(int planItemId)
     {
         var item = await _itemRepository.GetByIdAsync(planItemId)
@@ -153,7 +362,9 @@ public sealed class ProductionService : IProductionService
         var storedSnapshot = TryDeserializeSnapshotItem(item);
         if (storedSnapshot is not null)
         {
-            return BuildCookingCardFromSnapshot(item, storedSnapshot, null);
+            var snapshotCard = BuildCookingCardFromSnapshot(item, storedSnapshot, null);
+            await EnrichComponentSessionProgressAsync(snapshotCard);
+            return snapshotCard;
         }
 
         var details = await _dietProvider.GetMealCookingDetailsAsync(item.MealId);
@@ -681,6 +892,131 @@ public sealed class ProductionService : IProductionService
 
         item.PackagingDeductedAt = DateTimeOffset.UtcNow;
         item.PackagingReferenceDocument = $"P{item.ProductionPlanId}-I{item.Id}-PACK";
+    }
+
+    private static List<string> GetRefreshBlockers(IEnumerable<ProductionPlanItem> items)
+    {
+        var blockers = new List<string>();
+        foreach (var item in items)
+        {
+            if (item.Status != ProductionItemStatus.Planned)
+            {
+                blockers.Add($"Pozycja #{item.Id} ma status {item.Status}.");
+            }
+
+            if (item.FefoDeductedAt.HasValue)
+            {
+                blockers.Add($"Pozycja #{item.Id} ma wykonane FEFO.");
+            }
+
+            if (item.PackagingDeductedAt.HasValue)
+            {
+                blockers.Add($"Pozycja #{item.Id} ma zdjete opakowania.");
+            }
+
+            if (item.CookedQuantity > 0)
+            {
+                blockers.Add($"Pozycja #{item.Id} ma ugotowana ilosc {item.CookedQuantity}.");
+            }
+        }
+
+        return blockers.Distinct().ToList();
+    }
+
+    private static bool IsSameProductionSnapshotSet(
+        IReadOnlyCollection<ProductionPlanItem> existingItems,
+        IReadOnlyCollection<ProductionPlanItem> generatedItems)
+    {
+        if (existingItems.Count != generatedItems.Count)
+        {
+            return false;
+        }
+
+        var existingByKey = existingItems.ToDictionary(CreateProductionSnapshotComparisonKey);
+        foreach (var generated in generatedItems)
+        {
+            var key = CreateProductionSnapshotComparisonKey(generated);
+            if (!existingByKey.TryGetValue(key, out var existing))
+            {
+                return false;
+            }
+
+            if (existing.PlannedQuantity != generated.PlannedQuantity ||
+                !string.Equals(existing.M2SnapshotHash, generated.M2SnapshotHash, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string CreateProductionSnapshotComparisonKey(ProductionPlanItem item)
+        => item.DietMenuPlanItemId.HasValue
+            ? $"P:{item.DietMenuPlanItemId.Value}"
+            : $"M:{item.MealId}:D:{item.DietVariantId}:H:{item.M2SnapshotHash}";
+
+    private async Task EnrichComponentSessionProgressAsync(CookingCardDto card)
+    {
+        foreach (var component in card.Components)
+        {
+            var session = await _cookingSessionService.GetComponentSessionAsync(
+                card.PlanItemId,
+                component.RecipeComponentVersionId);
+            var steps = component.InstructionSections
+                .SelectMany(section => section.Steps)
+                .ToList();
+            var requiredSteps = steps
+                .Where(step => step.IsCritical || step.RequiresControl)
+                .ToList();
+
+            component.SessionStatus = session.Status;
+            component.TotalStepCount = steps.Count;
+            component.CheckedStepCount = steps.Count(step =>
+                session.StepChecksByStepId.TryGetValue(step.StepId, out var check)
+                && check.IsChecked);
+            component.RequiredStepCount = requiredSteps.Count;
+            component.RequiredCheckedStepCount = requiredSteps.Count(step =>
+                session.StepChecksByStepId.TryGetValue(step.StepId, out var check)
+                && check.IsChecked);
+        }
+    }
+
+    private static ProductionPlanItem? FindProductionItemForSnapshotItem(
+        IReadOnlyCollection<ProductionPlanItem> productionItems,
+        PublishedDietPlanItemDto snapshotItem)
+    {
+        var byPlanItemId = productionItems.FirstOrDefault(item =>
+            item.DietMenuPlanItemId == snapshotItem.DietMenuPlanItemId);
+        if (byPlanItemId is not null)
+        {
+            return byPlanItemId;
+        }
+
+        if (snapshotItem.MealVariantId.HasValue)
+        {
+            var byVariant = productionItems.FirstOrDefault(item =>
+            {
+                if (item.DietMenuPlanItemId.HasValue)
+                {
+                    return false;
+                }
+
+                var storedSnapshot = TryDeserializeSnapshotItem(item);
+                return item.MealId == snapshotItem.MealId
+                    && item.DietVariantId == snapshotItem.DietVariantId
+                    && storedSnapshot?.MealVariantId == snapshotItem.MealVariantId;
+            });
+            if (byVariant is not null)
+            {
+                return byVariant;
+            }
+        }
+
+        return productionItems.FirstOrDefault(item =>
+            !item.DietMenuPlanItemId.HasValue &&
+            item.MealId == snapshotItem.MealId
+            && item.DietVariantId == snapshotItem.DietVariantId);
     }
 
     private static CookingCardDto BuildCookingCardFromSnapshot(

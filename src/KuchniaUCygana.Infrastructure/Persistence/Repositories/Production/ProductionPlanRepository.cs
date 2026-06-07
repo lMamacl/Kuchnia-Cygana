@@ -126,6 +126,92 @@ public sealed class ProductionPlanRepository : BaseRepository<ProductionPlan>, I
             new { planId });
     }
 
+    public async Task ReplacePlanItemsAsync(
+        int planId,
+        IReadOnlyList<ProductionPlanItem> items,
+        string requestedBy)
+    {
+        using var db = _connectionFactory.CreateConnection();
+        db.Open();
+        using var transaction = db.BeginTransaction();
+        var now = DateTime.UtcNow;
+        var actor = string.IsNullOrWhiteSpace(requestedBy) ? "Admin" : requestedBy.Trim();
+
+        try
+        {
+            await db.ExecuteAsync(
+                """
+                UPDATE [ProductionPlanItems]
+                SET [IsDeleted] = 1,
+                    [DeletedAt] = @now,
+                    [DeletedBy] = @actor,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @actor
+                WHERE [ProductionPlanId] = @planId
+                  AND [IsDeleted] = 0;
+                """,
+                new { planId, now, actor },
+                transaction);
+
+            foreach (var item in items)
+            {
+                item.ProductionPlanId = planId;
+                var id = await db.ExecuteScalarAsync<int>(
+                    """
+                    INSERT INTO [ProductionPlanItems]
+                        ([ProductionPlanId], [MealId], [MealName], [DietVariantId],
+                         [DietMenuPlanItemId], [RecipeComponentVersionIds], [M2SnapshotHash], [M2SnapshotJson],
+                         [PlannedQuantity], [CookedQuantity], [Status], [ProductionGroup],
+                         [EstimatedReadyTime], [ActualReadyTime],
+                         [FefoDeductedAt], [FefoReferenceDocument], [PackagingDeductedAt], [PackagingReferenceDocument],
+                         [CreatedBy], [UpdatedBy], [IsDeleted], [CreatedAt], [UpdatedAt])
+                    VALUES
+                        (@ProductionPlanId, @MealId, @MealName, @DietVariantId,
+                         @DietMenuPlanItemId, @RecipeComponentVersionIds, @M2SnapshotHash, @M2SnapshotJson,
+                         @PlannedQuantity, @CookedQuantity, @Status, @ProductionGroup,
+                         @EstimatedReadyTime, @ActualReadyTime,
+                         @FefoDeductedAt, @FefoReferenceDocument, @PackagingDeductedAt, @PackagingReferenceDocument,
+                         @CreatedBy, @UpdatedBy, 0, @CreatedAt, NULL);
+
+                    SELECT CAST(SCOPE_IDENTITY() AS int);
+                    """,
+                    new
+                    {
+                        item.ProductionPlanId,
+                        item.MealId,
+                        item.MealName,
+                        item.DietVariantId,
+                        item.DietMenuPlanItemId,
+                        item.RecipeComponentVersionIds,
+                        item.M2SnapshotHash,
+                        item.M2SnapshotJson,
+                        item.PlannedQuantity,
+                        item.CookedQuantity,
+                        Status = (int)item.Status,
+                        item.ProductionGroup,
+                        EstimatedReadyTime = item.EstimatedReadyTime?.ToTimeSpan(),
+                        ActualReadyTime = item.ActualReadyTime?.ToTimeSpan(),
+                        item.FefoDeductedAt,
+                        item.FefoReferenceDocument,
+                        item.PackagingDeductedAt,
+                        item.PackagingReferenceDocument,
+                        CreatedBy = string.IsNullOrWhiteSpace(item.CreatedBy) ? actor : item.CreatedBy,
+                        item.UpdatedBy,
+                        CreatedAt = now,
+                    },
+                    transaction);
+                item.Id = id;
+            }
+
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+    }
+
     private static string BuildWhereClause(ProductionPlanItemQuery query, DynamicParameters parameters)
     {
         var clauses = new List<string>

@@ -3,7 +3,7 @@
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Foliowanie i etykiety";
     ViewData["Section"] = "Kuchnia";
-    ViewData["Description"] = "Stanowisko foliowania z wyszukiwaniem, paginacja i kontrola redrukow.";
+    ViewData["Description"] = "Stanowisko foliowania z wyszukiwaniem, paginacją i kontrolą redruków.";
 
     var filter = Model.Filter;
     var itemsPage = Model.Items;
@@ -14,7 +14,7 @@
     {
         return status switch
         {
-            "Pending" => "Czeka na folie",
+            "Pending" => "Czeka na folię",
             "FoilPrinted" => "Etykieta wydrukowana",
             "Packed" => "Spakowane",
             "Damaged" => "Uszkodzone",
@@ -84,7 +84,7 @@
                             </div>
                             <div class="col-sm-6 col-xl-3">
                                 <label class="form-label fw-bold">Szukaj</label>
-                                <input type="search" name="search" class="form-control" value="@filter.Search" placeholder="Danie, pudelko, klient, zamowienie" />
+                                <input type="search" name="search" class="form-control" value="@filter.Search" placeholder="Danie, pudełko, klient, zamówienie" />
                             </div>
                             <div class="col-sm-6 col-xl-2">
                                 <label class="form-label fw-bold">Status</label>
@@ -127,7 +127,7 @@
     </div>
 
     <div class="col-sm-6 col-xl-2">
-        <div class="card card-premium"><div class="card-body"><div class="subheader">Pudelka</div><div class="h2">@Model.TotalBoxes</div></div></div>
+        <div class="card card-premium"><div class="card-body"><div class="subheader">Pudełka</div><div class="h2">@Model.TotalBoxes</div></div></div>
     </div>
     <div class="col-sm-6 col-xl-2">
         <div class="card card-premium"><div class="card-body"><div class="subheader">Do druku</div><div class="h2 text-warning">@Model.PendingCount</div></div></div>
@@ -154,7 +154,7 @@
                     <a asp-action="FoilPrinting" asp-all-route-data="@RouteValues(1, labelState: "printed", replaceLabelState: true)" class="btn btn-sm @(filter.LabelState == "printed" ? "btn-success" : "btn-outline-success")">Wydrukowane</a>
                     <a asp-action="FoilPrinting" asp-all-route-data="@RouteValues(1, labelState: "reprint", replaceLabelState: true)" class="btn btn-sm @(filter.LabelState == "reprint" ? "btn-azure" : "btn-outline-azure")">Redruki</a>
                     <a asp-action="FoilPrinting" asp-all-route-data="@RouteValues(1, labelState: "blocked", replaceLabelState: true)" class="btn btn-sm @(filter.LabelState == "blocked" ? "btn-danger" : "btn-outline-danger")">Blokady</a>
-                    <a asp-action="Index" asp-route-date="@filter.Date.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-secondary ms-auto">Wroc do kuchni</a>
+                    <a asp-action="Index" asp-route-date="@filter.Date.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-secondary ms-auto">Wróć do kuchni</a>
                 </div>
             </div>
         </div>
@@ -163,7 +163,7 @@
     @if (itemsPage.TotalCount == 0)
     {
         <div class="col-12">
-            <div class="alert alert-info">Brak pudelek dla wybranych filtrow.</div>
+            <div class="alert alert-info">Brak pudełek dla wybranych filtrów.</div>
         </div>
     }
     else
@@ -172,7 +172,7 @@
             <div class="card card-premium">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div>
-                        <h3 class="card-title mb-0">Lista pudelek do foliowania</h3>
+                        <h3 class="card-title mb-0">Lista pudełek do foliowania</h3>
                         <div class="text-secondary small">
                             Wyniki @((itemsPage.TotalCount == 0 ? 0 : ((itemsPage.Page - 1) * itemsPage.PageSize) + 1)) - @Math.Min(itemsPage.Page * itemsPage.PageSize, itemsPage.TotalCount) z @itemsPage.TotalCount
                         </div>
@@ -191,7 +191,7 @@
                         <thead>
                             <tr>
                                 <th class="w-1"><input type="checkbox" id="select-all-boxes" class="form-check-input" /></th>
-                                <th>Kod pudelka</th>
+                                <th>Kod pudełka</th>
                                 <th>Danie</th>
                                 <th>Odbiorca</th>
                                 <th>Status</th>
@@ -213,7 +213,7 @@
                                         <div class="text-secondary small">Wariant diety #@item.DietVariantId</div>
                                     </td>
                                     <td>
-                                        <div class="fw-bold text-dark">@(item.ClientName ?? $"Zamowienie #{item.OrderId}")</div>
+                                        <div class="fw-bold text-dark">@(item.ClientName ?? $"Zamówienie #{item.OrderId}")</div>
                                         <div class="text-secondary small">@item.ClientPublicIdDisplay</div>
                                         @if (item.RouteId.HasValue)
                                         {
@@ -268,14 +268,14 @@
                                             }
                                             @if (item.ProductLabelPrintCount > 0)
                                             {
-                                                <a asp-action="FoilLabel" asp-route-packingItemId="@item.Id" target="_blank" class="btn btn-sm btn-outline-secondary">Podglad</a>
+                                                <a asp-action="FoilLabel" asp-route-packingItemId="@item.Id" target="_blank" class="btn btn-sm btn-outline-secondary">Podgląd</a>
                                             }
                                             @if (item.CanReprint)
                                             {
                                                 <form asp-action="PrintFoilLabel" asp-route-packingItemId="@item.Id" method="post" target="_blank" class="d-flex gap-1">
                                                     @Html.AntiForgeryToken()
                                                     <input type="hidden" name="returnDate" value="@filter.Date.ToString("yyyy-MM-dd")" />
-                                                    <input type="text" name="reprintReason" class="form-control form-control-sm" placeholder="Powod redruku" required />
+                                                    <input type="text" name="reprintReason" class="form-control form-control-sm" placeholder="Powód redruku" required />
                                                     <button type="submit" class="btn btn-sm btn-outline-azure">Redruk</button>
                                                 </form>
                                             }
@@ -305,7 +305,7 @@
                                 </li>
                             }
                             <li class="page-item @(itemsPage.Page >= itemsPage.TotalPages ? "disabled" : "")">
-                                <a class="page-link" asp-action="FoilPrinting" asp-all-route-data="@RouteValues(Math.Min(itemsPage.TotalPages, itemsPage.Page + 1))">Nastepna</a>
+                                <a class="page-link" asp-action="FoilPrinting" asp-all-route-data="@RouteValues(Math.Min(itemsPage.TotalPages, itemsPage.Page + 1))">Następna</a>
                             </li>
                         </ul>
                     </div>

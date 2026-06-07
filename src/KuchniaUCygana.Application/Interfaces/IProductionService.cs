@@ -15,6 +15,14 @@ public interface IProductionService
 
     Task<KitchenDashboardDto> GetKitchenDashboardAsync(KitchenDashboardFilterDto filter);
 
+    Task<M2PlanOverviewDto> GetM2PlanOverviewAsync(DateOnly startDate, int days);
+
+    Task AcknowledgePlanAlertAsync(int alertId, string acknowledgedBy);
+
+    Task<ProductionPlanRefreshResultDto> RefreshProductionPlanFromM2Async(DateOnly date, string requestedBy);
+
+    Task<ProductionPlanRefreshRangeResultDto> RefreshProductionPlansFromM2Async(DateOnly startDate, int days, string requestedBy);
+
     Task<CookingCardDto> GetCookingCardAsync(int planItemId);
 
     Task<CookingComponentCardDto> GetCookingComponentCardAsync(int planItemId, int recipeComponentVersionId);

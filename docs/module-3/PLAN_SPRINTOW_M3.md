@@ -551,6 +551,21 @@ graph TD
 
 ---
 
+## ANEKS 07.06.2026 — ETAP 1/2 M3
+
+W Sprint 8 M3 doszedł operacyjny backbone na snapshotach M2:
+
+- `/production/m2-plan` pokazuje plan M2 na 7+ dni, status publikacji, snapshot M3 i alerty;
+- `WarehouseDemandService` V1 agreguje składniki oraz opakowania z opłaconych zamówień i snapshotu M2;
+- karta gotowania pokazuje progres sesji składowych;
+- etykiety foliowe korzystają ze snapshotu M2;
+- `/production` pokazuje kompaktowy panel „Plan M2 na 7 dni”;
+- admin refresh porównuje hash produkcyjnego snapshotu z aktualnym snapshotem M2 i pokazuje `NeedsRefresh`;
+- admin może odświeżyć dzień albo zakres przed startem FEFO/gotowania;
+- refresh blokuje się po FEFO, zdjęciu opakowań, statusie innym niż `Planned` albo `CookedQuantity > 0`.
+
+---
+
 ## METRYKI PROJEKTU
 
 | Metryka | Przed planem | Po planie (cel) | Uwaga |

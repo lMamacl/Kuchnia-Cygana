@@ -170,6 +170,7 @@ public static class DependencyInjection
         services.AddScoped<IApplicationUrlProvider, ConfigurationApplicationUrlProvider>();
         services.AddScoped<IProductionService, Application.Services.ProductionService>();
         services.AddScoped<ICookingSessionService, Application.Services.CookingSessionService>();
+        services.AddScoped<IWarehouseDemandService, Application.Services.WarehouseDemandService>();
         services.AddScoped<IWarehouseService, Application.Services.WarehouseService>();
         services.AddScoped<IWarehouseCategoryService, Application.Services.WarehouseCategoryService>();
         services.AddScoped<IHaccpLocationService, Application.Services.HaccpLocationService>();

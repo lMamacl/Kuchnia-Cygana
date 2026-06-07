@@ -195,13 +195,20 @@
                                         {
                                             <span class="badge bg-orange-lt text-orange">Temp. @component.MinimumCoreTemperatureCelsius?.ToString("0.#") C</span>
                                         }
+                                        <span class="badge bg-@(component.IsSessionCompleted ? "success" : component.CheckedStepCount > 0 ? "warning" : "secondary")-lt ms-auto">
+                                            @component.SessionStatus: @component.CheckedStepCount/@component.TotalStepCount krokow
+                                        </span>
                                     </button>
                                 </h2>
                                 <div id="@collapseId" class="accordion-collapse collapse" aria-labelledby="heading-@collapseId" data-bs-parent="#snapshotComponents">
                                     <div class="accordion-body">
                                         <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
                                             <div class="small text-secondary">
-                                                Kroki instrukcji: @component.InstructionSections.Sum(section => section.Steps.Count)
+                                                Kroki instrukcji: @component.CheckedStepCount / @component.TotalStepCount
+                                                @if (component.RequiredStepCount > 0)
+                                                {
+                                                    <span class="ms-2 text-orange">Kontrole: @component.RequiredCheckedStepCount / @component.RequiredStepCount</span>
+                                                }
                                             </div>
                                             <a asp-action="CookingComponent"
                                                asp-route-planItemId="@Model.PlanItemId"

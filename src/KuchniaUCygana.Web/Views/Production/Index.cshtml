@@ -3,7 +3,7 @@
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Pulpit kuchni";
     ViewData["Section"] = "Kuchnia";
-    ViewData["Description"] = "Operacyjny plan gotowania z wyszukiwaniem, filtrami i paginacja.";
+    ViewData["Description"] = "Operacyjny plan gotowania z wyszukiwaniem, filtrami i paginacją.";
 
     var dashboard = Model.Dashboard;
     var filter = dashboard.Filter;
@@ -43,7 +43,7 @@
         {
             "New" => "Nowy",
             "InProgress" => "W toku",
-            "Completed" => "Zakonczony",
+            "Completed" => "Zakończony",
             _ => status
         };
     }
@@ -107,7 +107,7 @@
         <form method="get" class="row align-items-end g-3">
             <input type="hidden" name="page" value="1" />
             <div class="col-sm-6 col-lg-2">
-                <label class="form-label fw-bold">Dzien produkcji</label>
+                <label class="form-label fw-bold">Dzień produkcji</label>
                 <input type="date" name="date" class="form-control" value="@filter.Date.ToString("yyyy-MM-dd")" />
             </div>
             <div class="col-sm-6 col-lg-3">
@@ -128,7 +128,7 @@
                 <label class="form-label fw-bold">FEFO</label>
                 <select name="fefo" class="form-select">
                     <option value="">Wszystkie</option>
-                    <option value="pending" selected="@(filter.Fefo == "pending")">Do zdjecia</option>
+                    <option value="pending" selected="@(filter.Fefo == "pending")">Do zdjęcia</option>
                     <option value="done" selected="@(filter.Fefo == "done")">Wykonane</option>
                 </select>
             </div>
@@ -136,7 +136,7 @@
                 <label class="form-label fw-bold">Opakowania</label>
                 <select name="packaging" class="form-select">
                     <option value="">Wszystkie</option>
-                    <option value="pending" selected="@(filter.Packaging == "pending")">Do zdjecia</option>
+                    <option value="pending" selected="@(filter.Packaging == "pending")">Do zdjęcia</option>
                     <option value="done" selected="@(filter.Packaging == "done")">Wykonane</option>
                 </select>
             </div>
@@ -151,14 +151,64 @@
             </div>
             <div class="col-12 d-flex flex-wrap gap-2">
                 <button type="submit" class="btn btn-primary">Filtruj</button>
-                <a asp-action="Index" asp-route-date="@filter.Date.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wyczysc</a>
-                <a asp-action="Index" asp-route-date="@filter.Date.AddDays(-1).ToString("yyyy-MM-dd")" class="btn btn-outline-secondary ms-auto">Poprzedni dzien</a>
+                <a asp-action="Index" asp-route-date="@filter.Date.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wyczyść</a>
+                <a asp-action="Index" asp-route-date="@filter.Date.AddDays(-1).ToString("yyyy-MM-dd")" class="btn btn-outline-secondary ms-auto">Poprzedni dzień</a>
                 <a asp-action="Index" asp-route-date="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Dzisiaj</a>
-                <a asp-action="Index" asp-route-date="@filter.Date.AddDays(1).ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Nastepny dzien</a>
+                <a asp-action="Index" asp-route-date="@filter.Date.AddDays(1).ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Następny dzień</a>
+                <a asp-action="M2Plan" asp-route-startDate="@filter.Date.ToString("yyyy-MM-dd")" asp-route-days="7" class="btn btn-outline-primary">Plan z M2</a>
+                <a asp-action="WarehouseDemand" asp-route-startDate="@filter.Date.ToString("yyyy-MM-dd")" asp-route-days="7" class="btn btn-outline-primary">Zapotrzebowanie 7 dni</a>
             </div>
         </form>
     </div>
 </div>
+
+@if (Model.M2PlanOverview is not null)
+{
+    <div class="card card-premium mb-4">
+        <div class="card-header bg-transparent d-flex flex-wrap align-items-center gap-2">
+            <h3 class="card-title mb-0">Plan M2 na 7 dni</h3>
+            <span class="badge bg-success-lt">Opublikowane @Model.M2PlanOverview.PublishedDays / @Model.M2PlanOverview.TotalDays</span>
+            <span class="badge bg-warning-lt">Do odświeżenia @Model.M2PlanOverview.Days.Sum(day => day.Items.Count(item => item.NeedsRefresh))</span>
+            <span class="badge bg-danger-lt">Alerty @Model.M2PlanOverview.UnacknowledgedAlertCount</span>
+            <a asp-action="M2Plan"
+               asp-route-startDate="@filter.Date.ToString("yyyy-MM-dd")"
+               asp-route-days="7"
+               class="btn btn-sm btn-outline-primary ms-auto">
+                Pełny plan M2
+            </a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-vcenter card-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Status M2</th>
+                        <th class="text-end">Pozycje</th>
+                        <th class="text-end">Snapshot M3</th>
+                        <th class="text-end">Nieaktualne</th>
+                        <th class="text-end">Alerty</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var day in Model.M2PlanOverview.Days)
+                    {
+                        var staleCount = day.Items.Count(item => item.NeedsRefresh);
+                        <tr>
+                            <td>@day.PlanDate.ToString("dd.MM.yyyy")</td>
+                            <td>
+                                <span class="badge bg-@(day.IsPublished ? "success" : "secondary")-lt">@day.PlanStatus</span>
+                            </td>
+                            <td class="text-end">@day.TotalItems</td>
+                            <td class="text-end">@day.SnapshotItemCount / @day.TotalItems</td>
+                            <td class="text-end @(staleCount > 0 ? "text-warning fw-bold" : "text-success")">@staleCount</td>
+                            <td class="text-end @(day.UnacknowledgedAlertCount > 0 ? "text-danger fw-bold" : "text-secondary")">@day.UnacknowledgedAlertCount</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
 
 @if (!hasPlan)
 {
@@ -215,7 +265,7 @@ else
                 <div class="card-body">
                     <div class="subheader">Operacje</div>
                     <div class="h2 mt-1 mb-1">@summary.PendingFefoItems FEFO / @summary.PendingPackagingItems opak.</div>
-                    <div class="text-secondary small">Pozycje wymagajace operacji</div>
+                    <div class="text-secondary small">Pozycje wymagające operacji</div>
                 </div>
             </div>
         </div>
@@ -241,12 +291,12 @@ else
                 </a>
                 <span class="vr mx-1"></span>
                 <a asp-action="Index" asp-all-route-data="@RouteValues(1, fefo: "pending", replaceFefo: true)" class="btn btn-sm @(filter.Fefo == "pending" ? "btn-secondary" : "btn-outline-secondary")">
-                    FEFO do zdjecia
+                    FEFO do zdjęcia
                 </a>
                 <a asp-action="Index" asp-all-route-data="@RouteValues(1, snapshot: "missing", replaceSnapshot: true)" class="btn btn-sm @(filter.Snapshot == "missing" ? "btn-secondary" : "btn-outline-secondary")">
                     Bez snapshotu
                 </a>
-                <a asp-action="Plan" asp-route-planId="@dashboard.Plan!.Id" class="btn btn-sm btn-outline-primary ms-auto">Szczegoly i FEFO</a>
+                <a asp-action="Plan" asp-route-planId="@dashboard.Plan!.Id" class="btn btn-sm btn-outline-primary ms-auto">Szczegóły i FEFO</a>
                 <a asp-action="FoilPrinting" asp-route-date="@filter.Date.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-indigo">Foliowanie</a>
             </div>
         </div>
@@ -268,7 +318,7 @@ else
                         <th>ID</th>
                         <th>Danie</th>
                         <th>Snapshot M2</th>
-                        <th class="text-center">Ilosc</th>
+                        <th class="text-center">Ilość</th>
                         <th>Status</th>
                         <th>Operacje</th>
                         <th class="text-end">Akcje</th>
@@ -305,12 +355,13 @@ else
                                 @if (item.HasM2Snapshot)
                                 {
                                     <span class="badge bg-green-lt text-green">snapshot</span>
-                                    <span class="badge bg-blue-lt text-blue">@item.ComponentCount skl.</span>
+                                    <span class="badge bg-blue-lt text-blue">@item.ComponentCount skł.</span>
                                     <span class="badge bg-purple-lt text-purple">@item.PackagingRequirementCount opak.</span>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-orange-lt text-orange">legacy/live</span>
+                                    <span class="badge bg-orange-lt text-orange">Brak snapshotu M2</span>
+                                    <div class="small text-secondary">tryb zgodności</div>
                                 }
                                 @if (item.ValidationWarningCount > 0 || item.HasMissingWarehouseMappings || item.SnapshotWarning != null)
                                 {
@@ -338,7 +389,7 @@ else
                                         FEFO: @FlagText(item.FefoDeductedAt.HasValue, "wykonane", "do wykonania")
                                     </span>
                                     <span class="text-@(item.PackagingDeductedAt.HasValue ? "success" : "secondary")">
-                                        Opakowania: @FlagText(item.PackagingDeductedAt.HasValue, "zdjete", "czekaja")
+                                        Opakowania: @FlagText(item.PackagingDeductedAt.HasValue, "zdjęte", "czekają")
                                     </span>
                                 </div>
                             </td>
@@ -373,7 +424,7 @@ else
                         </li>
                     }
                     <li class="page-item @(itemsPage.Page >= itemsPage.TotalPages ? "disabled" : "")">
-                        <a class="page-link" asp-action="Index" asp-all-route-data="@RouteValues(Math.Min(itemsPage.TotalPages, itemsPage.Page + 1))">Nastepna</a>
+                        <a class="page-link" asp-action="Index" asp-all-route-data="@RouteValues(Math.Min(itemsPage.TotalPages, itemsPage.Page + 1))">Następna</a>
                     </li>
                 </ul>
             </div>

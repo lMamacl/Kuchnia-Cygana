@@ -4,7 +4,9 @@ using KuchniaUCygana.Application.DTOs.Production;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Application.Services;
 using KuchniaUCygana.Domain.Entities.Production;
+using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Entities.Warehouse;
+using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces.Production;
@@ -235,17 +237,394 @@ public sealed class ProductionServiceTests
                 step.IsCritical);
     }
 
+    [Fact]
+    public async Task GetCookingCardAsync_ShouldExposeComponentSessionProgress()
+    {
+        var date = new DateOnly(2026, 6, 5);
+        var snapshotItem = CreateSnapshotItem(date, 1001, 101, "Makaron standard", 501, 9001, 100m, 1.0m);
+        snapshotItem.Components.Single().InstructionSections = new[]
+        {
+            new ComponentInstructionSectionDto
+            {
+                SectionId = 71,
+                Title = "Kontrola",
+                SortOrder = 1,
+                Steps = new[]
+                {
+                    new ComponentInstructionStepDto { StepId = 711, StepText = "Kontrola temperatury", RequiresControl = true, IsCritical = true },
+                    new ComponentInstructionStepDto { StepId = 712, StepText = "Wymieszaj", RequiresControl = false, IsCritical = false },
+                },
+            },
+        };
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.GetByIdAsync(21))
+            .ReturnsAsync(new ProductionPlanItem
+            {
+                Id = 21,
+                ProductionPlanId = 5,
+                MealId = 10,
+                MealName = "Makaron standard",
+                DietVariantId = 1,
+                PlannedQuantity = 4,
+                M2SnapshotJson = JsonSerializer.Serialize(snapshotItem),
+            });
+        var cookingSessionService = new Mock<ICookingSessionService>();
+        cookingSessionService
+            .Setup(service => service.GetComponentSessionAsync(21, 501))
+            .ReturnsAsync(new CookingComponentSessionDto
+            {
+                Status = "InProgress",
+                StepChecksByStepId = new()
+                {
+                    [711] = new CookingStepCheckDto { StepId = 711, Status = "Checked" },
+                },
+            });
+        var service = CreateService(
+            itemRepository: itemRepository,
+            cookingSessionService: cookingSessionService);
+
+        var card = await service.GetCookingCardAsync(21);
+
+        card.Components.Should().ContainSingle().Which.Should().Match<CookingCardComponentDto>(component =>
+            component.RecipeComponentVersionId == 501 &&
+            component.SessionStatus == "InProgress" &&
+            component.TotalStepCount == 2 &&
+            component.CheckedStepCount == 1 &&
+            component.RequiredStepCount == 1 &&
+            component.RequiredCheckedStepCount == 1);
+    }
+
+    [Fact]
+    public async Task GetM2PlanOverviewAsync_ShouldShowProductionSnapshotStatusAndUnacknowledgedAlerts()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var snapshot = CreateSnapshot(date);
+        snapshot.Alerts = new[]
+        {
+            new PlanChangeAlertDto
+            {
+                Id = 44,
+                PlanDate = date,
+                DietMenuPlanId = snapshot.DietMenuPlanId,
+                AlertType = "PlanChanged",
+                Severity = "Warning",
+                Message = "Plan changed after publication",
+                RequiresAcknowledgement = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            },
+        };
+
+        var planRepository = new Mock<IProductionPlanRepository>();
+        planRepository
+            .Setup(repository => repository.GetByDateAsync(date))
+            .ReturnsAsync(new ProductionPlan { Id = 700, ProductionDate = date });
+        planRepository
+            .Setup(repository => repository.GetPlanItemsAsync(700))
+            .ReturnsAsync(new[]
+            {
+                new ProductionPlanItem
+                {
+                    Id = 21,
+                    ProductionPlanId = 700,
+                    MealId = 10,
+                    DietVariantId = 1,
+                    DietMenuPlanItemId = 1001,
+                    PlannedQuantity = 3,
+                    M2SnapshotJson = JsonSerializer.Serialize(snapshot.Items[0]),
+                },
+            });
+        var dietProvider = new Mock<IDietDataProvider>();
+        dietProvider
+            .Setup(provider => provider.GetPublishedPlanSnapshotAsync(date))
+            .ReturnsAsync(snapshot);
+
+        var service = CreateService(planRepository: planRepository, dietProvider: dietProvider);
+
+        var overview = await service.GetM2PlanOverviewAsync(date, 1);
+
+        overview.TotalDays.Should().Be(1);
+        overview.UnacknowledgedAlertCount.Should().Be(1);
+        overview.Days.Should().ContainSingle().Which.Should().Match<M2PlanOverviewDayDto>(day =>
+            day.PlanDate == date &&
+            day.IsPublished &&
+            day.ProductionPlanId == 700 &&
+            day.SnapshotItemCount == 1 &&
+            day.MissingSnapshotItemCount == 1 &&
+            day.UnacknowledgedAlertCount == 1);
+        overview.Days.Single().Items.Should().Contain(item =>
+            item.DietMenuPlanItemId == 1001 &&
+            item.HasProductionSnapshot &&
+            item.ProductionPlanItemId == 21 &&
+            item.PlannedQuantity == 3);
+    }
+
+    [Fact]
+    public async Task GetM2PlanOverviewAsync_ShouldMarkProductionSnapshotAsStale_WhenHashDiffersFromFreshM2Snapshot()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var snapshot = CreateSnapshot(date);
+        var planRepository = new Mock<IProductionPlanRepository>();
+        planRepository
+            .Setup(repository => repository.GetByDateAsync(date))
+            .ReturnsAsync(new ProductionPlan { Id = 700, ProductionDate = date });
+        planRepository
+            .Setup(repository => repository.GetPlanItemsAsync(700))
+            .ReturnsAsync(new[]
+            {
+                new ProductionPlanItem
+                {
+                    Id = 21,
+                    ProductionPlanId = 700,
+                    MealId = 10,
+                    DietVariantId = 1,
+                    DietMenuPlanItemId = 1001,
+                    PlannedQuantity = 3,
+                    M2SnapshotJson = JsonSerializer.Serialize(snapshot.Items[0]),
+                    M2SnapshotHash = "stary-hash",
+                },
+            });
+        var dietProvider = new Mock<IDietDataProvider>();
+        dietProvider
+            .Setup(provider => provider.GetPublishedPlanSnapshotAsync(date))
+            .ReturnsAsync(snapshot);
+
+        var service = CreateService(planRepository: planRepository, dietProvider: dietProvider);
+
+        var overview = await service.GetM2PlanOverviewAsync(date, 1);
+
+        var item = overview.Days.Single().Items.Single(i => i.DietMenuPlanItemId == 1001);
+        item.FreshSnapshotHash.Should().NotBeNullOrWhiteSpace();
+        item.SnapshotHash.Should().Be("stary-hash");
+        item.IsProductionSnapshotCurrent.Should().BeFalse();
+        item.NeedsRefresh.Should().BeTrue();
+        item.CanRefresh.Should().BeTrue();
+        item.RefreshBlockers.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RefreshProductionPlanFromM2Async_ShouldCreatePlan_WhenProductionPlanDoesNotExist()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var snapshot = CreateSnapshot(date);
+        var orderProvider = new Mock<IOrderDataProvider>();
+        var (generator, planRepository) = CreatePlanGenerator(snapshot, orderProvider);
+        SetupDeliveries(
+            orderProvider,
+            date,
+            new OrderItemInfo(1, "Dieta", 1, "2000", 2000, 10, 101, 1001, "lunch"),
+            new OrderItemInfo(1, "Dieta", 1, "2000", 2000, 10, 102, 1002, "lunch"));
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.InsertAsync(It.IsAny<ProductionPlanItem>()))
+            .ReturnsAsync(1);
+        var service = CreateService(
+            planRepository: planRepository,
+            itemRepository: itemRepository,
+            dietProvider: generator.DietProvider,
+            orderProvider: orderProvider,
+            planGenerator: generator.Instance);
+
+        var result = await service.RefreshProductionPlanFromM2Async(date, "admin");
+
+        result.Status.Should().Be("Created");
+        result.ProductionPlanId.Should().Be(77);
+        result.ItemCount.Should().Be(2);
+        result.Blockers.Should().BeEmpty();
+        itemRepository.Verify(repository => repository.InsertAsync(It.IsAny<ProductionPlanItem>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task RefreshProductionPlanFromM2Async_ShouldReplaceItems_WhenExistingPlanHasNotStarted()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var snapshot = CreateSnapshot(date);
+        var orderProvider = new Mock<IOrderDataProvider>();
+        var (generator, planRepository) = CreatePlanGenerator(snapshot, orderProvider);
+        planRepository
+            .Setup(repository => repository.GetByDateAsync(date))
+            .ReturnsAsync(new ProductionPlan { Id = 700, ProductionDate = date });
+        planRepository
+            .Setup(repository => repository.GetPlanItemsAsync(700))
+            .ReturnsAsync(new[]
+            {
+                new ProductionPlanItem
+                {
+                    Id = 21,
+                    ProductionPlanId = 700,
+                    MealId = 10,
+                    DietVariantId = 1,
+                    DietMenuPlanItemId = 1001,
+                    PlannedQuantity = 1,
+                    Status = ProductionItemStatus.Planned,
+                },
+            });
+        SetupDeliveries(
+            orderProvider,
+            date,
+            new OrderItemInfo(1, "Dieta", 1, "2000", 2000, 10, 101, 1001, "lunch"),
+            new OrderItemInfo(1, "Dieta", 1, "2000", 2000, 10, 102, 1002, "lunch"));
+        var service = CreateService(
+            planRepository: planRepository,
+            dietProvider: generator.DietProvider,
+            orderProvider: orderProvider,
+            planGenerator: generator.Instance);
+
+        var result = await service.RefreshProductionPlanFromM2Async(date, "admin");
+
+        result.Status.Should().Be("Refreshed");
+        result.ProductionPlanId.Should().Be(700);
+        result.ItemCount.Should().Be(2);
+        planRepository.Verify(repository => repository.ReplacePlanItemsAsync(
+            700,
+            It.Is<IReadOnlyList<ProductionPlanItem>>(items =>
+                items.Count == 2 &&
+                items.All(item => item.ProductionPlanId == 700) &&
+                items.All(item => !string.IsNullOrWhiteSpace(item.M2SnapshotHash))),
+            "admin"), Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshProductionPlanFromM2Async_ShouldBlock_WhenExistingPlanHasStarted()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var snapshot = CreateSnapshot(date);
+        var orderProvider = new Mock<IOrderDataProvider>();
+        var (generator, planRepository) = CreatePlanGenerator(snapshot, orderProvider);
+        planRepository
+            .Setup(repository => repository.GetByDateAsync(date))
+            .ReturnsAsync(new ProductionPlan { Id = 700, ProductionDate = date });
+        planRepository
+            .Setup(repository => repository.GetPlanItemsAsync(700))
+            .ReturnsAsync(new[]
+            {
+                new ProductionPlanItem
+                {
+                    Id = 21,
+                    ProductionPlanId = 700,
+                    MealId = 10,
+                    DietVariantId = 1,
+                    DietMenuPlanItemId = 1001,
+                    PlannedQuantity = 1,
+                    Status = ProductionItemStatus.Cooking,
+                    FefoDeductedAt = DateTimeOffset.UtcNow,
+                },
+            });
+        var service = CreateService(
+            planRepository: planRepository,
+            dietProvider: generator.DietProvider,
+            orderProvider: orderProvider,
+            planGenerator: generator.Instance);
+
+        var result = await service.RefreshProductionPlanFromM2Async(date, "admin");
+
+        result.Status.Should().Be("Blocked");
+        result.Blockers.Should().Contain(blocker => blocker.Contains("FEFO", StringComparison.OrdinalIgnoreCase));
+        result.Blockers.Should().Contain(blocker => blocker.Contains("Cooking", StringComparison.OrdinalIgnoreCase));
+        planRepository.Verify(repository => repository.ReplacePlanItemsAsync(
+            It.IsAny<int>(),
+            It.IsAny<IReadOnlyList<ProductionPlanItem>>(),
+            It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RefreshProductionPlansFromM2Async_ShouldSummarizeRangeResults()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var snapshot = CreateSnapshot(date);
+        var orderProvider = new Mock<IOrderDataProvider>();
+        var (generator, planRepository) = CreatePlanGenerator(snapshot, orderProvider);
+        planRepository
+            .Setup(repository => repository.GetByDateAsync(date))
+            .ReturnsAsync((ProductionPlan?)null);
+        planRepository
+            .Setup(repository => repository.GetByDateAsync(date.AddDays(1)))
+            .ReturnsAsync(new ProductionPlan { Id = 701, ProductionDate = date.AddDays(1) });
+        planRepository
+            .Setup(repository => repository.GetPlanItemsAsync(701))
+            .ReturnsAsync(new[]
+            {
+                new ProductionPlanItem
+                {
+                    Id = 22,
+                    ProductionPlanId = 701,
+                    MealId = 10,
+                    DietVariantId = 1,
+                    Status = ProductionItemStatus.Cooked,
+                    CookedQuantity = 1,
+                },
+            });
+        generator.DietProvider
+            .Setup(provider => provider.GetPublishedPlanSnapshotAsync(date.AddDays(1)))
+            .ReturnsAsync(CreateSnapshot(date.AddDays(1)));
+        SetupDeliveries(
+            orderProvider,
+            date,
+            new OrderItemInfo(1, "Dieta", 1, "2000", 2000, 10, 101, 1001, "lunch"));
+        SetupDeliveries(
+            orderProvider,
+            date.AddDays(1),
+            new OrderItemInfo(1, "Dieta", 1, "2000", 2000, 10, 101, 1001, "lunch"));
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.InsertAsync(It.IsAny<ProductionPlanItem>()))
+            .ReturnsAsync(1);
+        var service = CreateService(
+            planRepository: planRepository,
+            itemRepository: itemRepository,
+            dietProvider: generator.DietProvider,
+            orderProvider: orderProvider,
+            planGenerator: generator.Instance);
+
+        var result = await service.RefreshProductionPlansFromM2Async(date, 2, "admin");
+
+        result.CreatedCount.Should().Be(1);
+        result.BlockedCount.Should().Be(1);
+        result.Results.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task AcknowledgePlanAlertAsync_ShouldPersistAcknowledgement()
+    {
+        var alertRepository = new Mock<IRepository<PlanChangeAlert>>();
+        alertRepository
+            .Setup(repository => repository.GetByIdAsync(44))
+            .ReturnsAsync(new PlanChangeAlert
+            {
+                Id = 44,
+                PlanDate = new DateOnly(2026, 6, 8),
+                AlertType = "PlanChanged",
+                Severity = "Warning",
+                Message = "Plan changed",
+                RequiresAcknowledgement = true,
+            });
+        var service = CreateService(alertRepository: alertRepository);
+
+        await service.AcknowledgePlanAlertAsync(44, "kitchen-manager");
+
+        alertRepository.Verify(repository => repository.UpdateAsync(It.Is<PlanChangeAlert>(alert =>
+            alert.Id == 44 &&
+            alert.AcknowledgedAt.HasValue &&
+            alert.AcknowledgedBy == "kitchen-manager")), Times.Once);
+    }
+
     private static ProductionService CreateService(
         Mock<IProductionPlanRepository>? planRepository = null,
         Mock<IRepository<ProductionPlanItem>>? itemRepository = null,
-        Mock<IDietDataProvider>? dietProvider = null)
+        Mock<IDietDataProvider>? dietProvider = null,
+        Mock<IRepository<PlanChangeAlert>>? alertRepository = null,
+        Mock<ICookingSessionService>? cookingSessionService = null,
+        Mock<IOrderDataProvider>? orderProvider = null,
+        ProductionPlanGenerator? planGenerator = null)
     {
         planRepository ??= new Mock<IProductionPlanRepository>();
         itemRepository ??= new Mock<IRepository<ProductionPlanItem>>();
         dietProvider ??= new Mock<IDietDataProvider>();
+        alertRepository ??= new Mock<IRepository<PlanChangeAlert>>();
+        cookingSessionService ??= new Mock<ICookingSessionService>();
 
-        var orderProvider = new Mock<IOrderDataProvider>();
-        var planGenerator = new ProductionPlanGenerator(
+        orderProvider ??= new Mock<IOrderDataProvider>();
+        planGenerator ??= new ProductionPlanGenerator(
             orderProvider.Object,
             dietProvider.Object,
             new FoodCostCalculator(dietProvider.Object),
@@ -261,14 +640,17 @@ public sealed class ProductionServiceTests
             dietProvider.Object,
             Mock.Of<IPackingService>(),
             fefoService,
+            alertRepository.Object,
+            cookingSessionService.Object,
             Mock.Of<IMapper>(),
             Mock.Of<ILogger<ProductionService>>());
     }
 
     private static (GeneratorHarness generator, Mock<IProductionPlanRepository> planRepository) CreatePlanGenerator(
-        PublishedDietPlanSnapshotDto snapshot)
+        PublishedDietPlanSnapshotDto snapshot,
+        Mock<IOrderDataProvider>? orderProvider = null)
     {
-        var orderProvider = new Mock<IOrderDataProvider>();
+        orderProvider ??= new Mock<IOrderDataProvider>();
         orderProvider
             .Setup(provider => provider.GetActiveOrdersAsync(snapshot.PlanDate))
             .ReturnsAsync(new[]
@@ -301,7 +683,7 @@ public sealed class ProductionServiceTests
             new FoodCostCalculator(dietProvider.Object),
             planRepository.Object);
 
-        return (new GeneratorHarness(generator, orderProvider), planRepository);
+        return (new GeneratorHarness(generator, orderProvider, dietProvider), planRepository);
     }
 
     private static void SetupDeliveries(
@@ -404,5 +786,6 @@ public sealed class ProductionServiceTests
 
     private sealed record GeneratorHarness(
         ProductionPlanGenerator Instance,
-        Mock<IOrderDataProvider> OrderProvider);
+        Mock<IOrderDataProvider> OrderProvider,
+        Mock<IDietDataProvider> DietProvider);
 }

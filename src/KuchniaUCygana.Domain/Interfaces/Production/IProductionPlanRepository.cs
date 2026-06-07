@@ -27,6 +27,8 @@ public interface IProductionPlanRepository : IRepository<ProductionPlan>
         ProductionPlanItemQuery query);
 
     Task<ProductionPlanItemSummary> GetPlanItemSummaryAsync(int planId);
+
+    Task ReplacePlanItemsAsync(int planId, IReadOnlyList<ProductionPlanItem> items, string requestedBy);
 }
 
 public sealed class ProductionPlanItemQuery

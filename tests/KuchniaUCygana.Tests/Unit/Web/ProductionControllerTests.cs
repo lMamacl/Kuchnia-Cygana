@@ -118,6 +118,63 @@ public sealed class ProductionControllerTests
     }
 
     [Fact]
+    public async Task RefreshM2PlanDay_ShouldCallProductionRefreshAndReturnToM2Plan()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var productionService = new Mock<IProductionService>();
+        productionService
+            .Setup(service => service.RefreshProductionPlanFromM2Async(date, It.IsAny<string>()))
+            .ReturnsAsync(new ProductionPlanRefreshResultDto
+            {
+                ProductionDate = date,
+                ProductionPlanId = 700,
+                Status = "Refreshed",
+                ItemCount = 2,
+            });
+        var controller = CreateController(productionService);
+
+        var result = await controller.RefreshM2PlanDay(date, date, 7);
+
+        productionService.Verify(
+            service => service.RefreshProductionPlanFromM2Async(date, It.IsAny<string>()),
+            Times.Once);
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ProductionController.M2Plan));
+        redirect.RouteValues.Should().ContainKey("startDate").WhoseValue.Should().Be(date);
+        redirect.RouteValues.Should().ContainKey("days").WhoseValue.Should().Be(7);
+        controller.TempData["Success"].Should().Be("Odświeżono plan produkcji na 08.06.2026: Refreshed, pozycje: 2.");
+    }
+
+    [Fact]
+    public async Task RefreshM2PlanRange_ShouldCallRangeRefreshAndReturnSummary()
+    {
+        var startDate = new DateOnly(2026, 6, 8);
+        var productionService = new Mock<IProductionService>();
+        productionService
+            .Setup(service => service.RefreshProductionPlansFromM2Async(startDate, 7, It.IsAny<string>()))
+            .ReturnsAsync(new ProductionPlanRefreshRangeResultDto
+            {
+                StartDate = startDate,
+                Days = 7,
+                CreatedCount = 1,
+                RefreshedCount = 2,
+                BlockedCount = 1,
+            });
+        var controller = CreateController(productionService);
+
+        var result = await controller.RefreshM2PlanRange(startDate, 7);
+
+        productionService.Verify(
+            service => service.RefreshProductionPlansFromM2Async(startDate, 7, It.IsAny<string>()),
+            Times.Once);
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ProductionController.M2Plan));
+        redirect.RouteValues.Should().ContainKey("startDate").WhoseValue.Should().Be(startDate);
+        redirect.RouteValues.Should().ContainKey("days").WhoseValue.Should().Be(7);
+        controller.TempData["Success"].Should().Be("Refresh zakresu M2: utworzone 1, odświeżone 2, pominięte 0, zablokowane 1.");
+    }
+
+    [Fact]
     public async Task CookingComponent_ShouldLoadSnapshotCardAndPersistentSession()
     {
         const int PlanItemId = 42;
@@ -190,6 +247,7 @@ public sealed class ProductionControllerTests
     private static ProductionController CreateController(
         Mock<IProductionService> productionService,
         Mock<ICookingSessionService>? cookingSessionService = null,
+        Mock<IWarehouseDemandService>? warehouseDemandService = null,
         Mock<IPackingService>? packingService = null,
         Mock<IPackingSynchronizationService>? packingSynchronizationService = null)
     {
@@ -197,6 +255,7 @@ public sealed class ProductionControllerTests
         var controller = new ProductionController(
             productionService.Object,
             cookingSessionService?.Object ?? Mock.Of<ICookingSessionService>(),
+            warehouseDemandService?.Object ?? Mock.Of<IWarehouseDemandService>(),
             packingService?.Object ?? Mock.Of<IPackingService>(),
             Mock.Of<IPackingIncidentService>(),
             packingSynchronizationService?.Object ?? Mock.Of<IPackingSynchronizationService>())
