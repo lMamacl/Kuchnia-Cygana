@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,6 +7,7 @@ using Dapper;
 using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Interfaces.Production;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
 
@@ -17,8 +18,7 @@ public sealed class ProductionPlanRepository : BaseRepository<ProductionPlan>, I
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
-    public ProductionPlanRepository(IDbConnectionFactory connectionFactory)
-        : base(connectionFactory)
+    public ProductionPlanRepository(IDbConnectionFactory connectionFactory, ICurrentUserService? currentUserService = null) : base(connectionFactory, currentUserService)
     {
         _connectionFactory = connectionFactory;
     }
@@ -200,3 +200,5 @@ public sealed class ProductionPlanRepository : BaseRepository<ProductionPlan>, I
             : $"{column} {direction}, [Id] ASC";
     }
 }
+
+

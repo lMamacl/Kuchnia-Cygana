@@ -27,6 +27,8 @@ public static class DependencyInjection
         services.AddScoped<ICustomerSupportService, CustomerSupportService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<IMealVariantResultCalculator, MealVariantResultCalculator>();
+        services.AddScoped<IStaffActivityService, StaffActivityService>();
+        services.AddScoped<IStaffShiftAccessService, StaffShiftAccessService>();
         return services;
     }
 }

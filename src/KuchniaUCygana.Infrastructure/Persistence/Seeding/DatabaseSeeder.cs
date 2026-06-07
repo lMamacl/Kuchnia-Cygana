@@ -1,6 +1,7 @@
 ﻿using System.Data;
 using BCrypt.Net;
 using Dapper;
+using KuchniaUCygana.Domain.Entities.Notifications;
 using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Entities.Warehouse;
@@ -66,6 +67,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
         await SeedUsersAsync(db, now, cancellationToken);
         await SeedPersonnelAsync(db, now, cancellationToken);
+        await SeedModule5OperationsAsync(db, now, cancellationToken);
     }
 
     private async Task SeedUsersAsync(IDbConnection db, DateTimeOffset now, CancellationToken cancellationToken)
@@ -73,21 +75,25 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         var users = new[]
         {
             MakeUser("admin@kuchnia.local", "Admin123!", "System", "Administrator", UserRoles.Admin, now),
-            MakeUser("kitchen@kuchnia.local", "Kitchen123!", "Kuchnia", "Operator", UserRoles.Kitchen, now),
-            MakeUser("kitchenm@kuchnia.local", "Kitchen123!", "Kuchnia", "Szef", UserRoles.KitchenManager, now),
-            MakeUser("warehouse@kuchnia.local", "Warehouse123!", "Magazyn", "Pracownik", UserRoles.Warehouse, now),
-            MakeUser("warehousem@kuchnia.local", "Warehouse123!", "Magazyn", "Kierownik", UserRoles.WarehouseManager, now),
-            MakeUser("packing@kuchnia.local", "Packing123!", "Pakowanie", "Pracownik", UserRoles.Packing, now),
-            MakeUser("packingm@kuchnia.local", "Packing123!", "Pakowanie", "Kierownik", UserRoles.PackingManager, now),
-            MakeUser("dietitian@kuchnia.local", "Diet123!", "Anna", "Dietetyk", UserRoles.Dietitian, now),
-            MakeUser("logistics@kuchnia.local", "Logistics123!", "Logistyka", "Operator", UserRoles.Logistics, now),
-            MakeUser("logisticsm@kuchnia.local", "Logistics123!", "Logistyka", "Kierownik", UserRoles.LogisticsManager, now),
-            MakeUser("driver@kuchnia.local", "Driver123!", "Dostawa", "Kierowca", UserRoles.Driver, now),
+            MakeUser("kitchen@kuchnia.local", "Kitchen123!", "Marek", "Kowalski", UserRoles.Kitchen, now),
+            MakeUser("kitchenm@kuchnia.local", "Kitchen123!", "Joanna", "Witkowska", UserRoles.KitchenManager, now),
+            MakeUser("warehouse@kuchnia.local", "Warehouse123!", "Pawel", "Mazur", UserRoles.Warehouse, now),
+            MakeUser("warehousem@kuchnia.local", "Warehouse123!", "Tomasz", "Baran", UserRoles.WarehouseManager, now),
+            MakeUser("packing@kuchnia.local", "Packing123!", "Karolina", "Lis", UserRoles.Packing, now),
+            MakeUser("packingm@kuchnia.local", "Packing123!", "Ewa", "Kaczmarek", UserRoles.PackingManager, now),
+            MakeUser("dietitian@kuchnia.local", "Diet123!", "Anna", "Zielinska", UserRoles.Dietitian, now),
+            MakeUser("logistics@kuchnia.local", "Logistics123!", "Lukasz", "Dabrowski", UserRoles.Logistics, now),
+            MakeUser("logisticsm@kuchnia.local", "Logistics123!", "Monika", "Sokol", UserRoles.LogisticsManager, now),
+            MakeUser("driver@kuchnia.local", "Driver123!", "Kamil", "Nowicki", UserRoles.Driver, now),
             MakeUser("driverm@kuchnia.local", "Driver123!", "Dostawa", "Koordynator", UserRoles.DriverManager, now),
-            MakeUser("hr@kuchnia.local", "HR123!", "HR", "Specjalista", UserRoles.HR, now),
-            MakeUser("hrm@kuchnia.local", "HR123!", "HR", "Kierownik", UserRoles.HRManager, now),
-            MakeUser("bok@kuchnia.local", "BOK123!", "BOK", "Konsultant", UserRoles.BOK, now),
-            MakeUser("bokm@kuchnia.local", "BOK123!", "BOK", "Kierownik", UserRoles.BOKManager, now),
+            MakeUser("hr@kuchnia.local", "HR123!", "Alicja", "Nowak", UserRoles.HR, now),
+            MakeUser("hrm@kuchnia.local", "HR123!", "Beata", "Lewandowska", UserRoles.HRManager, now),
+            MakeUser("bok@kuchnia.local", "BOK123!", "Natalia", "Wrona", UserRoles.BOK, now),
+            MakeUser("bokm@kuchnia.local", "BOK123!", "Piotr", "Malec", UserRoles.BOKManager, now),
+            MakeUser("client.anna@kuchnia.local", "Client123!", "Anna", "Maj", UserRoles.Client, now),
+            MakeUser("client.michal@kuchnia.local", "Client123!", "Michal", "Rutkowski", UserRoles.Client, now),
+            MakeUser("client.katarzyna@kuchnia.local", "Client123!", "Katarzyna", "Wojcik", UserRoles.Client, now),
+            MakeUser("client.robert@kuchnia.local", "Client123!", "Robert", "Krawczyk", UserRoles.Client, now),
         };
 
         var inserted = await db.ExecuteAsync(new CommandDefinition(
@@ -96,6 +102,21 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             BEGIN
                 INSERT INTO [Users] ([Email], [PasswordHash], [FirstName], [LastName], [Role], [CreatedAt], [UpdatedAt])
                 VALUES (@Email, @PasswordHash, @FirstName, @LastName, @Role, @CreatedAt, @UpdatedAt);
+            END
+            ELSE
+            BEGIN
+                UPDATE [Users]
+                SET [FirstName] = @FirstName,
+                    [LastName] = @LastName,
+                    [Role] = @Role,
+                    [UpdatedAt] = @CreatedAt
+                WHERE [Email] = @Email
+                  AND
+                  (
+                      [FirstName] <> @FirstName
+                      OR [LastName] <> @LastName
+                      OR [Role] <> @Role
+                  );
             END
             """,
             users,
@@ -150,21 +171,21 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
         var employees = new[]
         {
-            new { Email = "admin@kuchnia.local", DepartmentName = "Administracja", Position = "Administrator systemu" },
-            new { Email = "kitchen@kuchnia.local", DepartmentName = "Kuchnia", Position = "Kucharz" },
-            new { Email = "kitchenm@kuchnia.local", DepartmentName = "Kuchnia", Position = "Szef kuchni" },
-            new { Email = "warehouse@kuchnia.local", DepartmentName = "Magazyn", Position = "Magazynier" },
-            new { Email = "warehousem@kuchnia.local", DepartmentName = "Magazyn", Position = "Kierownik magazynu" },
-            new { Email = "packing@kuchnia.local", DepartmentName = "Kompletacja", Position = "Pakowacz" },
-            new { Email = "packingm@kuchnia.local", DepartmentName = "Kompletacja", Position = "Kierownik kompletacji" },
-            new { Email = "dietitian@kuchnia.local", DepartmentName = "Diety", Position = "Dietetyk" },
-            new { Email = "logistics@kuchnia.local", DepartmentName = "Logistyka", Position = "Logistyk" },
-            new { Email = "logisticsm@kuchnia.local", DepartmentName = "Logistyka", Position = "Kierownik logistyki" },
-            new { Email = "driver@kuchnia.local", DepartmentName = "Logistyka", Position = "Kierowca" },
-            new { Email = "hr@kuchnia.local", DepartmentName = "HR", Position = "Specjalista HR" },
-            new { Email = "hrm@kuchnia.local", DepartmentName = "HR", Position = "Kierownik HR" },
-            new { Email = "bok@kuchnia.local", DepartmentName = "BOK", Position = "Konsultant BOK" },
-            new { Email = "bokm@kuchnia.local", DepartmentName = "BOK", Position = "Kierownik BOK" },
+            new { Email = "admin@kuchnia.local", DepartmentName = "Administracja", Position = "Administrator systemu", PhoneNumber = "+48 500 100 001" },
+            new { Email = "kitchen@kuchnia.local", DepartmentName = "Kuchnia", Position = "Kucharz", PhoneNumber = "+48 500 100 011" },
+            new { Email = "kitchenm@kuchnia.local", DepartmentName = "Kuchnia", Position = "Szef kuchni", PhoneNumber = "+48 500 100 012" },
+            new { Email = "warehouse@kuchnia.local", DepartmentName = "Magazyn", Position = "Magazynier", PhoneNumber = "+48 500 100 021" },
+            new { Email = "warehousem@kuchnia.local", DepartmentName = "Magazyn", Position = "Kierownik magazynu", PhoneNumber = "+48 500 100 022" },
+            new { Email = "packing@kuchnia.local", DepartmentName = "Kompletacja", Position = "Pakowacz", PhoneNumber = "+48 500 100 031" },
+            new { Email = "packingm@kuchnia.local", DepartmentName = "Kompletacja", Position = "Kierownik kompletacji", PhoneNumber = "+48 500 100 032" },
+            new { Email = "dietitian@kuchnia.local", DepartmentName = "Diety", Position = "Dietetyk", PhoneNumber = "+48 500 100 041" },
+            new { Email = "logistics@kuchnia.local", DepartmentName = "Logistyka", Position = "Logistyk", PhoneNumber = "+48 500 100 051" },
+            new { Email = "logisticsm@kuchnia.local", DepartmentName = "Logistyka", Position = "Kierownik logistyki", PhoneNumber = "+48 500 100 052" },
+            new { Email = "driver@kuchnia.local", DepartmentName = "Logistyka", Position = "Kierowca", PhoneNumber = "+48 500 100 053" },
+            new { Email = "hr@kuchnia.local", DepartmentName = "HR", Position = "Specjalista HR", PhoneNumber = "+48 500 100 061" },
+            new { Email = "hrm@kuchnia.local", DepartmentName = "HR", Position = "Kierownik HR", PhoneNumber = "+48 500 100 062" },
+            new { Email = "bok@kuchnia.local", DepartmentName = "BOK", Position = "Konsultant BOK", PhoneNumber = "+48 500 100 071" },
+            new { Email = "bokm@kuchnia.local", DepartmentName = "BOK", Position = "Kierownik BOK", PhoneNumber = "+48 500 100 072" },
         };
 
         await db.ExecuteAsync(new CommandDefinition(
@@ -174,7 +195,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                  [DepartmentId], [Position], [IsActive], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt],
                  [DeletedBy], [CreatedAt], [UpdatedAt])
             SELECT
-                u.[Id], u.[FirstName], u.[LastName], u.[Email], NULL, @HireDate, NULL,
+                u.[Id], u.[FirstName], u.[LastName], u.[Email], @PhoneNumber, @HireDate, NULL,
                 d.[Id], @Position, 1, @CreatedBy, NULL, 0, NULL, NULL, @CreatedAt, NULL
             FROM [Users] u
             INNER JOIN [Departments] d ON d.[Name] = @DepartmentName
@@ -186,9 +207,73 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 employee.Email,
                 employee.DepartmentName,
                 employee.Position,
+                employee.PhoneNumber,
                 HireDate = DateOnly.FromDateTime(DateTime.Today.AddMonths(-3)),
                 CreatedBy = "DatabaseSeeder",
                 CreatedAt = now,
+            }),
+            cancellationToken: cancellationToken));
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE e
+            SET [FirstName] = u.[FirstName],
+                [LastName] = u.[LastName],
+                [Email] = u.[Email],
+                [PhoneNumber] = CASE
+                    WHEN e.[PhoneNumber] IS NULL OR e.[PhoneNumber] = N'' THEN @PhoneNumber
+                    ELSE e.[PhoneNumber]
+                END,
+                [DepartmentId] = d.[Id],
+                [Position] = @Position,
+                [UpdatedBy] = @UpdatedBy,
+                [UpdatedAt] = @UpdatedAt
+            FROM [Employees] e
+            INNER JOIN [Users] u ON u.[Id] = e.[UserId]
+            INNER JOIN [Departments] d ON d.[Name] = @DepartmentName
+            WHERE u.[Email] = @Email
+              AND e.[IsDeleted] = 0;
+            """,
+            employees.Select(employee => new
+            {
+                employee.Email,
+                employee.DepartmentName,
+                employee.Position,
+                employee.PhoneNumber,
+                UpdatedBy = "DatabaseSeeder",
+                UpdatedAt = now,
+            }),
+            cancellationToken: cancellationToken));
+
+        var departmentHeads = new[]
+        {
+            new { DepartmentName = "Kuchnia", Email = "kitchenm@kuchnia.local" },
+            new { DepartmentName = "Magazyn", Email = "warehousem@kuchnia.local" },
+            new { DepartmentName = "Kompletacja", Email = "packingm@kuchnia.local" },
+            new { DepartmentName = "Diety", Email = "dietitian@kuchnia.local" },
+            new { DepartmentName = "Logistyka", Email = "logisticsm@kuchnia.local" },
+            new { DepartmentName = "HR", Email = "hrm@kuchnia.local" },
+            new { DepartmentName = "BOK", Email = "bokm@kuchnia.local" },
+            new { DepartmentName = "Administracja", Email = "admin@kuchnia.local" },
+        };
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE d
+            SET [HeadEmployeeId] = e.[Id],
+                [UpdatedAt] = @UpdatedAt
+            FROM [Departments] d
+            INNER JOIN [Employees] e ON e.[DepartmentId] = d.[Id] AND e.[IsDeleted] = 0
+            INNER JOIN [Users] u ON u.[Id] = e.[UserId]
+            WHERE d.[Name] = @DepartmentName
+              AND u.[Email] = @Email
+              AND (d.[HeadEmployeeId] IS NULL OR d.[HeadEmployeeId] <> e.[Id]);
+            """,
+            departmentHeads.Select(head => new
+            {
+                head.DepartmentName,
+                head.Email,
+                UpdatedAt = now,
             }),
             cancellationToken: cancellationToken));
 
@@ -279,6 +364,376 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         this.logger.LogInformation("Ensured minimal HR personnel, schedules and leave requests.");
     }
 
+    private async Task SeedModule5OperationsAsync(IDbConnection db, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var tickets = new[]
+        {
+            new
+            {
+                ClientEmail = "client.anna@kuchnia.local",
+                AssignedEmail = "bok@kuchnia.local",
+                Title = "Zmiana adresu dostawy na jutro",
+                Description = "Klient prosi o zmiane adresu przed jutrzejsza dostawa i potwierdzenie SMS.",
+                Status = (int)TicketStatus.Open,
+                Priority = (int)TicketPriority.High,
+                ClosedAt = (DateTimeOffset?)null,
+                CreatedAt = now.AddHours(-22),
+            },
+            new
+            {
+                ClientEmail = "client.michal@kuchnia.local",
+                AssignedEmail = (string?)null,
+                Title = "Pytanie o kalorycznosc diety sport",
+                Description = "Klient pyta, czy wariant sport 2500 kcal moze byc obnizony do 2300 kcal.",
+                Status = (int)TicketStatus.New,
+                Priority = (int)TicketPriority.Medium,
+                ClosedAt = (DateTimeOffset?)null,
+                CreatedAt = now.AddHours(-20),
+            },
+            new
+            {
+                ClientEmail = "client.katarzyna@kuchnia.local",
+                AssignedEmail = "bokm@kuchnia.local",
+                Title = "Brak jednego pudelka w dostawie",
+                Description = "Klient zglasza brak kolacji w dzisiejszej dostawie i prosi o rekompensate.",
+                Status = (int)TicketStatus.Pending,
+                Priority = (int)TicketPriority.Critical,
+                ClosedAt = (DateTimeOffset?)null,
+                CreatedAt = now.AddHours(-18),
+            },
+            new
+            {
+                ClientEmail = "client.robert@kuchnia.local",
+                AssignedEmail = "bok@kuchnia.local",
+                Title = "Prosba o fakture za maj",
+                Description = "Klient potrzebuje faktury zbiorczej za zamowienia z maja.",
+                Status = (int)TicketStatus.Resolved,
+                Priority = (int)TicketPriority.Low,
+                ClosedAt = (DateTimeOffset?)now.AddHours(-2),
+                CreatedAt = now.AddHours(-16),
+            },
+            new
+            {
+                ClientEmail = "client.anna@kuchnia.local",
+                AssignedEmail = (string?)null,
+                Title = "Dostawa poza oknem czasowym",
+                Description = "Klient prosi o kontakt w sprawie opoznionej dostawy na trasie porannej.",
+                Status = (int)TicketStatus.New,
+                Priority = (int)TicketPriority.High,
+                ClosedAt = (DateTimeOffset?)null,
+                CreatedAt = now.AddHours(-14),
+            },
+            new
+            {
+                ClientEmail = "client.michal@kuchnia.local",
+                AssignedEmail = "bok@kuchnia.local",
+                Title = "Pauza abonamentu na urlop",
+                Description = "Klient chce zawiesic dostawe na trzy dni urlopu i przesunac pakiet.",
+                Status = (int)TicketStatus.Open,
+                Priority = (int)TicketPriority.Medium,
+                ClosedAt = (DateTimeOffset?)null,
+                CreatedAt = now.AddHours(-12),
+            },
+            new
+            {
+                ClientEmail = "client.katarzyna@kuchnia.local",
+                AssignedEmail = "bokm@kuchnia.local",
+                Title = "Alergen niezgodny z profilem",
+                Description = "Klient widzi orzechy w skladzie posilku mimo ustawionej preferencji bez orzechow.",
+                Status = (int)TicketStatus.Pending,
+                Priority = (int)TicketPriority.Critical,
+                ClosedAt = (DateTimeOffset?)null,
+                CreatedAt = now.AddHours(-10),
+            },
+            new
+            {
+                ClientEmail = "client.robert@kuchnia.local",
+                AssignedEmail = (string?)null,
+                Title = "Aktualizacja numeru telefonu",
+                Description = "Klient prosi o podmiane numeru kontaktowego dla kuriera.",
+                Status = (int)TicketStatus.New,
+                Priority = (int)TicketPriority.Low,
+                ClosedAt = (DateTimeOffset?)null,
+                CreatedAt = now.AddHours(-8),
+            },
+            new
+            {
+                ClientEmail = "client.anna@kuchnia.local",
+                AssignedEmail = "bok@kuchnia.local",
+                Title = "Zmiana wariantu z vege na standard",
+                Description = "Klient chce zmienic wariant od kolejnego tygodnia rozliczeniowego.",
+                Status = (int)TicketStatus.Open,
+                Priority = (int)TicketPriority.Medium,
+                ClosedAt = (DateTimeOffset?)null,
+                CreatedAt = now.AddHours(-6),
+            },
+            new
+            {
+                ClientEmail = "client.michal@kuchnia.local",
+                AssignedEmail = "bokm@kuchnia.local",
+                Title = "Reklamacja temperatury posilku",
+                Description = "Klient zglasza zbyt wysoka temperature torby przy odbiorze i prosi o weryfikacje HACCP.",
+                Status = (int)TicketStatus.Pending,
+                Priority = (int)TicketPriority.High,
+                ClosedAt = (DateTimeOffset?)null,
+                CreatedAt = now.AddHours(-5),
+            },
+            new
+            {
+                ClientEmail = "client.katarzyna@kuchnia.local",
+                AssignedEmail = "bok@kuchnia.local",
+                Title = "Potwierdzenie platnosci",
+                Description = "Klient nie widzi platnosci w panelu mimo potwierdzenia bankowego.",
+                Status = (int)TicketStatus.Resolved,
+                Priority = (int)TicketPriority.Medium,
+                ClosedAt = (DateTimeOffset?)now.AddHours(-1),
+                CreatedAt = now.AddHours(-4),
+            },
+            new
+            {
+                ClientEmail = "client.robert@kuchnia.local",
+                AssignedEmail = (string?)null,
+                Title = "Dodatkowa informacja dla kuriera",
+                Description = "Klient chce dodac kod do domofonu i prosbe o telefon przed dostawa.",
+                Status = (int)TicketStatus.New,
+                Priority = (int)TicketPriority.Low,
+                ClosedAt = (DateTimeOffset?)null,
+                CreatedAt = now.AddHours(-3),
+            },
+        };
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO [Tickets]
+                ([Title], [Description], [ClientUserId], [OrderId], [DeliveryCalendarId], [AssignedToUserId], [Status], [Priority],
+                 [ClosedAt], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy],
+                 [CreatedAt], [UpdatedAt])
+            SELECT
+                @Title, @Description, client.[Id], NULL, NULL, assigned.[Id], @Status, @Priority,
+                @ClosedAt, @CreatedBy, NULL, 0, NULL, NULL, @CreatedAt, NULL
+            FROM [Users] client
+            OUTER APPLY (
+                SELECT TOP 1 assignee.[Id]
+                FROM [Users] assignee
+                WHERE assignee.[Email] = @AssignedEmail
+            ) assigned
+            WHERE client.[Email] = @ClientEmail
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [Tickets] ticket
+                    WHERE ticket.[ClientUserId] = client.[Id]
+                      AND ticket.[Title] = @Title
+                      AND ticket.[IsDeleted] = 0);
+            """,
+            tickets.Select(ticket => new
+            {
+                ticket.ClientEmail,
+                ticket.AssignedEmail,
+                ticket.Title,
+                ticket.Description,
+                ticket.Status,
+                ticket.Priority,
+                ticket.ClosedAt,
+                CreatedBy = "DatabaseSeeder",
+                ticket.CreatedAt,
+            }),
+            cancellationToken: cancellationToken));
+
+        var auditLogs = new[]
+        {
+            new
+            {
+                UserEmail = "admin@kuchnia.local",
+                Action = "Seed",
+                TargetEntity = "Users",
+                TargetId = "seed:module5-users",
+                OldValue = (string?)null,
+                NewValue = "{\"roles\":[\"Admin\",\"HR\",\"BOK\",\"Client\"],\"source\":\"DatabaseSeeder\"}",
+                Timestamp = now.AddHours(-24),
+                IPAddress = "127.0.0.1",
+            },
+            new
+            {
+                UserEmail = "hrm@kuchnia.local",
+                Action = "Seed",
+                TargetEntity = "Employees",
+                TargetId = "seed:module5-employees",
+                OldValue = (string?)null,
+                NewValue = "{\"departments\":8,\"employees\":15,\"source\":\"DatabaseSeeder\"}",
+                Timestamp = now.AddHours(-23),
+                IPAddress = "127.0.0.1",
+            },
+            new
+            {
+                UserEmail = "bokm@kuchnia.local",
+                Action = "Seed",
+                TargetEntity = "Tickets",
+                TargetId = "seed:bok-queue",
+                OldValue = (string?)null,
+                NewValue = "{\"tickets\":12,\"openQueue\":true,\"source\":\"DatabaseSeeder\"}",
+                Timestamp = now.AddHours(-22),
+                IPAddress = "127.0.0.1",
+            },
+            new
+            {
+                UserEmail = "admin@kuchnia.local",
+                Action = "Update",
+                TargetEntity = "Department",
+                TargetId = "seed:department-heads",
+                OldValue = "{\"headEmployeeId\":null}",
+                NewValue = "{\"headEmployeeId\":\"assigned-from-seed\"}",
+                Timestamp = now.AddHours(-21),
+                IPAddress = "127.0.0.1",
+            },
+            new
+            {
+                UserEmail = "bok@kuchnia.local",
+                Action = "Assign",
+                TargetEntity = "Ticket",
+                TargetId = "seed:ticket-address-change",
+                OldValue = "{\"assignedToUserId\":null}",
+                NewValue = "{\"assignedToUserEmail\":\"bok@kuchnia.local\"}",
+                Timestamp = now.AddHours(-20),
+                IPAddress = "127.0.0.1",
+            },
+            new
+            {
+                UserEmail = "hr@kuchnia.local",
+                Action = "Create",
+                TargetEntity = "WorkSchedule",
+                TargetId = "seed:today-shifts",
+                OldValue = (string?)null,
+                NewValue = "{\"todayShifts\":4,\"tomorrowShifts\":2}",
+                Timestamp = now.AddHours(-19),
+                IPAddress = "127.0.0.1",
+            },
+        };
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO [SystemLogs]
+                ([UserId], [Action], [TargetEntity], [TargetId], [OldValue], [NewValue],
+                 [Timestamp], [IPAddress], [CreatedAt], [UpdatedAt])
+            SELECT
+                u.[Id], @Action, @TargetEntity, @TargetId, @OldValue, @NewValue,
+                @Timestamp, @IPAddress, @CreatedAt, NULL
+            FROM [Users] u
+            WHERE u.[Email] = @UserEmail
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [SystemLogs] log
+                    WHERE log.[Action] = @Action
+                      AND log.[TargetEntity] = @TargetEntity
+                      AND log.[TargetId] = @TargetId);
+            """,
+            auditLogs.Select(log => new
+            {
+                log.UserEmail,
+                log.Action,
+                log.TargetEntity,
+                log.TargetId,
+                log.OldValue,
+                log.NewValue,
+                log.Timestamp,
+                log.IPAddress,
+                CreatedAt = now,
+            }),
+            cancellationToken: cancellationToken));
+
+        var notifications = new[]
+        {
+            new
+            {
+                Type = "HR",
+                Severity = NotificationSeverity.Info,
+                Title = "HR gotowy do pracy",
+                Message = "Seeder utworzyl dzialy, pracownikow, grafiki i wnioski urlopowe.",
+                LinkUrl = "/hr",
+                DeduplicationKey = "seed:m5:hr-ready",
+                SourceType = "Seed",
+                SourceId = (long?)null,
+                Roles = new[] { UserRoles.HR, UserRoles.HRManager, UserRoles.Admin },
+            },
+            new
+            {
+                Type = "BOK",
+                Severity = NotificationSeverity.Warning,
+                Title = "Kolejka BOK ma zgloszenia",
+                Message = "Seeder dodal startowa kolejke zgloszen klientow z roznymi priorytetami.",
+                LinkUrl = "/bok/tickets",
+                DeduplicationKey = "seed:m5:bok-queue",
+                SourceType = "Seed",
+                SourceId = (long?)null,
+                Roles = new[] { UserRoles.BOK, UserRoles.BOKManager, UserRoles.Admin },
+            },
+            new
+            {
+                Type = "Admin",
+                Severity = NotificationSeverity.Info,
+                Title = "Audyt M5 aktywny",
+                Message = "Operacje HR, BOK i Admin beda dopisywane do logow systemowych i powiadomien.",
+                LinkUrl = "/admin/logs",
+                DeduplicationKey = "seed:m5:audit-ready",
+                SourceType = "Seed",
+                SourceId = (long?)null,
+                Roles = new[] { UserRoles.Admin },
+            },
+        };
+
+        foreach (var notification in notifications)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                DECLARE @NotificationId bigint;
+
+                SELECT @NotificationId = [Id]
+                FROM [Notifications]
+                WHERE [DeduplicationKey] = @DeduplicationKey;
+
+                IF @NotificationId IS NULL
+                BEGIN
+                    INSERT INTO [Notifications]
+                        ([Type], [Severity], [Title], [Message], [LinkUrl], [DeduplicationKey],
+                         [SourceType], [SourceId], [CreatedAt], [UpdatedAt])
+                    VALUES
+                        (@Type, @Severity, @Title, @Message, @LinkUrl, @DeduplicationKey,
+                         @SourceType, @SourceId, @CreatedAt, NULL);
+
+                    SET @NotificationId = CAST(SCOPE_IDENTITY() AS bigint);
+                END
+
+                INSERT INTO [UserNotifications]
+                    ([NotificationId], [UserId], [IsRead], [DeliveredAt], [ReadAt], [CreatedAt], [UpdatedAt])
+                SELECT
+                    @NotificationId, u.[Id], 0, @DeliveredAt, NULL, @DeliveredAt, NULL
+                FROM [Users] u
+                WHERE u.[Role] IN @Roles
+                  AND NOT EXISTS (
+                        SELECT 1
+                        FROM [UserNotifications] un
+                        WHERE un.[NotificationId] = @NotificationId
+                          AND un.[UserId] = u.[Id]);
+                """,
+                new
+                {
+                    notification.Type,
+                    notification.Severity,
+                    notification.Title,
+                    notification.Message,
+                    notification.LinkUrl,
+                    notification.DeduplicationKey,
+                    notification.SourceType,
+                    notification.SourceId,
+                    notification.Roles,
+                    CreatedAt = now,
+                    DeliveredAt = now,
+                },
+                cancellationToken: cancellationToken));
+        }
+
+        this.logger.LogInformation("Ensured minimal Module 5 BOK tickets, audit logs and notifications.");
+    }
+
     private async Task SeedDemoDataAsync(CancellationToken cancellationToken)
     {
         using var db = connectionFactory.CreateConnection();
@@ -358,6 +813,13 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             WHERE [CreatedBy] = N'DemoSeeder'
                OR [Notes] LIKE N'%Demo lifecycle%'
                OR [Notes] LIKE N'%Wspolny demo seed%';
+
+            UPDATE [Tickets]
+            SET [OrderId] = NULL,
+                [DeliveryCalendarId] = NULL,
+                [UpdatedAt] = SYSUTCDATETIME()
+            WHERE [OrderId] IN (SELECT [Id] FROM @DemoOrders)
+               OR [DeliveryCalendarId] IN (SELECT [Id] FROM @DemoDeliveryCalendar);
 
             DECLARE @DemoProductionPlanItems TABLE ([Id] int PRIMARY KEY);
             INSERT INTO @DemoProductionPlanItems ([Id])
@@ -698,6 +1160,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         }
 
         await EnsureUnifiedDemoProductionPlanAsync(today, auditUser, cancellationToken);
+        await SeedModule5TicketOrderLinksAsync(db, today, now, cancellationToken);
 
         this.logger.LogInformation(
             "Seeded unified M1/M2/M3/M4 demo data for {DemoDate}: {VehicleCount} vehicles, {DriverCount} drivers, {DeliveryCount} delivery candidates.",
@@ -705,6 +1168,58 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             vehicles.Length,
             drivers.Length,
             customerSeeds.Length);
+    }
+
+    private async Task SeedModule5TicketOrderLinksAsync(
+        IDbConnection db,
+        DateOnly today,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            DECLARE @Links TABLE
+            (
+                [Title] nvarchar(200) NOT NULL,
+                [OrderNumber] nvarchar(100) NOT NULL
+            );
+
+            INSERT INTO @Links ([Title], [OrderNumber])
+            VALUES
+                (N'Brak jednego pudelka w dostawie', @OrderNumber03),
+                (N'Dostawa poza oknem czasowym', @OrderNumber05),
+                (N'Alergen niezgodny z profilem', @OrderNumber07),
+                (N'Reklamacja temperatury posilku', @OrderNumber10),
+                (N'Dodatkowa informacja dla kuriera', @OrderNumber12),
+                (N'Zmiana adresu dostawy na jutro', @OrderNumber01);
+
+            UPDATE ticket
+            SET ticket.[ClientUserId] = orders.[CustomerId],
+                ticket.[OrderId] = orders.[Id],
+                ticket.[DeliveryCalendarId] = deliveries.[Id],
+                ticket.[UpdatedAt] = @UpdatedAt
+            FROM [Tickets] ticket
+            INNER JOIN @Links links ON links.[Title] = ticket.[Title]
+            INNER JOIN [Orders] orders
+                ON orders.[OrderNumber] = links.[OrderNumber]
+               AND orders.[IsDeleted] = 0
+            INNER JOIN [DeliveryCalendar] deliveries
+                ON deliveries.[OrderId] = orders.[Id]
+               AND deliveries.[IsDeleted] = 0
+            WHERE ticket.[CreatedBy] = N'DatabaseSeeder'
+              AND ticket.[IsDeleted] = 0;
+            """,
+            new
+            {
+                OrderNumber01 = $"DEMO-M4-{today:yyyyMMdd}-01",
+                OrderNumber03 = $"DEMO-M4-{today:yyyyMMdd}-03",
+                OrderNumber05 = $"DEMO-M4-{today:yyyyMMdd}-05",
+                OrderNumber07 = $"DEMO-M4-{today:yyyyMMdd}-07",
+                OrderNumber10 = $"DEMO-M4-{today:yyyyMMdd}-10",
+                OrderNumber12 = $"DEMO-M4-{today:yyyyMMdd}-12",
+                UpdatedAt = now,
+            },
+            cancellationToken: cancellationToken));
     }
 
     private async Task EnsureUnifiedDemoProductionPlanAsync(

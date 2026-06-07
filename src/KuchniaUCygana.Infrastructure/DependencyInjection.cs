@@ -2,6 +2,7 @@ using FluentMigrator.Runner;
 using KuchniaUCygana.Application.Configuration;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Application.Services.Logistics;
+using KuchniaUCygana.Domain.Entities.Admin;
 using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Entities.Customers;
 using KuchniaUCygana.Domain.Entities.Orders;
@@ -61,6 +62,8 @@ public static class DependencyInjection
         services.AddScoped(typeof(IRepository<>), typeof(BaseRepository<>));
         services.AddScoped<IRepository<User>, BaseRepository<User>>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ISystemLogRepository, SystemLogRepository>();
+        services.AddScoped<IRepository<SystemLog>>(sp => sp.GetRequiredService<ISystemLogRepository>());
 
         // Module 3 repositories.
         services.AddScoped<IBatchRepository, BatchRepository>();

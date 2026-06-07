@@ -7,7 +7,7 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class DeliveryWindowRepository : BaseRepository<DeliveryWindow>, IDeliveryWindowRepository
 {
-    public DeliveryWindowRepository(IDbConnectionFactory factory) : base(factory) { }
+    public DeliveryWindowRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
     public async Task<IEnumerable<DeliveryWindow>> GetActiveWindowsAsync()
     {
@@ -16,3 +16,5 @@ public sealed class DeliveryWindowRepository : BaseRepository<DeliveryWindow>, I
         return await db.QueryAsync<DeliveryWindow>(sql);
     }
 }
+
+

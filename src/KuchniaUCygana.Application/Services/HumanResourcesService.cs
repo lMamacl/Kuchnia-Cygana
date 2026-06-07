@@ -148,6 +148,34 @@ public sealed class HumanResourcesService : IHumanResourcesService
         return (await MapEmployeesAsync(new[] { existing })).Single();
     }
 
+    public async Task<EmployeeDto?> ChangeEmployeeAssignmentAsync(int id, int departmentId, string position)
+    {
+        var existing = await employeeRepository.GetByIdAsync(id);
+        if (existing is null)
+        {
+            return null;
+        }
+
+        var normalizedPosition = position?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedPosition))
+        {
+            throw new InvalidOperationException("Stanowisko jest wymagane.");
+        }
+
+        if (normalizedPosition.Length > 100)
+        {
+            throw new InvalidOperationException("Stanowisko moze miec maksymalnie 100 znakow.");
+        }
+
+        await EnsureDepartmentExistsAsync(departmentId);
+
+        existing.DepartmentId = departmentId;
+        existing.Position = normalizedPosition;
+        await employeeRepository.UpdateAsync(existing);
+
+        return (await MapEmployeesAsync(new[] { existing })).Single();
+    }
+
     public async Task<bool> DeactivateEmployeeAsync(int id, DateOnly? terminationDate = null)
     {
         var employee = await employeeRepository.GetByIdAsync(id);

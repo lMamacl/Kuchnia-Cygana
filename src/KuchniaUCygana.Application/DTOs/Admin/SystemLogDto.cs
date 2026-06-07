@@ -21,4 +21,6 @@ public sealed class SystemLogDto
     public DateTimeOffset Timestamp { get; set; }
 
     public string? IPAddress { get; set; }
+
+    public bool IsArchived { get; set; }
 }

@@ -1,5 +1,7 @@
 using KuchniaUCygana.Application.DTOs.HR;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Entities.Notifications;
+using KuchniaUCygana.Web.Filters;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,13 +13,16 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class HumanResourcesController : Controller
 {
     private readonly IHumanResourcesService humanResourcesService;
+    private readonly IStaffActivityService staffActivityService;
     private readonly IUserService userService;
 
     public HumanResourcesController(
         IHumanResourcesService humanResourcesService,
+        IStaffActivityService staffActivityService,
         IUserService userService)
     {
         this.humanResourcesService = humanResourcesService;
+        this.staffActivityService = staffActivityService;
         this.userService = userService;
     }
 
@@ -29,10 +34,10 @@ public sealed class HumanResourcesController : Controller
     }
 
     [HttpGet("departments")]
-    public async Task<IActionResult> Departments()
+    public async Task<IActionResult> Departments(int page = 1, int pageSize = 10)
     {
         SetViewData("Dzialy", "Kadry", "Struktura organizacyjna i odpowiedzialni pracownicy.");
-        return View(await BuildModelAsync());
+        return View(await BuildModelAsync(departmentsPage: page, pageSize: pageSize));
     }
 
     [HttpPost("departments")]
@@ -46,7 +51,21 @@ public sealed class HumanResourcesController : Controller
 
         try
         {
-            await humanResourcesService.CreateDepartmentAsync(request);
+            var department = await humanResourcesService.CreateDepartmentAsync(request);
+            await staffActivityService.RecordAsync(
+                "HR.CreateDepartment",
+                "Department",
+                department.Id.ToString(),
+                newValue: new { department.Id, department.Name, department.HeadEmployeeId },
+                notification: BuildNotification(
+                    "HR",
+                    NotificationSeverity.Info,
+                    "Nowy dzial w HR",
+                    $"Dodano dzial: {department.Name}.",
+                    "/hr/departments",
+                    "Department",
+                    department.Id),
+                notifyRoles: HrNotificationRoles);
             TempData["Success"] = "Dzial zostal dodany.";
             return RedirectToAction(nameof(Departments));
         }
@@ -58,9 +77,16 @@ public sealed class HumanResourcesController : Controller
     }
 
     [HttpGet("employees")]
-    public async Task<IActionResult> Employees()
+    public async Task<IActionResult> Employees(int page = 1, int pageSize = 10)
     {
         SetViewData("Pracownicy", "Kadry", "Kartoteka pracownikow i status zatrudnienia.");
+        return View(await BuildModelAsync(employeesPage: page, pageSize: pageSize));
+    }
+
+    [HttpGet("employees/new")]
+    public async Task<IActionResult> NewEmployee()
+    {
+        SetViewData("Nowy pracownik", "Kadry", "Dodanie pracownika do kartoteki HR.");
         return View(await BuildModelAsync());
     }
 
@@ -69,21 +95,102 @@ public sealed class HumanResourcesController : Controller
     {
         if (!ModelState.IsValid)
         {
-            SetViewData("Pracownicy", "Kadry", "Kartoteka pracownikow i status zatrudnienia.");
-            return View("Employees", await BuildModelAsync(newEmployee: request));
+            SetViewData("Nowy pracownik", "Kadry", "Dodanie pracownika do kartoteki HR.");
+            return View("NewEmployee", await BuildModelAsync(newEmployee: request));
         }
 
         try
         {
-            await humanResourcesService.CreateEmployeeAsync(request);
+            var employee = await humanResourcesService.CreateEmployeeAsync(request);
+            await staffActivityService.RecordAsync(
+                "HR.CreateEmployee",
+                "Employee",
+                employee.Id.ToString(),
+                newValue: new
+                {
+                    employee.Id,
+                    employee.FullName,
+                    employee.Email,
+                    employee.DepartmentName,
+                    employee.Position,
+                },
+                notification: BuildNotification(
+                    "HR",
+                    NotificationSeverity.Success,
+                    "Dodano pracownika",
+                    $"{employee.FullName} dolaczyl(a) do dzialu {employee.DepartmentName ?? "bez nazwy"}.",
+                    "/hr/employees",
+                    "Employee",
+                    employee.Id),
+                notifyRoles: HrNotificationRoles);
             TempData["Success"] = "Pracownik zostal dodany.";
             return RedirectToAction(nameof(Employees));
         }
         catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(NewEmployee));
+        }
+    }
+
+    [HttpPost("employees/{id:int}/assignment")]
+    public async Task<IActionResult> ChangeEmployeeAssignment(int id, int departmentId, string position)
+    {
+        var normalizedPosition = position?.Trim() ?? string.Empty;
+        var before = await humanResourcesService.GetEmployeeByIdAsync(id);
+        if (before is not null &&
+            before.DepartmentId == departmentId &&
+            string.Equals(before.Position, normalizedPosition, StringComparison.Ordinal))
+        {
+            TempData["Success"] = "Pracownik ma juz wybrany dzial i stanowisko.";
             return RedirectToAction(nameof(Employees));
         }
+
+        try
+        {
+            var employee = await humanResourcesService.ChangeEmployeeAssignmentAsync(id, departmentId, normalizedPosition);
+            if (employee is null)
+            {
+                TempData["Error"] = "Nie znaleziono pracownika.";
+                return RedirectToAction(nameof(Employees));
+            }
+
+            await staffActivityService.RecordAsync(
+                "HR.ChangeEmployeeAssignment",
+                "Employee",
+                employee.Id.ToString(),
+                oldValue: new
+                {
+                    Id = before?.Id ?? employee.Id,
+                    DepartmentId = before?.DepartmentId,
+                    DepartmentName = before?.DepartmentName,
+                    Position = before?.Position,
+                },
+                newValue: new
+                {
+                    employee.Id,
+                    employee.FullName,
+                    employee.DepartmentId,
+                    employee.DepartmentName,
+                    employee.Position,
+                },
+                notification: BuildNotification(
+                    "HR",
+                    NotificationSeverity.Info,
+                    "Zmieniono przypisanie pracownika",
+                    $"{employee.FullName}: {employee.DepartmentName ?? "bez nazwy"}, {employee.Position}.",
+                    "/hr/employees",
+                    "Employee",
+                    employee.Id),
+                notifyRoles: HrNotificationRoles);
+            TempData["Success"] = "Dzial i stanowisko pracownika zostaly zaktualizowane.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Employees));
     }
 
     [Authorize(Roles = "HRManager,Admin")]
@@ -91,6 +198,24 @@ public sealed class HumanResourcesController : Controller
     public async Task<IActionResult> DeactivateEmployee(int id)
     {
         var deactivated = await humanResourcesService.DeactivateEmployeeAsync(id);
+        if (deactivated)
+        {
+            await staffActivityService.RecordAsync(
+                "HR.DeactivateEmployee",
+                "Employee",
+                id.ToString(),
+                newValue: new { Id = id, IsActive = false },
+                notification: BuildNotification(
+                    "HR",
+                    NotificationSeverity.Warning,
+                    "Pracownik dezaktywowany",
+                    $"Kartoteka pracownika #{id} zostala dezaktywowana.",
+                    "/hr/employees",
+                    "Employee",
+                    id),
+                notifyRoles: HrNotificationRoles);
+        }
+
         TempData[deactivated ? "Success" : "Error"] = deactivated
             ? "Pracownik zostal dezaktywowany."
             : "Nie znaleziono pracownika.";
@@ -98,31 +223,62 @@ public sealed class HumanResourcesController : Controller
     }
 
     [HttpGet("leaves")]
-    public async Task<IActionResult> Leaves()
+    public async Task<IActionResult> Leaves(int page = 1, int pageSize = 10)
     {
         SetViewData("Urlopy", "Kadry", "Wnioski urlopowe i decyzje kadrowe.");
+        return View(await BuildModelAsync(leaveRequestsPage: page, pageSize: pageSize));
+    }
+
+    [HttpGet("leaves/new")]
+    [AllowOutsideShift]
+    public async Task<IActionResult> NewLeaveRequest()
+    {
+        SetViewData("Nowy wniosek", "Kadry", "Rejestracja wniosku urlopowego.");
         return View(await BuildModelAsync());
     }
 
     [HttpPost("leaves")]
+    [AllowOutsideShift]
     public async Task<IActionResult> CreateLeaveRequest(CreateLeaveRequestRequest request)
     {
         if (!ModelState.IsValid)
         {
-            SetViewData("Urlopy", "Kadry", "Wnioski urlopowe i decyzje kadrowe.");
-            return View("Leaves", await BuildModelAsync(newLeaveRequest: request));
+            SetViewData("Nowy wniosek", "Kadry", "Rejestracja wniosku urlopowego.");
+            return View("NewLeaveRequest", await BuildModelAsync(newLeaveRequest: request));
         }
 
         try
         {
-            await humanResourcesService.CreateLeaveRequestAsync(request);
+            var leaveRequest = await humanResourcesService.CreateLeaveRequestAsync(request);
+            await staffActivityService.RecordAsync(
+                "HR.CreateLeaveRequest",
+                "LeaveRequest",
+                leaveRequest.Id.ToString(),
+                newValue: new
+                {
+                    leaveRequest.Id,
+                    leaveRequest.EmployeeId,
+                    leaveRequest.EmployeeFullName,
+                    leaveRequest.StartDate,
+                    leaveRequest.EndDate,
+                    leaveRequest.LeaveType,
+                },
+                notification: BuildNotification(
+                    "HR",
+                    NotificationSeverity.Info,
+                    "Nowy wniosek urlopowy",
+                    $"{leaveRequest.EmployeeFullName ?? $"Pracownik #{leaveRequest.EmployeeId}"} dodal(a) wniosek urlopowy.",
+                    "/hr/leaves",
+                    "LeaveRequest",
+                    leaveRequest.Id),
+                notifyRoles: HrManagerNotificationRoles);
             TempData["Success"] = "Wniosek urlopowy zostal dodany.";
             return RedirectToAction(nameof(Leaves));
         }
         catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
-            return RedirectToAction(nameof(Leaves));
+            return RedirectToAction(nameof(NewLeaveRequest));
         }
     }
 
@@ -145,43 +301,184 @@ public sealed class HumanResourcesController : Controller
         TempData[reviewed is null ? "Error" : "Success"] = reviewed is null
             ? "Nie znaleziono wniosku urlopowego."
             : "Wniosek urlopowy zostal zaktualizowany.";
+        if (reviewed is not null)
+        {
+            await staffActivityService.RecordAsync(
+                "HR.ReviewLeaveRequest",
+                "LeaveRequest",
+                reviewed.Id.ToString(),
+                newValue: new
+                {
+                    reviewed.Id,
+                    reviewed.EmployeeId,
+                    reviewed.EmployeeFullName,
+                    reviewed.Status,
+                    reviewed.ApprovedByEmployeeId,
+                    reviewed.RejectionReason,
+                },
+                notification: BuildNotification(
+                    "HR",
+                    reviewed.Status == 1 ? NotificationSeverity.Success : NotificationSeverity.Warning,
+                    "Decyzja urlopowa",
+                    $"Wniosek urlopowy #{reviewed.Id} zostal rozpatrzony.",
+                    "/hr/leaves",
+                    "LeaveRequest",
+                    reviewed.Id),
+                notifyRoles: HrNotificationRoles);
+        }
+
         return RedirectToAction(nameof(Leaves));
     }
 
     [HttpGet("schedules")]
-    public async Task<IActionResult> Schedules()
+    public async Task<IActionResult> Schedules(int page = 1, int pageSize = 10)
     {
         SetViewData("Grafik", "Kadry", "Zmiany pracownikow i role na zmianie.");
+        return View(await BuildModelAsync(workSchedulesPage: page, pageSize: pageSize));
+    }
+
+    [HttpGet("schedules/new")]
+    [AllowOutsideShift]
+    public async Task<IActionResult> NewWorkSchedule()
+    {
+        SetViewData("Nowa zmiana", "Kadry", "Dodanie zmiany do grafiku.");
         return View(await BuildModelAsync());
     }
 
     [HttpPost("schedules")]
+    [AllowOutsideShift]
     public async Task<IActionResult> CreateWorkSchedule(CreateWorkScheduleRequest request)
     {
         if (!ModelState.IsValid)
         {
-            SetViewData("Grafik", "Kadry", "Zmiany pracownikow i role na zmianie.");
-            return View("Schedules", await BuildModelAsync(newWorkSchedule: request));
+            SetViewData("Nowa zmiana", "Kadry", "Dodanie zmiany do grafiku.");
+            return View("NewWorkSchedule", await BuildModelAsync(newWorkSchedule: request));
         }
 
         try
         {
-            await humanResourcesService.CreateWorkScheduleAsync(request);
+            var schedule = await humanResourcesService.CreateWorkScheduleAsync(request);
+            await staffActivityService.RecordAsync(
+                "HR.CreateWorkSchedule",
+                "WorkSchedule",
+                schedule.Id.ToString(),
+                newValue: new
+                {
+                    schedule.Id,
+                    schedule.UserId,
+                    schedule.EmployeeFullName,
+                    schedule.ShiftDate,
+                    schedule.Shift,
+                    schedule.RoleAtShift,
+                },
+                notification: BuildNotification(
+                    "HR",
+                    NotificationSeverity.Info,
+                    "Nowa zmiana w grafiku",
+                    $"{schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}"} ma nowa zmiane {schedule.ShiftDate:dd.MM.yyyy}.",
+                    "/hr/schedules",
+                    "WorkSchedule",
+                    schedule.Id),
+                notifyRoles: HrNotificationRoles);
             TempData["Success"] = "Zmiana zostala dodana do grafiku.";
             return RedirectToAction(nameof(Schedules));
         }
         catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(NewWorkSchedule));
+        }
+    }
+
+    [HttpPost("schedules/{id:int}/update")]
+    [AllowOutsideShift]
+    public async Task<IActionResult> UpdateWorkSchedule(int id, UpdateWorkScheduleRequest request)
+    {
+        request.Id = id;
+        var before = await humanResourcesService.GetWorkScheduleByIdAsync(id);
+
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = "Niepoprawne dane zmiany.";
             return RedirectToAction(nameof(Schedules));
         }
+
+        try
+        {
+            var schedule = await humanResourcesService.UpdateWorkScheduleAsync(id, request);
+            if (schedule is null)
+            {
+                TempData["Error"] = "Nie znaleziono zmiany w grafiku.";
+                return RedirectToAction(nameof(Schedules));
+            }
+
+            await staffActivityService.RecordAsync(
+                "HR.UpdateWorkSchedule",
+                "WorkSchedule",
+                schedule.Id.ToString(),
+                oldValue: before is null
+                    ? null
+                    : new
+                    {
+                        before.Id,
+                        before.UserId,
+                        before.EmployeeFullName,
+                        before.ShiftDate,
+                        before.Shift,
+                        before.RoleAtShift,
+                    },
+                newValue: new
+                {
+                    schedule.Id,
+                    schedule.UserId,
+                    schedule.EmployeeFullName,
+                    schedule.ShiftDate,
+                    schedule.Shift,
+                    schedule.RoleAtShift,
+                },
+                notification: BuildNotification(
+                    "HR",
+                    NotificationSeverity.Info,
+                    "Zmieniono grafik",
+                    $"{schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}"} ma zaktualizowana zmiane {schedule.ShiftDate:dd.MM.yyyy}.",
+                    "/hr/schedules",
+                    "WorkSchedule",
+                    schedule.Id),
+                notifyRoles: HrNotificationRoles);
+            TempData["Success"] = "Zmiana w grafiku zostala zaktualizowana.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Schedules));
     }
 
     [Authorize(Roles = "HRManager,Admin")]
     [HttpPost("schedules/{id:int}/delete")]
+    [AllowOutsideShift]
     public async Task<IActionResult> DeleteWorkSchedule(int id)
     {
         var deleted = await humanResourcesService.DeleteWorkScheduleAsync(id);
+        if (deleted)
+        {
+            await staffActivityService.RecordAsync(
+                "HR.DeleteWorkSchedule",
+                "WorkSchedule",
+                id.ToString(),
+                oldValue: new { Id = id },
+                notification: BuildNotification(
+                    "HR",
+                    NotificationSeverity.Warning,
+                    "Usunieto zmiane z grafiku",
+                    $"Zmiana #{id} zostala usunieta z grafiku.",
+                    "/hr/schedules",
+                    "WorkSchedule",
+                    id),
+                notifyRoles: HrNotificationRoles);
+        }
+
         TempData[deleted ? "Success" : "Error"] = deleted
             ? "Zmiana zostala usunieta z grafiku."
             : "Nie znaleziono zmiany.";
@@ -192,15 +489,42 @@ public sealed class HumanResourcesController : Controller
         CreateDepartmentRequest? newDepartment = null,
         CreateEmployeeRequest? newEmployee = null,
         CreateLeaveRequestRequest? newLeaveRequest = null,
-        CreateWorkScheduleRequest? newWorkSchedule = null)
+        CreateWorkScheduleRequest? newWorkSchedule = null,
+        int departmentsPage = 1,
+        int employeesPage = 1,
+        int leaveRequestsPage = 1,
+        int workSchedulesPage = 1,
+        int pageSize = 10)
     {
+        var departments = (await humanResourcesService.GetDepartmentsAsync()).ToArray();
+        var employees = (await humanResourcesService.GetEmployeesAsync()).ToArray();
+        var leaveRequests = (await humanResourcesService.GetLeaveRequestsAsync()).ToArray();
+        var workSchedules = (await humanResourcesService.GetWorkSchedulesAsync()).ToArray();
+        var users = (await userService.GetAllAsync()).ToArray();
+
         return new HumanResourcesDashboardViewModel
         {
-            Departments = (await humanResourcesService.GetDepartmentsAsync()).ToArray(),
-            Employees = (await humanResourcesService.GetEmployeesAsync()).ToArray(),
-            LeaveRequests = (await humanResourcesService.GetLeaveRequestsAsync()).ToArray(),
-            WorkSchedules = (await humanResourcesService.GetWorkSchedulesAsync()).ToArray(),
-            Users = (await userService.GetAllAsync()).ToArray(),
+            Departments = departments,
+            Employees = employees,
+            LeaveRequests = leaveRequests,
+            WorkSchedules = workSchedules,
+            Users = users,
+            DepartmentsPage = PagedList<DepartmentDto>.Create(
+                departments.OrderBy(department => department.Name),
+                departmentsPage,
+                pageSize),
+            EmployeesPage = PagedList<EmployeeDto>.Create(
+                employees.OrderBy(employee => employee.LastName).ThenBy(employee => employee.FirstName),
+                employeesPage,
+                pageSize),
+            LeaveRequestsPage = PagedList<LeaveRequestDto>.Create(
+                leaveRequests.OrderByDescending(request => request.CreatedAt),
+                leaveRequestsPage,
+                pageSize),
+            WorkSchedulesPage = PagedList<WorkScheduleDto>.Create(
+                workSchedules.OrderBy(schedule => schedule.ShiftDate).ThenBy(schedule => schedule.Shift),
+                workSchedulesPage,
+                pageSize),
             NewDepartment = newDepartment ?? new CreateDepartmentRequest(),
             NewEmployee = newEmployee ?? new CreateEmployeeRequest
             {
@@ -225,4 +549,27 @@ public sealed class HumanResourcesController : Controller
         ViewData["Section"] = section;
         ViewData["Description"] = description;
     }
+
+    private static readonly string[] HrNotificationRoles = ["HR", "HRManager", "Admin"];
+
+    private static readonly string[] HrManagerNotificationRoles = ["HRManager", "Admin"];
+
+    private static Notification BuildNotification(
+        string type,
+        string severity,
+        string title,
+        string message,
+        string linkUrl,
+        string sourceType,
+        long sourceId)
+        => new()
+        {
+            Type = type,
+            Severity = severity,
+            Title = title,
+            Message = message,
+            LinkUrl = linkUrl,
+            SourceType = sourceType,
+            SourceId = sourceId,
+        };
 }

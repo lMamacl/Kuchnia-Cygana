@@ -87,6 +87,12 @@
                                 <td>
                                     <div class="fw-semibold">@ticket.Title</div>
                                     <div class="text-secondary small">@ticket.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                    @if (ticket.OrderId.HasValue || ticket.DeliveryCalendarId.HasValue)
+                                    {
+                                        <div class="small text-primary">
+                                            Zamowienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
+                                        </div>
+                                    }
                                 </td>
                                 <td>@(ticket.ClientFullName ?? $"#{ticket.ClientUserId}")</td>
                                 <td><span class="badge bg-blue-lt text-blue">@ticket.Status</span></td>
@@ -125,6 +131,12 @@
                         <div class="text-secondary small">
                             @(ticket.ClientFullName ?? $"Klient #{ticket.ClientUserId}") - @ticket.CreatedAt.ToLocalTime().ToString("dd.MM HH:mm")
                         </div>
+                        @if (ticket.OrderId.HasValue || ticket.DeliveryCalendarId.HasValue)
+                        {
+                            <div class="small text-primary">
+                                Zamowienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
+                            </div>
+                        }
                     </div>
                 }
                 @if (unassignedTickets.Length == 0)

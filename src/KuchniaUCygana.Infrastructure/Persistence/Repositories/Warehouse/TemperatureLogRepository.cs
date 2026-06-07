@@ -1,16 +1,17 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
 public sealed class TemperatureLogRepository : BaseRepository<TemperatureLog, long>, ITemperatureLogRepository
 {
-    public TemperatureLogRepository(IDbConnectionFactory factory) : base(factory)
+    public TemperatureLogRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -62,3 +63,5 @@ public sealed class TemperatureLogRepository : BaseRepository<TemperatureLog, lo
             new { haccpLocationId, from, to });
     }
 }
+
+

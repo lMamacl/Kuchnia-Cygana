@@ -14,4 +14,5 @@ public interface IWorkScheduleRepository : IRepository<WorkSchedule>
 {
     Task<IEnumerable<WorkSchedule>> GetByUserIdAsync(int userId);
     Task<IEnumerable<WorkSchedule>> GetByDateRangeAsync(DateOnly start, DateOnly end);
+    Task<IEnumerable<WorkSchedule>> GetByUserIdAndDateRangeAsync(int userId, DateOnly start, DateOnly end);
 }

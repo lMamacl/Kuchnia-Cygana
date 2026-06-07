@@ -2,50 +2,180 @@
 @{
     Layout = "_LayoutStaff";
 
-    var logs = Model.SystemLogs
-        .OrderByDescending(x => x.Timestamp)
-        .ToArray();
+    var auditPage = Model.AuditPage;
+    var filter = Model.AuditFilter;
+    var logs = auditPage.Items;
+    var fromValue = filter.From?.ToString("yyyy-MM-dd");
+    var toValue = filter.To?.ToString("yyyy-MM-dd");
+    var previousPage = Math.Max(1, auditPage.Page - 1);
+    var nextPage = Math.Min(auditPage.TotalPages, auditPage.Page + 1);
+
+    string ShortJson(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "-";
+        }
+
+        return value.Length > 180 ? value[..180] + "..." : value;
+    }
 }
 
-<div class="card">
-    <div class="card-header">
-        <h3 class="card-title">Logi systemowe</h3>
+<div class="row row-cards">
+    <div class="col-12">
+        <form class="card" method="get" asp-controller="Admin" asp-action="Logs">
+            <div class="card-header">
+                <h3 class="card-title">Filtry audytu</h3>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label" for="Search">Szukaj</label>
+                        <input class="form-control" id="Search" name="Search" value="@filter.Search" placeholder="Akcja, obiekt, JSON, IP..." />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="UserId">Uzytkownik</label>
+                        <select class="form-select" id="UserId" name="UserId">
+                            <option value="">Wszyscy</option>
+                            @foreach (var user in Model.Users.OrderBy(user => user.FullName))
+                            {
+                                <option value="@user.Id" selected="@(filter.UserId == user.Id)">
+                                    @(string.IsNullOrWhiteSpace(user.FullName) ? user.Email : user.FullName) (@user.Role)
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="Action">Akcja</label>
+                        <select class="form-select" id="Action" name="Action">
+                            <option value="">Wszystkie</option>
+                            @foreach (var action in auditPage.Actions)
+                            {
+                                <option value="@action" selected="@(string.Equals(filter.Action, action, StringComparison.OrdinalIgnoreCase))">@action</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="TargetEntity">Encja</label>
+                        <select class="form-select" id="TargetEntity" name="TargetEntity">
+                            <option value="">Wszystkie</option>
+                            @foreach (var entity in auditPage.TargetEntities)
+                            {
+                                <option value="@entity" selected="@(string.Equals(filter.TargetEntity, entity, StringComparison.OrdinalIgnoreCase))">@entity</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="From">Od</label>
+                        <input class="form-control" id="From" name="From" type="date" value="@fromValue" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="To">Do</label>
+                        <input class="form-control" id="To" name="To" type="date" value="@toValue" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="PageSize">Na stronie</label>
+                        <select class="form-select" id="PageSize" name="PageSize">
+                            @foreach (var size in new[] { 10, 25, 50, 100 })
+                            {
+                                <option value="@size" selected="@(auditPage.PageSize == size)">@size</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <label class="form-check mb-2" for="IncludeArchived">
+                            <input class="form-check-input" id="IncludeArchived" name="IncludeArchived" type="checkbox" value="true" checked="@filter.IncludeArchived" />
+                            <span class="form-check-label">Archiwum</span>
+                        </label>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end justify-content-md-end gap-2">
+                        <input type="hidden" name="Page" value="1" />
+                        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Logs">Wyczysc</a>
+                        <button class="btn btn-primary" type="submit">Filtruj</button>
+                    </div>
+                </div>
+            </div>
+        </form>
     </div>
-    <div class="table-responsive">
-        <table class="table table-vcenter card-table">
-            <thead>
-                <tr>
-                    <th>Czas</th>
-                    <th>Uzytkownik</th>
-                    <th>Akcja</th>
-                    <th>Obiekt</th>
-                    <th>Stara wartosc</th>
-                    <th>Nowa wartosc</th>
-                    <th>IP</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var log in logs)
-                {
-                    var oldValue = string.IsNullOrWhiteSpace(log.OldValue) ? "-" : log.OldValue;
-                    var newValue = string.IsNullOrWhiteSpace(log.NewValue) ? "-" : log.NewValue;
-                    <tr>
-                        <td>@log.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                        <td>@(log.UserFullName ?? $"#{log.UserId}")</td>
-                        <td>@log.Action</td>
-                        <td>@log.TargetEntity #@log.TargetId</td>
-                        <td class="text-secondary">@oldValue</td>
-                        <td class="text-secondary">@newValue</td>
-                        <td class="text-secondary">@(log.IPAddress ?? "-")</td>
-                    </tr>
-                }
-                @if (logs.Length == 0)
-                {
-                    <tr>
-                        <td colspan="7" class="text-secondary text-center py-4">Brak zapisanych logow systemowych.</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Logi systemowe</h3>
+                <div class="text-secondary small">
+                    Wyniki @logs.Count z @auditPage.TotalCount - strona @auditPage.Page / @auditPage.TotalPages
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Czas</th>
+                            <th>Uzytkownik</th>
+                            <th>Akcja</th>
+                            <th>Obiekt</th>
+                            <th>Stara wartosc</th>
+                            <th>Nowa wartosc</th>
+                            <th>IP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in logs)
+                        {
+                            <tr>
+                                <td class="text-nowrap">
+                                    <div>@log.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                    @if (log.IsArchived)
+                                    {
+                                        <span class="badge bg-secondary-lt text-secondary">Archiwum</span>
+                                    }
+                                </td>
+                                <td>@(log.UserFullName ?? $"#{log.UserId}")</td>
+                                <td><span class="badge bg-blue-lt text-blue">@log.Action</span></td>
+                                <td>@log.TargetEntity #@log.TargetId</td>
+                                <td class="text-secondary small audit-json-cell">@ShortJson(log.OldValue)</td>
+                                <td class="text-secondary small audit-json-cell">@ShortJson(log.NewValue)</td>
+                                <td class="text-secondary text-nowrap">@(log.IPAddress ?? "-")</td>
+                            </tr>
+                        }
+                        @if (!logs.Any())
+                        {
+                            <tr>
+                                <td colspan="7" class="text-secondary text-center py-4">Brak logow dla wybranych filtrow.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <span class="text-secondary small">Zakres strony: @auditPage.PageSize wpisow</span>
+                <div class="btn-list">
+                    <a class="btn btn-outline-secondary @(auditPage.Page <= 1 ? "disabled" : string.Empty)"
+                       asp-controller="Admin"
+                       asp-action="Logs"
+                       asp-route-Search="@filter.Search"
+                       asp-route-UserId="@filter.UserId"
+                       asp-route-Action="@filter.Action"
+                       asp-route-TargetEntity="@filter.TargetEntity"
+                       asp-route-From="@fromValue"
+                       asp-route-To="@toValue"
+                       asp-route-IncludeArchived="@filter.IncludeArchived"
+                       asp-route-Page="@previousPage"
+                       asp-route-PageSize="@auditPage.PageSize">Poprzednia</a>
+                    <a class="btn btn-outline-secondary @(auditPage.Page >= auditPage.TotalPages ? "disabled" : string.Empty)"
+                       asp-controller="Admin"
+                       asp-action="Logs"
+                       asp-route-Search="@filter.Search"
+                       asp-route-UserId="@filter.UserId"
+                       asp-route-Action="@filter.Action"
+                       asp-route-TargetEntity="@filter.TargetEntity"
+                       asp-route-From="@fromValue"
+                       asp-route-To="@toValue"
+                       asp-route-IncludeArchived="@filter.IncludeArchived"
+                       asp-route-Page="@nextPage"
+                       asp-route-PageSize="@auditPage.PageSize">Nastepna</a>
+                </div>
+            </div>
+        </div>
     </div>
 </div>

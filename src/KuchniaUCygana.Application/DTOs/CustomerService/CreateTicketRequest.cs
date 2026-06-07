@@ -10,5 +10,9 @@ public sealed class CreateTicketRequest
 
     public int ClientUserId { get; set; }
 
+    public int? OrderId { get; set; }
+
+    public int? DeliveryCalendarId { get; set; }
+
     public TicketPriority Priority { get; set; } = TicketPriority.Medium;
 }

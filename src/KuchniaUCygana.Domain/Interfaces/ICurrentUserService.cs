@@ -17,6 +17,8 @@ public interface ICurrentUserService
     /// </summary>
     string? GetUserName();
 
+    string? GetIpAddress();
+
     /// <summary>
     /// Czy użytkownik jest zalogowany.
     /// </summary>

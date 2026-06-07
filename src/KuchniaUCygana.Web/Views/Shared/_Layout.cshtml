@@ -2,6 +2,8 @@
 @using KuchniaUCygana.Domain.Constants
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
+    var currentReturnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
+    var isAuthenticated = User.Identity?.IsAuthenticated == true;
     var canAccessStaffPanel = User.Identity?.IsAuthenticated == true &&
         User.Claims
             .Where(claim => claim.Type == ClaimTypes.Role)
@@ -45,13 +47,25 @@
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-controller="Order" asp-action="Index">Zamowienia</a>
                         </li>
-                        @if (canAccessStaffPanel)
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link text-dark" asp-controller="Staff" asp-action="Index">Panel pracowniczy</a>
-                            </li>
-                        }
                     </ul>
+                    <div class="navbar-nav ms-auto align-items-sm-center gap-2">
+                        @if (isAuthenticated)
+                        {
+                            @if (canAccessStaffPanel)
+                            {
+                                <a class="nav-link text-dark" asp-controller="Staff" asp-action="Index">Panel pracowniczy</a>
+                            }
+                            <a class="nav-link text-dark" asp-controller="Account" asp-action="Profile">Konto</a>
+                            <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Wyloguj</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <a class="btn btn-outline-success btn-sm px-3" asp-controller="Account" asp-action="Login" asp-route-returnUrl="@currentReturnUrl">Zaloguj</a>
+                        }
+                    </div>
                 </div>
             </div>
         </nav>

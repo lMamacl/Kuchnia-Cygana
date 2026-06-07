@@ -3,13 +3,13 @@ using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
 public sealed class MealRepository : BaseRepository<Meal>, IMealRepository
 {
-    public MealRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public MealRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -30,3 +30,5 @@ public sealed class MealRepository : BaseRepository<Meal>, IMealRepository
         return meal;
     }
 }
+
+

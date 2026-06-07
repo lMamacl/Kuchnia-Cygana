@@ -42,4 +42,21 @@ public sealed class CurrentUserService : ICurrentUserService
     {
         return User?.FindFirstValue(ClaimTypes.Name);
     }
+
+    public string? GetIpAddress()
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext is null)
+        {
+            return null;
+        }
+
+        var forwardedFor = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(forwardedFor))
+        {
+            return forwardedFor.Split(',')[0].Trim();
+        }
+
+        return httpContext.Connection.RemoteIpAddress?.ToString();
+    }
 }

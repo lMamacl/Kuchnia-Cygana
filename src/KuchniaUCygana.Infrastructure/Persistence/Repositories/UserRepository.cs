@@ -7,7 +7,7 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class UserRepository : BaseRepository<User>, IUserRepository
 {
-    public UserRepository(IDbConnectionFactory factory) : base(factory) { }
+    public UserRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
     public async Task<User?> FindByEmailAsync(string email)
     {
@@ -62,3 +62,5 @@ public sealed class UserRepository : BaseRepository<User>, IUserRepository
         return await db.QuerySingleOrDefaultAsync<User>(sql, new { Role = role });
     }
 }
+
+

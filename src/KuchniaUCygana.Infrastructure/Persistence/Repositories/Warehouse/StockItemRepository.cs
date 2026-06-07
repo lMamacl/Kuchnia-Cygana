@@ -1,7 +1,8 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Warehouse;
 
@@ -9,8 +10,7 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
-    public StockItemRepository(IDbConnectionFactory connectionFactory)
-        : base(connectionFactory)
+    public StockItemRepository(IDbConnectionFactory connectionFactory, ICurrentUserService? currentUserService = null) : base(connectionFactory, currentUserService)
     {
         _connectionFactory = connectionFactory;
     }
@@ -564,3 +564,5 @@ public sealed class StockItemRepository : BaseRepository<StockItem>, IStockItemR
         string? Contains,
         bool UseContains);
 }
+
+

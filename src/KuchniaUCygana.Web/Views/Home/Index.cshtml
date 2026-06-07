@@ -180,6 +180,7 @@
                 <h2 class="h3 fw-bold mb-0">Witaj, @(string.IsNullOrWhiteSpace(userName) ? "kliencie" : userName)</h2>
             </div>
             <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                @Html.AntiForgeryToken()
                 <button type="submit" class="btn btn-outline-danger">Wyloguj</button>
             </form>
         </div>

@@ -1786,5 +1786,10 @@ public sealed class WarehouseRepositoriesSqlServerTests
         {
             return "test-user";
         }
+
+        public string? GetIpAddress()
+        {
+            return "127.0.0.1";
+        }
     }
 }

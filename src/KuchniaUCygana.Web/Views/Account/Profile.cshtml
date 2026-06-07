@@ -73,6 +73,12 @@
                     </div>
                 }
             </div>
+            <div class="card-footer d-flex justify-content-end">
+                <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-danger">Wyloguj</button>
+                </form>
+            </div>
         </div>
 
         <div class="card mt-3">

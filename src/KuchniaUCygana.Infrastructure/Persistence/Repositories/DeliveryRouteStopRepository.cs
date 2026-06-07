@@ -1,20 +1,20 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using Dapper;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Repozytorium przystanków tras dostaw
+/// Repozytorium przystankĂłw tras dostaw
 /// </summary>
 public sealed class DeliveryRouteStopRepository : BaseRepository<DeliveryRouteStop>, IDeliveryRouteStopRepository
 {
-    public DeliveryRouteStopRepository(IDbConnectionFactory connectionFactory)
-        : base(connectionFactory)
+    public DeliveryRouteStopRepository(IDbConnectionFactory connectionFactory, ICurrentUserService? currentUserService = null) : base(connectionFactory, currentUserService)
     {
     }
 
@@ -31,3 +31,4 @@ public sealed class DeliveryRouteStopRepository : BaseRepository<DeliveryRouteSt
         return stops;
     }
 }
+

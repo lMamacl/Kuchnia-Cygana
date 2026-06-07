@@ -10,6 +10,10 @@ public sealed class UpdateTicketRequest
 
     public string Description { get; set; } = string.Empty;
 
+    public int? OrderId { get; set; }
+
+    public int? DeliveryCalendarId { get; set; }
+
     public int? AssignedToUserId { get; set; }
 
     public TicketStatus Status { get; set; }

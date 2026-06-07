@@ -1,6 +1,7 @@
 @model HumanResourcesDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+    var departmentsPage = Model.DepartmentsPage;
 }
 
 <div class="row row-cards">
@@ -27,7 +28,7 @@
                             <option value="">Bez przypisania</option>
                             @foreach (var employee in Model.Employees.Where(x => x.IsActive).OrderBy(x => x.FullName))
                             {
-                                <option value="@employee.Id">@employee.FullName</option>
+                                <option value="@employee.Id" selected="@(Model.NewDepartment.HeadEmployeeId == employee.Id)">@employee.FullName</option>
                             }
                         </select>
                     </div>
@@ -40,8 +41,9 @@
     </div>
     <div class="col-lg-7">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Dzialy</h3>
+                <span class="text-secondary small">Pokazuje @departmentsPage.FirstItem-@departmentsPage.LastItem z @departmentsPage.TotalCount</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -50,28 +52,68 @@
                             <th>Nazwa</th>
                             <th>Opis</th>
                             <th>Kierownik</th>
-                            <th class="text-end">Pracownicy</th>
+                            <th>Pracownicy</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var department in Model.Departments.OrderBy(x => x.Name))
+                        @foreach (var department in departmentsPage.Items)
                         {
+                            var departmentEmployees = Model.Employees
+                                .Where(employee => employee.DepartmentId == department.Id)
+                                .OrderBy(employee => employee.FullName)
+                                .ToArray();
                             <tr>
                                 <td class="fw-semibold">@department.Name</td>
                                 <td class="text-secondary">@department.Description</td>
                                 <td>@(department.HeadEmployeeFullName ?? "-")</td>
-                                <td class="text-end">@Model.Employees.Count(x => x.DepartmentId == department.Id)</td>
+                                <td>
+                                    <div class="fw-semibold">@departmentEmployees.Length</div>
+                                    <div class="text-secondary small">
+                                        @if (departmentEmployees.Length == 0)
+                                        {
+                                            <span>Brak przypisanych osob</span>
+                                        }
+                                        else
+                                        {
+                                            @string.Join(", ", departmentEmployees.Take(3).Select(employee => employee.FullName))
+                                            @if (departmentEmployees.Length > 3)
+                                            {
+                                                <span> +@(departmentEmployees.Length - 3)</span>
+                                            }
+                                        }
+                                    </div>
+                                </td>
                             </tr>
                         }
-                        @if (Model.Departments.Count == 0)
+                        @if (departmentsPage.TotalCount == 0)
                         {
                             <tr>
-                                <td colspan="4" class="text-secondary text-center py-4">Brak dzialow.</td>
+                                <td colspan="4" class="text-secondary text-center py-4">
+                                    Brak dzialow w bazie. Seeder powinien utworzyc podstawowa strukture firmy.
+                                </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
+            @if (departmentsPage.TotalCount > 0)
+            {
+                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <span class="text-secondary small">Strona @departmentsPage.Page / @departmentsPage.TotalPages, po @departmentsPage.PageSize rekordow</span>
+                    <div class="btn-list">
+                        <a class="btn btn-outline-secondary @(departmentsPage.HasPrevious ? string.Empty : "disabled")"
+                           asp-controller="HumanResources"
+                           asp-action="Departments"
+                           asp-route-page="@departmentsPage.PreviousPage"
+                           asp-route-pageSize="@departmentsPage.PageSize">Poprzednia</a>
+                        <a class="btn btn-outline-secondary @(departmentsPage.HasNext ? string.Empty : "disabled")"
+                           asp-controller="HumanResources"
+                           asp-action="Departments"
+                           asp-route-page="@departmentsPage.NextPage"
+                           asp-route-pageSize="@departmentsPage.PageSize">Nastepna</a>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>

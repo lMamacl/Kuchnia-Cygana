@@ -1,55 +1,23 @@
 @model HumanResourcesDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+    var workSchedulesPage = Model.WorkSchedulesPage;
+    var usersById = Model.Users.ToDictionary(user => user.Id);
+    var staffUsers = Model.Users
+        .Where(user => !string.Equals(user.Role, "Client", StringComparison.Ordinal))
+        .OrderBy(user => user.FullName)
+        .ToArray();
 }
 
 <div class="row row-cards">
-    <div class="col-lg-4">
+    <div class="col-12">
         <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Nowa zmiana</h3>
-            </div>
-            <form asp-action="CreateWorkSchedule" method="post">
-                @Html.AntiForgeryToken()
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label" for="schedule-user">Uzytkownik</label>
-                        <select id="schedule-user" class="form-select" name="UserId" required>
-                            <option value="">Wybierz uzytkownika</option>
-                            @foreach (var user in Model.Users.OrderBy(x => x.FullName))
-                            {
-                                <option value="@user.Id">@user.FullName (@user.Role)</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="schedule-date">Data</label>
-                        <input id="schedule-date" class="form-control" name="ShiftDate" type="date" value="@Model.NewWorkSchedule.ShiftDate.ToString("yyyy-MM-dd")" required />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="schedule-shift">Zmiana</label>
-                        <select id="schedule-shift" class="form-select" name="Shift" required>
-                            @foreach (var shift in Enum.GetValues<WorkShift>())
-                            {
-                                <option value="@shift">@shift</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-0">
-                        <label class="form-label" for="schedule-role">Rola na zmianie</label>
-                        <input id="schedule-role" class="form-control" name="RoleAtShift" value="@Model.NewWorkSchedule.RoleAtShift" maxlength="50" />
-                    </div>
-                </div>
-                <div class="card-footer text-end">
-                    <button class="btn btn-primary" type="submit">Dodaj zmiane</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    <div class="col-lg-8">
-        <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Grafik</h3>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="text-secondary small">Pokazuje @workSchedulesPage.FirstItem-@workSchedulesPage.LastItem z @workSchedulesPage.TotalCount</span>
+                    <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewWorkSchedule">Nowa zmiana</a>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -58,18 +26,59 @@
                             <th>Data</th>
                             <th>Zmiana</th>
                             <th>Pracownik</th>
-                            <th>Rola</th>
+                            <th>Konto</th>
+                            <th>Rola na zmianie</th>
+                            <th>Edycja</th>
                             <th class="text-end">Akcje</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var schedule in Model.WorkSchedules.OrderBy(x => x.ShiftDate))
+                        @foreach (var schedule in workSchedulesPage.Items)
                         {
+                            var accountRole = usersById.TryGetValue(schedule.UserId, out var account)
+                                ? account.Role
+                                : "-";
                             <tr>
-                                <td>@schedule.ShiftDate.ToString("dd.MM.yyyy")</td>
+                                <td class="text-nowrap">@schedule.ShiftDate.ToString("dd.MM.yyyy")</td>
                                 <td>@schedule.Shift</td>
                                 <td>@(schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}")</td>
+                                <td><span class="badge bg-blue-lt text-blue">@accountRole</span></td>
                                 <td>@(schedule.RoleAtShift ?? "-")</td>
+                                <td style="min-width: 520px;">
+                                    <form asp-action="UpdateWorkSchedule" asp-route-id="@schedule.Id" method="post" class="row g-2 align-items-end justify-content-end">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="Id" value="@schedule.Id" />
+                                        <div class="col-md-3">
+                                            <label class="form-label small" for="schedule-date-@schedule.Id">Data</label>
+                                            <input id="schedule-date-@schedule.Id" class="form-control form-control-sm" name="ShiftDate" type="date" value="@schedule.ShiftDate.ToString("yyyy-MM-dd")" required />
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small" for="schedule-user-@schedule.Id">Uzytkownik</label>
+                                            <select id="schedule-user-@schedule.Id" class="form-select form-select-sm" name="UserId" required>
+                                                @foreach (var user in staffUsers)
+                                                {
+                                                    <option value="@user.Id" selected="@(schedule.UserId == user.Id)">@user.FullName</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small" for="schedule-shift-@schedule.Id">Zmiana</label>
+                                            <select id="schedule-shift-@schedule.Id" class="form-select form-select-sm" name="Shift" required>
+                                                @foreach (var shift in Enum.GetValues<WorkShift>())
+                                                {
+                                                    <option value="@shift" selected="@(string.Equals(schedule.Shift, shift.ToString(), StringComparison.Ordinal))">@shift</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small" for="schedule-role-@schedule.Id">Rola</label>
+                                            <input id="schedule-role-@schedule.Id" class="form-control form-control-sm" name="RoleAtShift" value="@schedule.RoleAtShift" maxlength="50" />
+                                        </div>
+                                        <div class="col-md-2 text-end">
+                                            <button class="btn btn-sm btn-outline-primary" type="submit">Zmien</button>
+                                        </div>
+                                    </form>
+                                </td>
                                 <td class="text-end">
                                     @if (User.IsInRole("HRManager") || User.IsInRole("Admin"))
                                     {
@@ -81,15 +90,35 @@
                                 </td>
                             </tr>
                         }
-                        @if (Model.WorkSchedules.Count == 0)
+                        @if (workSchedulesPage.TotalCount == 0)
                         {
                             <tr>
-                                <td colspan="5" class="text-secondary text-center py-4">Brak zmian w grafiku.</td>
+                                <td colspan="7" class="text-secondary text-center py-4">
+                                    Brak zmian w grafiku. Seeder dodaje startowy grafik dla podstawowych rol.
+                                </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
+            @if (workSchedulesPage.TotalCount > 0)
+            {
+                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <span class="text-secondary small">Strona @workSchedulesPage.Page / @workSchedulesPage.TotalPages, po @workSchedulesPage.PageSize rekordow</span>
+                    <div class="btn-list">
+                        <a class="btn btn-outline-secondary @(workSchedulesPage.HasPrevious ? string.Empty : "disabled")"
+                           asp-controller="HumanResources"
+                           asp-action="Schedules"
+                           asp-route-page="@workSchedulesPage.PreviousPage"
+                           asp-route-pageSize="@workSchedulesPage.PageSize">Poprzednia</a>
+                        <a class="btn btn-outline-secondary @(workSchedulesPage.HasNext ? string.Empty : "disabled")"
+                           asp-controller="HumanResources"
+                           asp-action="Schedules"
+                           asp-route-page="@workSchedulesPage.NextPage"
+                           asp-route-pageSize="@workSchedulesPage.PageSize">Nastepna</a>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>

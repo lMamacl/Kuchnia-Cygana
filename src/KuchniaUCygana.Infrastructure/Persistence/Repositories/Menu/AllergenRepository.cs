@@ -2,13 +2,13 @@
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using Dapper;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Menu;
 
 public sealed class AllergenRepository : BaseRepository<Allergen>, IAllergenRepository
 {
-    public AllergenRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public AllergenRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -19,3 +19,5 @@ public sealed class AllergenRepository : BaseRepository<Allergen>, IAllergenRepo
         return await db.QueryAsync<Allergen>(sql);
     }
 }
+
+

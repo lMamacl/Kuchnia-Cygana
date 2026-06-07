@@ -1,14 +1,15 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 
 public sealed class PackingLabelRepository : BaseRepository<PackingLabel>, IPackingLabelRepository
 {
-    public PackingLabelRepository(IDbConnectionFactory factory) : base(factory)
+    public PackingLabelRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -148,3 +149,5 @@ public sealed class PackingLabelRepository : BaseRepository<PackingLabel>, IPack
             });
     }
 }
+
+

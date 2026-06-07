@@ -4,6 +4,7 @@ using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
+using KuchniaUCygana.Web.Filters;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -89,6 +90,7 @@ public sealed class AccountController : Controller
     [Authorize]
     [HttpPost]
     [Route("account/profile/leave")]
+    [AllowOutsideShift]
     public async Task<IActionResult> RequestLeave(CreateLeaveRequestRequest request)
     {
         var employee = await GetCurrentEmployeeAsync();
@@ -138,16 +140,7 @@ public sealed class AccountController : Controller
     [HttpGet]
     public IActionResult StaffLogin(string? returnUrl = null)
     {
-        if (!env.IsDevelopment())
-        {
-            return RedirectToAction(nameof(Login), new { returnUrl });
-        }
-
-        return View(new LoginViewModel
-        {
-            ReturnUrl = returnUrl,
-            Email = DevRoleEmails[UserRoles.Admin],
-        });
+        return RedirectToAction(nameof(Login), new { returnUrl });
     }
 
     [AllowAnonymous]
@@ -249,6 +242,7 @@ public sealed class AccountController : Controller
 
     [Authorize]
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -343,7 +337,7 @@ public sealed class AccountController : Controller
 
         return role switch
         {
-            UserRoles.Admin => RedirectToAction("Index", "Staff"),
+            UserRoles.Admin => RedirectToAction("Index", "Admin"),
             UserRoles.HR or UserRoles.HRManager => RedirectToAction("Index", "HumanResources"),
             UserRoles.BOK or UserRoles.BOKManager => RedirectToAction("Index", "CustomerSupport"),
             UserRoles.Kitchen or UserRoles.KitchenManager => RedirectToAction("Index", "Production"),

@@ -1,0 +1,55 @@
+@model HumanResourcesDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+    var staffUsers = Model.Users
+        .Where(user => !string.Equals(user.Role, "Client", StringComparison.Ordinal))
+        .OrderBy(user => user.FullName)
+        .ToArray();
+}
+
+<div class="row row-cards">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Nowa zmiana</h3>
+                <a class="btn btn-outline-secondary btn-sm" asp-controller="HumanResources" asp-action="Schedules">Grafik</a>
+            </div>
+            <form asp-action="CreateWorkSchedule" method="post">
+                @Html.AntiForgeryToken()
+                <div class="card-body">
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                    <div class="mb-3">
+                        <label class="form-label" for="schedule-user">Uzytkownik</label>
+                        <select id="schedule-user" class="form-select" name="UserId" required>
+                            <option value="">Wybierz pracownika</option>
+                            @foreach (var user in staffUsers)
+                            {
+                                <option value="@user.Id" selected="@(Model.NewWorkSchedule.UserId == user.Id)">@user.FullName (@user.Role)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="schedule-date">Data</label>
+                        <input id="schedule-date" class="form-control" name="ShiftDate" type="date" value="@Model.NewWorkSchedule.ShiftDate.ToString("yyyy-MM-dd")" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="schedule-shift">Zmiana</label>
+                        <select id="schedule-shift" class="form-select" name="Shift" required>
+                            @foreach (var shift in Enum.GetValues<WorkShift>())
+                            {
+                                <option value="@shift" selected="@(Model.NewWorkSchedule.Shift == shift)">@shift</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label" for="schedule-role">Rola na zmianie</label>
+                        <input id="schedule-role" class="form-control" name="RoleAtShift" value="@Model.NewWorkSchedule.RoleAtShift" maxlength="50" />
+                    </div>
+                </div>
+                <div class="card-footer text-end">
+                    <button class="btn btn-primary" type="submit">Dodaj zmiane</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

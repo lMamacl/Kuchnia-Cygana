@@ -6,7 +6,7 @@
   "DatabaseSeeding": {
     "Enabled": true,
     "Mode": "Both",
-    "Profile": "MinimalRealistic",
+    "Profile": "DemoData",
     "ResetDemoData": false
   },
   "Stripe": {

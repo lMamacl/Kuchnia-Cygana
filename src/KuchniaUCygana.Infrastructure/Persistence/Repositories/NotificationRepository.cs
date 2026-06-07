@@ -1,4 +1,4 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Notifications;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
@@ -7,8 +7,7 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class NotificationRepository : BaseRepository<Notification, long>, INotificationRepository
 {
-    public NotificationRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public NotificationRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -347,3 +346,5 @@ public sealed class NotificationRepository : BaseRepository<Notification, long>,
             new { userId, now = DateTimeOffset.UtcNow });
     }
 }
+
+

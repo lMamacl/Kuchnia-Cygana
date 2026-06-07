@@ -144,9 +144,12 @@ public static class StaffNavigationCatalog
             [
                 new("Dashboard HR", "HumanResources", "Index", "department", "Zbiorczy ekran dzialu HR.", "hr kadry pracownicy"),
                 new("Pracownicy", "HumanResources", "Employees", "users", "Kartoteka pracownikow.", "pracownicy kartoteka"),
+                new("Nowy pracownik", "HumanResources", "NewEmployee", "plus", "Dodanie pracownika do kartoteki.", "nowy pracownik dodaj"),
                 new("Dzialy", "HumanResources", "Departments", "department", "Struktura organizacyjna.", "dzialy departamenty"),
                 new("Urlopy", "HumanResources", "Leaves", "calendar", "Wnioski urlopowe.", "urlopy wnioski"),
+                new("Nowy wniosek", "HumanResources", "NewLeaveRequest", "plus", "Rejestracja wniosku urlopowego.", "nowy wniosek urlopowy"),
                 new("Grafik", "HumanResources", "Schedules", "checklist", "Grafik zmian pracownikow.", "grafik zmiany"),
+                new("Nowa zmiana", "HumanResources", "NewWorkSchedule", "plus", "Dodanie zmiany do grafiku.", "nowa zmiana grafik"),
             ]),
         new(
             "bok",
@@ -157,6 +160,7 @@ public static class StaffNavigationCatalog
             [
                 new("Dashboard BOK", "CustomerSupport", "Index", "support", "Zbiorczy ekran obslugi klienta.", "bok obsluga klienta"),
                 new("Zgloszenia", "CustomerSupport", "Tickets", "support", "Lista zgloszen klientow.", "zgloszenia tickety klient"),
+                new("Nowe zgloszenie", "CustomerSupport", "NewTicket", "plus", "Rejestracja nowego zgloszenia BOK.", "nowe zgloszenie bok reklamacja"),
             ]),
         new(
             "admin",
@@ -167,6 +171,7 @@ public static class StaffNavigationCatalog
             [
                 new("Dashboard admina", "Admin", "Index", "admin", "Pulpit administracyjny.", "admin administracja"),
                 new("Uzytkownicy", "Admin", "Users", "users", "Zarzadzanie uzytkownikami.", "uzytkownicy"),
+                new("Nowy uzytkownik", "Admin", "NewUser", "plus", "Tworzenie konta uzytkownika.", "nowy uzytkownik konto"),
                 new("Role", "Admin", "Roles", "shield", "Role i uprawnienia.", "role uprawnienia"),
                 new("Logi systemowe", "Admin", "Logs", "report", "Audyt zmian i zdarzen systemowych.", "logi audyt zmiany"),
                 new("Awarie kompletacji", "Admin", "PackingIncidents", "alert", "Obsluga zgloszen z kompletacji.", "awarie kompletacji incydenty packing"),

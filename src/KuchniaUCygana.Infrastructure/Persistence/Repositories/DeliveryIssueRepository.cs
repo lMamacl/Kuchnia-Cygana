@@ -1,14 +1,14 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Logistics;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories;
 
 public sealed class DeliveryIssueRepository : BaseRepository<DeliveryIssue>, IDeliveryIssueRepository
 {
-    public DeliveryIssueRepository(IDbConnectionFactory factory)
-        : base(factory)
+    public DeliveryIssueRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -34,3 +34,5 @@ public sealed class DeliveryIssueRepository : BaseRepository<DeliveryIssue>, IDe
         return issues.ToList();
     }
 }
+
+

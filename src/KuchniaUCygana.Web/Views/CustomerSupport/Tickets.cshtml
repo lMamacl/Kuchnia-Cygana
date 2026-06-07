@@ -1,55 +1,39 @@
 @model CustomerSupportDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+    var ticketsPage = Model.TicketsPage;
+    var supportUsers = Model.Users
+        .Where(user => user.Role is "BOK" or "BOKManager" or "Admin")
+        .OrderBy(user => user.FullName)
+        .ToArray();
+
+    string TextOrDash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+    string DateOrDash(DateTime? value) => value.HasValue ? value.Value.ToString("dd.MM.yyyy") : "-";
+    string DateTimeOrDash(DateTimeOffset? value) => value.HasValue ? value.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "-";
+
+    string PriorityClass(string priority) => priority switch
+    {
+        "Critical" => "bg-red-lt text-red",
+        "High" => "bg-orange-lt text-orange",
+        "Medium" => "bg-blue-lt text-blue",
+        _ => "bg-secondary-lt text-secondary",
+    };
+
+    string StatusClass(string status) => status switch
+    {
+        "Resolved" or "Closed" => "bg-green-lt text-green",
+        "Pending" => "bg-yellow-lt text-yellow",
+        "Open" => "bg-blue-lt text-blue",
+        _ => "bg-secondary-lt text-secondary",
+    };
 }
 
 <div class="row row-cards">
-    <div class="col-xl-4">
+    <div class="col-12">
         <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Nowe zgloszenie</h3>
-            </div>
-            <form asp-action="CreateTicket" method="post">
-                @Html.AntiForgeryToken()
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label" for="ticket-client">Klient</label>
-                        <select id="ticket-client" class="form-select" name="ClientUserId" required>
-                            <option value="">Wybierz uzytkownika</option>
-                            @foreach (var user in Model.Users.OrderBy(x => x.FullName))
-                            {
-                                <option value="@user.Id">@user.FullName (@user.Email)</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="ticket-title">Tytul</label>
-                        <input id="ticket-title" class="form-control" name="Title" value="@Model.NewTicket.Title" maxlength="200" required />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="ticket-priority">Priorytet</label>
-                        <select id="ticket-priority" class="form-select" name="Priority">
-                            @foreach (var priority in Enum.GetValues<TicketPriority>())
-                            {
-                                <option value="@priority">@priority</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-0">
-                        <label class="form-label" for="ticket-description">Opis</label>
-                        <textarea id="ticket-description" class="form-control" name="Description" rows="5" required>@Model.NewTicket.Description</textarea>
-                    </div>
-                </div>
-                <div class="card-footer text-end">
-                    <button class="btn btn-primary" type="submit">Dodaj zgloszenie</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    <div class="col-xl-8">
-        <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Zgloszenia</h3>
+                <span class="text-secondary small">Pokazuje @ticketsPage.FirstItem-@ticketsPage.LastItem z @ticketsPage.TotalCount</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -64,16 +48,26 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var ticket in Model.Tickets.OrderByDescending(x => x.CreatedAt))
+                        @foreach (var ticket in ticketsPage.Items)
                         {
+                            var hasContext = Model.OperationalContexts.TryGetValue(ticket.Id, out var operationalContext);
                             <tr>
                                 <td>
                                     <div class="fw-semibold">@ticket.Title</div>
                                     <div class="text-secondary small">@ticket.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                    @if (ticket.OrderId.HasValue || ticket.DeliveryCalendarId.HasValue)
+                                    {
+                                        <div class="small text-primary">
+                                            Zamowienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
+                                        </div>
+                                    }
+                                    <div class="text-secondary small">
+                                        @(ticket.Description.Length > 100 ? ticket.Description[..100] + "..." : ticket.Description)
+                                    </div>
                                 </td>
                                 <td>@(ticket.ClientFullName ?? $"#{ticket.ClientUserId}")</td>
-                                <td><span class="badge bg-blue-lt text-blue">@ticket.Status</span></td>
-                                <td>@ticket.Priority</td>
+                                <td><span class="badge @StatusClass(ticket.Status)">@ticket.Status</span></td>
+                                <td><span class="badge @PriorityClass(ticket.Priority)">@ticket.Priority</span></td>
                                 <td>@(ticket.AssignedToFullName ?? "-")</td>
                                 <td class="text-end">
                                     <div class="d-inline-flex flex-wrap justify-content-end gap-2">
@@ -81,9 +75,9 @@
                                             @Html.AntiForgeryToken()
                                             <select class="form-select form-select-sm" name="assignedToUserId" required>
                                                 <option value="">Pracownik</option>
-                                                @foreach (var user in Model.Users.Where(x => x.Role is "BOK" or "BOKManager" or "Admin").OrderBy(x => x.FullName))
+                                                @foreach (var user in supportUsers)
                                                 {
-                                                    <option value="@user.Id">@user.FullName</option>
+                                                    <option value="@user.Id" selected="@(ticket.AssignedToUserId == user.Id)">@user.FullName</option>
                                                 }
                                             </select>
                                             <button class="btn btn-sm btn-outline-primary" type="submit">Przypisz</button>
@@ -93,7 +87,7 @@
                                             <select class="form-select form-select-sm" name="status">
                                                 @foreach (var status in Enum.GetValues<TicketStatus>())
                                                 {
-                                                    <option value="@status">@status</option>
+                                                    <option value="@status" selected="@(string.Equals(ticket.Status, status.ToString(), StringComparison.Ordinal))">@status</option>
                                                 }
                                             </select>
                                             <button class="btn btn-sm btn-outline-secondary" type="submit">Zmien</button>
@@ -101,16 +95,202 @@
                                     </div>
                                 </td>
                             </tr>
+                            @if (hasContext && operationalContext is not null)
+                            {
+                                <tr class="bg-body-tertiary">
+                                    <td colspan="6" class="p-0">
+                                        <div class="p-3 border-top">
+                                            <div class="row g-3">
+                                                <div class="col-xl-4">
+                                                    <div class="border rounded-2 p-3 h-100 bg-white">
+                                                        <div class="fw-semibold mb-2">Zamowienie i dostawa</div>
+                                                        <dl class="row small mb-0">
+                                                            <dt class="col-5 text-secondary">Numer</dt>
+                                                            <dd class="col-7 mb-1">@TextOrDash(operationalContext.OrderNumber)</dd>
+                                                            <dt class="col-5 text-secondary">Status zam.</dt>
+                                                            <dd class="col-7 mb-1">@TextOrDash(operationalContext.OrderStatus)</dd>
+                                                            <dt class="col-5 text-secondary">Dostawa</dt>
+                                                            <dd class="col-7 mb-1">
+                                                                @DateOrDash(operationalContext.DeliveryDate)
+                                                                <span class="text-secondary">(@TextOrDash(operationalContext.DeliveryStatus))</span>
+                                                            </dd>
+                                                            <dt class="col-5 text-secondary">Okno</dt>
+                                                            <dd class="col-7 mb-1">
+                                                                @TextOrDash(operationalContext.DeliveryWindowName)
+                                                                @if (!string.IsNullOrWhiteSpace(operationalContext.DeliveryWindowRange))
+                                                                {
+                                                                    <span class="text-secondary"> @operationalContext.DeliveryWindowRange</span>
+                                                                }
+                                                            </dd>
+                                                            <dt class="col-5 text-secondary">Adres</dt>
+                                                            <dd class="col-7 mb-1">@TextOrDash(operationalContext.AddressFullLine)</dd>
+                                                            <dt class="col-5 text-secondary">Uwagi</dt>
+                                                            <dd class="col-7 mb-1">@TextOrDash(operationalContext.DeliveryNotes)</dd>
+                                                            @if (operationalContext.IsSkipped)
+                                                            {
+                                                                <dt class="col-5 text-secondary">Pominieta</dt>
+                                                                <dd class="col-7 mb-1">@TextOrDash(operationalContext.SkipReason)</dd>
+                                                            }
+                                                        </dl>
+                                                    </div>
+                                                </div>
+                                                <div class="col-xl-4">
+                                                    <div class="border rounded-2 p-3 h-100 bg-white">
+                                                        <div class="fw-semibold mb-2">Logistyka i kompletacja</div>
+                                                        @if (operationalContext.Route is not null)
+                                                        {
+                                                            <div class="small mb-2">
+                                                                <div>
+                                                                    <span class="text-secondary">Trasa:</span>
+                                                                    @operationalContext.Route.RouteName, stop @operationalContext.Route.SequenceNumber
+                                                                    <span class="text-secondary">(@operationalContext.Route.StopStatus)</span>
+                                                                </div>
+                                                                <div>
+                                                                    <span class="text-secondary">Plan/real:</span>
+                                                                    @DateTimeOrDash(operationalContext.Route.PlannedArrivalTime)
+                                                                    /
+                                                                    @DateTimeOrDash(operationalContext.Route.ActualArrivalTime)
+                                                                </div>
+                                                                <div>
+                                                                    <span class="text-secondary">Kierowca:</span>
+                                                                    @TextOrDash(operationalContext.Route.DriverName)
+                                                                </div>
+                                                                <div>
+                                                                    <span class="text-secondary">Auto:</span>
+                                                                    @TextOrDash(operationalContext.Route.VehicleRegistration)
+                                                                    @TextOrDash(operationalContext.Route.VehicleModel)
+                                                                </div>
+                                                            </div>
+                                                            @if (operationalContext.Route.LatestIssue is not null)
+                                                            {
+                                                                <div class="alert alert-warning py-2 px-3 small mb-2">
+                                                                    Problem kierowcy: @operationalContext.Route.LatestIssue.Reason
+                                                                    @if (!string.IsNullOrWhiteSpace(operationalContext.Route.LatestIssue.Notes))
+                                                                    {
+                                                                        <span>- @operationalContext.Route.LatestIssue.Notes</span>
+                                                                    }
+                                                                </div>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="text-secondary small mb-2">Brak przypisanej trasy dla tej dostawy.</div>
+                                                        }
+
+                                                        @if (operationalContext.PackingBags.Count > 0)
+                                                        {
+                                                            <div class="small">
+                                                                @foreach (var bag in operationalContext.PackingBags)
+                                                                {
+                                                                    <div class="d-flex flex-wrap gap-2 align-items-center border-top py-1">
+                                                                        <span class="font-monospace">@bag.BagCode</span>
+                                                                        <span>@bag.StatusText</span>
+                                                                        <span class="text-secondary">@bag.PackedBoxes/@bag.TotalBoxes pud.</span>
+                                                                        <span class="text-secondary">etykieta @(bag.IsTransportLabelAttached ? "OK" : "brak")</span>
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="text-secondary small">Brak danych torby z kompletacji.</div>
+                                                        }
+
+                                                        @if (operationalContext.PackingIncidents.Count > 0)
+                                                        {
+                                                            <div class="mt-2 small">
+                                                                <div class="fw-semibold">Zgloszenia kompletacji</div>
+                                                                @foreach (var incident in operationalContext.PackingIncidents.Take(3))
+                                                                {
+                                                                    <div class="border-top py-1">
+                                                                        <span class="badge bg-red-lt text-red">@incident.Status</span>
+                                                                        <span>@incident.Type</span>
+                                                                        <span class="text-secondary">@incident.ReasonSummary</span>
+                                                                        <div class="text-secondary">@incident.Description</div>
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                <div class="col-xl-4">
+                                                    <div class="border rounded-2 p-3 h-100 bg-white">
+                                                        <div class="fw-semibold mb-2">Dieta, sklad i alerty</div>
+                                                        @if (operationalContext.Meals.Count > 0)
+                                                        {
+                                                            @foreach (var meal in operationalContext.Meals.Take(4))
+                                                            {
+                                                                <div class="small border-top py-2">
+                                                                    <div class="fw-semibold">
+                                                                        @TextOrDash(meal.MealSlot) - @meal.MealName
+                                                                    </div>
+                                                                    <div class="text-secondary">@meal.DietName @meal.VariantName</div>
+                                                                    @if (meal.Allergens.Count > 0)
+                                                                    {
+                                                                        <div>Alergeny: @string.Join(", ", meal.Allergens.Take(8))</div>
+                                                                    }
+                                                                    @if (meal.Ingredients.Count > 0)
+                                                                    {
+                                                                        <div class="text-secondary">Sklad: @string.Join(", ", meal.Ingredients.Take(8))</div>
+                                                                    }
+                                                                    @if (!string.IsNullOrWhiteSpace(meal.NutritionSummary))
+                                                                    {
+                                                                        <div class="text-secondary">@meal.NutritionSummary</div>
+                                                                    }
+                                                                </div>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="text-secondary small">Brak powiazania pozycji z planem menu.</div>
+                                                        }
+
+                                                        @if (operationalContext.AssessmentHints.Count > 0)
+                                                        {
+                                                            <div class="mt-2">
+                                                                @foreach (var hint in operationalContext.AssessmentHints)
+                                                                {
+                                                                    <div class="alert alert-info py-2 px-3 small mb-2">@hint</div>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
                         }
-                        @if (Model.Tickets.Count == 0)
+                        @if (ticketsPage.TotalCount == 0)
                         {
                             <tr>
-                                <td colspan="6" class="text-secondary text-center py-4">Brak zgloszen.</td>
+                                <td colspan="6" class="text-secondary text-center py-4">
+                                    Brak zgloszen w bazie. Seeder dodaje startowa kolejke BOK dla kont klienckich.
+                                </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
+            @if (ticketsPage.TotalCount > 0)
+            {
+                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <span class="text-secondary small">Strona @ticketsPage.Page / @ticketsPage.TotalPages, po @ticketsPage.PageSize rekordow</span>
+                    <div class="btn-list">
+                        <a class="btn btn-outline-secondary @(ticketsPage.HasPrevious ? string.Empty : "disabled")"
+                           asp-controller="CustomerSupport"
+                           asp-action="Tickets"
+                           asp-route-page="@ticketsPage.PreviousPage"
+                           asp-route-pageSize="@ticketsPage.PageSize">Poprzednia</a>
+                        <a class="btn btn-outline-secondary @(ticketsPage.HasNext ? string.Empty : "disabled")"
+                           asp-controller="CustomerSupport"
+                           asp-action="Tickets"
+                           asp-route-page="@ticketsPage.NextPage"
+                           asp-route-pageSize="@ticketsPage.PageSize">Nastepna</a>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>

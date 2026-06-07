@@ -1,14 +1,15 @@
-using Dapper;
+﻿using Dapper;
 using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Domain.Interfaces;
 
 namespace KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 
 public sealed class PackingBagRepository : BaseRepository<PackingBag>, IPackingBagRepository
 {
-    public PackingBagRepository(IDbConnectionFactory factory) : base(factory)
+    public PackingBagRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService)
     {
     }
 
@@ -77,3 +78,5 @@ public sealed class PackingBagRepository : BaseRepository<PackingBag>, IPackingB
             new { packingSessionId, damagedStatus = (int)PackingBagStatus.Damaged });
     }
 }
+
+
