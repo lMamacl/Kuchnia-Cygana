@@ -6,7 +6,7 @@ services:
       - ACCEPT_EULA=Y
       - MSSQL_PID=Developer
       - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required}
-      - MSSQL_MEMORY_LIMIT_MB=${MSSQL_MEMORY_LIMIT_MB:-768}
+      - MSSQL_MEMORY_LIMIT_MB=${MSSQL_MEMORY_LIMIT_MB:-1536}
     ports:
       - "${MSSQL_PORT:-1433}:1433"
     volumes:
@@ -22,7 +22,7 @@ services:
       retries: 12
       start_period: 20s
     restart: unless-stopped
-    mem_limit: ${MSSQL_CONTAINER_MEMORY_LIMIT:-1g}
+    mem_limit: ${MSSQL_CONTAINER_MEMORY_LIMIT:-2g}
 
   sqlserver-init:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -80,7 +80,7 @@ services:
     volumes:
       - uploads_data:/app/wwwroot/uploads
     restart: unless-stopped
-    mem_limit: ${WEB_CONTAINER_MEMORY_LIMIT:-512m}
+    mem_limit: ${WEB_CONTAINER_MEMORY_LIMIT:-768m}
 
 volumes:
   mssql_data:

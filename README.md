@@ -123,9 +123,9 @@ W pliku `.env` uzupelnij nastepujace pola:
 - `MSSQL_SA_PASSWORD` = Twoje super tajne hasło!
 - `MSSQL_DB_NAME` = `KuchniaUCygana`
 - opcjonalnie `MSSQL_PORT` = `1433`
-- `MSSQL_MEMORY_LIMIT_MB` = `768` (limit RAM dla silnika SQL)
-- `MSSQL_CONTAINER_MEMORY_LIMIT` = `1g` (limit dla kontenera SQL)
-- `WEB_CONTAINER_MEMORY_LIMIT` = `512m` (limit dla kontenera Web)
+- `MSSQL_MEMORY_LIMIT_MB` = `1536` (limit RAM dla silnika SQL)
+- `MSSQL_CONTAINER_MEMORY_LIMIT` = `2g` (limit dla kontenera SQL)
+- `WEB_CONTAINER_MEMORY_LIMIT` = `768m` (limit dla kontenera Web)
 ```
 # Opcjonalnie — klucze API (możesz pominąć jeśli nie testujesz integracji)
 dotnet user-secrets set "Stripe:SecretKey" "sk_test_..." --project src/KuchniaUCygana.Web

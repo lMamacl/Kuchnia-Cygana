@@ -43,9 +43,9 @@ System oparty jest na architekturze Clean Architecture i wzorcach DDD
 
 ### 💡 Limity Pamięci (RAM)
 W pliku `.env` możesz dostosować limity pamięci dla kontenerów (domyślne wartości zoptymalizowane pod lokalne dev):
-- `MSSQL_MEMORY_LIMIT_MB=768` (limit silnika SQL)
-- `MSSQL_CONTAINER_MEMORY_LIMIT=1g` (limit kontenera Docker)
-- `WEB_CONTAINER_MEMORY_LIMIT=512m` (limit kontenera aplikacji)
+- `MSSQL_MEMORY_LIMIT_MB=1536` (limit silnika SQL)
+- `MSSQL_CONTAINER_MEMORY_LIMIT=2g` (limit kontenera Docker)
+- `WEB_CONTAINER_MEMORY_LIMIT=768m` (limit kontenera aplikacji)
 
 ### Panel staff i standard Tablera
 
