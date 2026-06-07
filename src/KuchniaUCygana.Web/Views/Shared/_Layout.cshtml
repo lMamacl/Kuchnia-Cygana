@@ -47,16 +47,14 @@
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-controller="Order" asp-action="Index">Zamowienia</a>
                         </li>
-                        @if (canAccessStaffPanel)
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link text-dark" asp-controller="Staff" asp-action="Index">Panel pracowniczy</a>
-                            </li>
-                        }
                     </ul>
                     <div class="navbar-nav ms-auto align-items-sm-center gap-2">
                         @if (isAuthenticated)
                         {
+                            @if (canAccessStaffPanel)
+                            {
+                                <a class="nav-link text-dark" asp-controller="Staff" asp-action="Index">Panel pracowniczy</a>
+                            }
                             <a class="nav-link text-dark" asp-controller="Account" asp-action="Profile">Konto</a>
                             <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
                                 @Html.AntiForgeryToken()

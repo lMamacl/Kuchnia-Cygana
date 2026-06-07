@@ -115,7 +115,25 @@
                                         <div class="text-secondary small">@employee.PhoneNumber</div>
                                     }
                                 </td>
-                                <td>@(employee.DepartmentName ?? "-")</td>
+                                <td>
+                                    @if (Model.Departments.Count == 0)
+                                    {
+                                        <span class="text-secondary">Brak dzialow</span>
+                                    }
+                                    else
+                                    {
+                                        <form asp-action="ChangeEmployeeDepartment" asp-route-id="@employee.Id" method="post" class="d-inline-flex align-items-center gap-2">
+                                            @Html.AntiForgeryToken()
+                                            <select class="form-select form-select-sm" name="departmentId" aria-label="Dzial pracownika @employee.FullName" required>
+                                                @foreach (var department in Model.Departments.OrderBy(x => x.Name))
+                                                {
+                                                    <option value="@department.Id" selected="@(employee.DepartmentId == department.Id)">@department.Name</option>
+                                                }
+                                            </select>
+                                            <button class="btn btn-sm btn-outline-secondary" type="submit">Zmien</button>
+                                        </form>
+                                    }
+                                </td>
                                 <td>@employee.Position</td>
                                 <td><span class="badge bg-blue-lt text-blue">@accountRole</span></td>
                                 <td class="text-nowrap">@employee.HireDate.ToString("dd.MM.yyyy")</td>

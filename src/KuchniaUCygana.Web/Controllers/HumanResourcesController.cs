@@ -126,6 +126,61 @@ public sealed class HumanResourcesController : Controller
         }
     }
 
+    [HttpPost("employees/{id:int}/department")]
+    public async Task<IActionResult> ChangeEmployeeDepartment(int id, int departmentId)
+    {
+        var before = await humanResourcesService.GetEmployeeByIdAsync(id);
+        if (before is not null && before.DepartmentId == departmentId)
+        {
+            TempData["Success"] = "Pracownik jest juz przypisany do wybranego dzialu.";
+            return RedirectToAction(nameof(Employees));
+        }
+
+        try
+        {
+            var employee = await humanResourcesService.ChangeEmployeeDepartmentAsync(id, departmentId);
+            if (employee is null)
+            {
+                TempData["Error"] = "Nie znaleziono pracownika.";
+                return RedirectToAction(nameof(Employees));
+            }
+
+            await staffActivityService.RecordAsync(
+                "HR.ChangeEmployeeDepartment",
+                "Employee",
+                employee.Id.ToString(),
+                oldValue: new
+                {
+                    Id = before?.Id ?? employee.Id,
+                    DepartmentId = before?.DepartmentId,
+                    DepartmentName = before?.DepartmentName,
+                },
+                newValue: new
+                {
+                    employee.Id,
+                    employee.FullName,
+                    employee.DepartmentId,
+                    employee.DepartmentName,
+                },
+                notification: BuildNotification(
+                    "HR",
+                    NotificationSeverity.Info,
+                    "Zmieniono dzial pracownika",
+                    $"{employee.FullName} przeniesiono do dzialu {employee.DepartmentName ?? "bez nazwy"}.",
+                    "/hr/employees",
+                    "Employee",
+                    employee.Id),
+                notifyRoles: HrNotificationRoles);
+            TempData["Success"] = "Przypisanie pracownika do dzialu zostalo zmienione.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Employees));
+    }
+
     [Authorize(Roles = "HRManager,Admin")]
     [HttpPost("employees/{id:int}/deactivate")]
     public async Task<IActionResult> DeactivateEmployee(int id)

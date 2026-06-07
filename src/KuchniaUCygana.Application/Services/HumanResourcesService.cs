@@ -148,6 +148,22 @@ public sealed class HumanResourcesService : IHumanResourcesService
         return (await MapEmployeesAsync(new[] { existing })).Single();
     }
 
+    public async Task<EmployeeDto?> ChangeEmployeeDepartmentAsync(int id, int departmentId)
+    {
+        var existing = await employeeRepository.GetByIdAsync(id);
+        if (existing is null)
+        {
+            return null;
+        }
+
+        await EnsureDepartmentExistsAsync(departmentId);
+
+        existing.DepartmentId = departmentId;
+        await employeeRepository.UpdateAsync(existing);
+
+        return (await MapEmployeesAsync(new[] { existing })).Single();
+    }
+
     public async Task<bool> DeactivateEmployeeAsync(int id, DateOnly? terminationDate = null)
     {
         var employee = await employeeRepository.GetByIdAsync(id);
