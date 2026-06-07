@@ -76,11 +76,11 @@
                 @if (Model.SelectedVariant is not null)
                 {
                     <div class="d-flex flex-wrap gap-2 mb-4">
-                        <span class="badge text-bg-success rounded-pill px-3 py-2">@Model.SelectedVariant.TargetCalories kcal</span>
-                        <span class="badge text-bg-light border rounded-pill px-3 py-2">
+                        <span class="badge bg-success text-white rounded-pill px-3 py-2">@Model.SelectedVariant.TargetCalories kcal</span>
+                        <span class="badge bg-light text-dark border rounded-pill px-3 py-2">
                             @Model.SelectedVariant.PricePerDay.ToString("C", culture) / dzień
                         </span>
-                        <span class="badge text-bg-light border rounded-pill px-3 py-2">
+                        <span class="badge bg-light text-dark border rounded-pill px-3 py-2">
                             mnożnik @Model.SelectedVariant.PriceMultiplier.ToString("F2", CultureInfo.InvariantCulture)
                         </span>
                     </div>
@@ -180,7 +180,7 @@
                                         </div>
                                         @if (meal.ServingWeightGrams > 0)
                                         {
-                                            <span class="badge text-bg-light border rounded-pill">@meal.ServingWeightGrams.ToString("F0", culture) g</span>
+                                            <span class="badge bg-light text-dark border rounded-pill">@meal.ServingWeightGrams.ToString("F0", culture) g</span>
                                         }
                                     </div>
                                 </div>

@@ -35,6 +35,22 @@
     .meal-item {
         border-top: 1px solid rgba(23, 33, 27, .08);
     }
+
+    .meal-category-pill {
+        display: inline-flex;
+        max-width: 100%;
+        min-height: 22px;
+        align-items: center;
+        padding: .2rem .55rem;
+        border: 1px solid rgba(31, 122, 77, .28);
+        border-radius: 999px;
+        background: #e9f7ef;
+        color: #145236;
+        font-size: .75rem;
+        font-weight: 700;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+    }
 </style>
 
 <div class="week-shell">
@@ -91,7 +107,7 @@
                             <div class="text-muted small">@meal.MealSlot</div>
                             @if (!string.IsNullOrWhiteSpace(meal.CategoryName))
                             {
-                                <span class="badge text-bg-light border rounded-pill mt-2">@meal.CategoryName</span>
+                                <span class="meal-category-pill mt-2">@meal.CategoryName</span>
                             }
                         </div>
                     }

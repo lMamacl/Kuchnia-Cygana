@@ -3,33 +3,135 @@
     ViewData["Title"] = "Zaloguj sie";
 }
 
-<div class="row justify-content-center align-items-center" style="min-height: 70vh;">
-    <div class="col-md-6 col-lg-5">
-        <div class="card shadow-sm border-0">
-            <div class="card-body p-5">
-                <div class="text-center mb-4">
-                    <h2 class="fw-bold">Logowanie</h2>
-                    <p class="text-muted">Wpisz dane konta, aby wejsc do systemu.</p>
+<style>
+    .auth-shell {
+        min-height: 74vh;
+        color: #17211b;
+    }
+
+    .auth-card {
+        overflow: hidden;
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 26px;
+        background: #fff;
+        box-shadow: 0 24px 70px rgba(23, 33, 27, .12);
+    }
+
+    .auth-aside {
+        min-height: 100%;
+        background:
+            linear-gradient(145deg, rgba(31, 122, 77, .94), rgba(23, 33, 27, .93)),
+            url('@Url.Content("~/img/pumpkin_soup.png")') center/cover;
+        color: #fff;
+    }
+
+    .auth-kicker {
+        color: rgba(255, 255, 255, .72);
+        font-size: .75rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+
+    .auth-form .form-control {
+        min-height: 48px;
+        border-radius: 14px;
+        border-color: rgba(23, 33, 27, .14);
+    }
+
+    .auth-form .form-control:focus {
+        border-color: #1f7a4d;
+        box-shadow: 0 0 0 .2rem rgba(31, 122, 77, .12);
+    }
+
+    .btn-auth {
+        border: 0;
+        border-radius: 14px;
+        background: #1f7a4d;
+        color: #fff;
+        box-shadow: 0 14px 26px rgba(31, 122, 77, .22);
+    }
+
+    .btn-auth:hover {
+        background: #17623d;
+        color: #fff;
+    }
+
+    .auth-fallback {
+        border: 1px solid rgba(31, 122, 77, .14);
+        border-radius: 16px;
+        background: #f6fbf8;
+    }
+</style>
+
+<div class="auth-shell d-flex align-items-center py-4">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-xl-10">
+                <div class="auth-card">
+                    <div class="row g-0">
+                        <div class="col-lg-5 d-none d-lg-block">
+                            <div class="auth-aside h-100 p-5 d-flex flex-column justify-content-between">
+                                <div>
+                                    <div class="auth-kicker mb-3">Panel klienta</div>
+                                    <h1 class="display-6 fw-bold mb-3">Wroc do swojego planu dostaw.</h1>
+                                    <p class="mb-0 opacity-75">
+                                        Zamowienia, adresy i platnosci sa w jednym miejscu, bez szukania po panelu.
+                                    </p>
+                                </div>
+                                <div class="pt-5">
+                                    <div class="border-top border-light border-opacity-25 pt-4 small opacity-75">
+                                        Koszyk, checkout i kalendarz dostaw dzialaja na realnych kontach klientow.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-7">
+                            <div class="p-4 p-md-5">
+                                <div class="mb-4">
+                                    <div class="text-success small fw-bold text-uppercase mb-2">Kuchnia u Cygana</div>
+                                    <h2 class="fw-bold mb-1">Zaloguj sie</h2>
+                                    <p class="text-muted mb-0">Wpisz dane konta, aby przejsc do zamowien i platnosci.</p>
+                                </div>
+
+                                <form asp-action="Login" method="post" asp-route-returnUrl="@Model.ReturnUrl" class="auth-form">
+                                    <input type="hidden" asp-for="ReturnUrl" />
+                                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+
+                                    <div class="mb-3">
+                                        <label asp-for="Email" class="form-label fw-semibold">Adres e-mail</label>
+                                        <input asp-for="Email" class="form-control" placeholder="nazwa@example.com" autocomplete="username" required />
+                                        <span asp-validation-for="Email" class="text-danger small"></span>
+                                    </div>
+
+                                    <div class="mb-4">
+                                        <label asp-for="Password" class="form-label fw-semibold">Haslo</label>
+                                        <input asp-for="Password" class="form-control" type="password" placeholder="Wpisz haslo" autocomplete="current-password" required />
+                                        <span asp-validation-for="Password" class="text-danger small"></span>
+                                    </div>
+
+                                    <button type="submit" class="btn btn-auth btn-lg w-100 mb-3">Zaloguj sie</button>
+                                </form>
+
+                                <div class="auth-fallback p-3 mt-3">
+                                    <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+                                        <div>
+                                            <div class="fw-semibold">Nie masz konta klienta?</div>
+                                            <div class="text-muted small">Rejestracja tworzy realne konto z rola Client.</div>
+                                        </div>
+                                        <a asp-action="Register" class="btn btn-outline-success">Zarejestruj sie</a>
+                                    </div>
+                                </div>
+
+                                <p class="text-center small mb-0 mt-4">
+                                    Konto pracownika?
+                                    <a asp-action="StaffLogin" class="fw-semibold text-success">Przejdz do logowania staff</a>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-
-                <form asp-action="Login" method="post" asp-route-returnUrl="@Model.ReturnUrl">
-                    <input type="hidden" asp-for="ReturnUrl" />
-                    <div asp-validation-summary="ModelOnly" class="text-danger small mb-3"></div>
-
-                    <div class="mb-3">
-                        <label asp-for="Email" class="form-label">Adres email</label>
-                        <input asp-for="Email" class="form-control" placeholder="nazwa@kuchnia.local" autocomplete="username" required />
-                        <span asp-validation-for="Email" class="text-danger small"></span>
-                    </div>
-
-                    <div class="mb-4">
-                        <label asp-for="Password" class="form-label">Haslo</label>
-                        <input asp-for="Password" class="form-control" type="password" placeholder="********" autocomplete="current-password" required />
-                        <span asp-validation-for="Password" class="text-danger small"></span>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary w-100 py-2 mb-3">Zaloguj sie</button>
-                </form>
             </div>
         </div>
     </div>

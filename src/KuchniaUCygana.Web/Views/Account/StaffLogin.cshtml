@@ -14,6 +14,12 @@
         background: #fff;
         box-shadow: 0 20px 55px rgba(23, 33, 27, .12);
     }
+
+    .staff-login-fallback {
+        border: 1px solid rgba(31, 122, 77, .14);
+        border-radius: 14px;
+        background: #f6fbf8;
+    }
 </style>
 
 <div class="staff-dev-login d-flex align-items-center py-4">
@@ -22,7 +28,7 @@
             <div class="col-lg-6 col-xl-5">
                 <div class="staff-dev-card p-4 p-md-5">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-                        <span class="badge text-bg-warning">DEV</span>
+                        <span class="badge bg-warning text-dark">DEV</span>
                         <span class="fw-semibold text-uppercase small text-muted">Panel pracowniczy</span>
                     </div>
                     <h1 class="h3 fw-bold mb-2">Logowanie pracownika</h1>
@@ -46,6 +52,15 @@
 
                         <button type="submit" class="btn btn-dark w-100 py-2">Zaloguj sie</button>
                     </form>
+
+                    <div class="staff-login-fallback p-3 mt-4">
+                        <div class="fw-semibold mb-1">Szukasz konta klienta?</div>
+                        <p class="text-muted small mb-3">Przejdz do zwyklego logowania albo utworz nowe konto klienta.</p>
+                        <div class="d-flex flex-column flex-sm-row gap-2">
+                            <a asp-action="Login" class="btn btn-outline-success flex-fill">Logowanie klienta</a>
+                            <a asp-action="Register" class="btn btn-success flex-fill">Rejestracja</a>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
