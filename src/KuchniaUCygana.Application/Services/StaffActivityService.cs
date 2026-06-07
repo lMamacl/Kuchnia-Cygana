@@ -42,12 +42,12 @@ public sealed class StaffActivityService : IStaffActivityService
             await auditLogService.CreateSystemLogAsync(new CreateSystemLogRequest
             {
                 UserId = userId.Value,
-                Action = Trim(action, 100),
-                TargetEntity = Trim(targetEntity, 50),
-                TargetId = Trim(targetId, 100),
+                Action = TrimRequired(action, 100),
+                TargetEntity = TrimRequired(targetEntity, 50),
+                TargetId = TrimRequired(targetId, 100),
                 OldValue = Serialize(oldValue),
                 NewValue = Serialize(newValue),
-                IPAddress = Trim(currentUserService.GetIpAddress(), 45),
+                IPAddress = TrimOptional(currentUserService.GetIpAddress(), 45),
             });
         }
 
@@ -71,12 +71,12 @@ public sealed class StaffActivityService : IStaffActivityService
         return value is null ? null : JsonSerializer.Serialize(value, JsonOptions);
     }
 
-    private static string Trim(string value, int maxLength)
+    private static string TrimRequired(string value, int maxLength)
     {
         return value.Length <= maxLength ? value : value[..maxLength];
     }
 
-    private static string? Trim(string? value, int maxLength)
+    private static string? TrimOptional(string? value, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
