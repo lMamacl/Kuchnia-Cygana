@@ -104,6 +104,44 @@ public sealed class MealVariantPlanOptionDto
     public bool IsDefault { get; set; }
 }
 
+public sealed class MenuPlanMealLookupDto
+{
+    public int MealId { get; set; }
+
+    public string MealName { get; set; } = string.Empty;
+
+    public string? CategoryName { get; set; }
+
+    public string Status { get; set; } = string.Empty;
+
+    public int VariantCount { get; set; }
+
+    public int WarningCount { get; set; }
+
+    public string CompletenessStatus { get; set; } = "Incomplete";
+
+    public IReadOnlyList<string> Warnings { get; set; } = Array.Empty<string>();
+}
+
+public sealed class MenuPlanMealVariantLookupDto
+{
+    public int? MealVariantId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public string Status { get; set; } = "Draft";
+
+    public bool IsDefault { get; set; }
+
+    public decimal? FinalWeightGrams { get; set; }
+
+    public int WarningCount { get; set; }
+
+    public string CompletenessStatus { get; set; } = "Incomplete";
+
+    public IReadOnlyList<string> Warnings { get; set; } = Array.Empty<string>();
+}
+
 public sealed class DietMenuPlanValidationDto
 {
     public bool CanPublish => Warnings.Count == 0;

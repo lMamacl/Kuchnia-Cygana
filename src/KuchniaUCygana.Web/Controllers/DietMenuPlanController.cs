@@ -151,18 +151,23 @@ public sealed class DietMenuPlanController : Controller
         return this.RedirectToAction(nameof(Day), new { date = planDate.ToString("yyyy-MM-dd") });
     }
 
+    [HttpGet("lookups/meals")]
+    public async Task<IActionResult> LookupMeals([FromQuery] string? query)
+    {
+        var meals = await this.mealService.SearchPlanningMealsAsync(query, 20);
+        return this.Json(meals);
+    }
+
+    [HttpGet("lookups/meals/{mealId:int}/variants")]
+    public async Task<IActionResult> LookupMealVariants(int mealId)
+    {
+        var variants = await this.mealService.GetPlanningMealVariantOptionsAsync(mealId);
+        return this.Json(variants);
+    }
+
     private async Task LoadLookupsAsync()
     {
         this.ViewBag.Diets = await this.dietService.GetActiveDietsAsync();
-        var meals = (await this.mealService.GetPublishedMealsAsync()).ToList();
-        var mealVariants = new List<MealVariantPlanOptionDto>();
-        foreach (var meal in meals)
-        {
-            mealVariants.AddRange(await this.mealService.GetMealVariantOptionsAsync(meal.Id));
-        }
-
-        this.ViewBag.Meals = meals;
-        this.ViewBag.MealVariants = mealVariants;
         this.ViewBag.Slots = Slots;
     }
 

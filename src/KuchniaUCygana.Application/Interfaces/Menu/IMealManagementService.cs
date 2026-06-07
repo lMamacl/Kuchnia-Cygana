@@ -1,9 +1,15 @@
 ﻿using KuchniaUCygana.Application.DTOs.Menu;
 
+using KuchniaUCygana.Application.DTOs.Warehouse;
+
 namespace KuchniaUCygana.Application.Interfaces.Menu;
 
 public interface IMealManagementService
 {
+    Task<PagedResultDto<MealListItemDto>> SearchAsync(MealSearchFilterDto filter);
+
+    Task<IReadOnlyList<MenuPlanMealLookupDto>> SearchPlanningMealsAsync(string? query, int limit = 20);
+
     Task<MealDto?> GetMealAsync(int mealId);
 
     Task<MealDetailDto?> GetMealWithDetailsAsync(int mealId);
@@ -11,6 +17,8 @@ public interface IMealManagementService
     Task<MealVariantResultDto?> GetMealVariantResultAsync(int mealId, int? mealVariantId);
 
     Task<IReadOnlyList<MealVariantPlanOptionDto>> GetMealVariantOptionsAsync(int mealId);
+
+    Task<IReadOnlyList<MenuPlanMealVariantLookupDto>> GetPlanningMealVariantOptionsAsync(int mealId);
 
     Task<IEnumerable<MealDto>> GetPublishedMealsAsync();
 

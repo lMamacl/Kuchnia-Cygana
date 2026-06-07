@@ -1,5 +1,6 @@
 using AutoMapper;
 using KuchniaUCygana.Application.DTOs.Menu;
+using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces.Menu;
 using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Enums;
@@ -43,6 +44,52 @@ public sealed class MealManagementService : IMealManagementService
         this.resultCalculator = resultCalculator;
         this.currentUser = currentUser;
         this.mapper = mapper;
+    }
+
+    public async Task<PagedResultDto<MealListItemDto>> SearchAsync(MealSearchFilterDto filter)
+    {
+        var page = filter.Page <= 0 ? 1 : filter.Page;
+        var pageSize = Math.Clamp(filter.PageSize <= 0 ? 25 : filter.PageSize, 1, 100);
+
+        var result = await this.mealRepository.SearchAsync(new MealSearchQuery
+        {
+            Search = Normalize(filter.Search),
+            CategoryId = filter.CategoryId,
+            Status = Normalize(filter.Status),
+            AllergenId = filter.AllergenId,
+            MissingPublicationData = filter.MissingPublicationData,
+            HasVariants = filter.HasVariants,
+            MissingPackaging = filter.MissingPackaging,
+            Page = page,
+            PageSize = pageSize,
+        });
+
+        filter.Page = page;
+        filter.PageSize = pageSize;
+
+        return new PagedResultDto<MealListItemDto>
+        {
+            Items = result.Items.Select(MapListItem).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = result.TotalCount,
+        };
+    }
+
+    public async Task<IReadOnlyList<MenuPlanMealLookupDto>> SearchPlanningMealsAsync(string? query, int limit = 20)
+    {
+        var pageSize = Math.Clamp(limit <= 0 ? 20 : limit, 1, 50);
+        var result = await this.mealRepository.SearchAsync(new MealSearchQuery
+        {
+            Search = Normalize(query),
+            PlanningEligibleOnly = true,
+            Page = 1,
+            PageSize = pageSize,
+        });
+
+        return result.Items
+            .Select(MapPlanningMealLookup)
+            .ToList();
     }
 
     public async Task<MealDto?> GetMealAsync(int mealId)
@@ -117,6 +164,36 @@ public sealed class MealManagementService : IMealManagementService
                 IsDefault = variant.IsDefault,
             })
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<MenuPlanMealVariantLookupDto>> GetPlanningMealVariantOptionsAsync(int mealId)
+    {
+        var detail = await this.GetMealWithDetailsAsync(mealId);
+        if (detail is null || !detail.IsActive || !IsPlanningLookupStatus(detail.Status))
+        {
+            return Array.Empty<MenuPlanMealVariantLookupDto>();
+        }
+
+        var options = new List<MenuPlanMealVariantLookupDto>();
+        options.Add(MapPlanningMealVariantLookup(
+            null,
+            "wariant bazowy",
+            detail.Status,
+            true,
+            detail.Result));
+
+        options.AddRange(detail.Variants
+            .Where(variant => IsPlanningLookupStatus(variant.Status))
+            .OrderByDescending(variant => variant.IsDefault)
+            .ThenBy(variant => variant.Name)
+            .Select(variant => MapPlanningMealVariantLookup(
+                variant.Id,
+                variant.Name,
+                variant.Status,
+                variant.IsDefault,
+                variant.Result)));
+
+        return options;
     }
 
     public async Task<IEnumerable<MealDto>> GetPublishedMealsAsync()
@@ -718,6 +795,135 @@ public sealed class MealManagementService : IMealManagementService
             SourceType = "Aggregated",
         };
 
+    private static MealListItemDto MapListItem(MealListRow row)
+        => new()
+        {
+            Id = row.Id,
+            CategoryId = row.CategoryId,
+            CategoryName = row.CategoryName,
+            Name = row.Name,
+            Description = row.Description,
+            MarketingDescription = row.MarketingDescription,
+            Status = row.Status,
+            PreparationTimeMinutes = row.PreparationTimeMinutes,
+            IsActive = row.IsActive,
+            RawWeightGrams = row.RawWeightGrams,
+            CookedWeightGrams = row.CookedWeightGrams,
+            CaloriesPer100g = row.CaloriesPer100g,
+            ProteinPer100g = row.ProteinPer100g,
+            CarbohydratesPer100g = row.CarbohydratesPer100g,
+            FatPer100g = row.FatPer100g,
+            FiberPer100g = row.FiberPer100g,
+            VariantCount = row.VariantCount,
+            PublishedVariantCount = row.PublishedVariantCount,
+            ComponentCount = row.ComponentCount,
+            PackagingRequirementCount = row.PackagingRequirementCount,
+            AllergenNames = row.AllergenNames,
+            HasNutrition = row.HasNutrition,
+            MissingPackaging = row.MissingPackaging,
+            MissingPublicationData = row.MissingPublicationData,
+        };
+
+    private static MenuPlanMealLookupDto MapPlanningMealLookup(MealListRow row)
+    {
+        var warnings = BuildMealPlanningWarnings(row);
+        return new MenuPlanMealLookupDto
+        {
+            MealId = row.Id,
+            MealName = row.Name,
+            CategoryName = row.CategoryName,
+            Status = row.Status,
+            VariantCount = row.VariantCount,
+            WarningCount = warnings.Count,
+            CompletenessStatus = warnings.Count == 0 ? "Complete" : "Incomplete",
+            Warnings = warnings,
+        };
+    }
+
+    private static MenuPlanMealVariantLookupDto MapPlanningMealVariantLookup(
+        int? mealVariantId,
+        string name,
+        string status,
+        bool isDefault,
+        MealVariantResultDto? result)
+    {
+        var warnings = BuildMealVariantPlanningWarnings(status, result);
+        return new MenuPlanMealVariantLookupDto
+        {
+            MealVariantId = mealVariantId,
+            Name = name,
+            Status = status,
+            IsDefault = isDefault,
+            FinalWeightGrams = result?.FinalWeightGrams,
+            WarningCount = warnings.Count,
+            CompletenessStatus = warnings.Count == 0 ? "Complete" : result?.CompletenessStatus ?? "Incomplete",
+            Warnings = warnings,
+        };
+    }
+
+    private static List<string> BuildMealPlanningWarnings(MealListRow row)
+    {
+        var warnings = new List<string>();
+        if (row.ComponentCount <= 0)
+        {
+            warnings.Add("brak skladowych");
+        }
+
+        if (row.VariantCount <= 0)
+        {
+            warnings.Add("brak wariantow dania");
+        }
+
+        if (!HasPositiveWeight(row.RawWeightGrams, row.CookedWeightGrams))
+        {
+            warnings.Add("brak gramatury");
+        }
+
+        if (!row.HasNutrition)
+        {
+            warnings.Add("brak nutrition");
+        }
+
+        if (row.MissingPackaging)
+        {
+            warnings.Add("brak opakowan");
+        }
+
+        if (row.MissingPublicationData && warnings.Count == 0)
+        {
+            warnings.Add("braki publikacyjne");
+        }
+
+        return warnings.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static List<string> BuildMealVariantPlanningWarnings(string status, MealVariantResultDto? result)
+    {
+        var warnings = new List<string>();
+        if (!IsPlanningLookupStatus(status))
+        {
+            warnings.Add($"status wariantu: {status}");
+        }
+
+        if (result is null)
+        {
+            warnings.Add("brak wyniku kalkulatora");
+        }
+        else if (!result.IsComplete)
+        {
+            warnings.AddRange(result.ValidationWarnings);
+        }
+
+        return warnings.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static bool IsPlanningLookupStatus(string? status)
+        => string.Equals(status, "Published", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasPositiveWeight(params decimal?[] values)
+        => values.Any(value => value.HasValue && value.Value > 0);
+
     private static PackagingRequirementEditDto MapPackagingEdit(PackagingRequirementRow row)
         => new()
         {
@@ -862,6 +1068,9 @@ public sealed class MealManagementService : IMealManagementService
             ? OverrideNutritionSource
             : normalized;
     }
+
+    private static string? Normalize(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string NormalizeVariantStatus(string? status)
     {

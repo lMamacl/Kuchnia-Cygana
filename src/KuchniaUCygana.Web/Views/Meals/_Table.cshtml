@@ -1,0 +1,223 @@
+@using KuchniaUCygana.Application.DTOs.Menu
+@using KuchniaUCygana.Application.DTOs.Warehouse
+@model PagedResultDto<MealListItemDto>
+@{
+    var filter = ViewBag.Filter as MealSearchFilterDto ?? new MealSearchFilterDto();
+    var items = Model.Items?.ToList() ?? new List<MealListItemDto>();
+    var totalPages = Math.Max(1, Model.TotalPages);
+    var currentPage = Math.Clamp(Model.Page <= 0 ? 1 : Model.Page, 1, totalPages);
+    var firstItem = Model.TotalCount == 0 ? 0 : ((currentPage - 1) * Model.PageSize) + 1;
+    var lastItem = Model.TotalCount == 0 ? 0 : Math.Min(currentPage * Model.PageSize, Model.TotalCount);
+    var startPage = Math.Max(1, currentPage - 2);
+    var endPage = Math.Min(totalPages, currentPage + 2);
+
+    string StatusColor(string status) => status switch
+    {
+        "Draft" => "secondary",
+        "Ready" => "azure",
+        "Published" => "success",
+        "Archived" => "danger",
+        _ => "secondary",
+    };
+
+    string StatusLabel(string status) => status switch
+    {
+        "Draft" => "Szkic",
+        "Ready" => "Gotowy",
+        "Published" => "Opublikowany",
+        "Archived" => "Archiwum",
+        _ => status,
+    };
+
+    string Weight(decimal? value) => value.HasValue ? $"{value.Value:0.#} g" : "-";
+
+    string IndexUrl(int page) => Url.Action("Index", "Meals", new
+    {
+        filter.Search,
+        filter.CategoryId,
+        filter.Status,
+        filter.AllergenId,
+        filter.MissingPublicationData,
+        filter.HasVariants,
+        filter.MissingPackaging,
+        Page = page,
+        PageSize = Model.PageSize,
+    }) ?? "#";
+
+    string TableUrl(int page) => Url.Action("Table", "Meals", new
+    {
+        filter.Search,
+        filter.CategoryId,
+        filter.Status,
+        filter.AllergenId,
+        filter.MissingPublicationData,
+        filter.HasVariants,
+        filter.MissingPackaging,
+        Page = page,
+        PageSize = Model.PageSize,
+    }) ?? "#";
+}
+
+<div class="table-responsive">
+    <table class="table table-vcenter card-table table-premium">
+        <thead>
+            <tr>
+                <th>Posilek</th>
+                <th>Kategoria</th>
+                <th>Status</th>
+                <th class="text-center">Warianty</th>
+                <th>Kompletnosc</th>
+                <th>Gramatura</th>
+                <th>Nutrition / opakowania</th>
+                <th class="text-end">Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (!items.Any())
+            {
+                <tr>
+                    <td colspan="8" class="text-center text-secondary py-4">Brak posilkow dla wybranych filtrow.</td>
+                </tr>
+            }
+            else
+            {
+                foreach (var meal in items)
+                {
+                    var color = StatusColor(meal.Status);
+                    <tr>
+                        <td>
+                            <div class="fw-bold text-dark">@meal.Name</div>
+                            <div class="text-secondary small">#@meal.Id</div>
+                            @if (!meal.IsActive)
+                            {
+                                <span class="badge bg-danger-lt text-danger mt-1">Nieaktywny</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary-lt">@(meal.CategoryName ?? "-")</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-@color-lt text-@color">@StatusLabel(meal.Status)</span>
+                        </td>
+                        <td class="text-center">
+                            <div class="fw-bold">@meal.VariantCount</div>
+                            <div class="text-secondary small">@meal.PublishedVariantCount publ.</div>
+                        </td>
+                        <td>
+                            @if (meal.IsComplete)
+                            {
+                                <span class="badge bg-green-lt text-green">OK</span>
+                            }
+                            else
+                            {
+                                <div class="d-flex flex-wrap gap-1">
+                                    @if (meal.MissingPublicationData)
+                                    {
+                                        <span class="badge bg-orange-lt text-orange">Publikacja</span>
+                                    }
+                                    @if (meal.MissingPackaging)
+                                    {
+                                        <span class="badge bg-red-lt text-red">Opakowania</span>
+                                    }
+                                </div>
+                            }
+                            <div class="text-secondary small">@meal.ComponentCount skladowych</div>
+                        </td>
+                        <td>
+                            <div>Surowa: @Weight(meal.RawWeightGrams)</div>
+                            <div class="text-secondary small">Po obrobce: @Weight(meal.CookedWeightGrams)</div>
+                        </td>
+                        <td>
+                            @if (meal.HasNutrition)
+                            {
+                                <div>@meal.CaloriesPer100g?.ToString("0.#") kcal / 100 g</div>
+                                <div class="text-secondary small">
+                                    B @meal.ProteinPer100g?.ToString("0.#") /
+                                    W @meal.CarbohydratesPer100g?.ToString("0.#") /
+                                    T @meal.FatPer100g?.ToString("0.#") /
+                                    Bl @meal.FiberPer100g?.ToString("0.#")
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-secondary">Brak nutrition</span>
+                            }
+                            <div class="small @(meal.MissingPackaging ? "text-danger" : "text-secondary")">
+                                Opakowania: @meal.PackagingRequirementCount
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(meal.AllergenNames))
+                            {
+                                <div class="text-secondary small">@meal.AllergenNames</div>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-list flex-nowrap justify-content-end">
+                                <a asp-action="Details" asp-route-id="@meal.Id" class="btn btn-sm btn-indigo">Zarzadzaj</a>
+                                <a asp-action="Edit" asp-route-id="@meal.Id" class="btn btn-sm btn-outline-secondary">Edytuj</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+<div class="card-footer bg-transparent d-flex flex-wrap align-items-center gap-2 border-top">
+    <p class="m-0 text-secondary">Pokazano <strong>@firstItem-@lastItem</strong> z <strong>@Model.TotalCount</strong> wynikow</p>
+
+    @if (totalPages > 1)
+    {
+        <ul class="pagination m-0 ms-auto">
+            <li class="page-item @(currentPage > 1 ? string.Empty : "disabled")">
+                <a class="page-link"
+                   href="@IndexUrl(currentPage - 1)"
+                   hx-get="@TableUrl(currentPage - 1)"
+                   hx-target="#meal-table-container"
+                   hx-push-url="@IndexUrl(currentPage - 1)"
+                   aria-disabled="@(currentPage <= 1)">Poprzednia</a>
+            </li>
+
+            @if (startPage > 1)
+            {
+                <li class="page-item">
+                    <a class="page-link" href="@IndexUrl(1)" hx-get="@TableUrl(1)" hx-target="#meal-table-container" hx-push-url="@IndexUrl(1)">1</a>
+                </li>
+                @if (startPage > 2)
+                {
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                }
+            }
+
+            @for (var pageNumber = startPage; pageNumber <= endPage; pageNumber++)
+            {
+                <li class="page-item @(pageNumber == currentPage ? "active" : string.Empty)">
+                    <a class="page-link"
+                       href="@IndexUrl(pageNumber)"
+                       hx-get="@TableUrl(pageNumber)"
+                       hx-target="#meal-table-container"
+                       hx-push-url="@IndexUrl(pageNumber)">@pageNumber</a>
+                </li>
+            }
+
+            @if (endPage < totalPages)
+            {
+                @if (endPage < totalPages - 1)
+                {
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                }
+                <li class="page-item">
+                    <a class="page-link" href="@IndexUrl(totalPages)" hx-get="@TableUrl(totalPages)" hx-target="#meal-table-container" hx-push-url="@IndexUrl(totalPages)">@totalPages</a>
+                </li>
+            }
+
+            <li class="page-item @(currentPage < totalPages ? string.Empty : "disabled")">
+                <a class="page-link"
+                   href="@IndexUrl(currentPage + 1)"
+                   hx-get="@TableUrl(currentPage + 1)"
+                   hx-target="#meal-table-container"
+                   hx-push-url="@IndexUrl(currentPage + 1)"
+                   aria-disabled="@(currentPage >= totalPages)">Nastepna</a>
+            </li>
+        </ul>
+    }
+</div>

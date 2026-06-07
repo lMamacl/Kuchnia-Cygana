@@ -1,0 +1,14 @@
+[2026-06-07 22:05:07.024] [00005854] === Logging started ===
+[2026-06-07 22:05:07.036] [00005854] Executing: "C:\Program Files\dotnet\dotnet.exe" build src\KuchniaUCygana.Web\KuchniaUCygana.Web.csproj --no-restore --disable-build-servers -m:1 -clp:ErrorsOnly, PID: 22612, PPID: 14644
+[2026-06-07 22:05:07.040] [00005854] IsElevated: False
+[2026-06-07 22:05:07.040] [00005854] Is64BitProcess: True
+[2026-06-07 22:05:07.040] [00005854] RebootPending: False
+[2026-06-07 22:05:07.040] [00005854] ProcessorArchitecture: amd64
+[2026-06-07 22:05:07.040] [00005854] HostArchitecture: x64
+[2026-06-07 22:05:07.040] [00005854] SdkDirectory: 9.0.201
+[2026-06-07 22:05:07.040] [00005854] VerifySignatures: False
+[2026-06-07 22:05:07.040] [00005854] SDK feature band: 9.0.200
+[2026-06-07 22:06:17.821] [00005854] Shutting down
+[2026-06-07 22:06:17.822] [00005854] Shutdown completed.
+[2026-06-07 22:06:17.822] [00005854] Restart required: False
+[2026-06-07 22:06:17.822] [00005854] === Logging ended ===

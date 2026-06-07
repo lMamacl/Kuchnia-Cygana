@@ -2,6 +2,7 @@ using KuchniaUCygana.Application.DTOs.Menu;
 using KuchniaUCygana.Application.Interfaces.Menu;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace KuchniaUCygana.Web.Controllers;
 
@@ -13,6 +14,7 @@ public sealed class MealsController : Controller
     private readonly IImageManagementService _imageService;
     private readonly IAiDescriptionService _aiService;
     private readonly ICategoryService _categoryService;
+    private readonly IAllergenManagementService _allergenService;
     private readonly IIngredientManagementService _ingredientService;
     private readonly IRecipeComponentManagementService _recipeComponentService;
 
@@ -21,6 +23,7 @@ public sealed class MealsController : Controller
         IImageManagementService imageService,
         IAiDescriptionService aiService,
         ICategoryService categoryService,
+        IAllergenManagementService allergenService,
         IIngredientManagementService ingredientService,
         IRecipeComponentManagementService recipeComponentService)
     {
@@ -28,15 +31,27 @@ public sealed class MealsController : Controller
         _imageService = imageService;
         _aiService = aiService;
         _categoryService = categoryService;
+        _allergenService = allergenService;
         _ingredientService = ingredientService;
         _recipeComponentService = recipeComponentService;
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index([FromQuery] MealSearchFilterDto filter)
     {
-        var meals = await _mealService.GetPublishedMealsAsync();
+        var meals = await _mealService.SearchAsync(filter);
+        await LoadListLookupsAsync(filter.CategoryId, filter.AllergenId);
+        ViewBag.Filter = filter;
         return View(meals);
+    }
+
+    [HttpGet("table")]
+    public async Task<IActionResult> Table([FromQuery] MealSearchFilterDto filter)
+    {
+        var meals = await _mealService.SearchAsync(filter);
+        await LoadListLookupsAsync(filter.CategoryId, filter.AllergenId);
+        ViewBag.Filter = filter;
+        return PartialView("_Table", meals);
     }
 
     [HttpGet("create")]
@@ -297,5 +312,15 @@ public sealed class MealsController : Controller
         var response = await _aiService.GenerateDescriptionAsync(new AiGenerateDescriptionRequest { MealId = mealId });
         TempData["Success"] = "Opis marketingowy wygenerowany przez AI.";
         return RedirectToAction(nameof(Details), new { id = mealId });
+    }
+
+    private async Task LoadListLookupsAsync(int? selectedCategoryId = null, int? selectedAllergenId = null)
+    {
+        var categories = (await _categoryService.GetAllAsync()).ToList();
+        var allergens = (await _allergenService.GetAllAsync()).ToList();
+
+        ViewBag.Categories = new SelectList(categories, "Id", "Name", selectedCategoryId);
+        ViewBag.Allergens = allergens;
+        ViewBag.AllergenOptions = new SelectList(allergens, "Id", "Name", selectedAllergenId);
     }
 }

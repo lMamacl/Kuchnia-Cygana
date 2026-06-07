@@ -1,19 +1,6 @@
-﻿using System.Collections.Generic;
-using System.Threading.Tasks;
-using KuchniaUCygana.Domain.Entities.Menu;
+namespace KuchniaUCygana.Application.DTOs.Menu;
 
-namespace KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
-
-public interface IMealRepository : IRepository<Meal>
-{
-    Task<MealSearchResult> SearchAsync(MealSearchQuery query);
-
-    Task<IEnumerable<Meal>> GetPublishedAsync();
-
-    Task<Meal?> GetWithRecipeAsync(int mealId);
-}
-
-public sealed class MealSearchQuery
+public sealed class MealSearchFilterDto
 {
     public string? Search { get; set; }
 
@@ -29,21 +16,12 @@ public sealed class MealSearchQuery
 
     public bool MissingPackaging { get; set; }
 
-    public bool PlanningEligibleOnly { get; set; }
-
     public int Page { get; set; } = 1;
 
     public int PageSize { get; set; } = 25;
 }
 
-public sealed class MealSearchResult
-{
-    public IReadOnlyList<MealListRow> Items { get; set; } = Array.Empty<MealListRow>();
-
-    public int TotalCount { get; set; }
-}
-
-public sealed class MealListRow
+public sealed class MealListItemDto
 {
     public int Id { get; set; }
 
@@ -87,9 +65,13 @@ public sealed class MealListRow
 
     public string? AllergenNames { get; set; }
 
+    public bool HasVariants => this.VariantCount > 0;
+
     public bool HasNutrition { get; set; }
 
     public bool MissingPackaging { get; set; }
 
     public bool MissingPublicationData { get; set; }
+
+    public bool IsComplete => !this.MissingPublicationData && !this.MissingPackaging;
 }
