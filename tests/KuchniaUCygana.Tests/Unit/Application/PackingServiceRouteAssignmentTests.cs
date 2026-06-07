@@ -13,6 +13,7 @@ using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces.Packing;
 using KuchniaUCygana.Domain.Interfaces.Production;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 
 namespace KuchniaUCygana.Tests.Unit.Application;
 
@@ -210,6 +211,7 @@ public sealed class PackingServiceRouteAssignmentTests
             DietVariantId = 1,
             Status = ProductionItemStatus.Cooked,
             PackagingDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotJson = CreateFoilSnapshotJson(),
         };
         productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
         var service = CreateService(
@@ -236,6 +238,250 @@ public sealed class PackingServiceRouteAssignmentTests
     }
 
     [Fact]
+    public async Task PrintFoilLabelAsync_UsesM2SnapshotInsteadOfLegacyMealData()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository
+        {
+            MealIngredients = new[] { "Legacy skladnik" },
+            MealAllergens = new[] { "Legacy alergen" },
+            MealCalories = 999,
+        };
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var productionPlanItemRepository = new InMemoryRepository<ProductionPlanItem>();
+        var boxLabelRepository = new InMemoryBoxLabelRepository();
+        var productionItem = new ProductionPlanItem
+        {
+            ProductionPlanId = 10,
+            MealId = 501,
+            MealName = "Legacy meal",
+            DietVariantId = 1,
+            Status = ProductionItemStatus.Cooked,
+            PackagingDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotHash = "snapshot-hash",
+            M2SnapshotJson = CreateFoilSnapshotJson(
+                mealName: "Snapshot meal",
+                mealVariantName: "High protein",
+                ingredientName: "Snapshot skladnik",
+                allergen: "Jaja",
+                caloriesPerServing: 456m),
+        };
+        productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            boxLabelRepository: boxLabelRepository,
+            productionPlanItemRepository: productionPlanItemRepository);
+        var (_, _, item) = await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Pending,
+            productionPlanItemId: productionItem.Id);
+
+        var label = await service.PrintFoilLabelAsync(item.Id, "kitchen");
+
+        label.DishName.Should().Be("Snapshot meal");
+        label.MealVariantName.Should().Be("High protein");
+        label.Kcal.Should().Be(456);
+        label.Ingredients.Should().Contain("Snapshot skladnik");
+        label.Ingredients.Should().NotContain("Legacy skladnik");
+        label.Allergens.Should().Contain("Jaja");
+        label.Allergens.Should().NotContain("Legacy alergen");
+        label.NutritionRows.Should().Contain(row =>
+            row.Name == "Wartość energetyczna" && row.Per100g == "515 kJ / 123 kcal" && row.PerServing == "1908 kJ / 456 kcal");
+        label.LabelDataJson.Should().Contain("snapshot-hash");
+        sessionRepository.MealIngredientCallCount.Should().Be(0);
+        sessionRepository.MealAllergenCallCount.Should().Be(0);
+        sessionRepository.MealCaloriesCallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task PrintFoilLabelAsync_GroupsSnapshotIngredientsByComponentsWithoutWeights()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var productionPlanItemRepository = new InMemoryRepository<ProductionPlanItem>();
+        var boxLabelRepository = new InMemoryBoxLabelRepository();
+        var productionItem = new ProductionPlanItem
+        {
+            ProductionPlanId = 10,
+            MealId = 501,
+            MealName = "Legacy meal",
+            DietVariantId = 1,
+            Status = ProductionItemStatus.Cooked,
+            PackagingDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotHash = "snapshot-hash",
+            M2SnapshotJson = CreateFoilSnapshotJsonWithComponents(),
+        };
+        productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            boxLabelRepository: boxLabelRepository,
+            productionPlanItemRepository: productionPlanItemRepository);
+        var (_, _, item) = await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Pending,
+            productionPlanItemId: productionItem.Id);
+
+        var label = await service.PrintFoilLabelAsync(item.Id, "kitchen");
+
+        label.Ingredients.Should().Be("Mieso: Kurczak, Pieprz; Sos: Czosnek, Jogurt");
+        label.IngredientGroups.Should().HaveCount(2);
+        label.IngredientGroups[0].GroupName.Should().Be("Mieso");
+        label.IngredientGroups[0].Ingredients.Should().BeEquivalentTo(new[] { "Kurczak", "Pieprz" });
+        label.Ingredients.Should().NotContain("g)");
+        label.LabelDataJson.Should().Contain("IngredientGroups");
+    }
+
+    [Fact]
+    public async Task PrintFoilLabelAsync_WritesStructuredNutritionRows()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var productionPlanItemRepository = new InMemoryRepository<ProductionPlanItem>();
+        var boxLabelRepository = new InMemoryBoxLabelRepository();
+        var productionItem = new ProductionPlanItem
+        {
+            ProductionPlanId = 10,
+            MealId = 501,
+            MealName = "Legacy meal",
+            DietVariantId = 1,
+            Status = ProductionItemStatus.Cooked,
+            PackagingDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotHash = "snapshot-hash",
+            M2SnapshotJson = CreateFoilSnapshotJson(caloriesPerServing: 456m),
+        };
+        productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            boxLabelRepository: boxLabelRepository,
+            productionPlanItemRepository: productionPlanItemRepository);
+        var (_, _, item) = await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Pending,
+            productionPlanItemId: productionItem.Id);
+
+        var label = await service.PrintFoilLabelAsync(item.Id, "kitchen");
+
+        var rows = label.NutritionRows;
+
+        label.LabelDataJson.Should().Contain("NutritionRows");
+        rows.Should().Contain(row => row.Name == "Wartość energetyczna" && row.Per100g == "515 kJ / 123 kcal" && row.PerServing == "1908 kJ / 456 kcal");
+        rows.Should().Contain(row => row.Name == "Tłuszcz" && row.Per100g == "5 g" && row.PerServing == "11 g");
+        rows.Should().Contain(row => row.Name == "Białko" && row.Per100g == "12 g" && row.PerServing == "28 g");
+        rows.Should().Contain(row => row.Name == "Węglowodany" && row.Per100g == "8 g" && row.PerServing == "18 g");
+        rows.Should().NotContain(row => row.Name.Contains("cuk", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PrintFoilLabelAsync_CalculatesServingNutritionWhenOnlyPer100gIsAvailable()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var productionPlanItemRepository = new InMemoryRepository<ProductionPlanItem>();
+        var boxLabelRepository = new InMemoryBoxLabelRepository();
+        var productionItem = new ProductionPlanItem
+        {
+            ProductionPlanId = 10,
+            MealId = 501,
+            MealName = "Legacy meal",
+            DietVariantId = 1,
+            Status = ProductionItemStatus.Cooked,
+            PackagingDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotJson = CreateFoilSnapshotJsonWithoutServingNutrition(),
+        };
+        productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            boxLabelRepository: boxLabelRepository,
+            productionPlanItemRepository: productionPlanItemRepository);
+        var (_, _, item) = await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Pending,
+            productionPlanItemId: productionItem.Id);
+
+        var label = await service.PrintFoilLabelAsync(item.Id, "kitchen");
+
+        label.NutritionRows.Should().Contain(row =>
+            row.Name == "Wartość energetyczna" && row.PerServing == "1441 kJ / 344.4 kcal");
+        label.NutritionRows.Should().Contain(row => row.Name == "Tłuszcz" && row.PerServing == "14 g");
+    }
+
+    [Fact]
+    public async Task PrintFoilLabelAsync_ShowsNoDeclaredAllergensWhenSnapshotHasNoAllergens()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var productionPlanItemRepository = new InMemoryRepository<ProductionPlanItem>();
+        var boxLabelRepository = new InMemoryBoxLabelRepository();
+        var productionItem = new ProductionPlanItem
+        {
+            ProductionPlanId = 10,
+            MealId = 501,
+            MealName = "Legacy meal",
+            DietVariantId = 1,
+            Status = ProductionItemStatus.Cooked,
+            PackagingDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotJson = CreateFoilSnapshotJson(allergen: string.Empty),
+        };
+        productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new CalendarAwareOrderProvider(date),
+            itemRepository,
+            boxLabelRepository: boxLabelRepository,
+            productionPlanItemRepository: productionPlanItemRepository);
+        var (_, _, item) = await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Pending,
+            productionPlanItemId: productionItem.Id);
+
+        var label = await service.PrintFoilLabelAsync(item.Id, "kitchen");
+
+        label.Allergens.Should().Be("Brak zadeklarowanych alergenów");
+    }
+
+    [Fact]
     public async Task PrintFoilLabelAsync_RejectsItemWithoutCookedProductionStatus()
     {
         var date = new DateOnly(2035, 6, 1);
@@ -252,6 +498,7 @@ public sealed class PackingServiceRouteAssignmentTests
             DietVariantId = 1,
             Status = ProductionItemStatus.Cooking,
             PackagingDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotJson = CreateFoilSnapshotJson(),
         };
         productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
         var service = CreateService(
@@ -294,6 +541,7 @@ public sealed class PackingServiceRouteAssignmentTests
             MealName = "Test meal",
             DietVariantId = 1,
             Status = ProductionItemStatus.Cooked,
+            M2SnapshotJson = CreateFoilSnapshotJson(),
         };
         productionItem.Id = await productionPlanItemRepository.InsertAsync(productionItem);
         var service = CreateService(
@@ -691,6 +939,188 @@ public sealed class PackingServiceRouteAssignmentTests
 
         return (session, bag, item);
     }
+
+    private static string CreateFoilSnapshotJson(
+        string mealName = "Test meal",
+        string? mealVariantName = "Standard",
+        string ingredientName = "Jajko",
+        string allergen = "Jaja",
+        decimal caloriesPerServing = 320m)
+        => JsonSerializer.Serialize(new PublishedDietPlanItemDto
+        {
+            DietMenuPlanItemId = 1001,
+            DietMenuPlanId = 50,
+            PlanDate = new DateOnly(2035, 6, 1),
+            MealId = 501,
+            MealVariantId = 77,
+            MealVariantName = mealVariantName,
+            MealName = mealName,
+            DietVariantId = 1,
+            MealSlot = "Breakfast",
+            SortOrder = 1,
+            ServingMultiplier = 1m,
+            FinalWeightGrams = 280m,
+            FinalWeightAfterMultiplierGrams = 280m,
+            Nutrition = new LabelNutritionDto
+            {
+                CaloriesPer100g = 123m,
+                ProteinPer100g = 12m,
+                CarbohydratesPer100g = 8m,
+                FatPer100g = 5m,
+                FiberPer100g = 2m,
+                CaloriesPerServing = caloriesPerServing,
+                ProteinPerServing = 28m,
+                CarbohydratesPerServing = 18m,
+                FatPerServing = 11m,
+                FiberPerServing = 4m,
+            },
+            Allergens = new[] { allergen },
+            AggregateIngredients = new[]
+            {
+                new AggregateIngredientDto
+                {
+                    IngredientId = 1,
+                    IngredientName = ingredientName,
+                    StockItemId = 101,
+                    WarehouseCategoryId = 10,
+                    NetWeightInGrams = 120m,
+                    GrossWeightInGrams = 130m,
+                },
+            },
+            PackagingRequirements = new[]
+            {
+                new PackagingRequirementDto
+                {
+                    OwnerType = "MealVariant",
+                    MealId = 501,
+                    MealVariantId = 77,
+                    StockItemId = 201,
+                    ResourceName = "Pudelko obiadowe",
+                    Quantity = 1m,
+                    Unit = "pcs",
+                    IsCustomerFacing = true,
+                },
+            },
+            CompletenessStatus = "Complete",
+            IsCompleteForProduction = true,
+        });
+
+    private static string CreateFoilSnapshotJsonWithComponents()
+        => JsonSerializer.Serialize(new PublishedDietPlanItemDto
+        {
+            DietMenuPlanItemId = 1001,
+            DietMenuPlanId = 50,
+            PlanDate = new DateOnly(2035, 6, 1),
+            MealId = 501,
+            MealVariantId = 77,
+            MealVariantName = "Standard",
+            MealName = "Test meal",
+            DietVariantId = 1,
+            MealSlot = "Dinner",
+            SortOrder = 1,
+            ServingMultiplier = 1m,
+            FinalWeightGrams = 280m,
+            FinalWeightAfterMultiplierGrams = 280m,
+            Nutrition = new LabelNutritionDto
+            {
+                CaloriesPer100g = 123m,
+                ProteinPer100g = 12m,
+                CarbohydratesPer100g = 8m,
+                FatPer100g = 5m,
+                FiberPer100g = 2m,
+                CaloriesPerServing = 456m,
+                ProteinPerServing = 28m,
+                CarbohydratesPerServing = 18m,
+                FatPerServing = 11m,
+                FiberPerServing = 4m,
+            },
+            Allergens = new[] { "Jaja" },
+            Components = new[]
+            {
+                new MealComponentVersionDto
+                {
+                    RecipeComponentId = 1,
+                    RecipeComponentVersionId = 101,
+                    ComponentName = "Mieso",
+                    SortOrder = 1,
+                    Ingredients = new[]
+                    {
+                        new ComponentIngredientDto { IngredientId = 1, IngredientName = "Kurczak", WeightInGrams = 120m },
+                        new ComponentIngredientDto { IngredientId = 2, IngredientName = "Pieprz", WeightInGrams = 2m },
+                        new ComponentIngredientDto { IngredientId = 2, IngredientName = "Pieprz", WeightInGrams = 2m },
+                    },
+                },
+                new MealComponentVersionDto
+                {
+                    RecipeComponentId = 2,
+                    RecipeComponentVersionId = 102,
+                    ComponentName = "Sos",
+                    SortOrder = 2,
+                    Ingredients = new[]
+                    {
+                        new ComponentIngredientDto { IngredientId = 3, IngredientName = "Jogurt", WeightInGrams = 60m },
+                        new ComponentIngredientDto { IngredientId = 4, IngredientName = "Czosnek", WeightInGrams = 5m },
+                    },
+                },
+            },
+            PackagingRequirements = new[]
+            {
+                new PackagingRequirementDto
+                {
+                    OwnerType = "MealVariant",
+                    MealId = 501,
+                    MealVariantId = 77,
+                    StockItemId = 201,
+                    ResourceName = "Pudelko obiadowe",
+                    Quantity = 1m,
+                    Unit = "pcs",
+                    IsCustomerFacing = true,
+                },
+            },
+            CompletenessStatus = "Complete",
+            IsCompleteForProduction = true,
+        });
+
+    private static string CreateFoilSnapshotJsonWithoutServingNutrition()
+        => JsonSerializer.Serialize(new PublishedDietPlanItemDto
+        {
+            DietMenuPlanItemId = 1001,
+            DietMenuPlanId = 50,
+            PlanDate = new DateOnly(2035, 6, 1),
+            MealId = 501,
+            MealVariantId = 77,
+            MealVariantName = "Standard",
+            MealName = "Test meal",
+            DietVariantId = 1,
+            MealSlot = "Breakfast",
+            SortOrder = 1,
+            ServingMultiplier = 1m,
+            FinalWeightGrams = 280m,
+            FinalWeightAfterMultiplierGrams = 280m,
+            Nutrition = new LabelNutritionDto
+            {
+                CaloriesPer100g = 123m,
+                ProteinPer100g = 12m,
+                CarbohydratesPer100g = 8m,
+                FatPer100g = 5m,
+                FiberPer100g = 2m,
+            },
+            Allergens = new[] { "Jaja" },
+            AggregateIngredients = new[]
+            {
+                new AggregateIngredientDto
+                {
+                    IngredientId = 1,
+                    IngredientName = "Jajko",
+                    StockItemId = 101,
+                    WarehouseCategoryId = 10,
+                    NetWeightInGrams = 120m,
+                    GrossWeightInGrams = 130m,
+                },
+            },
+            CompletenessStatus = "Complete",
+            IsCompleteForProduction = true,
+        });
 
     private static PackingService CreateService(
         IPackingSessionRepository sessionRepository,
@@ -1192,6 +1622,18 @@ public sealed class PackingServiceRouteAssignmentTests
 
     private sealed class InMemoryPackingSessionRepository : InMemoryRepository<PackingSession>, IPackingSessionRepository
     {
+        public IReadOnlyList<string> MealIngredients { get; init; } = Array.Empty<string>();
+
+        public IReadOnlyList<string> MealAllergens { get; init; } = Array.Empty<string>();
+
+        public int? MealCalories { get; init; }
+
+        public int MealIngredientCallCount { get; private set; }
+
+        public int MealAllergenCallCount { get; private set; }
+
+        public int MealCaloriesCallCount { get; private set; }
+
         public Task<IEnumerable<PackingSession>> GetActiveByDateAsync(DateOnly date)
         {
             return Task.FromResult(this.Entities.Where(s => s.PackingDate == date));
@@ -1234,17 +1676,20 @@ public sealed class PackingServiceRouteAssignmentTests
 
         public Task<IEnumerable<string>> GetMealIngredientsAsync(int mealId)
         {
-            return Task.FromResult(Enumerable.Empty<string>());
+            this.MealIngredientCallCount++;
+            return Task.FromResult<IEnumerable<string>>(this.MealIngredients);
         }
 
         public Task<IEnumerable<string>> GetMealAllergensAsync(int mealId)
         {
-            return Task.FromResult(Enumerable.Empty<string>());
+            this.MealAllergenCallCount++;
+            return Task.FromResult<IEnumerable<string>>(this.MealAllergens);
         }
 
         public Task<int?> GetMealCaloriesAsync(int mealId)
         {
-            return Task.FromResult<int?>(null);
+            this.MealCaloriesCallCount++;
+            return Task.FromResult(this.MealCalories);
         }
 
         public Task<(IReadOnlyList<PackingItemSearchRow> Items, int TotalCount)> SearchPackingItemsAsync(

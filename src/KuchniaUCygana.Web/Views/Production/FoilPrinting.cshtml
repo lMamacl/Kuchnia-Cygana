@@ -234,7 +234,18 @@
                                     <td>
                                         @if (item.ProductLabelPrintCount == 0)
                                         {
-                                            <span class="badge bg-orange-lt text-orange">brak wydruku</span>
+                                            @if (item.CanPrint)
+                                            {
+                                                <span class="badge bg-green-lt text-green">gotowe do druku</span>
+                                            }
+                                            else if (item.IsBlocked)
+                                            {
+                                                <span class="badge bg-red-lt text-red">zablokowane</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-orange-lt text-orange">brak wydruku</span>
+                                            }
                                         }
                                         else
                                         {

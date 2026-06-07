@@ -24,6 +24,14 @@ public sealed class PackingLabelDto
 
     public int? Kcal { get; set; }
 
+    public string? MealVariantName { get; set; }
+
+    public decimal? ServingWeightGrams { get; set; }
+
+    public List<PackingLabelIngredientGroupDto> IngredientGroups { get; set; } = new();
+
+    public List<PackingLabelNutritionRowDto> NutritionRows { get; set; } = new();
+
     // Etykieta wysyłkowa
     public string? ClientName { get; set; }
 
@@ -67,4 +75,20 @@ public sealed class PackingLabelDto
     public string? AttachedBy { get; set; }
 
     public string? LabelDataJson { get; set; }
+}
+
+public sealed class PackingLabelIngredientGroupDto
+{
+    public string GroupName { get; set; } = string.Empty;
+
+    public List<string> Ingredients { get; set; } = new();
+}
+
+public sealed class PackingLabelNutritionRowDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string Per100g { get; set; } = "-";
+
+    public string PerServing { get; set; } = "-";
 }

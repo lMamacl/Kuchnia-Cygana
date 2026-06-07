@@ -899,12 +899,10 @@ public sealed class PackingService : IPackingService
             throw new InvalidOperationException("Nie można drukować etykiety produktowej dla pudełka oznaczonego jako uszkodzone albo brakujące.");
         }
 
-        await EnsureProductionItemReadyForFoilAsync(item);
-
-        var ingredients = (await sessionRepository.GetMealIngredientsAsync(item.MealId)).ToList();
-        var allergens = (await sessionRepository.GetMealAllergensAsync(item.MealId)).ToList();
-        var calories = await sessionRepository.GetMealCaloriesAsync(item.MealId);
         var qrCode = item.BoxCode ?? $"BOX-{item.Id:D6}";
+        var planItem = await EnsureProductionItemReadyForFoilAsync(item);
+        var snapshot = ReadFoilSnapshot(planItem);
+        var labelPayload = BuildFoilLabelPayload(item, planItem, snapshot, qrCode, printNumber, operatorName, reprintReason);
         var printedAt = DateTimeOffset.UtcNow;
         var label = new BoxLabel
         {
@@ -914,23 +912,7 @@ public sealed class PackingService : IPackingService
             ReprintReason = printNumber > 1 ? reprintReason!.Trim() : null,
             PrintedAt = printedAt,
             PrintedBy = string.IsNullOrWhiteSpace(operatorName) ? "Kuchnia" : operatorName,
-            LabelDataJson = JsonSerializer.Serialize(
-                new
-                {
-                    qrCode,
-                    item.Id,
-                    item.PackingSessionId,
-                    item.PackingBagId,
-                    item.MealId,
-                    item.MealName,
-                    item.DietVariantId,
-                    ingredients,
-                    allergens,
-                    kcal = calories,
-                    printNumber,
-                    printedAt,
-                    printedBy = string.IsNullOrWhiteSpace(operatorName) ? "Kuchnia" : operatorName,
-                }),
+            LabelDataJson = JsonSerializer.Serialize(labelPayload),
         };
 
         var labelId = await boxLabelRepository.InsertAsync(label);
@@ -944,24 +926,7 @@ public sealed class PackingService : IPackingService
             await itemRepository.UpdateAsync(item);
         }
 
-        return new PackingLabelDto
-        {
-            Id = label.Id,
-            PackingItemId = label.PackingItemId,
-            PackingSessionId = item.PackingSessionId,
-            PackingBagId = item.PackingBagId,
-            LabelType = LabelType.Product.ToString(),
-            QrCode = label.QrCode,
-            DishName = item.MealName,
-            Allergens = allergens.Any() ? string.Join(", ", allergens) : "Brak",
-            Kcal = calories,
-            Ingredients = ingredients.Any() ? string.Join(", ", ingredients) : "Brak danych",
-            ReprintReason = label.ReprintReason,
-            PrintNumber = label.PrintNumber,
-            PrintedAt = label.PrintedAt,
-            PrintedBy = label.PrintedBy,
-            LabelDataJson = label.LabelDataJson,
-        };
+        return MapFoilLabelDto(label, item, labelPayload);
     }
 
     public async Task<PackingLabelDto?> GetLatestFoilLabelAsync(int packingItemId)
@@ -974,28 +939,10 @@ public sealed class PackingService : IPackingService
             return null;
         }
 
-        var ingredients = (await sessionRepository.GetMealIngredientsAsync(item.MealId)).ToList();
-        var allergens = (await sessionRepository.GetMealAllergensAsync(item.MealId)).ToList();
-        var calories = await sessionRepository.GetMealCaloriesAsync(item.MealId);
+        var payload = DeserializeFoilLabelPayload(label.LabelDataJson)
+            ?? throw new InvalidOperationException("Ostatnia etykieta produktowa nie ma zapisanego snapshotu danych.");
 
-        return new PackingLabelDto
-        {
-            Id = label.Id,
-            PackingItemId = label.PackingItemId,
-            PackingSessionId = item.PackingSessionId,
-            PackingBagId = item.PackingBagId,
-            LabelType = LabelType.Product.ToString(),
-            QrCode = label.QrCode,
-            DishName = item.MealName,
-            Allergens = allergens.Any() ? string.Join(", ", allergens) : "Brak",
-            Kcal = calories,
-            Ingredients = ingredients.Any() ? string.Join(", ", ingredients) : "Brak danych",
-            ReprintReason = label.ReprintReason,
-            PrintNumber = label.PrintNumber,
-            PrintedAt = label.PrintedAt,
-            PrintedBy = label.PrintedBy,
-            LabelDataJson = label.LabelDataJson,
-        };
+        return MapFoilLabelDto(label, item, payload);
     }
 
     public async Task PackBoxByCodeAsync(int sessionId, string barcode, string packedBy)
@@ -1283,7 +1230,7 @@ public sealed class PackingService : IPackingService
             FoilBlockReason = GetFoilBlockReason(row),
         };
 
-    private async Task EnsureProductionItemReadyForFoilAsync(PackingItem item)
+    private async Task<ProductionPlanItem> EnsureProductionItemReadyForFoilAsync(PackingItem item)
     {
         if (!item.ProductionPlanItemId.HasValue)
         {
@@ -1305,7 +1252,250 @@ public sealed class PackingService : IPackingService
         {
             throw new InvalidOperationException("Nie mozna wydrukowac etykiety produktowej: opakowania nie zostaly rozliczone po gotowaniu.");
         }
+
+        return planItem;
     }
+
+    private static PublishedDietPlanItemDto ReadFoilSnapshot(ProductionPlanItem planItem)
+    {
+        if (string.IsNullOrWhiteSpace(planItem.M2SnapshotJson))
+        {
+            throw new InvalidOperationException("Nie mozna wydrukowac etykiety produktowej: pozycja produkcji nie ma snapshotu M2.");
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<PublishedDietPlanItemDto>(planItem.M2SnapshotJson)
+                ?? throw new InvalidOperationException("Nie mozna wydrukowac etykiety produktowej: snapshot M2 jest pusty.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException("Nie mozna wydrukowac etykiety produktowej: snapshot M2 jest nieprawidlowy.", ex);
+        }
+    }
+
+    private static FoilLabelSnapshotPayload BuildFoilLabelPayload(
+        PackingItem item,
+        ProductionPlanItem planItem,
+        PublishedDietPlanItemDto snapshot,
+        string qrCode,
+        int printNumber,
+        string operatorName,
+        string? reprintReason)
+    {
+        var allergens = snapshot.Allergens
+            .Where(allergen => !string.IsNullOrWhiteSpace(allergen))
+            .Select(allergen => allergen.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(allergen => allergen)
+            .ToList();
+
+        var packaging = snapshot.PackagingRequirements
+            .Select(packaging => $"{packaging.ResourceName} x {FormatDecimal(packaging.Quantity)} {packaging.Unit}".Trim())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToList();
+
+        var printedBy = string.IsNullOrWhiteSpace(operatorName) ? "Kuchnia" : operatorName;
+        var dishName = string.IsNullOrWhiteSpace(snapshot.MealName) ? item.MealName : snapshot.MealName;
+        var servingWeightGrams = snapshot.FinalWeightAfterMultiplierGrams ?? snapshot.FinalWeightGrams ?? snapshot.CookedWeightGrams;
+        var caloriesForServing = snapshot.Nutrition is null
+            ? null
+            : snapshot.Nutrition.CaloriesPerServing ?? CalculateServingValue(snapshot.Nutrition.CaloriesPer100g, servingWeightGrams);
+        var kcal = snapshot.Nutrition is null
+            ? null
+            : (int?)Math.Round(caloriesForServing ?? snapshot.Nutrition.CaloriesPer100g);
+
+        return new FoilLabelSnapshotPayload
+        {
+            QrCode = qrCode,
+            PackingItemId = item.Id,
+            PackingSessionId = item.PackingSessionId,
+            PackingBagId = item.PackingBagId,
+            ProductionPlanItemId = planItem.Id,
+            DietMenuPlanItemId = snapshot.DietMenuPlanItemId,
+            MealId = snapshot.MealId,
+            MealName = dishName,
+            MealVariantId = snapshot.MealVariantId,
+            MealVariantName = snapshot.MealVariantName,
+            DietVariantId = snapshot.DietVariantId,
+            MealSlot = snapshot.MealSlot,
+            ServingWeightGrams = servingWeightGrams,
+            IngredientGroups = BuildIngredientGroups(snapshot),
+            Allergens = allergens,
+            Packaging = packaging,
+            NutritionRows = BuildNutritionRows(snapshot.Nutrition, servingWeightGrams),
+            Kcal = kcal,
+            PrintNumber = printNumber,
+            ReprintReason = printNumber > 1 ? reprintReason?.Trim() : null,
+            PrintedBy = printedBy,
+            PrintedAt = DateTimeOffset.UtcNow,
+            SnapshotHash = planItem.M2SnapshotHash,
+            SnapshotCompletenessStatus = snapshot.CompletenessStatus,
+        };
+    }
+
+    private static PackingLabelDto MapFoilLabelDto(
+        BoxLabel label,
+        PackingItem item,
+        FoilLabelSnapshotPayload payload)
+    {
+        return new PackingLabelDto
+        {
+            Id = label.Id,
+            PackingItemId = label.PackingItemId,
+            PackingSessionId = item.PackingSessionId,
+            PackingBagId = item.PackingBagId,
+            LabelType = LabelType.Product.ToString(),
+            QrCode = label.QrCode,
+            DishName = payload.MealName,
+            MealVariantName = payload.MealVariantName,
+            ServingWeightGrams = payload.ServingWeightGrams,
+            IngredientGroups = payload.IngredientGroups
+                .Select(group => new PackingLabelIngredientGroupDto
+                {
+                    GroupName = group.GroupName,
+                    Ingredients = group.Ingredients.ToList(),
+                })
+                .ToList(),
+            Allergens = payload.Allergens.Count > 0 ? string.Join(", ", payload.Allergens) : "Brak zadeklarowanych alergen\u00f3w",
+            Kcal = payload.Kcal,
+            NutritionRows = payload.NutritionRows
+                .Select(row => new PackingLabelNutritionRowDto
+                {
+                    Name = row.Name,
+                    Per100g = row.Per100g,
+                    PerServing = row.PerServing,
+                })
+                .ToList(),
+            Ingredients = FormatIngredientGroups(payload.IngredientGroups),
+            ReprintReason = label.ReprintReason,
+            PrintNumber = label.PrintNumber,
+            PrintedAt = label.PrintedAt,
+            PrintedBy = label.PrintedBy,
+            LabelDataJson = label.LabelDataJson,
+        };
+    }
+
+    private static FoilLabelSnapshotPayload? DeserializeFoilLabelPayload(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<FoilLabelSnapshotPayload>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static List<FoilLabelIngredientGroupPayload> BuildIngredientGroups(PublishedDietPlanItemDto snapshot)
+    {
+        var componentGroups = snapshot.Components
+            .OrderBy(component => component.SortOrder)
+            .ThenBy(component => component.ComponentName)
+            .Select(component => new FoilLabelIngredientGroupPayload
+            {
+                GroupName = string.IsNullOrWhiteSpace(component.ComponentName)
+                    ? "Sk\u0142adowa"
+                    : component.ComponentName.Trim(),
+                Ingredients = BuildIngredientNames(component.Ingredients.Select(ingredient => ingredient.IngredientName)),
+            })
+            .Where(group => group.Ingredients.Count > 0)
+            .ToList();
+
+        if (componentGroups.Count > 0)
+        {
+            return componentGroups;
+        }
+
+        var aggregateIngredients = BuildIngredientNames(snapshot.AggregateIngredients.Select(ingredient => ingredient.IngredientName));
+        return aggregateIngredients.Count == 0
+            ? new List<FoilLabelIngredientGroupPayload>()
+            : new List<FoilLabelIngredientGroupPayload>
+            {
+                new()
+                {
+                    GroupName = "Sk\u0142adniki",
+                    Ingredients = aggregateIngredients,
+                },
+            };
+    }
+
+    private static List<string> BuildIngredientNames(IEnumerable<string?> ingredients)
+        => ingredients
+            .Where(ingredient => !string.IsNullOrWhiteSpace(ingredient))
+            .Select(ingredient => ingredient!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(ingredient => ingredient)
+            .ToList();
+
+    private static string FormatIngredientGroups(IReadOnlyCollection<FoilLabelIngredientGroupPayload> groups)
+    {
+        if (groups.Count == 0)
+        {
+            return "Brak danych";
+        }
+
+        return string.Join(
+            "; ",
+            groups.Select(group => $"{group.GroupName}: {string.Join(", ", group.Ingredients)}"));
+    }
+
+    private static List<FoilLabelNutritionRowPayload> BuildNutritionRows(LabelNutritionDto? nutrition, decimal? servingWeightGrams)
+        => new()
+        {
+            BuildEnergyRow(nutrition?.CaloriesPer100g, nutrition?.CaloriesPerServing, servingWeightGrams),
+            BuildGramsRow("T\u0142uszcz", nutrition?.FatPer100g, nutrition?.FatPerServing, servingWeightGrams),
+            BuildGramsRow("Bia\u0142ko", nutrition?.ProteinPer100g, nutrition?.ProteinPerServing, servingWeightGrams),
+            BuildGramsRow("W\u0119glowodany", nutrition?.CarbohydratesPer100g, nutrition?.CarbohydratesPerServing, servingWeightGrams),
+        };
+
+    private static FoilLabelNutritionRowPayload BuildEnergyRow(decimal? per100g, decimal? perServing, decimal? servingWeightGrams)
+        => new()
+        {
+            Name = "Warto\u015b\u0107 energetyczna",
+            Per100g = FormatEnergy(per100g),
+            PerServing = FormatEnergy(perServing ?? CalculateServingValue(per100g, servingWeightGrams)),
+        };
+
+    private static FoilLabelNutritionRowPayload BuildGramsRow(
+        string name,
+        decimal? per100g,
+        decimal? perServing,
+        decimal? servingWeightGrams)
+        => new()
+        {
+            Name = name,
+            Per100g = FormatGrams(per100g),
+            PerServing = FormatGrams(perServing ?? CalculateServingValue(per100g, servingWeightGrams)),
+        };
+
+    private static decimal? CalculateServingValue(decimal? per100g, decimal? servingWeightGrams)
+        => per100g.HasValue && servingWeightGrams.HasValue && servingWeightGrams.Value > 0m
+            ? per100g.Value * servingWeightGrams.Value / 100m
+            : null;
+
+    private static string FormatEnergy(decimal? calories)
+    {
+        if (!calories.HasValue)
+        {
+            return "-";
+        }
+
+        var kilojoules = (int)Math.Round(calories.Value * 4.184m, MidpointRounding.AwayFromZero);
+        return $"{kilojoules} kJ / {FormatDecimal(calories.Value)} kcal";
+    }
+
+    private static string FormatGrams(decimal? value)
+        => value.HasValue ? $"{FormatDecimal(value.Value)} g" : "-";
+
+    private static string FormatDecimal(decimal value)
+        => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
     private static string? GetFoilBlockReason(PackingItemSearchRow row)
     {
@@ -2037,6 +2227,73 @@ public sealed class PackingService : IPackingService
     }
 
     private sealed record BoxDefinition(int MealId, string MealName, int DietVariantId, int? ProductionPlanItemId);
+
+    private sealed class FoilLabelSnapshotPayload
+    {
+        public string QrCode { get; set; } = string.Empty;
+
+        public int PackingItemId { get; set; }
+
+        public int PackingSessionId { get; set; }
+
+        public int? PackingBagId { get; set; }
+
+        public int ProductionPlanItemId { get; set; }
+
+        public int DietMenuPlanItemId { get; set; }
+
+        public int MealId { get; set; }
+
+        public string MealName { get; set; } = string.Empty;
+
+        public int? MealVariantId { get; set; }
+
+        public string? MealVariantName { get; set; }
+
+        public int DietVariantId { get; set; }
+
+        public string MealSlot { get; set; } = string.Empty;
+
+        public decimal? ServingWeightGrams { get; set; }
+
+        public List<FoilLabelIngredientGroupPayload> IngredientGroups { get; set; } = new();
+
+        public List<string> Allergens { get; set; } = new();
+
+        public List<string> Packaging { get; set; } = new();
+
+        public List<FoilLabelNutritionRowPayload> NutritionRows { get; set; } = new();
+
+        public int? Kcal { get; set; }
+
+        public int PrintNumber { get; set; }
+
+        public string? ReprintReason { get; set; }
+
+        public string PrintedBy { get; set; } = string.Empty;
+
+        public DateTimeOffset PrintedAt { get; set; }
+
+        public string? SnapshotHash { get; set; }
+
+        public string SnapshotCompletenessStatus { get; set; } = string.Empty;
+    }
+
+    private sealed class FoilLabelIngredientGroupPayload
+    {
+        public string GroupName { get; set; } = string.Empty;
+
+        public List<string> Ingredients { get; set; } = new();
+    }
+
+    private sealed class FoilLabelNutritionRowPayload
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public string Per100g { get; set; } = "-";
+
+        public string PerServing { get; set; } = "-";
+    }
 
     private sealed record RouteStop(RouteEntry Route, RouteStopEntry Stop);
 
