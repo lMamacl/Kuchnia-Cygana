@@ -17,6 +17,8 @@ public interface IProductionService
 
     Task<CookingCardDto> GetCookingCardAsync(int planItemId);
 
+    Task<CookingComponentCardDto> GetCookingComponentCardAsync(int planItemId, int recipeComponentVersionId);
+
     Task ApproveCookingAsync(int planItemId, decimal actualQuantity);
 
     Task ProduceSemiFinishedAsync(int planId);

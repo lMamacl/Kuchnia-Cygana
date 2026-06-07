@@ -292,6 +292,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await EnsureDefaultMealVariantsAsync(db, now, auditUser, cancellationToken);
         await EnsureDemoMealVariantComponentsAsync(db, now, auditUser, cancellationToken);
         await EnsureDietMenuPlanItemsHaveMealVariantsAsync(db, now, auditUser, cancellationToken);
+        await SeedCanonicalM2DemoCatalogAsync(db, now, auditUser, cancellationToken);
         await SeedUnifiedDemoScenarioAsync(db, now, auditUser, cancellationToken);
     }
 
@@ -478,6 +479,9 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                    OR [Notes] LIKE N'%demo%'
             );
 
+            DELETE FROM [DietMenuPlanItems]
+            WHERE [MealId] IN (SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'Demo %');
+
             DELETE FROM [DietMenuPlans]
             WHERE [CreatedBy] = N'DemoSeeder'
                OR [Notes] LIKE N'%demo%';
@@ -490,6 +494,9 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
                 WHERE d.[Name] = N'Demo Lifecycle'
             );
+
+            DELETE FROM [DietVariantMeals]
+            WHERE [MealId] IN (SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'Demo %');
 
             DELETE FROM [DietVariants]
             WHERE [DietId] IN (SELECT [Id] FROM [Diets] WHERE [Name] = N'Demo Lifecycle');
@@ -701,7 +708,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             await itemRepository.InsertAsync(item);
         }
 
-        result.Plan.Status = ProductionPlanStatus.InProgress;
+        result.Plan.Status = ProductionPlanStatus.Active;
         result.Plan.Notes = "Wspolny demo seed: plan wygenerowany z zamowien M1 i planu M2.";
         result.Plan.IsSharedWithLogistics = true;
         result.Plan.SharedAt = DateTimeOffset.UtcNow;
@@ -2543,6 +2550,1642 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             cancellationToken: cancellationToken));
     }
 
+    private static async Task SeedCanonicalM2DemoCatalogAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var categoryIds = await EnsureCanonicalM2CategoriesAsync(db, now, cancellationToken);
+        var allergenIds = await EnsureCanonicalM2AllergensAsync(db, now, cancellationToken);
+        var stockItemIds = await EnsureCanonicalPackagingStockAsync(db, now, auditUser, cancellationToken);
+        var ingredientIds = await EnsureCanonicalM2IngredientsAsync(db, categoryIds, allergenIds, now, auditUser, cancellationToken);
+        var componentVersionIds = await EnsureCanonicalM2RecipeComponentsAsync(
+            db,
+            categoryIds,
+            ingredientIds,
+            stockItemIds,
+            now,
+            auditUser,
+            cancellationToken);
+        var mealVariantIds = await EnsureCanonicalM2MealsAndVariantsAsync(
+            db,
+            categoryIds,
+            componentVersionIds,
+            stockItemIds,
+            now,
+            auditUser,
+            cancellationToken);
+
+        await EnsureCanonicalM2DietsAndPlansAsync(db, mealVariantIds, now, auditUser, cancellationToken);
+    }
+
+    private static async Task<Dictionary<string, int>> EnsureCanonicalM2CategoriesAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var categories = new[]
+        {
+            new { Key = "breakfast", Name = "Demo M2 - sniadania", Description = "Demo M2: dania sniadaniowe.", SortOrder = 201 },
+            new { Key = "lunch", Name = "Demo M2 - obiady", Description = "Demo M2: dania obiadowe.", SortOrder = 202 },
+            new { Key = "dinner", Name = "Demo M2 - kolacje", Description = "Demo M2: dania kolacyjne.", SortOrder = 203 },
+            new { Key = "snack", Name = "Demo M2 - przekaski", Description = "Demo M2: przekaski i desery.", SortOrder = 204 },
+            new { Key = "meat", Name = "Demo M2 - mieso i ryby", Description = "Demo M2: mieso, ryby i alternatywy bialkowe.", SortOrder = 211 },
+            new { Key = "dairy", Name = "Demo M2 - nabial", Description = "Demo M2: nabial i zamienniki.", SortOrder = 212 },
+            new { Key = "veg", Name = "Demo M2 - warzywa", Description = "Demo M2: warzywa.", SortOrder = 213 },
+            new { Key = "fruit", Name = "Demo M2 - owoce", Description = "Demo M2: owoce.", SortOrder = 214 },
+            new { Key = "dry", Name = "Demo M2 - suche", Description = "Demo M2: kasze, ryze, platki i suche produkty.", SortOrder = 215 },
+            new { Key = "processed", Name = "Demo M2 - przetworzone", Description = "Demo M2: produkty przetworzone z opisem skladu.", SortOrder = 216 },
+            new { Key = "spice", Name = "Demo M2 - przyprawy", Description = "Demo M2: przyprawy jako zasob magazynowy.", SortOrder = 217 },
+        };
+
+        foreach (var category in categories)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                IF EXISTS (SELECT 1 FROM [Categories] WHERE [Name] = @Name)
+                BEGIN
+                    UPDATE [Categories]
+                    SET [Description] = @Description,
+                        [SortOrder] = @SortOrder,
+                        [UpdatedAt] = @now
+                    WHERE [Name] = @Name;
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO [Categories] ([Name], [Description], [SortOrder], [CreatedAt], [UpdatedAt])
+                    VALUES (@Name, @Description, @SortOrder, @now, NULL);
+                END
+                """,
+                new { category.Name, category.Description, category.SortOrder, now },
+                cancellationToken: cancellationToken));
+        }
+
+        var rows = await db.QueryAsync<(string Name, int Id)>(new CommandDefinition(
+            "SELECT [Name], [Id] FROM [Categories] WHERE [Name] IN @names;",
+            new { names = categories.Select(category => category.Name).ToArray() },
+            cancellationToken: cancellationToken));
+
+        return categories.ToDictionary(
+            category => category.Key,
+            category => rows.First(row => row.Name == category.Name).Id,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static async Task<Dictionary<string, int>> EnsureCanonicalM2AllergensAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var allergens = new[]
+        {
+            new { Code = "GLU", Name = "Gluten" },
+            new { Code = "LAK", Name = "Laktoza" },
+            new { Code = "RYB", Name = "Ryby" },
+            new { Code = "ORZ", Name = "Orzechy" },
+            new { Code = "JAJ", Name = "Jaja" },
+            new { Code = "SOJ", Name = "Soja" },
+            new { Code = "SEZ", Name = "Sezam" },
+            new { Code = "SEL", Name = "Seler" },
+        };
+
+        foreach (var allergen in allergens)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                IF EXISTS (SELECT 1 FROM [Allergens] WHERE [Code] = @Code)
+                BEGIN
+                    UPDATE [Allergens]
+                    SET [Name] = @Name,
+                        [UpdatedAt] = @now
+                    WHERE [Code] = @Code;
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO [Allergens] ([Name], [Code], [IconUrl], [CreatedAt], [UpdatedAt])
+                    VALUES (@Name, @Code, NULL, @now, NULL);
+                END
+                """,
+                new { allergen.Code, allergen.Name, now },
+                cancellationToken: cancellationToken));
+        }
+
+        var rows = await db.QueryAsync<(string Code, int Id)>(new CommandDefinition(
+            "SELECT [Code], [Id] FROM [Allergens] WHERE [Code] IN @codes;",
+            new { codes = allergens.Select(allergen => allergen.Code).ToArray() },
+            cancellationToken: cancellationToken));
+
+        return rows.ToDictionary(row => row.Code, row => row.Id, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static async Task<Dictionary<string, int>> EnsureCanonicalPackagingStockAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var sztUnitId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT TOP 1 [Id] FROM [UnitsOfMeasure] WHERE [Symbol] = N'szt' ORDER BY [Id];",
+            cancellationToken: cancellationToken));
+
+        var items = new[]
+        {
+            new { Key = "box250", Name = "Pudełko cateringowe 250ml", MinimumLevel = 100m, TargetQuantity = 600m },
+            new { Key = "box500", Name = "Pudełko cateringowe 500ml", MinimumLevel = 100m, TargetQuantity = 600m },
+            new { Key = "box750", Name = "Pudełko cateringowe 750ml", MinimumLevel = 80m, TargetQuantity = 400m },
+            new { Key = "sauce80", Name = "Pojemnik sosowy 80ml", MinimumLevel = 80m, TargetQuantity = 500m },
+        };
+
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in items)
+        {
+            result[item.Key] = await EnsureCanonicalStockItemAsync(
+                db,
+                item.Name,
+                null,
+                sztUnitId,
+                PackagingWarehouseCategoryId,
+                item.MinimumLevel,
+                item.TargetQuantity,
+                2,
+                now,
+                auditUser,
+                cancellationToken);
+        }
+
+        return result;
+    }
+
+    private static async Task<Dictionary<string, int>> EnsureCanonicalM2IngredientsAsync(
+        IDbConnection db,
+        IReadOnlyDictionary<string, int> categoryIds,
+        IReadOnlyDictionary<string, int> allergenIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var gUnitId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT TOP 1 [Id] FROM [UnitsOfMeasure] WHERE [Symbol] = N'g' ORDER BY [Id];",
+            cancellationToken: cancellationToken));
+
+        var ingredients = GetCanonicalIngredientSeeds();
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var ingredient in ingredients)
+        {
+            var ingredientId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+                """
+                SELECT TOP 1 [Id]
+                FROM [Ingredients]
+                WHERE [Name] = @Name
+                  AND [IsDeleted] = 0
+                ORDER BY [Id];
+                """,
+                new { ingredient.Name },
+                cancellationToken: cancellationToken));
+
+            if (ingredientId.HasValue)
+            {
+                await db.ExecuteAsync(new CommandDefinition(
+                    """
+                    UPDATE [Ingredients]
+                    SET [Unit] = @Unit,
+                        [CostPerUnit] = @CostPerUnit,
+                        [Notes] = @Notes,
+                        [IsActive] = 1,
+                        [ResourceType] = N'Food',
+                        [FoodCategoryId] = @FoodCategoryId,
+                        [Description] = @Description,
+                        [ProductComposition] = @ProductComposition,
+                        [WarehouseCategoryId] = @WarehouseCategoryId,
+                        [YieldFactor] = @YieldFactor,
+                        [RequiresCoreTemperatureCheck] = @RequiresCoreTemperatureCheck,
+                        [MinimumCoreTemperatureCelsius] = @MinimumCoreTemperatureCelsius,
+                        [WarehouseCategoryFefoApproved] = 1,
+                        [UpdatedAt] = @now,
+                        [UpdatedBy] = @auditUser,
+                        [IsDeleted] = 0
+                    WHERE [Id] = @IngredientId;
+                    """,
+                    new
+                    {
+                        IngredientId = ingredientId.Value,
+                        ingredient.Unit,
+                        ingredient.CostPerUnit,
+                        ingredient.Notes,
+                        FoodCategoryId = categoryIds[ingredient.CategoryKey],
+                        ingredient.Description,
+                        ingredient.ProductComposition,
+                        ingredient.WarehouseCategoryId,
+                        ingredient.YieldFactor,
+                        ingredient.RequiresCoreTemperatureCheck,
+                        ingredient.MinimumCoreTemperatureCelsius,
+                        now,
+                        auditUser,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+            else
+            {
+                ingredientId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+                    """
+                    INSERT INTO [Ingredients]
+                        ([Name], [Unit], [CostPerUnit], [Notes], [IsActive], [CreatedAt], [UpdatedAt],
+                         [CreatedBy], [UpdatedBy], [IsDeleted], [ResourceType], [FoodCategoryId],
+                         [Description], [ProductComposition], [WarehouseCategoryId], [YieldFactor],
+                         [RequiresCoreTemperatureCheck], [MinimumCoreTemperatureCelsius], [WarehouseCategoryFefoApproved])
+                    OUTPUT INSERTED.[Id]
+                    VALUES
+                        (@Name, @Unit, @CostPerUnit, @Notes, 1, @now, NULL,
+                         @auditUser, NULL, 0, N'Food', @FoodCategoryId,
+                         @Description, @ProductComposition, @WarehouseCategoryId, @YieldFactor,
+                         @RequiresCoreTemperatureCheck, @MinimumCoreTemperatureCelsius, 1);
+                    """,
+                    new
+                    {
+                        ingredient.Name,
+                        ingredient.Unit,
+                        ingredient.CostPerUnit,
+                        ingredient.Notes,
+                        FoodCategoryId = categoryIds[ingredient.CategoryKey],
+                        ingredient.Description,
+                        ingredient.ProductComposition,
+                        ingredient.WarehouseCategoryId,
+                        ingredient.YieldFactor,
+                        ingredient.RequiresCoreTemperatureCheck,
+                        ingredient.MinimumCoreTemperatureCelsius,
+                        now,
+                        auditUser,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+
+            var stockItemId = await EnsureCanonicalStockItemAsync(
+                db,
+                ingredient.Name,
+                ingredientId.Value,
+                gUnitId,
+                ingredient.WarehouseCategoryId,
+                ingredient.MinimumStockLevel,
+                ingredient.TargetBatchQuantity,
+                ingredient.LeadTimeDays,
+                now,
+                auditUser,
+                cancellationToken);
+
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [Ingredients]
+                SET [StockItemId] = @stockItemId,
+                    [WarehouseCategoryId] = @warehouseCategoryId,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser
+                WHERE [Id] = @ingredientId;
+                """,
+                new
+                {
+                    stockItemId,
+                    warehouseCategoryId = ingredient.WarehouseCategoryId,
+                    ingredientId = ingredientId.Value,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+
+            await UpsertCanonicalNutritionFactsAsync(db, ingredientId.Value, null, ingredient.Nutrition, now, cancellationToken);
+            await ReplaceCanonicalIngredientAllergensAsync(db, ingredientId.Value, ingredient.AllergenCodes, allergenIds, cancellationToken);
+            result[ingredient.Name] = ingredientId.Value;
+        }
+
+        return result;
+    }
+
+    private static async Task<int> EnsureCanonicalStockItemAsync(
+        IDbConnection db,
+        string name,
+        int? baseIngredientId,
+        int unitOfMeasureId,
+        int warehouseCategoryId,
+        decimal minimumLevel,
+        decimal targetBatchQuantity,
+        int leadTimeDays,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var stockItemId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            """
+            SELECT TOP 1 [Id]
+            FROM [StockItems]
+            WHERE [Name] = @name
+              AND [IsDeleted] = 0
+            ORDER BY [Id];
+            """,
+            new { name },
+            cancellationToken: cancellationToken));
+
+        if (stockItemId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [StockItems]
+                SET [BaseIngredientId] = COALESCE(@baseIngredientId, [BaseIngredientId]),
+                    [DefaultUnitOfMeasureId] = @unitOfMeasureId,
+                    [WarehouseCategoryId] = @warehouseCategoryId,
+                    [MinimumLevel] = @minimumLevel,
+                    [LeadTimeDays] = @leadTimeDays,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser,
+                    [IsDeleted] = 0
+                WHERE [Id] = @stockItemId;
+                """,
+                new
+                {
+                    stockItemId = stockItemId.Value,
+                    baseIngredientId,
+                    unitOfMeasureId,
+                    warehouseCategoryId,
+                    minimumLevel,
+                    leadTimeDays,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+        }
+        else
+        {
+            stockItemId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+                """
+                INSERT INTO [StockItems]
+                    ([Name], [BaseIngredientId], [DefaultUnitOfMeasureId], [WarehouseCategoryId],
+                     [MinimumLevel], [LeadTimeDays], [CreatedBy], [UpdatedBy], [IsDeleted],
+                     [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+                OUTPUT INSERTED.[Id]
+                VALUES
+                    (@name, @baseIngredientId, @unitOfMeasureId, @warehouseCategoryId,
+                     @minimumLevel, @leadTimeDays, @auditUser, NULL, 0,
+                     NULL, NULL, @now, NULL);
+                """,
+                new
+                {
+                    name,
+                    baseIngredientId,
+                    unitOfMeasureId,
+                    warehouseCategoryId,
+                    minimumLevel,
+                    leadTimeDays,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+        }
+
+        var availableQuantity = await db.ExecuteScalarAsync<decimal>(new CommandDefinition(
+            """
+            SELECT COALESCE(SUM([CurrentQuantity]), 0)
+            FROM [Batches]
+            WHERE [StockItemId] = @stockItemId
+              AND [IsDeleted] = 0
+              AND [IsDepleted] = 0;
+            """,
+            new { stockItemId = stockItemId.Value },
+            cancellationToken: cancellationToken));
+
+        if (availableQuantity < targetBatchQuantity)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO [Batches]
+                    ([StockItemId], [SupplierBatchNumber], [CurrentQuantity], [ExpiryDate], [ReceivedDate], [IsDepleted],
+                     [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+                VALUES
+                    (@stockItemId, @supplierBatchNumber, @currentQuantity, @expiryDate, @receivedDate, 0,
+                     @auditUser, NULL, 0, NULL, NULL, @createdAt, NULL);
+                """,
+                new[]
+                {
+                    new
+                    {
+                        stockItemId = stockItemId.Value,
+                        supplierBatchNumber = $"M2-FEFO-{stockItemId.Value}-A",
+                        currentQuantity = targetBatchQuantity * 0.45m,
+                        expiryDate = now.UtcDateTime.AddDays(5),
+                        receivedDate = now.UtcDateTime.AddDays(-5),
+                        auditUser,
+                        createdAt = now.UtcDateTime.AddDays(-5),
+                    },
+                    new
+                    {
+                        stockItemId = stockItemId.Value,
+                        supplierBatchNumber = $"M2-FEFO-{stockItemId.Value}-B",
+                        currentQuantity = targetBatchQuantity * 0.75m,
+                        expiryDate = now.UtcDateTime.AddDays(25),
+                        receivedDate = now.UtcDateTime.AddDays(-1),
+                        auditUser,
+                        createdAt = now.UtcDateTime.AddDays(-1),
+                    },
+                },
+                cancellationToken: cancellationToken));
+        }
+
+        return stockItemId.Value;
+    }
+
+    private static async Task UpsertCanonicalNutritionFactsAsync(
+        IDbConnection db,
+        int? ingredientId,
+        int? mealId,
+        CanonicalNutritionSeed nutrition,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            IF EXISTS (
+                SELECT 1
+                FROM [NutritionFacts]
+                WHERE ((@ingredientId IS NOT NULL AND [IngredientId] = @ingredientId)
+                    OR (@mealId IS NOT NULL AND [MealId] = @mealId))
+            )
+            BEGIN
+                UPDATE [NutritionFacts]
+                SET [CaloriesPer100g] = @Calories,
+                    [ProteinPer100g] = @Protein,
+                    [CarbohydratesPer100g] = @Carbohydrates,
+                    [FatPer100g] = @Fat,
+                    [FiberPer100g] = @Fiber,
+                    [UpdatedAt] = @now
+                WHERE ((@ingredientId IS NOT NULL AND [IngredientId] = @ingredientId)
+                    OR (@mealId IS NOT NULL AND [MealId] = @mealId));
+            END
+            ELSE
+            BEGIN
+                INSERT INTO [NutritionFacts]
+                    ([MealId], [IngredientId], [CaloriesPer100g], [ProteinPer100g],
+                     [CarbohydratesPer100g], [FatPer100g], [FiberPer100g], [CreatedAt], [UpdatedAt])
+                VALUES
+                    (@mealId, @ingredientId, @Calories, @Protein, @Carbohydrates, @Fat, @Fiber, @now, NULL);
+            END
+            """,
+            new
+            {
+                ingredientId,
+                mealId,
+                nutrition.Calories,
+                nutrition.Protein,
+                nutrition.Carbohydrates,
+                nutrition.Fat,
+                nutrition.Fiber,
+                now,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task ReplaceCanonicalIngredientAllergensAsync(
+        IDbConnection db,
+        int ingredientId,
+        IReadOnlyCollection<string> allergenCodes,
+        IReadOnlyDictionary<string, int> allergenIds,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM [IngredientAllergens] WHERE [IngredientId] = @ingredientId;",
+            new { ingredientId },
+            cancellationToken: cancellationToken));
+
+        foreach (var code in allergenCodes)
+        {
+            if (!allergenIds.TryGetValue(code, out var allergenId))
+            {
+                continue;
+            }
+
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO [IngredientAllergens] ([IngredientId], [AllergenId], [TraceAmount])
+                VALUES (@ingredientId, @allergenId, 0);
+                """,
+                new { ingredientId, allergenId },
+                cancellationToken: cancellationToken));
+        }
+    }
+
+    private static async Task<Dictionary<string, int>> EnsureCanonicalM2RecipeComponentsAsync(
+        IDbConnection db,
+        IReadOnlyDictionary<string, int> categoryIds,
+        IReadOnlyDictionary<string, int> ingredientIds,
+        IReadOnlyDictionary<string, int> packagingStockItemIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var components = GetCanonicalComponentSeeds();
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var component in components)
+        {
+            var componentId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+                """
+                SELECT TOP 1 [Id]
+                FROM [RecipeComponents]
+                WHERE [Name] = @Name
+                  AND [IsDeleted] = 0
+                ORDER BY [Id];
+                """,
+                new { component.Name },
+                cancellationToken: cancellationToken));
+
+            if (componentId.HasValue)
+            {
+                await db.ExecuteAsync(new CommandDefinition(
+                    """
+                    UPDATE [RecipeComponents]
+                    SET [Description] = @Description,
+                        [CategoryId] = @CategoryId,
+                        [PreparationTimeMinutes] = @PreparationTimeMinutes,
+                        [IsActive] = 1,
+                        [UpdatedAt] = @now,
+                        [UpdatedBy] = @auditUser,
+                        [IsDeleted] = 0
+                    WHERE [Id] = @componentId;
+                    """,
+                    new
+                    {
+                        componentId = componentId.Value,
+                        component.Description,
+                        CategoryId = categoryIds[component.CategoryKey],
+                        component.PreparationTimeMinutes,
+                        now,
+                        auditUser,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+            else
+            {
+                componentId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+                    """
+                    INSERT INTO [RecipeComponents]
+                        ([Name], [Description], [CategoryId], [ImageUrl], [PreparationTimeMinutes],
+                         [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
+                    OUTPUT INSERTED.[Id]
+                    VALUES
+                        (@Name, @Description, @CategoryId, NULL, @PreparationTimeMinutes,
+                         1, @now, @auditUser, 0);
+                    """,
+                    new
+                    {
+                        component.Name,
+                        component.Description,
+                        CategoryId = categoryIds[component.CategoryKey],
+                        component.PreparationTimeMinutes,
+                        now,
+                        auditUser,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+
+            foreach (var version in component.Versions)
+            {
+                var versionId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+                    """
+                    SELECT TOP 1 [Id]
+                    FROM [RecipeComponentVersions]
+                    WHERE [RecipeComponentId] = @componentId
+                      AND [VersionNumber] = @VersionNumber
+                      AND [IsDeleted] = 0
+                    ORDER BY [Id];
+                    """,
+                    new { componentId = componentId.Value, version.VersionNumber },
+                    cancellationToken: cancellationToken));
+
+                if (versionId.HasValue)
+                {
+                    await db.ExecuteAsync(new CommandDefinition(
+                        """
+                        UPDATE [RecipeComponentVersions]
+                        SET [Status] = N'Published',
+                            [Instructions] = @Instructions,
+                            [YieldQuantity] = @YieldQuantity,
+                            [YieldUnit] = @YieldUnit,
+                            [RawWeightGrams] = @RawWeightGrams,
+                            [CookedWeightGrams] = @CookedWeightGrams,
+                            [CaloriesPer100g] = @Calories,
+                            [ProteinPer100g] = @Protein,
+                            [CarbohydratesPer100g] = @Carbohydrates,
+                            [FatPer100g] = @Fat,
+                            [FiberPer100g] = @Fiber,
+                            [ShelfLifeHours] = @ShelfLifeHours,
+                            [UseEarliestIngredientExpiry] = @UseEarliestIngredientExpiry,
+                            [NutritionSource] = N'Manual',
+                            [NutritionOverrideReason] = @NutritionOverrideReason,
+                            [AllergensApproved] = 1,
+                            [AllergenOverrideReason] = @AllergenOverrideReason,
+                            [AllergensApprovedAt] = COALESCE([AllergensApprovedAt], @now),
+                            [AllergensApprovedBy] = COALESCE([AllergensApprovedBy], @auditUser),
+                            [ChangeSummary] = @ChangeSummary,
+                            [IsTechnologyChange] = @IsTechnologyChange,
+                            [PublishedAt] = COALESCE([PublishedAt], @now),
+                            [PublishedBy] = COALESCE([PublishedBy], @auditUser),
+                            [UpdatedAt] = @now,
+                            [UpdatedBy] = @auditUser
+                        WHERE [Id] = @versionId;
+                        """,
+                        new
+                        {
+                            versionId = versionId.Value,
+                            version.Instructions,
+                            version.YieldQuantity,
+                            version.YieldUnit,
+                            version.RawWeightGrams,
+                            version.CookedWeightGrams,
+                            version.Nutrition.Calories,
+                            version.Nutrition.Protein,
+                            version.Nutrition.Carbohydrates,
+                            version.Nutrition.Fat,
+                            version.Nutrition.Fiber,
+                            version.ShelfLifeHours,
+                            version.UseEarliestIngredientExpiry,
+                            NutritionOverrideReason = "Demo M2: wartosci odzywcze wersji skladowej do testow snapshotu.",
+                            AllergenOverrideReason = "Demo M2: alergeny zatwierdzone na podstawie skladnikow.",
+                            version.ChangeSummary,
+                            version.IsTechnologyChange,
+                            now,
+                            auditUser,
+                        },
+                        cancellationToken: cancellationToken));
+                }
+                else
+                {
+                    versionId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+                        """
+                        INSERT INTO [RecipeComponentVersions]
+                            ([RecipeComponentId], [VersionNumber], [Status], [Instructions], [YieldQuantity], [YieldUnit],
+                             [RawWeightGrams], [CookedWeightGrams], [CaloriesPer100g], [ProteinPer100g],
+                             [CarbohydratesPer100g], [FatPer100g], [FiberPer100g], [ShelfLifeHours],
+                             [UseEarliestIngredientExpiry], [NutritionSource], [NutritionOverrideReason],
+                             [AllergensApproved], [AllergenOverrideReason], [AllergensApprovedAt], [AllergensApprovedBy],
+                             [ChangeSummary], [IsTechnologyChange], [PublishedAt], [PublishedBy], [CreatedAt], [CreatedBy], [IsDeleted])
+                        OUTPUT INSERTED.[Id]
+                        VALUES
+                            (@componentId, @VersionNumber, N'Published', @Instructions, @YieldQuantity, @YieldUnit,
+                             @RawWeightGrams, @CookedWeightGrams, @Calories, @Protein,
+                             @Carbohydrates, @Fat, @Fiber, @ShelfLifeHours,
+                             @UseEarliestIngredientExpiry, N'Manual', @NutritionOverrideReason,
+                             1, @AllergenOverrideReason, @now, @auditUser,
+                             @ChangeSummary, @IsTechnologyChange, @now, @auditUser, @now, @auditUser, 0);
+                        """,
+                        new
+                        {
+                            componentId = componentId.Value,
+                            version.VersionNumber,
+                            version.Instructions,
+                            version.YieldQuantity,
+                            version.YieldUnit,
+                            version.RawWeightGrams,
+                            version.CookedWeightGrams,
+                            version.Nutrition.Calories,
+                            version.Nutrition.Protein,
+                            version.Nutrition.Carbohydrates,
+                            version.Nutrition.Fat,
+                            version.Nutrition.Fiber,
+                            version.ShelfLifeHours,
+                            version.UseEarliestIngredientExpiry,
+                            NutritionOverrideReason = "Demo M2: wartosci odzywcze wersji skladowej do testow snapshotu.",
+                            AllergenOverrideReason = "Demo M2: alergeny zatwierdzone na podstawie skladnikow.",
+                            version.ChangeSummary,
+                            version.IsTechnologyChange,
+                            now,
+                            auditUser,
+                        },
+                        cancellationToken: cancellationToken));
+                }
+
+                await ReplaceCanonicalComponentIngredientsAsync(db, versionId.Value, version.Ingredients, ingredientIds, now, auditUser, cancellationToken);
+                await ReplaceCanonicalInstructionStepsAsync(db, versionId.Value, version.Sections, now, auditUser, cancellationToken);
+                await ReplaceCanonicalComponentPackagingAsync(db, versionId.Value, version.PackagingKey, packagingStockItemIds, now, auditUser, cancellationToken);
+                result[$"{component.Key}:v{version.VersionNumber}"] = versionId.Value;
+            }
+        }
+
+        return result;
+    }
+
+    private static async Task ReplaceCanonicalComponentIngredientsAsync(
+        IDbConnection db,
+        int versionId,
+        IReadOnlyCollection<CanonicalComponentIngredientSeed> ingredients,
+        IReadOnlyDictionary<string, int> ingredientIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            "UPDATE [RecipeComponentIngredients] SET [IsDeleted] = 1, [DeletedAt] = @now, [DeletedBy] = @auditUser WHERE [RecipeComponentVersionId] = @versionId AND [IsDeleted] = 0;",
+            new { versionId, now, auditUser },
+            cancellationToken: cancellationToken));
+
+        foreach (var ingredient in ingredients)
+        {
+            var ingredientId = ingredientIds[ingredient.IngredientName];
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO [RecipeComponentIngredients]
+                    ([RecipeComponentVersionId], [IngredientId], [StockItemId], [WarehouseCategoryId],
+                     [WeightInGrams], [YieldFactor], [IsOptional], [Notes], [CreatedAt], [CreatedBy], [IsDeleted])
+                SELECT
+                    @versionId,
+                    i.[Id],
+                    COALESCE(i.[StockItemId], si.[Id]),
+                    COALESCE(i.[WarehouseCategoryId], si.[WarehouseCategoryId]),
+                    @WeightInGrams,
+                    COALESCE(NULLIF(@YieldFactor, 0), i.[YieldFactor], 1.0),
+                    @IsOptional,
+                    @Notes,
+                    @now,
+                    @auditUser,
+                    0
+                FROM [Ingredients] i
+                LEFT JOIN [StockItems] si ON si.[BaseIngredientId] = i.[Id] AND si.[IsDeleted] = 0
+                WHERE i.[Id] = @ingredientId;
+                """,
+                new
+                {
+                    versionId,
+                    ingredientId,
+                    ingredient.WeightInGrams,
+                    ingredient.YieldFactor,
+                    ingredient.IsOptional,
+                    ingredient.Notes,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+        }
+    }
+
+    private static async Task ReplaceCanonicalInstructionStepsAsync(
+        IDbConnection db,
+        int versionId,
+        IReadOnlyCollection<CanonicalInstructionSectionSeed> sections,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE steps
+            SET [IsDeleted] = 1,
+                [DeletedAt] = @now,
+                [DeletedBy] = @auditUser
+            FROM [RecipeComponentInstructionSteps] steps
+            INNER JOIN [RecipeComponentInstructionSections] sections
+                ON sections.[Id] = steps.[RecipeComponentInstructionSectionId]
+            WHERE sections.[RecipeComponentVersionId] = @versionId
+              AND steps.[IsDeleted] = 0;
+
+            UPDATE [RecipeComponentInstructionSections]
+            SET [IsDeleted] = 1,
+                [DeletedAt] = @now,
+                [DeletedBy] = @auditUser
+            WHERE [RecipeComponentVersionId] = @versionId
+              AND [IsDeleted] = 0;
+            """,
+            new { versionId, now, auditUser },
+            cancellationToken: cancellationToken));
+
+        foreach (var section in sections)
+        {
+            var sectionId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+                """
+                INSERT INTO [RecipeComponentInstructionSections]
+                    ([RecipeComponentVersionId], [Title], [SortOrder], [CreatedAt], [CreatedBy], [IsDeleted])
+                OUTPUT INSERTED.[Id]
+                VALUES (@versionId, @Title, @SortOrder, @now, @auditUser, 0);
+                """,
+                new { versionId, section.Title, section.SortOrder, now, auditUser },
+                cancellationToken: cancellationToken));
+
+            foreach (var step in section.Steps)
+            {
+                await db.ExecuteAsync(new CommandDefinition(
+                    """
+                    INSERT INTO [RecipeComponentInstructionSteps]
+                        ([RecipeComponentInstructionSectionId], [StepText], [SortOrder], [RequiresControl],
+                         [ControlType], [ExpectedValue], [ExpectedUnit], [IsCritical], [CreatedAt], [CreatedBy], [IsDeleted])
+                    VALUES
+                        (@sectionId, @StepText, @SortOrder, @RequiresControl,
+                         @ControlType, @ExpectedValue, @ExpectedUnit, @IsCritical, @now, @auditUser, 0);
+                    """,
+                    new
+                    {
+                        sectionId,
+                        step.StepText,
+                        step.SortOrder,
+                        step.RequiresControl,
+                        step.ControlType,
+                        step.ExpectedValue,
+                        step.ExpectedUnit,
+                        step.IsCritical,
+                        now,
+                        auditUser,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+        }
+    }
+
+    private static async Task ReplaceCanonicalComponentPackagingAsync(
+        IDbConnection db,
+        int versionId,
+        string packagingKey,
+        IReadOnlyDictionary<string, int> packagingStockItemIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            "UPDATE [PackagingRequirements] SET [IsDeleted] = 1, [DeletedAt] = @now, [DeletedBy] = @auditUser WHERE [RecipeComponentVersionId] = @versionId AND [IsDeleted] = 0;",
+            new { versionId, now, auditUser },
+            cancellationToken: cancellationToken));
+
+        var stockItemId = packagingStockItemIds[packagingKey];
+        var resourceName = await db.ExecuteScalarAsync<string>(new CommandDefinition(
+            "SELECT [Name] FROM [StockItems] WHERE [Id] = @stockItemId;",
+            new { stockItemId },
+            cancellationToken: cancellationToken));
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO [PackagingRequirements]
+                ([OwnerType], [MealId], [MealVariantId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
+                 [ResourceName], [Quantity], [Unit], [ContainerRole], [IsCustomerFacing],
+                 [CreatedAt], [CreatedBy], [IsDeleted])
+            VALUES
+                (N'RecipeComponentVersion', NULL, NULL, @versionId, @stockItemId, @warehouseCategoryId,
+                 @resourceName, @quantity, N'szt', @containerRole, @isCustomerFacing,
+                 @now, @auditUser, 0);
+            """,
+            new
+            {
+                versionId,
+                stockItemId,
+                warehouseCategoryId = PackagingWarehouseCategoryId,
+                resourceName,
+                quantity = packagingKey == "sauce80" ? 1.0m : 0.05m,
+                containerRole = packagingKey == "sauce80" ? "ComponentCup" : "ProductionContainer",
+                isCustomerFacing = packagingKey == "sauce80",
+                now,
+                auditUser,
+            },
+                cancellationToken: cancellationToken));
+    }
+
+    private static async Task<Dictionary<string, int>> EnsureCanonicalM2MealsAndVariantsAsync(
+        IDbConnection db,
+        IReadOnlyDictionary<string, int> categoryIds,
+        IReadOnlyDictionary<string, int> componentVersionIds,
+        IReadOnlyDictionary<string, int> packagingStockItemIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var meals = GetCanonicalMealSeeds();
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var meal in meals)
+        {
+            var mealId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+                """
+                SELECT TOP 1 [Id]
+                FROM [Meals]
+                WHERE [Name] = @Name
+                  AND [IsDeleted] = 0
+                ORDER BY [Id];
+                """,
+                new { meal.Name },
+                cancellationToken: cancellationToken));
+
+            if (mealId.HasValue)
+            {
+                await db.ExecuteAsync(new CommandDefinition(
+                    """
+                    UPDATE [Meals]
+                    SET [CategoryId] = @CategoryId,
+                        [Description] = @Description,
+                        [MarketingDescription] = @MarketingDescription,
+                        [Status] = N'Published',
+                        [PreparationTimeMinutes] = @PreparationTimeMinutes,
+                        [PreparationInstructions] = @PreparationInstructions,
+                        [ShelfLifeHours] = @ShelfLifeHours,
+                        [UseEarliestIngredientExpiry] = @UseEarliestIngredientExpiry,
+                        [IsActive] = 1,
+                        [UpdatedAt] = @now,
+                        [UpdatedBy] = @auditUser,
+                        [IsDeleted] = 0
+                    WHERE [Id] = @mealId;
+                    """,
+                    new
+                    {
+                        mealId = mealId.Value,
+                        CategoryId = categoryIds[meal.CategoryKey],
+                        meal.Description,
+                        meal.MarketingDescription,
+                        meal.PreparationTimeMinutes,
+                        meal.PreparationInstructions,
+                        meal.ShelfLifeHours,
+                        meal.UseEarliestIngredientExpiry,
+                        now,
+                        auditUser,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+            else
+            {
+                mealId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+                    """
+                    INSERT INTO [Meals]
+                        ([CategoryId], [Name], [Description], [MarketingDescription], [Status],
+                         [PreparationTimeMinutes], [PreparationInstructions], [ShelfLifeHours],
+                         [UseEarliestIngredientExpiry], [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
+                    OUTPUT INSERTED.[Id]
+                    VALUES
+                        (@CategoryId, @Name, @Description, @MarketingDescription, N'Published',
+                         @PreparationTimeMinutes, @PreparationInstructions, @ShelfLifeHours,
+                         @UseEarliestIngredientExpiry, 1, @now, @auditUser, 0);
+                    """,
+                    new
+                    {
+                        CategoryId = categoryIds[meal.CategoryKey],
+                        meal.Name,
+                        meal.Description,
+                        meal.MarketingDescription,
+                        meal.PreparationTimeMinutes,
+                        meal.PreparationInstructions,
+                        meal.ShelfLifeHours,
+                        meal.UseEarliestIngredientExpiry,
+                        now,
+                        auditUser,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+
+            await ReplaceCanonicalMealRecipeComponentsAsync(db, mealId.Value, meal.BaseComponents, componentVersionIds, now, auditUser, cancellationToken);
+            await ReplaceCanonicalMealPackagingAsync(db, mealId.Value, meal.PackagingKey, packagingStockItemIds, now, auditUser, cancellationToken);
+
+            foreach (var variant in meal.Variants)
+            {
+                var variantId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+                    """
+                    SELECT TOP 1 [Id]
+                    FROM [MealVariants]
+                    WHERE [MealId] = @mealId
+                      AND [Name] = @Name
+                      AND [IsDeleted] = 0
+                    ORDER BY [Id];
+                    """,
+                    new { mealId = mealId.Value, variant.Name },
+                    cancellationToken: cancellationToken));
+
+                if (variantId.HasValue)
+                {
+                    await db.ExecuteAsync(new CommandDefinition(
+                        """
+                        UPDATE [MealVariants]
+                        SET [VariantType] = @VariantType,
+                            [Status] = N'Published',
+                            [Description] = @Description,
+                            [IsDefault] = @IsDefault,
+                            [NutritionSource] = @NutritionSource,
+                            [NutritionOverrideReason] = @NutritionOverrideReason,
+                            [AllergensApproved] = 1,
+                            [AllergenOverrideReason] = N'Demo M2: alergeny wariantu zatwierdzone z komponentow.',
+                            [PublishedAt] = COALESCE([PublishedAt], @now),
+                            [PublishedBy] = COALESCE([PublishedBy], @auditUser),
+                            [UpdatedAt] = @now,
+                            [UpdatedBy] = @auditUser,
+                            [IsDeleted] = 0
+                        WHERE [Id] = @variantId;
+                        """,
+                        new
+                        {
+                            variantId = variantId.Value,
+                            variant.VariantType,
+                            variant.Description,
+                            variant.IsDefault,
+                            variant.NutritionSource,
+                            variant.NutritionOverrideReason,
+                            now,
+                            auditUser,
+                        },
+                        cancellationToken: cancellationToken));
+                }
+                else
+                {
+                    variantId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+                        """
+                        INSERT INTO [MealVariants]
+                            ([MealId], [Name], [VariantType], [Status], [Description], [IsDefault],
+                             [NutritionSource], [NutritionOverrideReason], [AllergensApproved],
+                             [AllergenOverrideReason], [PublishedAt], [PublishedBy], [CreatedAt], [CreatedBy], [IsDeleted])
+                        OUTPUT INSERTED.[Id]
+                        VALUES
+                            (@mealId, @Name, @VariantType, N'Published', @Description, @IsDefault,
+                             @NutritionSource, @NutritionOverrideReason, 1,
+                             N'Demo M2: alergeny wariantu zatwierdzone z komponentow.', @now, @auditUser, @now, @auditUser, 0);
+                        """,
+                        new
+                        {
+                            mealId = mealId.Value,
+                            variant.Name,
+                            variant.VariantType,
+                            variant.Description,
+                            variant.IsDefault,
+                            variant.NutritionSource,
+                            variant.NutritionOverrideReason,
+                            now,
+                            auditUser,
+                        },
+                        cancellationToken: cancellationToken));
+                }
+
+                await ReplaceCanonicalMealVariantComponentsAsync(db, variantId.Value, variant.Components, componentVersionIds, now, auditUser, cancellationToken);
+                await ReplaceCanonicalMealVariantPackagingAsync(db, variantId.Value, variant.PackagingKey ?? meal.PackagingKey, packagingStockItemIds, now, auditUser, cancellationToken);
+                result[$"{meal.Key}:{variant.Key}"] = variantId.Value;
+            }
+
+            await UpdateCanonicalMealVariantResultFieldsAsync(db, mealId.Value, now, auditUser, cancellationToken);
+            await UpdateCanonicalMealFactsFromDefaultVariantAsync(db, mealId.Value, now, cancellationToken);
+        }
+
+        return result;
+    }
+
+    private static async Task ReplaceCanonicalMealRecipeComponentsAsync(
+        IDbConnection db,
+        int mealId,
+        IReadOnlyCollection<CanonicalMealComponentSeed> components,
+        IReadOnlyDictionary<string, int> componentVersionIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            "UPDATE [MealRecipeComponents] SET [IsDeleted] = 1, [DeletedAt] = @now, [DeletedBy] = @auditUser WHERE [MealId] = @mealId AND [IsDeleted] = 0;",
+            new { mealId, now, auditUser },
+            cancellationToken: cancellationToken));
+
+        foreach (var component in components)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO [MealRecipeComponents]
+                    ([MealId], [RecipeComponentVersionId], [Role], [QuantityPerServing], [Unit],
+                     [SortOrder], [IsOptional], [CreatedAt], [CreatedBy], [IsDeleted])
+                VALUES
+                    (@mealId, @versionId, @Role, @QuantityPerServing, @Unit,
+                     @SortOrder, @IsOptional, @now, @auditUser, 0);
+                """,
+                new
+                {
+                    mealId,
+                    versionId = componentVersionIds[component.ComponentVersionKey],
+                    component.Role,
+                    component.QuantityPerServing,
+                    component.Unit,
+                    component.SortOrder,
+                    component.IsOptional,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+        }
+    }
+
+    private static async Task ReplaceCanonicalMealVariantComponentsAsync(
+        IDbConnection db,
+        int mealVariantId,
+        IReadOnlyCollection<CanonicalMealComponentSeed> components,
+        IReadOnlyDictionary<string, int> componentVersionIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            "UPDATE [MealVariantComponents] SET [IsDeleted] = 1, [DeletedAt] = @now, [DeletedBy] = @auditUser WHERE [MealVariantId] = @mealVariantId AND [IsDeleted] = 0;",
+            new { mealVariantId, now, auditUser },
+            cancellationToken: cancellationToken));
+
+        foreach (var component in components)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO [MealVariantComponents]
+                    ([MealVariantId], [RecipeComponentVersionId], [Role], [QuantityPerServing], [Unit],
+                     [SortOrder], [IsOptional], [CreatedAt], [CreatedBy], [IsDeleted])
+                VALUES
+                    (@mealVariantId, @versionId, @Role, @QuantityPerServing, @Unit,
+                     @SortOrder, @IsOptional, @now, @auditUser, 0);
+                """,
+                new
+                {
+                    mealVariantId,
+                    versionId = componentVersionIds[component.ComponentVersionKey],
+                    component.Role,
+                    component.QuantityPerServing,
+                    component.Unit,
+                    component.SortOrder,
+                    component.IsOptional,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+        }
+    }
+
+    private static async Task ReplaceCanonicalMealPackagingAsync(
+        IDbConnection db,
+        int mealId,
+        string packagingKey,
+        IReadOnlyDictionary<string, int> packagingStockItemIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            "UPDATE [PackagingRequirements] SET [IsDeleted] = 1, [DeletedAt] = @now, [DeletedBy] = @auditUser WHERE [MealId] = @mealId AND [MealVariantId] IS NULL AND [IsDeleted] = 0;",
+            new { mealId, now, auditUser },
+            cancellationToken: cancellationToken));
+
+        await InsertCanonicalPackagingRequirementAsync(db, mealId, null, null, packagingKey, packagingStockItemIds, 1.0m, "MealBox", true, now, auditUser, cancellationToken);
+    }
+
+    private static async Task ReplaceCanonicalMealVariantPackagingAsync(
+        IDbConnection db,
+        int mealVariantId,
+        string packagingKey,
+        IReadOnlyDictionary<string, int> packagingStockItemIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            "UPDATE [PackagingRequirements] SET [IsDeleted] = 1, [DeletedAt] = @now, [DeletedBy] = @auditUser WHERE [MealVariantId] = @mealVariantId AND [IsDeleted] = 0;",
+            new { mealVariantId, now, auditUser },
+            cancellationToken: cancellationToken));
+
+        await InsertCanonicalPackagingRequirementAsync(db, null, mealVariantId, null, packagingKey, packagingStockItemIds, 1.0m, "VariantMealBox", true, now, auditUser, cancellationToken);
+    }
+
+    private static async Task InsertCanonicalPackagingRequirementAsync(
+        IDbConnection db,
+        int? mealId,
+        int? mealVariantId,
+        int? recipeComponentVersionId,
+        string packagingKey,
+        IReadOnlyDictionary<string, int> packagingStockItemIds,
+        decimal quantity,
+        string containerRole,
+        bool isCustomerFacing,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var stockItemId = packagingStockItemIds[packagingKey];
+        var resourceName = await db.ExecuteScalarAsync<string>(new CommandDefinition(
+            "SELECT [Name] FROM [StockItems] WHERE [Id] = @stockItemId;",
+            new { stockItemId },
+            cancellationToken: cancellationToken));
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO [PackagingRequirements]
+                ([OwnerType], [MealId], [MealVariantId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
+                 [ResourceName], [Quantity], [Unit], [ContainerRole], [IsCustomerFacing],
+                 [CreatedAt], [CreatedBy], [IsDeleted])
+            VALUES
+                (@OwnerType, @mealId, @mealVariantId, @recipeComponentVersionId, @stockItemId, @warehouseCategoryId,
+                 @resourceName, @quantity, N'szt', @containerRole, @isCustomerFacing,
+                 @now, @auditUser, 0);
+            """,
+            new
+            {
+                OwnerType = mealVariantId.HasValue
+                    ? "MealVariant"
+                    : recipeComponentVersionId.HasValue
+                        ? "RecipeComponentVersion"
+                        : "Meal",
+                mealId,
+                mealVariantId,
+                recipeComponentVersionId,
+                stockItemId,
+                warehouseCategoryId = PackagingWarehouseCategoryId,
+                resourceName,
+                quantity,
+                containerRole,
+                isCustomerFacing,
+                now,
+                auditUser,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task UpdateCanonicalMealVariantResultFieldsAsync(
+        IDbConnection db,
+        int mealId,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            ;WITH ComponentScale AS
+            (
+                SELECT
+                    mvc.[MealVariantId],
+                    rcv.[RawWeightGrams],
+                    rcv.[CookedWeightGrams],
+                    rcv.[CaloriesPer100g],
+                    rcv.[ProteinPer100g],
+                    rcv.[CarbohydratesPer100g],
+                    rcv.[FatPer100g],
+                    rcv.[FiberPer100g],
+                    CASE
+                        WHEN LOWER(mvc.[Unit]) IN (N'portion', N'portions')
+                            THEN mvc.[QuantityPerServing] / NULLIF(rcv.[YieldQuantity], 0)
+                        WHEN LOWER(mvc.[Unit]) IN (N'g', N'gram', N'grams')
+                            THEN mvc.[QuantityPerServing] / NULLIF(COALESCE(rcv.[CookedWeightGrams], rcv.[RawWeightGrams]), 0)
+                        ELSE 0
+                    END AS [ScaleFactor]
+                FROM [MealVariantComponents] mvc
+                INNER JOIN [RecipeComponentVersions] rcv ON rcv.[Id] = mvc.[RecipeComponentVersionId]
+                INNER JOIN [MealVariants] mv ON mv.[Id] = mvc.[MealVariantId]
+                WHERE mv.[MealId] = @mealId
+                  AND mv.[IsDeleted] = 0
+                  AND mvc.[IsDeleted] = 0
+                  AND rcv.[IsDeleted] = 0
+            ),
+            Totals AS
+            (
+                SELECT
+                    [MealVariantId],
+                    SUM([RawWeightGrams] * [ScaleFactor]) AS [RawWeightGrams],
+                    SUM([CookedWeightGrams] * [ScaleFactor]) AS [CookedWeightGrams],
+                    SUM(([CaloriesPer100g] / 100.0) * COALESCE([CookedWeightGrams], [RawWeightGrams]) * [ScaleFactor]) AS [CaloriesTotal],
+                    SUM(([ProteinPer100g] / 100.0) * COALESCE([CookedWeightGrams], [RawWeightGrams]) * [ScaleFactor]) AS [ProteinTotal],
+                    SUM(([CarbohydratesPer100g] / 100.0) * COALESCE([CookedWeightGrams], [RawWeightGrams]) * [ScaleFactor]) AS [CarbohydratesTotal],
+                    SUM(([FatPer100g] / 100.0) * COALESCE([CookedWeightGrams], [RawWeightGrams]) * [ScaleFactor]) AS [FatTotal],
+                    SUM(([FiberPer100g] / 100.0) * COALESCE([CookedWeightGrams], [RawWeightGrams]) * [ScaleFactor]) AS [FiberTotal]
+                FROM ComponentScale
+                GROUP BY [MealVariantId]
+            )
+            UPDATE mv
+            SET [RawWeightGrams] = totals.[RawWeightGrams],
+                [CookedWeightGrams] = totals.[CookedWeightGrams],
+                [CaloriesPer100g] = CASE WHEN totals.[CookedWeightGrams] > 0 THEN totals.[CaloriesTotal] / totals.[CookedWeightGrams] * 100 ELSE mv.[CaloriesPer100g] END,
+                [ProteinPer100g] = CASE WHEN totals.[CookedWeightGrams] > 0 THEN totals.[ProteinTotal] / totals.[CookedWeightGrams] * 100 ELSE mv.[ProteinPer100g] END,
+                [CarbohydratesPer100g] = CASE WHEN totals.[CookedWeightGrams] > 0 THEN totals.[CarbohydratesTotal] / totals.[CookedWeightGrams] * 100 ELSE mv.[CarbohydratesPer100g] END,
+                [FatPer100g] = CASE WHEN totals.[CookedWeightGrams] > 0 THEN totals.[FatTotal] / totals.[CookedWeightGrams] * 100 ELSE mv.[FatPer100g] END,
+                [FiberPer100g] = CASE WHEN totals.[CookedWeightGrams] > 0 THEN totals.[FiberTotal] / totals.[CookedWeightGrams] * 100 ELSE mv.[FiberPer100g] END,
+                [NutritionSource] = COALESCE(NULLIF(mv.[NutritionSource], N''), N'Aggregated'),
+                [AllergensApproved] = 1,
+                [Status] = N'Published',
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [MealVariants] mv
+            INNER JOIN Totals totals ON totals.[MealVariantId] = mv.[Id]
+            WHERE mv.[MealId] = @mealId
+              AND mv.[IsDeleted] = 0;
+            """,
+            new { mealId, now, auditUser },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task UpdateCanonicalMealFactsFromDefaultVariantAsync(
+        IDbConnection db,
+        int mealId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var variant = await db.QuerySingleOrDefaultAsync<CanonicalVariantNutritionRow>(new CommandDefinition(
+            """
+            SELECT TOP 1
+                [RawWeightGrams],
+                [CookedWeightGrams],
+                [CaloriesPer100g] AS [Calories],
+                [ProteinPer100g] AS [Protein],
+                [CarbohydratesPer100g] AS [Carbohydrates],
+                [FatPer100g] AS [Fat],
+                [FiberPer100g] AS [Fiber]
+            FROM [MealVariants]
+            WHERE [MealId] = @mealId
+              AND [IsDeleted] = 0
+            ORDER BY [IsDefault] DESC, [Id];
+            """,
+            new { mealId },
+            cancellationToken: cancellationToken));
+
+        if (variant is null)
+        {
+            return;
+        }
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE [Meals]
+            SET [RawWeightGrams] = @RawWeightGrams,
+                [CookedWeightGrams] = @CookedWeightGrams,
+                [UpdatedAt] = @now
+            WHERE [Id] = @mealId;
+            """,
+            new { mealId, variant.RawWeightGrams, variant.CookedWeightGrams, now },
+            cancellationToken: cancellationToken));
+
+        await UpsertCanonicalNutritionFactsAsync(
+            db,
+            null,
+            mealId,
+            new CanonicalNutritionSeed(
+                variant.Calories ?? 0m,
+                variant.Protein ?? 0m,
+                variant.Carbohydrates ?? 0m,
+                variant.Fat ?? 0m,
+                variant.Fiber ?? 0m),
+            now,
+            cancellationToken);
+    }
+
+    private static async Task EnsureCanonicalM2DietsAndPlansAsync(
+        IDbConnection db,
+        IReadOnlyDictionary<string, int> mealVariantIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var dietVariantIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var diet in GetCanonicalDietSeeds())
+        {
+            var dietId = await EnsureCanonicalDietAsync(db, diet.Name, diet.Description, diet.MarketingDescription, now, auditUser, cancellationToken);
+            foreach (var variant in diet.Variants)
+            {
+                dietVariantIds[variant.Key] = await EnsureCanonicalDietVariantAsync(
+                    db,
+                    dietId,
+                    variant.Name,
+                    variant.TargetCalories,
+                    variant.PriceMultiplier,
+                    variant.IsDefault,
+                    now,
+                    auditUser,
+                    cancellationToken);
+            }
+        }
+
+        foreach (var plan in GetCanonicalDietVariantMealPlans())
+        {
+            var dietVariantId = dietVariantIds[plan.DietVariantKey];
+            await db.ExecuteAsync(new CommandDefinition(
+                "DELETE FROM [DietVariantMeals] WHERE [DietVariantId] = @dietVariantId;",
+                new { dietVariantId },
+                cancellationToken: cancellationToken));
+
+            foreach (var slot in plan.Slots)
+            {
+                var mealVariantId = mealVariantIds[slot.MealVariantKey];
+                await db.ExecuteAsync(new CommandDefinition(
+                    """
+                    INSERT INTO [DietVariantMeals] ([DietVariantId], [MealId], [ServingSizeMultiplier], [SortOrder])
+                    SELECT @dietVariantId, mv.[MealId], @ServingSizeMultiplier, @SortOrder
+                    FROM [MealVariants] mv
+                    WHERE mv.[Id] = @mealVariantId;
+                    """,
+                    new
+                    {
+                        dietVariantId,
+                        mealVariantId,
+                        slot.ServingSizeMultiplier,
+                        slot.SortOrder,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        for (var offset = 0; offset < 8; offset++)
+        {
+            await EnsureCanonicalDietMenuPlanForDateAsync(
+                db,
+                today.AddDays(offset).ToDateTime(TimeOnly.MinValue),
+                dietVariantIds,
+                mealVariantIds,
+                now,
+                auditUser,
+                cancellationToken);
+        }
+    }
+
+    private static async Task<int> EnsureCanonicalDietAsync(
+        IDbConnection db,
+        string name,
+        string description,
+        string marketingDescription,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var dietId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            "SELECT TOP 1 [Id] FROM [Diets] WHERE [Name] = @name AND [IsDeleted] = 0 ORDER BY [Id];",
+            new { name },
+            cancellationToken: cancellationToken));
+
+        if (dietId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [Diets]
+                SET [Description] = @description,
+                    [MarketingDescription] = @marketingDescription,
+                    [Status] = N'Active',
+                    [IsActive] = 1,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser,
+                    [IsDeleted] = 0
+                WHERE [Id] = @dietId;
+                """,
+                new { dietId = dietId.Value, description, marketingDescription, now, auditUser },
+                cancellationToken: cancellationToken));
+
+            return dietId.Value;
+        }
+
+        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [Diets]
+                ([Name], [Description], [MarketingDescription], [Status], [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
+            OUTPUT INSERTED.[Id]
+            VALUES
+                (@name, @description, @marketingDescription, N'Active', 1, @now, @auditUser, 0);
+            """,
+            new { name, description, marketingDescription, now, auditUser },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task<int> EnsureCanonicalDietVariantAsync(
+        IDbConnection db,
+        int dietId,
+        string name,
+        int targetCalories,
+        decimal priceMultiplier,
+        bool isDefault,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var variantId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            """
+            SELECT TOP 1 [Id]
+            FROM [DietVariants]
+            WHERE [DietId] = @dietId
+              AND [Name] = @name
+              AND [IsDeleted] = 0
+            ORDER BY [Id];
+            """,
+            new { dietId, name },
+            cancellationToken: cancellationToken));
+
+        if (variantId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [DietVariants]
+                SET [TargetCalories] = @targetCalories,
+                    [PriceMultiplier] = @priceMultiplier,
+                    [IsDefault] = @isDefault,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser,
+                    [IsDeleted] = 0
+                WHERE [Id] = @variantId;
+                """,
+                new { variantId = variantId.Value, targetCalories, priceMultiplier, isDefault, now, auditUser },
+                cancellationToken: cancellationToken));
+
+            return variantId.Value;
+        }
+
+        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            INSERT INTO [DietVariants]
+                ([DietId], [Name], [TargetCalories], [PriceMultiplier], [IsDefault], [CreatedAt], [CreatedBy], [IsDeleted])
+            OUTPUT INSERTED.[Id]
+            VALUES
+                (@dietId, @name, @targetCalories, @priceMultiplier, @isDefault, @now, @auditUser, 0);
+            """,
+            new { dietId, name, targetCalories, priceMultiplier, isDefault, now, auditUser },
+            cancellationToken: cancellationToken));
+    }
+
+    private static async Task EnsureCanonicalDietMenuPlanForDateAsync(
+        IDbConnection db,
+        DateTime planDate,
+        IReadOnlyDictionary<string, int> dietVariantIds,
+        IReadOnlyDictionary<string, int> mealVariantIds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var planId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
+            "SELECT TOP 1 [Id] FROM [DietMenuPlans] WHERE [PlanDate] = @planDate ORDER BY [Id];",
+            new { planDate },
+            cancellationToken: cancellationToken));
+
+        if (planId.HasValue)
+        {
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [DietMenuPlans]
+                SET [Status] = N'Published',
+                    [Notes] = N'Demo M2: kanoniczny plan 8 dni ze snapshotem wariantow.',
+                    [PublishedAt] = COALESCE([PublishedAt], @now),
+                    [PublishedBy] = COALESCE([PublishedBy], @auditUser),
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser,
+                    [IsDeleted] = 0
+                WHERE [Id] = @planId;
+                """,
+                new { planId = planId.Value, now, auditUser },
+                cancellationToken: cancellationToken));
+        }
+        else
+        {
+            planId = await db.ExecuteScalarAsync<int>(new CommandDefinition(
+                """
+                INSERT INTO [DietMenuPlans]
+                    ([PlanDate], [Status], [Notes], [PublishedAt], [PublishedBy], [CreatedAt], [CreatedBy], [IsDeleted])
+                OUTPUT INSERTED.[Id]
+                VALUES
+                    (@planDate, N'Published', N'Demo M2: kanoniczny plan 8 dni ze snapshotem wariantow.',
+                     @now, @auditUser, @now, @auditUser, 0);
+                """,
+                new { planDate, now, auditUser },
+                cancellationToken: cancellationToken));
+        }
+
+        var canonicalDietVariantIds = dietVariantIds.Values.ToArray();
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE [DietMenuPlanItems]
+            SET [IsDeleted] = 1,
+                [DeletedAt] = @now,
+                [DeletedBy] = @auditUser
+            WHERE [DietMenuPlanId] = @planId
+              AND [DietVariantId] IN @canonicalDietVariantIds
+              AND [IsDeleted] = 0;
+            """,
+            new { planId = planId.Value, canonicalDietVariantIds, now, auditUser },
+            cancellationToken: cancellationToken));
+
+        foreach (var plan in GetCanonicalDietVariantMealPlans())
+        {
+            var dietVariantId = dietVariantIds[plan.DietVariantKey];
+            foreach (var slot in plan.Slots)
+            {
+                var mealVariantId = mealVariantIds[slot.MealVariantKey];
+                await db.ExecuteAsync(new CommandDefinition(
+                    """
+                    INSERT INTO [DietMenuPlanItems]
+                        ([DietMenuPlanId], [DietVariantId], [MealId], [MealVariantId], [MealSlot],
+                         [ServingSizeMultiplier], [SortOrder], [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
+                    SELECT
+                        @planId,
+                        @dietVariantId,
+                        mv.[MealId],
+                        mv.[Id],
+                        @MealSlot,
+                        @ServingSizeMultiplier,
+                        @SortOrder,
+                        1,
+                        @now,
+                        @auditUser,
+                        0
+                    FROM [MealVariants] mv
+                    WHERE mv.[Id] = @mealVariantId;
+                    """,
+                    new
+                    {
+                        planId = planId.Value,
+                        dietVariantId,
+                        mealVariantId,
+                        slot.MealSlot,
+                        slot.ServingSizeMultiplier,
+                        slot.SortOrder,
+                        now,
+                        auditUser,
+                    },
+                    cancellationToken: cancellationToken));
+            }
+        }
+    }
+
     private static async Task<int> EnsureDemoLifecycleMenuFoundationAsync(
         IDbConnection db,
         DateTimeOffset now,
@@ -3180,6 +4823,374 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         }
     }
 
+    private static IReadOnlyList<CanonicalIngredientSeed> GetCanonicalIngredientSeeds()
+        =>
+        [
+            new("Demo M2 Piers z kurczaka", "g", 0.032m, "meat", 1, new(110m, 23m, 0m, 2m, 0m), "Chude mieso drobiowe do dan obiadowych.", null, [], 0.92m, true, 75m, 12000m, 65000m, 1),
+            new("Demo M2 Udziec indyka", "g", 0.030m, "meat", 1, new(125m, 21m, 0m, 4m, 0m), "Mieso z indyka do wariantow high protein.", null, [], 0.90m, true, 75m, 10000m, 52000m, 1),
+            new("Demo M2 Losos filet", "g", 0.075m, "meat", 1, new(208m, 20m, 0m, 13m, 0m), "Filet z lososia do dan rybnych.", null, ["RYB"], 0.88m, true, 63m, 7000m, 36000m, 1),
+            new("Demo M2 Dorsz filet", "g", 0.052m, "meat", 1, new(82m, 18m, 0m, 0.7m, 0m), "Filet z dorsza do lekkich dan.", null, ["RYB"], 0.90m, true, 63m, 6000m, 30000m, 1),
+            new("Demo M2 Mieso wolowe mielone", "g", 0.040m, "meat", 1, new(217m, 19m, 0m, 15m, 0m), "Wolowina do chili i sosow.", null, [], 0.88m, true, 70m, 9000m, 45000m, 2),
+            new("Demo M2 Tofu naturalne", "g", 0.026m, "meat", 4, new(144m, 15m, 2m, 8m, 1m), "Alternatywa bialkowa dla diet vege.", "Soja, woda, koagulant wapniowy.", ["SOJ"], 0.96m, false, null, 8000m, 42000m, 3),
+            new("Demo M2 Jaja", "g", 0.018m, "dairy", 2, new(143m, 13m, 1m, 10m, 0m), "Jaja kurze do sniadan.", null, ["JAJ"], 1.00m, true, 70m, 6000m, 30000m, 2),
+            new("Demo M2 Jogurt grecki 2%", "g", 0.016m, "dairy", 2, new(73m, 9m, 3.5m, 2m, 0m), "Jogurt do sosow i deserow.", "Mleko, zywe kultury bakterii.", ["LAK"], 1.00m, false, null, 10000m, 50000m, 2),
+            new("Demo M2 Jogurt bez laktozy", "g", 0.019m, "dairy", 2, new(72m, 8.5m, 4m, 2m, 0m), "Jogurt do wariantow bez laktozy.", "Mleko bez laktozy, kultury bakterii.", [], 1.00m, false, null, 7000m, 35000m, 2),
+            new("Demo M2 Mleko kokosowe", "g", 0.021m, "processed", 4, new(190m, 2m, 3m, 19m, 0m), "Produkt przetworzony do sosow i deserow.", "Ekstrakt kokosowy, woda.", [], 1.00m, false, null, 7000m, 35000m, 7),
+            new("Demo M2 Twarog poltlusty", "g", 0.020m, "dairy", 2, new(133m, 18m, 3.5m, 5m, 0m), "Nabial wysokobialkowy.", "Mleko, kultury bakterii.", ["LAK"], 1.00m, false, null, 5000m, 25000m, 2),
+            new("Demo M2 Ser feta", "g", 0.034m, "dairy", 2, new(265m, 14m, 4m, 21m, 0m), "Ser do salatek.", "Mleko, sol, kultury bakterii.", ["LAK"], 1.00m, false, null, 4000m, 22000m, 3),
+            new("Demo M2 Ryz basmati", "g", 0.010m, "dry", 4, new(360m, 7m, 79m, 0.6m, 1m), "Suchy ryz do gotowania.", null, [], 1.00m, false, null, 18000m, 90000m, 7),
+            new("Demo M2 Komosa ryzowa", "g", 0.023m, "dry", 4, new(368m, 14m, 64m, 6m, 7m), "Quinoa do bowl i dan rybnych.", null, [], 1.00m, false, null, 9000m, 45000m, 7),
+            new("Demo M2 Makaron pelnoziarnisty", "g", 0.011m, "dry", 4, new(350m, 13m, 68m, 2m, 8m), "Makaron z glutenem.", "Maka pszenna pelnoziarnista.", ["GLU"], 1.00m, false, null, 10000m, 50000m, 7),
+            new("Demo M2 Tortilla pszenna", "g", 0.019m, "processed", 4, new(310m, 8m, 52m, 8m, 3m), "Produkt przetworzony do wrapow.", "Maka pszenna, woda, olej rzepakowy, sol.", ["GLU"], 1.00m, false, null, 6000m, 35000m, 7),
+            new("Demo M2 Kasza bulgur", "g", 0.012m, "dry", 4, new(342m, 12m, 76m, 1m, 12m), "Kasza pszenna.", "Pszenica durum.", ["GLU"], 1.00m, false, null, 9000m, 45000m, 7),
+            new("Demo M2 Platki owsiane", "g", 0.009m, "dry", 4, new(370m, 13m, 60m, 7m, 10m), "Platki do sniadan.", "Owies.", ["GLU"], 1.00m, false, null, 10000m, 50000m, 7),
+            new("Demo M2 Granola orzechowa", "g", 0.026m, "processed", 4, new(450m, 10m, 58m, 18m, 8m), "Produkt przetworzony z wlasnym skladem.", "Platki owsiane, orzechy, miod, olej.", ["GLU", "ORZ"], 1.00m, false, null, 6000m, 30000m, 7),
+            new("Demo M2 Nasiona chia", "g", 0.030m, "dry", 4, new(486m, 17m, 42m, 31m, 34m), "Nasiona do puddingow.", null, [], 1.00m, false, null, 3000m, 18000m, 10),
+            new("Demo M2 Czekolada gorzka 70%", "g", 0.045m, "processed", 4, new(560m, 8m, 34m, 43m, 11m), "Produkt przetworzony do deserow.", "Miazga kakaowa, cukier, tluszcz kakaowy, lecytyna sojowa.", ["SOJ"], 1.00m, false, null, 4000m, 22000m, 10),
+            new("Demo M2 Hummus", "g", 0.024m, "processed", 4, new(166m, 8m, 14m, 10m, 6m), "Produkt przetworzony do wrapow.", "Ciecierzyca, pasta sezamowa, oliwa, czosnek, sok z cytryny.", ["SEZ"], 1.00m, false, null, 6000m, 30000m, 5),
+            new("Demo M2 Passata pomidorowa", "g", 0.008m, "processed", 4, new(32m, 1.4m, 5m, 0.2m, 1.5m), "Produkt przetworzony do sosow.", "Pomidory przetarte.", [], 1.00m, false, null, 10000m, 55000m, 10),
+            new("Demo M2 Soczewica czerwona", "g", 0.012m, "dry", 4, new(352m, 24m, 52m, 1.5m, 11m), "Straczek do sosow vege.", null, [], 1.00m, false, null, 10000m, 52000m, 7),
+            new("Demo M2 Ciecierzyca gotowana", "g", 0.014m, "processed", 4, new(164m, 9m, 27m, 2.6m, 8m), "Produkt przetworzony do hummusu i bowl.", "Ciecierzyca, woda, sol.", [], 1.00m, false, null, 8000m, 40000m, 7),
+            new("Demo M2 Fasola czerwona", "g", 0.013m, "processed", 4, new(127m, 9m, 23m, 0.5m, 6m), "Produkt przetworzony do chili.", "Fasola czerwona, woda, sol.", [], 1.00m, false, null, 8000m, 40000m, 7),
+            new("Demo M2 Brokul", "g", 0.012m, "veg", 3, new(34m, 2.8m, 6.6m, 0.4m, 2.6m), "Warzywo do gotowania na parze.", null, [], 0.92m, false, null, 8000m, 45000m, 1),
+            new("Demo M2 Szpinak", "g", 0.014m, "veg", 3, new(23m, 2.9m, 3.6m, 0.4m, 2.2m), "Warzywo lisciaste.", null, [], 0.95m, false, null, 5000m, 25000m, 1),
+            new("Demo M2 Papryka czerwona", "g", 0.013m, "veg", 3, new(31m, 1m, 6m, 0.3m, 2.1m), "Warzywo do wrapow i sosow.", null, [], 0.90m, false, null, 7000m, 35000m, 1),
+            new("Demo M2 Cukinia", "g", 0.010m, "veg", 3, new(17m, 1.2m, 3.1m, 0.3m, 1m), "Warzywo do duszenia.", null, [], 0.92m, false, null, 7000m, 35000m, 1),
+            new("Demo M2 Marchew", "g", 0.008m, "veg", 3, new(41m, 0.9m, 10m, 0.2m, 2.8m), "Warzywo korzeniowe.", null, [], 0.88m, false, null, 9000m, 45000m, 2),
+            new("Demo M2 Pomidor koktajlowy", "g", 0.014m, "veg", 3, new(18m, 0.9m, 3.9m, 0.2m, 1.2m), "Warzywo do salatek.", null, [], 0.95m, false, null, 7000m, 35000m, 1),
+            new("Demo M2 Batat", "g", 0.010m, "veg", 3, new(86m, 1.6m, 20m, 0.1m, 3m), "Warzywo skrobiowe.", null, [], 0.88m, false, null, 10000m, 55000m, 2),
+            new("Demo M2 Ziemniaki", "g", 0.006m, "veg", 3, new(77m, 2m, 17m, 0.1m, 2.2m), "Warzywo skrobiowe.", null, [], 0.88m, false, null, 12000m, 65000m, 2),
+            new("Demo M2 Cebula", "g", 0.006m, "veg", 3, new(40m, 1.1m, 9m, 0.1m, 1.7m), "Baza sosow.", null, [], 0.85m, false, null, 8000m, 40000m, 2),
+            new("Demo M2 Czosnek", "g", 0.018m, "veg", 3, new(149m, 6.4m, 33m, 0.5m, 2.1m), "Przyprawa/warzywo aromatyczne.", null, [], 0.90m, false, null, 2000m, 12000m, 3),
+            new("Demo M2 Szczypiorek", "g", 0.010m, "veg", 3, new(30m, 3.3m, 4.4m, 0.7m, 2.5m), "Dodatek do sniadan.", null, [], 0.85m, false, null, 1500m, 9000m, 2),
+            new("Demo M2 Ogorek", "g", 0.007m, "veg", 3, new(15m, 0.7m, 3.6m, 0.1m, 0.5m), "Warzywo do salatek.", null, [], 0.95m, false, null, 7000m, 35000m, 1),
+            new("Demo M2 Salata rzymska", "g", 0.011m, "veg", 3, new(17m, 1.2m, 3.3m, 0.3m, 2.1m), "Warzywo lisciaste.", null, [], 0.90m, false, null, 5000m, 25000m, 1),
+            new("Demo M2 Borowki", "g", 0.020m, "fruit", 3, new(57m, 0.7m, 14.5m, 0.3m, 2.4m), "Owoc do deserow.", null, [], 0.98m, false, null, 5000m, 25000m, 4),
+            new("Demo M2 Banan", "g", 0.007m, "fruit", 3, new(89m, 1.1m, 23m, 0.3m, 2.6m), "Owoc do sniadan.", null, [], 0.75m, false, null, 6000m, 32000m, 3),
+            new("Demo M2 Jablko", "g", 0.006m, "fruit", 3, new(52m, 0.3m, 14m, 0.2m, 2.4m), "Owoc do przekasek.", null, [], 0.85m, false, null, 6000m, 32000m, 3),
+            new("Demo M2 Awokado", "g", 0.026m, "fruit", 3, new(160m, 2m, 9m, 15m, 7m), "Owoc tluszczowy do salatek.", null, [], 0.72m, false, null, 4000m, 22000m, 3),
+            new("Demo M2 Oliwa z oliwek", "g", 0.035m, "processed", 4, new(884m, 0m, 0m, 100m, 0m), "Tluszcz do smazenia i salatek.", "Oliwa z oliwek extra virgin.", [], 1.00m, false, null, 5000m, 28000m, 10),
+            new("Demo M2 Maslo klarowane", "g", 0.030m, "dairy", 2, new(892m, 0m, 0m, 99m, 0m), "Tluszcz do smazenia.", "Tluszcz mleczny.", ["LAK"], 1.00m, false, null, 4000m, 22000m, 7),
+            new("Demo M2 Pasta curry", "g", 0.040m, "processed", 4, new(180m, 4m, 22m, 8m, 5m), "Produkt przetworzony do sosu curry.", "Chili, czosnek, trawa cytrynowa, przyprawy.", [], 1.00m, false, null, 2500m, 15000m, 14),
+            new("Demo M2 Sos sojowy", "g", 0.015m, "processed", 4, new(53m, 8m, 5m, 0m, 0m), "Produkt przetworzony do tofu.", "Woda, soja, pszenica, sol.", ["SOJ", "GLU"], 1.00m, false, null, 2500m, 15000m, 14),
+            new("Demo M2 Miod", "g", 0.030m, "processed", 4, new(304m, 0.3m, 82m, 0m, 0m), "Slodzik do deserow.", null, [], 1.00m, false, null, 2500m, 15000m, 14),
+            new("Demo M2 Kakao", "g", 0.020m, "dry", 4, new(228m, 20m, 58m, 14m, 33m), "Kakao do deserow.", null, [], 1.00m, false, null, 2000m, 12000m, 14),
+            new("Demo M2 Orzechy wloskie", "g", 0.050m, "dry", 4, new(654m, 15m, 14m, 65m, 7m), "Orzechy do granoli i salatek.", null, ["ORZ"], 1.00m, false, null, 2500m, 15000m, 10),
+            new("Demo M2 Przyprawa chili", "g", 0.018m, "spice", 4, new(282m, 12m, 50m, 14m, 35m), "Przyprawa ostra jako zasob magazynowy.", "Chili mielone.", [], 1.00m, false, null, 800m, 5000m, 14),
+            new("Demo M2 Sol himalajska", "g", 0.004m, "spice", 4, new(0m, 0m, 0m, 0m, 0m), "Sol jako zasob magazynowy.", "Chlorek sodu.", [], 1.00m, false, null, 2000m, 12000m, 14),
+        ];
+
+    private static IReadOnlyList<CanonicalComponentSeed> GetCanonicalComponentSeeds()
+        =>
+        [
+            Component("eggs", "Demo M2 Jajecznica ze szczypiorkiem", "breakfast", 15, "Sniadaniowa skladowa jajeczna.", "box250",
+                [
+                    Version(1, 220m, 205m, new(155m, 13m, 1.5m, 11m, 0.2m), "Usmaz jajka na masle klarowanym i dodaj szczypiorek.", [
+                        Ing("Demo M2 Jaja", 150m), Ing("Demo M2 Maslo klarowane", 8m), Ing("Demo M2 Szczypiorek", 12m), Ing("Demo M2 Sol himalajska", 1m)
+                    ], "Wersja standardowa."),
+                    Version(2, 265m, 245m, new(142m, 17m, 1.4m, 8m, 0.2m), "Wersja high protein z dodatkowym bialkiem z twarogu.", [
+                        Ing("Demo M2 Jaja", 150m), Ing("Demo M2 Twarog poltlusty", 70m), Ing("Demo M2 Maslo klarowane", 5m), Ing("Demo M2 Szczypiorek", 12m), Ing("Demo M2 Sol himalajska", 1m)
+                    ], "Wersja high protein.")
+                ]),
+            Component("chia", "Demo M2 Pudding chia jogurtowy", "snack", 10, "Deser/sniadanie na zimno.", "box250",
+                [
+                    Version(1, 260m, 260m, new(128m, 8m, 14m, 5m, 6m), "Wymieszaj jogurt, chia, miod i borowki, odstaw do napecznienia.", [
+                        Ing("Demo M2 Jogurt grecki 2%", 170m), Ing("Demo M2 Nasiona chia", 22m), Ing("Demo M2 Borowki", 50m), Ing("Demo M2 Miod", 8m)
+                    ], "Wersja jogurtowa."),
+                    Version(2, 260m, 260m, new(118m, 6m, 15m, 5m, 6m), "Wersja bez laktozy na jogurcie bez laktozy.", [
+                        Ing("Demo M2 Jogurt bez laktozy", 180m), Ing("Demo M2 Nasiona chia", 22m), Ing("Demo M2 Borowki", 45m), Ing("Demo M2 Miod", 8m)
+                    ], "Wersja bez laktozy.")
+                ]),
+            Component("rice", "Demo M2 Ryz basmati gotowany", "dry", 18, "Baza weglowodanowa.", "box250", [Version(1, 200m, 180m, new(130m, 2.7m, 28m, 0.3m, 0.4m), "Ugotuj ryz na sypko.", [Ing("Demo M2 Ryz basmati", 65m), Ing("Demo M2 Sol himalajska", 1m)], "Wersja bazowa.")]),
+            Component("chicken", "Demo M2 Kurczak curry", "meat", 22, "Skladowa bialkowa z kurczaka.", "box500", [Version(1, 190m, 165m, new(160m, 25m, 2m, 5m, 0m), "Podsmaz kurczaka z pasta curry i dopiecz do temperatury kontrolnej.", [Ing("Demo M2 Piers z kurczaka", 170m), Ing("Demo M2 Pasta curry", 12m), Ing("Demo M2 Oliwa z oliwek", 6m), Ing("Demo M2 Sol himalajska", 1m)], "Wersja bazowa.", true, 75m)]),
+            Component("curry-sauce", "Demo M2 Sos curry kokosowy", "processed", 18, "Sos do curry.", "sauce80", [Version(1, 130m, 120m, new(96m, 1.6m, 7m, 7m, 1m), "Zredukuj mleko kokosowe z curry i passata.", [Ing("Demo M2 Mleko kokosowe", 75m), Ing("Demo M2 Passata pomidorowa", 45m), Ing("Demo M2 Pasta curry", 8m), Ing("Demo M2 Czosnek", 3m)], "Wersja bazowa.")]),
+            Component("broccoli", "Demo M2 Brokul parowany", "veg", 12, "Warzywo gotowane na parze.", "box250", [Version(1, 170m, 150m, new(35m, 3m, 6m, 0.4m, 3m), "Ugotuj brokul na parze, schlodz i dopraw.", [Ing("Demo M2 Brokul", 165m), Ing("Demo M2 Oliwa z oliwek", 3m), Ing("Demo M2 Sol himalajska", 1m)], "Wersja bazowa.")]),
+            Component("salmon", "Demo M2 Losos pieczony", "meat", 24, "Ryba pieczona.", "box500", [Version(1, 160m, 140m, new(220m, 22m, 0m, 14m, 0m), "Piecz lososia do temperatury bezpiecznej.", [Ing("Demo M2 Losos filet", 150m), Ing("Demo M2 Oliwa z oliwek", 5m), Ing("Demo M2 Sol himalajska", 1m)], "Wersja bazowa.", true, 63m)]),
+            Component("quinoa", "Demo M2 Komosa ryzowa gotowana", "dry", 20, "Baza z komosy.", "box250", [Version(1, 210m, 190m, new(120m, 4.4m, 21m, 1.9m, 2.8m), "Ugotuj komose do miekkosci.", [Ing("Demo M2 Komosa ryzowa", 70m), Ing("Demo M2 Sol himalajska", 1m)], "Wersja bazowa.")]),
+            Component("tofu", "Demo M2 Tofu grillowane", "meat", 20, "Skladowa vege bialkowa.", "box500", [Version(1, 175m, 160m, new(160m, 17m, 3m, 9m, 1m), "Zamarynuj tofu w sosie sojowym i grilluj.", [Ing("Demo M2 Tofu naturalne", 155m), Ing("Demo M2 Sos sojowy", 10m), Ing("Demo M2 Oliwa z oliwek", 5m), Ing("Demo M2 Czosnek", 3m)], "Wersja bazowa.")]),
+            Component("hummus", "Demo M2 Hummus warzywny", "processed", 8, "Dodatek sosowy do wrapow.", "sauce80", [Version(1, 90m, 90m, new(155m, 7m, 13m, 9m, 5m), "Wymieszaj hummus z czosnkiem i dopraw.", [Ing("Demo M2 Hummus", 80m), Ing("Demo M2 Czosnek", 2m), Ing("Demo M2 Oliwa z oliwek", 3m)], "Wersja bazowa.")]),
+            Component("tortilla", "Demo M2 Tortilla warzywna", "processed", 12, "Baza wrapa.", "box250", [Version(1, 180m, 180m, new(190m, 6m, 27m, 6m, 4m), "Zloz tortille z warzywami.", [Ing("Demo M2 Tortilla pszenna", 70m), Ing("Demo M2 Salata rzymska", 35m), Ing("Demo M2 Papryka czerwona", 35m), Ing("Demo M2 Ogorek", 30m)], "Wersja bazowa.")]),
+            Component("chili", "Demo M2 Chili wolowe", "lunch", 28, "Sos wolowy z fasola.", "box500", [Version(1, 270m, 245m, new(150m, 15m, 14m, 7m, 5m), "Dus wolowine z fasola, passata i chili.", [Ing("Demo M2 Mieso wolowe mielone", 130m), Ing("Demo M2 Fasola czerwona", 80m), Ing("Demo M2 Passata pomidorowa", 70m), Ing("Demo M2 Cebula", 25m), Ing("Demo M2 Przyprawa chili", 2m)], "Wersja bazowa.", true, 70m)]),
+            Component("batat", "Demo M2 Bataty pieczone", "veg", 25, "Dodatek skrobiowy.", "box250", [Version(1, 210m, 180m, new(95m, 2m, 22m, 0.5m, 3.5m), "Upiecz bataty w kostce.", [Ing("Demo M2 Batat", 200m), Ing("Demo M2 Oliwa z oliwek", 6m), Ing("Demo M2 Sol himalajska", 1m)], "Wersja bazowa.")]),
+            Component("lentil", "Demo M2 Sos pomidorowy z soczewica", "processed", 25, "Sos vege z bialkiem roslinnym.", "box500", [Version(1, 260m, 235m, new(125m, 8m, 20m, 2m, 7m), "Gotuj soczewice w passacie z warzywami.", [Ing("Demo M2 Soczewica czerwona", 75m), Ing("Demo M2 Passata pomidorowa", 95m), Ing("Demo M2 Marchew", 45m), Ing("Demo M2 Cebula", 25m), Ing("Demo M2 Przyprawa chili", 1m)], "Wersja bazowa.")]),
+            Component("choco", "Demo M2 Fit krem czekoladowy", "snack", 10, "Deser czekoladowy.", "box250", [Version(1, 150m, 150m, new(210m, 7m, 23m, 10m, 7m), "Zblenduj banana, kakao, jogurt i czekolade.", [Ing("Demo M2 Banan", 80m), Ing("Demo M2 Kakao", 10m), Ing("Demo M2 Jogurt grecki 2%", 45m), Ing("Demo M2 Czekolada gorzka 70%", 12m)], "Wersja bazowa.")]),
+            Component("granola", "Demo M2 Granola chrupiaca", "snack", 8, "Dodatek chrupiacy.", "box250", [Version(1, 35m, 35m, new(465m, 10m, 55m, 20m, 8m), "Odmierz granole do deseru.", [Ing("Demo M2 Granola orzechowa", 30m), Ing("Demo M2 Orzechy wloskie", 5m)], "Wersja bazowa.")]),
+            Component("avocado", "Demo M2 Salatka awokado", "veg", 10, "Dodatek warzywny.", "box250", [Version(1, 130m, 130m, new(125m, 2m, 7m, 10m, 5m), "Pokroj warzywa i wymieszaj z oliwa.", [Ing("Demo M2 Awokado", 55m), Ing("Demo M2 Pomidor koktajlowy", 45m), Ing("Demo M2 Salata rzymska", 25m), Ing("Demo M2 Oliwa z oliwek", 4m)], "Wersja bazowa.")]),
+            Component("pasta", "Demo M2 Makaron pelnoziarnisty gotowany", "dry", 18, "Baza makaronowa.", "box250", [Version(1, 220m, 200m, new(145m, 5m, 29m, 0.9m, 3m), "Ugotuj makaron al dente.", [Ing("Demo M2 Makaron pelnoziarnisty", 75m), Ing("Demo M2 Sol himalajska", 1m)], "Wersja bazowa.")]),
+            Component("cod", "Demo M2 Dorsz z warzywami", "meat", 22, "Lekka skladowa rybna.", "box500", [Version(1, 200m, 175m, new(95m, 18m, 4m, 1m, 1m), "Dus dorsza z cukinia i papryka.", [Ing("Demo M2 Dorsz filet", 140m), Ing("Demo M2 Cukinia", 45m), Ing("Demo M2 Papryka czerwona", 35m), Ing("Demo M2 Oliwa z oliwek", 4m)], "Wersja bazowa.", true, 63m)]),
+            Component("yogurt-salsa", "Demo M2 Salsa jogurtowa", "processed", 7, "Sos jogurtowy.", "sauce80", [Version(1, 80m, 80m, new(65m, 7m, 4m, 2m, 0.5m), "Wymieszaj jogurt z czosnkiem i ogorkiem.", [Ing("Demo M2 Jogurt grecki 2%", 60m), Ing("Demo M2 Ogorek", 20m), Ing("Demo M2 Czosnek", 2m)], "Wersja bazowa.")]),
+            Component("oatmeal", "Demo M2 Owsianka bananowa", "breakfast", 12, "Sniadanie owsiane.", "box250", [Version(1, 260m, 250m, new(135m, 6m, 23m, 3m, 4m), "Ugotuj platki i dodaj banana.", [Ing("Demo M2 Platki owsiane", 55m), Ing("Demo M2 Banan", 80m), Ing("Demo M2 Jogurt bez laktozy", 80m), Ing("Demo M2 Miod", 5m)], "Wersja bazowa.")]),
+        ];
+
+    private static CanonicalComponentSeed Component(
+        string key,
+        string name,
+        string categoryKey,
+        int preparationTimeMinutes,
+        string description,
+        string packagingKey,
+        IReadOnlyList<CanonicalComponentVersionSeed> versions)
+        => new(key, name, description, categoryKey, preparationTimeMinutes, versions.Select(v => v with { PackagingKey = packagingKey }).ToArray());
+
+    private static CanonicalComponentVersionSeed Version(
+        int versionNumber,
+        decimal rawWeightGrams,
+        decimal cookedWeightGrams,
+        CanonicalNutritionSeed nutrition,
+        string instructions,
+        IReadOnlyList<CanonicalComponentIngredientSeed> ingredients,
+        string changeSummary,
+        bool requiresTemperature = false,
+        decimal? temperature = null)
+        => new(
+            versionNumber,
+            instructions,
+            1.0m,
+            "portion",
+            rawWeightGrams,
+            cookedWeightGrams,
+            nutrition,
+            48,
+            requiresTemperature,
+            changeSummary,
+            true,
+            string.Empty,
+            ingredients,
+            [
+                new("Przygotowanie", 1, [
+                    new("Odmierz skladniki wedlug zapotrzebowania produkcyjnego.", 1, false, null, null, null, false),
+                    new(instructions, 2, requiresTemperature, requiresTemperature ? "CoreTemperature" : null, temperature, requiresTemperature ? "C" : null, requiresTemperature),
+                    new("Oznacz partie i przekaz skladowa do kompletacji dania.", 3, false, null, null, null, false),
+                ]),
+            ]);
+
+    private static CanonicalComponentIngredientSeed Ing(
+        string ingredientName,
+        decimal weightInGrams,
+        decimal yieldFactor = 1.0m,
+        bool isOptional = false,
+        string? notes = null)
+        => new(ingredientName, weightInGrams, yieldFactor, isOptional, notes);
+
+    private static IReadOnlyList<CanonicalMealSeed> GetCanonicalMealSeeds()
+        =>
+        [
+            Meal("eggs-meal", "Demo M2 Jajecznica z salatka", "breakfast", "Sniadanie jajeczne z wariantem high protein.", "box500",
+                Base("eggs:v1", "Main", 1, "portion", 1), Base("avocado:v1", "Side", 90, "g", 2),
+                [
+                    Variant("standard", "standard", "Standard", true, "box500", Base("eggs:v1", "Main", 1, "portion", 1), Base("avocado:v1", "Side", 90, "g", 2)),
+                    Variant("high", "high protein", "HighProtein", false, "box500", Base("eggs:v2", "Main", 1, "portion", 1), Base("avocado:v1", "Side", 80, "g", 2)),
+                ]),
+            Meal("chia-meal", "Demo M2 Pudding chia z granola", "snack", "Pudding z wariantem bez laktozy.", "box250",
+                Base("chia:v1", "Main", 1, "portion", 1), Base("granola:v1", "Crunch", 25, "g", 2),
+                [
+                    Variant("standard", "standard", "Standard", true, "box250", Base("chia:v1", "Main", 1, "portion", 1), Base("granola:v1", "Crunch", 25, "g", 2)),
+                    Variant("lactose-free", "bez laktozy", "NoLactose", false, "box250", Base("chia:v2", "Main", 1, "portion", 1), Base("granola:v1", "Crunch", 20, "g", 2)),
+                ]),
+            Meal("curry-meal", "Demo M2 Kurczak curry z ryzem", "lunch", "Danie wieloskladowe testujace ryz w gramach i komponenty sosu.", "box750",
+                Base("chicken:v1", "Protein", 1, "portion", 1), Base("curry-sauce:v1", "Sauce", 1, "portion", 2), Base("rice:v1", "Base", 1, "portion", 3), Base("broccoli:v1", "Vegetable", 1, "portion", 4),
+                [
+                    Variant("standard", "standard", "Standard", true, "box750", Base("chicken:v1", "Protein", 1, "portion", 1), Base("curry-sauce:v1", "Sauce", 1, "portion", 2), Base("rice:v1", "Base", 1, "portion", 3), Base("broccoli:v1", "Vegetable", 1, "portion", 4)),
+                    Variant("high", "high protein", "HighProtein", false, "box750", Base("chicken:v1", "Protein", 1.30m, "portion", 1), Base("curry-sauce:v1", "Sauce", 1, "portion", 2), Base("rice:v1", "Base", 160, "g", 3), Base("broccoli:v1", "Vegetable", 1, "portion", 4)),
+                    Variant("vege", "vege tofu", "Vege", false, "box750", Base("tofu:v1", "Protein", 1, "portion", 1), Base("curry-sauce:v1", "Sauce", 1, "portion", 2), Base("rice:v1", "Base", 1, "portion", 3), Base("broccoli:v1", "Vegetable", 1, "portion", 4)),
+                ]),
+            Meal("salmon-meal", "Demo M2 Losos z quinoa", "lunch", "Ryba z komosa i brokulem.", "box750",
+                Base("salmon:v1", "Protein", 1, "portion", 1), Base("quinoa:v1", "Base", 1, "portion", 2), Base("broccoli:v1", "Vegetable", 1, "portion", 3), Base("yogurt-salsa:v1", "Sauce", 1, "portion", 4),
+                [
+                    Variant("standard", "standard", "Standard", true, "box750", Base("salmon:v1", "Protein", 1, "portion", 1), Base("quinoa:v1", "Base", 1, "portion", 2), Base("broccoli:v1", "Vegetable", 1, "portion", 3), Base("yogurt-salsa:v1", "Sauce", 1, "portion", 4)),
+                    Variant("large", "wieksza gramatura", "Large", false, "box750", Base("salmon:v1", "Protein", 1.20m, "portion", 1), Base("quinoa:v1", "Base", 220, "g", 2), Base("broccoli:v1", "Vegetable", 1, "portion", 3), Base("yogurt-salsa:v1", "Sauce", 1, "portion", 4)),
+                ]),
+            Meal("tortilla-meal", "Demo M2 Tortilla vege z tofu", "dinner", "Wrap vege z hummusem.", "box500",
+                Base("tortilla:v1", "Base", 1, "portion", 1), Base("tofu:v1", "Protein", 1, "portion", 2), Base("hummus:v1", "Sauce", 1, "portion", 3),
+                [
+                    Variant("standard", "standard vege", "Vege", true, "box500", Base("tortilla:v1", "Base", 1, "portion", 1), Base("tofu:v1", "Protein", 1, "portion", 2), Base("hummus:v1", "Sauce", 1, "portion", 3)),
+                    Variant("high", "vege high protein", "HighProtein", false, "box500", Base("tortilla:v1", "Base", 1, "portion", 1), Base("tofu:v1", "Protein", 1.30m, "portion", 2), Base("hummus:v1", "Sauce", 1, "portion", 3)),
+                ]),
+            Meal("chili-meal", "Demo M2 Chili z batatami", "dinner", "Chili z wariantem wolowym i vege.", "box750",
+                Base("chili:v1", "Main", 1, "portion", 1), Base("batat:v1", "Side", 1, "portion", 2),
+                [
+                    Variant("standard", "standard", "Standard", true, "box750", Base("chili:v1", "Main", 1, "portion", 1), Base("batat:v1", "Side", 1, "portion", 2)),
+                    Variant("high", "high protein", "HighProtein", false, "box750", Base("chili:v1", "Main", 1.25m, "portion", 1), Base("batat:v1", "Side", 180, "g", 2)),
+                    Variant("vege", "vege soczewica", "Vege", false, "box750", Base("lentil:v1", "Main", 1, "portion", 1), Base("batat:v1", "Side", 1, "portion", 2)),
+                ]),
+            Meal("dessert-meal", "Demo M2 Fit deser czekoladowy", "snack", "Deser z produktem przetworzonym i granola.", "box250",
+                Base("choco:v1", "Main", 1, "portion", 1), Base("granola:v1", "Crunch", 20, "g", 2),
+                [
+                    Variant("standard", "standard", "Standard", true, "box250", Base("choco:v1", "Main", 1, "portion", 1), Base("granola:v1", "Crunch", 20, "g", 2)),
+                    Variant("large", "wieksza porcja", "Large", false, "box500", Base("choco:v1", "Main", 1.20m, "portion", 1), Base("granola:v1", "Crunch", 30, "g", 2)),
+                ]),
+        ];
+
+    private static CanonicalMealSeed Meal(
+        string key,
+        string name,
+        string categoryKey,
+        string description,
+        string packagingKey,
+        CanonicalMealComponentSeed firstComponent,
+        CanonicalMealComponentSeed secondComponent,
+        IReadOnlyList<CanonicalMealVariantSeed> variants)
+        => new(
+            key,
+            name,
+            categoryKey,
+            description,
+            $"Demo M2: {description}",
+            30,
+            "Danie agreguje skladowe technologiczne; szczegoly przygotowania sa na kartach skladowych.",
+            48,
+            false,
+            packagingKey,
+            [firstComponent, secondComponent],
+            variants);
+
+    private static CanonicalMealSeed Meal(
+        string key,
+        string name,
+        string categoryKey,
+        string description,
+        string packagingKey,
+        CanonicalMealComponentSeed firstComponent,
+        CanonicalMealComponentSeed secondComponent,
+        CanonicalMealComponentSeed thirdComponent,
+        IReadOnlyList<CanonicalMealVariantSeed> variants)
+        => new(
+            key,
+            name,
+            categoryKey,
+            description,
+            $"Demo M2: {description}",
+            30,
+            "Danie agreguje skladowe technologiczne; szczegoly przygotowania sa na kartach skladowych.",
+            48,
+            false,
+            packagingKey,
+            [firstComponent, secondComponent, thirdComponent],
+            variants);
+
+    private static CanonicalMealSeed Meal(
+        string key,
+        string name,
+        string categoryKey,
+        string description,
+        string packagingKey,
+        CanonicalMealComponentSeed firstComponent,
+        CanonicalMealComponentSeed secondComponent,
+        CanonicalMealComponentSeed thirdComponent,
+        CanonicalMealComponentSeed fourthComponent,
+        IReadOnlyList<CanonicalMealVariantSeed> variants)
+        => new(
+            key,
+            name,
+            categoryKey,
+            description,
+            $"Demo M2: {description}",
+            35,
+            "Danie agreguje skladowe technologiczne; szczegoly przygotowania sa na kartach skladowych.",
+            48,
+            false,
+            packagingKey,
+            [firstComponent, secondComponent, thirdComponent, fourthComponent],
+            variants);
+
+    private static CanonicalMealVariantSeed Variant(
+        string key,
+        string nameSuffix,
+        string variantType,
+        bool isDefault,
+        string packagingKey,
+        params CanonicalMealComponentSeed[] components)
+        => new(
+            key,
+            $"Demo M2 - {nameSuffix}",
+            variantType,
+            $"Wariant demo M2: {nameSuffix}.",
+            isDefault,
+            "Aggregated",
+            null,
+            packagingKey,
+            components);
+
+    private static CanonicalMealComponentSeed Base(
+        string componentVersionKey,
+        string role,
+        decimal quantityPerServing,
+        string unit,
+        int sortOrder,
+        bool isOptional = false)
+        => new(componentVersionKey, role, quantityPerServing, unit, sortOrder, isOptional);
+
+    private static IReadOnlyList<CanonicalDietSeed> GetCanonicalDietSeeds()
+        =>
+        [
+            new("Standard", "Dieta standardowa oparta o pelny przekroj demo M2.", "Standardowy plan demo z 5 posilkami.", [
+                new("standard-1800", "Standard 1800", 1800, 1.00m, true),
+                new("standard-2200", "Standard 2200", 2200, 1.12m, false),
+            ]),
+            new("High Protein", "Dieta wysokobialkowa testujaca warianty dań.", "Plan demo dla klienta aktywnego.", [
+                new("protein-2200", "High Protein 2200", 2200, 1.18m, true),
+                new("protein-2600", "High Protein 2600", 2600, 1.30m, false),
+            ]),
+            new("Vege/Fit", "Dieta roslinna i lekka z wariantami bez laktozy.", "Plan demo vege/fit.", [
+                new("vege-1600", "Vege/Fit 1600", 1600, 1.05m, true),
+                new("vege-1900", "Vege/Fit 1900", 1900, 1.13m, false),
+            ]),
+        ];
+
+    private static IReadOnlyList<CanonicalDietVariantMealPlanSeed> GetCanonicalDietVariantMealPlans()
+        =>
+        [
+            new("standard-1800", [
+                Slot("Breakfast", 1, "eggs-meal:standard"),
+                Slot("Snack1", 2, "chia-meal:standard"),
+                Slot("Lunch", 3, "curry-meal:standard"),
+                Slot("Snack2", 4, "dessert-meal:standard"),
+                Slot("Dinner", 5, "salmon-meal:standard"),
+            ]),
+            new("standard-2200", [
+                Slot("Breakfast", 1, "eggs-meal:standard"),
+                Slot("Snack1", 2, "chia-meal:standard", 1.10m),
+                Slot("Lunch", 3, "curry-meal:high"),
+                Slot("Snack2", 4, "dessert-meal:large"),
+                Slot("Dinner", 5, "chili-meal:standard"),
+            ]),
+            new("protein-2200", [
+                Slot("Breakfast", 1, "eggs-meal:high"),
+                Slot("Snack1", 2, "chia-meal:standard"),
+                Slot("Lunch", 3, "curry-meal:high"),
+                Slot("Snack2", 4, "dessert-meal:standard"),
+                Slot("Dinner", 5, "chili-meal:high"),
+            ]),
+            new("protein-2600", [
+                Slot("Breakfast", 1, "eggs-meal:high", 1.10m),
+                Slot("Snack1", 2, "chia-meal:standard", 1.15m),
+                Slot("Lunch", 3, "curry-meal:high", 1.10m),
+                Slot("Snack2", 4, "dessert-meal:large"),
+                Slot("Dinner", 5, "salmon-meal:large"),
+            ]),
+            new("vege-1600", [
+                Slot("Breakfast", 1, "chia-meal:lactose-free"),
+                Slot("Snack1", 2, "dessert-meal:standard"),
+                Slot("Lunch", 3, "curry-meal:vege"),
+                Slot("Snack2", 4, "tortilla-meal:standard"),
+                Slot("Dinner", 5, "chili-meal:vege"),
+            ]),
+            new("vege-1900", [
+                Slot("Breakfast", 1, "chia-meal:lactose-free"),
+                Slot("Snack1", 2, "dessert-meal:standard"),
+                Slot("Lunch", 3, "curry-meal:vege", 1.10m),
+                Slot("Snack2", 4, "tortilla-meal:high"),
+                Slot("Dinner", 5, "chili-meal:vege"),
+            ]),
+        ];
+
+    private static CanonicalDietPlanSlotSeed Slot(
+        string mealSlot,
+        int sortOrder,
+        string mealVariantKey,
+        decimal servingSizeMultiplier = 1.0m)
+        => new(mealSlot, sortOrder, mealVariantKey, servingSizeMultiplier);
+
     private static async Task<int> EnsureTodayDemoDeliveryCalendarAsync(
         IDbConnection db,
         int orderId,
@@ -3353,6 +5364,149 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
         public decimal PricePerDay { get; set; }
     }
+
+    private sealed class CanonicalVariantNutritionRow
+    {
+        public decimal? RawWeightGrams { get; set; }
+
+        public decimal? CookedWeightGrams { get; set; }
+
+        public decimal? Calories { get; set; }
+
+        public decimal? Protein { get; set; }
+
+        public decimal? Carbohydrates { get; set; }
+
+        public decimal? Fat { get; set; }
+
+        public decimal? Fiber { get; set; }
+    }
+
+    private sealed record CanonicalNutritionSeed(
+        decimal Calories,
+        decimal Protein,
+        decimal Carbohydrates,
+        decimal Fat,
+        decimal Fiber);
+
+    private sealed record CanonicalIngredientSeed(
+        string Name,
+        string Unit,
+        decimal CostPerUnit,
+        string CategoryKey,
+        int WarehouseCategoryId,
+        CanonicalNutritionSeed Nutrition,
+        string Description,
+        string? ProductComposition,
+        IReadOnlyCollection<string> AllergenCodes,
+        decimal YieldFactor,
+        bool RequiresCoreTemperatureCheck,
+        decimal? MinimumCoreTemperatureCelsius,
+        decimal MinimumStockLevel,
+        decimal TargetBatchQuantity,
+        int LeadTimeDays,
+        string? Notes = null);
+
+    private sealed record CanonicalComponentSeed(
+        string Key,
+        string Name,
+        string Description,
+        string CategoryKey,
+        int PreparationTimeMinutes,
+        IReadOnlyList<CanonicalComponentVersionSeed> Versions);
+
+    private sealed record CanonicalComponentVersionSeed(
+        int VersionNumber,
+        string Instructions,
+        decimal YieldQuantity,
+        string YieldUnit,
+        decimal RawWeightGrams,
+        decimal CookedWeightGrams,
+        CanonicalNutritionSeed Nutrition,
+        int ShelfLifeHours,
+        bool UseEarliestIngredientExpiry,
+        string ChangeSummary,
+        bool IsTechnologyChange,
+        string PackagingKey,
+        IReadOnlyList<CanonicalComponentIngredientSeed> Ingredients,
+        IReadOnlyList<CanonicalInstructionSectionSeed> Sections);
+
+    private sealed record CanonicalComponentIngredientSeed(
+        string IngredientName,
+        decimal WeightInGrams,
+        decimal YieldFactor,
+        bool IsOptional,
+        string? Notes);
+
+    private sealed record CanonicalInstructionSectionSeed(
+        string Title,
+        int SortOrder,
+        IReadOnlyList<CanonicalInstructionStepSeed> Steps);
+
+    private sealed record CanonicalInstructionStepSeed(
+        string StepText,
+        int SortOrder,
+        bool RequiresControl,
+        string? ControlType,
+        decimal? ExpectedValue,
+        string? ExpectedUnit,
+        bool IsCritical);
+
+    private sealed record CanonicalMealSeed(
+        string Key,
+        string Name,
+        string CategoryKey,
+        string Description,
+        string MarketingDescription,
+        int PreparationTimeMinutes,
+        string PreparationInstructions,
+        int ShelfLifeHours,
+        bool UseEarliestIngredientExpiry,
+        string PackagingKey,
+        IReadOnlyList<CanonicalMealComponentSeed> BaseComponents,
+        IReadOnlyList<CanonicalMealVariantSeed> Variants);
+
+    private sealed record CanonicalMealVariantSeed(
+        string Key,
+        string Name,
+        string VariantType,
+        string Description,
+        bool IsDefault,
+        string NutritionSource,
+        string? NutritionOverrideReason,
+        string? PackagingKey,
+        IReadOnlyList<CanonicalMealComponentSeed> Components);
+
+    private sealed record CanonicalMealComponentSeed(
+        string ComponentVersionKey,
+        string Role,
+        decimal QuantityPerServing,
+        string Unit,
+        int SortOrder,
+        bool IsOptional);
+
+    private sealed record CanonicalDietSeed(
+        string Name,
+        string Description,
+        string MarketingDescription,
+        IReadOnlyList<CanonicalDietVariantSeed> Variants);
+
+    private sealed record CanonicalDietVariantSeed(
+        string Key,
+        string Name,
+        int TargetCalories,
+        decimal PriceMultiplier,
+        bool IsDefault);
+
+    private sealed record CanonicalDietVariantMealPlanSeed(
+        string DietVariantKey,
+        IReadOnlyList<CanonicalDietPlanSlotSeed> Slots);
+
+    private sealed record CanonicalDietPlanSlotSeed(
+        string MealSlot,
+        int SortOrder,
+        string MealVariantKey,
+        decimal ServingSizeMultiplier);
 
     private sealed record LogisticsDemoVehicle(
         string RegistrationNumber,

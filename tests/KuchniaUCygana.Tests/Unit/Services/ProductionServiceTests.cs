@@ -1,5 +1,6 @@
 using AutoMapper;
 using FluentAssertions;
+using KuchniaUCygana.Application.DTOs.Production;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Application.Services;
 using KuchniaUCygana.Domain.Entities.Production;
@@ -11,6 +12,7 @@ using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Domain.Services;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System.Text.Json;
 using Xunit;
 
 namespace KuchniaUCygana.Tests.Unit.Services;
@@ -122,6 +124,83 @@ public sealed class ProductionServiceTests
             .WithMessage("*Brak opublikowanego snapshotu M2*");
         dietProvider.Verify(provider => provider.GetRecipeForMealAsync(It.IsAny<int>()), Times.Never);
         planRepository.Verify(repository => repository.UpdateAsync(It.IsAny<ProductionPlan>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetCookingComponentCardAsync_ShouldUseSnapshotInstructions_AndScaleIngredientQuantities()
+    {
+        var date = new DateOnly(2026, 6, 5);
+        var snapshotItem = CreateSnapshotItem(date, 1001, 101, "Makaron standard", 501, 9001, 100m, 1.5m);
+        var component = snapshotItem.Components.Single();
+        component.Ingredients = new[]
+        {
+            new ComponentIngredientDto
+            {
+                IngredientId = 11,
+                IngredientName = "Kurczak",
+                StockItemId = 9001,
+                WarehouseCategoryName = "Mieso",
+                WeightInGrams = 120m,
+            },
+        };
+        component.InstructionSections = new[]
+        {
+            new ComponentInstructionSectionDto
+            {
+                SectionId = 71,
+                Title = "Obrobka",
+                SortOrder = 1,
+                Steps = new[]
+                {
+                    new ComponentInstructionStepDto
+                    {
+                        StepId = 711,
+                        StepText = "Podgrzej do temperatury rdzenia.",
+                        SortOrder = 1,
+                        RequiresControl = true,
+                        ControlType = "CoreTemperature",
+                        ExpectedValue = 75m,
+                        ExpectedUnit = "C",
+                        IsCritical = true,
+                    },
+                },
+            },
+        };
+
+        var planRepository = new Mock<IProductionPlanRepository>();
+        planRepository
+            .Setup(repository => repository.GetByIdAsync(5))
+            .ReturnsAsync(new ProductionPlan { Id = 5, ProductionDate = date });
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.GetByIdAsync(21))
+            .ReturnsAsync(new ProductionPlanItem
+            {
+                Id = 21,
+                ProductionPlanId = 5,
+                MealId = 10,
+                MealName = "Makaron standard",
+                DietVariantId = 1,
+                PlannedQuantity = 7,
+                FefoDeductedAt = DateTimeOffset.UtcNow,
+                M2SnapshotJson = JsonSerializer.Serialize(snapshotItem),
+            });
+        var service = CreateService(planRepository: planRepository, itemRepository: itemRepository);
+
+        var card = await service.GetCookingComponentCardAsync(21, 501);
+
+        card.PlanItemId.Should().Be(21);
+        card.RecipeComponentVersionId.Should().Be(501);
+        card.PlannedQuantity.Should().Be(7);
+        card.Ingredients.Should().ContainSingle().Which.Should().Match<CookingComponentIngredientDto>(ingredient =>
+            ingredient.IngredientName == "Kurczak" &&
+            ingredient.WeightPerServing == 180m &&
+            ingredient.TotalWeight == 1260m);
+        card.InstructionSections.Should().ContainSingle().Which.Steps.Should().ContainSingle().Which.Should()
+            .Match<CookingComponentInstructionStepDto>(step =>
+                step.StepId == 711 &&
+                step.RequiresControl &&
+                step.IsCritical);
     }
 
     private static ProductionService CreateService(

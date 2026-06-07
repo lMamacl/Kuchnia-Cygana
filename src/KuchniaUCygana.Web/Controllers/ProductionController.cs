@@ -20,17 +20,20 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class ProductionController : Controller
 {
     private readonly IProductionService productionService;
+    private readonly ICookingSessionService cookingSessionService;
     private readonly IPackingService packingService;
     private readonly IPackingIncidentService packingIncidentService;
     private readonly IPackingSynchronizationService packingSynchronizationService;
 
     public ProductionController(
         IProductionService productionService,
+        ICookingSessionService cookingSessionService,
         IPackingService packingService,
         IPackingIncidentService packingIncidentService,
         IPackingSynchronizationService packingSynchronizationService)
     {
         this.productionService = productionService;
+        this.cookingSessionService = cookingSessionService;
         this.packingService = packingService;
         this.packingIncidentService = packingIncidentService;
         this.packingSynchronizationService = packingSynchronizationService;
@@ -160,6 +163,90 @@ public sealed class ProductionController : Controller
             TempData["Error"] = ex.Message;
             return RedirectToAction(nameof(Index));
         }
+    }
+
+    [HttpGet("cooking-card/{planItemId:int}/components/{recipeComponentVersionId:int}")]
+    public async Task<IActionResult> CookingComponent(int planItemId, int recipeComponentVersionId)
+    {
+        try
+        {
+            var card = await productionService.GetCookingComponentCardAsync(planItemId, recipeComponentVersionId);
+            card.Session = await cookingSessionService.GetComponentSessionAsync(planItemId, recipeComponentVersionId);
+            return View(card);
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(CookingCard), new { planItemId });
+        }
+    }
+
+    [HttpPost("cooking-card/{planItemId:int}/components/{recipeComponentVersionId:int}/start")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartCookingComponent(int planItemId, int recipeComponentVersionId)
+    {
+        try
+        {
+            await cookingSessionService.StartComponentSessionAsync(planItemId, recipeComponentVersionId, GetOperatorName());
+            TempData["Success"] = "Sesja gotowania skladowej zostala uruchomiona.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(CookingComponent), new { planItemId, recipeComponentVersionId });
+    }
+
+    [HttpPost("cooking-card/{planItemId:int}/components/{recipeComponentVersionId:int}/steps/{stepId:int}/toggle")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleCookingComponentStep(
+        int planItemId,
+        int recipeComponentVersionId,
+        int stepId,
+        bool isChecked,
+        decimal? actualValue,
+        string? actualUnit,
+        string? notes)
+    {
+        try
+        {
+            await cookingSessionService.ToggleStepAsync(new ToggleCookingStepRequest
+            {
+                ProductionPlanItemId = planItemId,
+                RecipeComponentVersionId = recipeComponentVersionId,
+                StepId = stepId,
+                IsChecked = isChecked,
+                ActualValue = actualValue,
+                ActualUnit = actualUnit,
+                Notes = notes,
+                OperatorName = GetOperatorName(),
+            });
+            TempData["Success"] = isChecked ? "Krok zostal odznaczony." : "Krok zostal cofniety.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(CookingComponent), new { planItemId, recipeComponentVersionId });
+    }
+
+    [HttpPost("cooking-card/{planItemId:int}/components/{recipeComponentVersionId:int}/complete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CompleteCookingComponent(int planItemId, int recipeComponentVersionId)
+    {
+        try
+        {
+            await cookingSessionService.CompleteComponentSessionAsync(planItemId, recipeComponentVersionId, GetOperatorName());
+            TempData["Success"] = "Skladowa zostala oznaczona jako ukonczona.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(CookingComponent), new { planItemId, recipeComponentVersionId });
     }
 
     // ── Zatwierdzanie gotowania ──────────────────────────────
@@ -369,4 +456,7 @@ public sealed class ProductionController : Controller
         ViewBag.Errors = errors;
         return View(labels);
     }
+
+    private string GetOperatorName()
+        => User.Identity?.Name ?? "Kuchnia";
 }

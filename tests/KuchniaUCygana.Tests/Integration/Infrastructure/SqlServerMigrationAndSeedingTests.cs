@@ -86,6 +86,26 @@ public sealed class SqlServerMigrationAndSeedingTests
             NullLogger<DatabaseSeeder>.Instance);
 
         await seeder.SeedAsync(DatabaseSeedingProfile.DemoData, resetDemoData: true);
+
+        await using (var staleConnection = new SqlConnection(this.fixture.AppConnectionString))
+        {
+            await staleConnection.OpenAsync();
+            await InsertLegacyDietVariantMealReferenceToDemoMealAsync(staleConnection);
+            var staleReferenceCount = await ScalarIntAsync(
+                staleConnection,
+                """
+                SELECT COUNT(1)
+                FROM [DietVariantMeals] dvm
+                INNER JOIN [Meals] m ON m.[Id] = dvm.[MealId]
+                INNER JOIN [DietVariants] dv ON dv.[Id] = dvm.[DietVariantId]
+                INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
+                WHERE m.[Name] LIKE N'Demo M2 %'
+                  AND d.[Name] <> N'Demo Lifecycle';
+                """);
+            staleReferenceCount.Should().BeGreaterThan(0);
+        }
+
+        await seeder.SeedAsync(DatabaseSeedingProfile.DemoData, resetDemoData: true);
         await seeder.SeedAsync(DatabaseSeedingProfile.DemoData);
         await seeder.SeedAsync(DatabaseSeedingProfile.DemoData);
 
@@ -114,7 +134,29 @@ public sealed class SqlServerMigrationAndSeedingTests
               AND dpi.[IsActive] = 1;
             """,
             ("@today", today));
-        todayPlanItemCount.Should().BeGreaterThan(1);
+        todayPlanItemCount.Should().BeGreaterThanOrEqualTo(30);
+
+        var inconsistentDemoProductionPlanCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [ProductionPlans] pp
+            WHERE pp.[ProductionDate] = @today
+              AND pp.[CreatedBy] = N'DemoSeeder'
+              AND pp.[Status] = @inProgressStatus
+              AND pp.[IsDeleted] = 0
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM [ProductionPlanItems] ppi
+                  WHERE ppi.[ProductionPlanId] = pp.[Id]
+                    AND ppi.[IsDeleted] = 0
+                    AND ppi.[FefoDeductedAt] IS NULL
+              );
+            """,
+            ("@today", today),
+            ("@inProgressStatus", (int)ProductionPlanStatus.InProgress));
+        inconsistentDemoProductionPlanCount.Should().Be(0);
 
         var orderCount = await ScalarIntAsync(
             connection,
@@ -158,6 +200,8 @@ public sealed class SqlServerMigrationAndSeedingTests
               )
               AND [MealId] IS NOT NULL
               AND [DietMenuPlanItemId] IS NOT NULL
+              AND [MealVariantId] IS NOT NULL
+              AND [MealSlot] IS NOT NULL
               AND [IsDeleted] = 0;
             """,
             ("@orderNumberPrefix", orderNumberPrefix));
@@ -227,13 +271,69 @@ public sealed class SqlServerMigrationAndSeedingTests
             "SELECT COUNT(1) FROM [MealVariantComponents] WHERE [IsDeleted] = 0;");
         mealVariantComponentCount.Should().BeGreaterThan(0);
 
-        var incompleteDemoComponentCount = await ScalarIntAsync(
+        var canonicalIngredientCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [Ingredients]
+            WHERE [Name] LIKE N'Demo M2 %'
+              AND [ResourceType] = N'Food'
+              AND [IsDeleted] = 0;
+            """);
+        canonicalIngredientCount.Should().BeGreaterThanOrEqualTo(50);
+
+        var canonicalProcessedIngredientCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [Ingredients]
+            WHERE [Name] LIKE N'Demo M2 %'
+              AND [ProductComposition] IS NOT NULL
+              AND [ProductComposition] <> N''
+              AND [IsDeleted] = 0;
+            """);
+        canonicalProcessedIngredientCount.Should().BeGreaterThanOrEqualTo(6);
+
+        var canonicalRecipeComponentCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [RecipeComponents]
+            WHERE [Name] LIKE N'Demo M2 %'
+              AND [IsDeleted] = 0;
+            """);
+        canonicalRecipeComponentCount.Should().BeGreaterThanOrEqualTo(20);
+
+        var canonicalMealCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [Meals]
+            WHERE [Name] LIKE N'Demo M2 %'
+              AND [IsDeleted] = 0;
+            """);
+        canonicalMealCount.Should().BeGreaterThanOrEqualTo(7);
+
+        var canonicalMealVariantCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [MealVariants] mv
+            INNER JOIN [Meals] m ON m.[Id] = mv.[MealId]
+            WHERE m.[Name] LIKE N'Demo M2 %'
+              AND m.[IsDeleted] = 0
+              AND mv.[IsDeleted] = 0
+              AND mv.[Status] = N'Published';
+            """);
+        canonicalMealVariantCount.Should().BeGreaterThanOrEqualTo(14);
+
+        var incompleteCanonicalComponentCount = await ScalarIntAsync(
             connection,
             """
             SELECT COUNT(1)
             FROM [RecipeComponentVersions] rcv
             INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
-            WHERE rc.[Name] LIKE N'% - składowa bazowa'
+            WHERE rc.[Name] LIKE N'Demo M2 %'
               AND rc.[IsDeleted] = 0
               AND rcv.[IsDeleted] = 0
               AND
@@ -275,7 +375,59 @@ public sealed class SqlServerMigrationAndSeedingTests
                   )
               );
             """);
-        incompleteDemoComponentCount.Should().Be(0);
+        incompleteCanonicalComponentCount.Should().Be(0);
+
+        var incompleteCanonicalMealVariantCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [MealVariants] mv
+            INNER JOIN [Meals] m ON m.[Id] = mv.[MealId]
+            WHERE m.[Name] LIKE N'Demo M2 %'
+              AND m.[IsDeleted] = 0
+              AND mv.[IsDeleted] = 0
+              AND
+              (
+                  mv.[Status] <> N'Published'
+                  OR mv.[RawWeightGrams] IS NULL
+                  OR mv.[CookedWeightGrams] IS NULL
+                  OR mv.[CaloriesPer100g] IS NULL
+                  OR mv.[ProteinPer100g] IS NULL
+                  OR mv.[CarbohydratesPer100g] IS NULL
+                  OR mv.[FatPer100g] IS NULL
+                  OR mv.[FiberPer100g] IS NULL
+                  OR mv.[AllergensApproved] = 0
+                  OR NOT EXISTS
+                  (
+                      SELECT 1
+                      FROM [MealVariantComponents] mvc
+                      WHERE mvc.[MealVariantId] = mv.[Id]
+                        AND mvc.[IsDeleted] = 0
+                  )
+                  OR NOT EXISTS
+                  (
+                      SELECT 1
+                      FROM [PackagingRequirements] pr
+                      WHERE pr.[MealVariantId] = mv.[Id]
+                        AND pr.[IsDeleted] = 0
+                        AND (pr.[StockItemId] IS NOT NULL OR pr.[WarehouseCategoryId] IS NOT NULL)
+                  )
+              );
+            """);
+        incompleteCanonicalMealVariantCount.Should().Be(0);
+
+        var canonicalPublishedPlanDays = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [DietMenuPlans]
+            WHERE [PlanDate] >= @today
+              AND [PlanDate] < DATEADD(day, 8, @today)
+              AND [Status] = N'Published'
+              AND [IsDeleted] = 0;
+            """,
+            ("@today", today));
+        canonicalPublishedPlanDays.Should().Be(8);
 
         var activePlanItemsWithoutMealVariant = await ScalarIntAsync(
             connection,
@@ -557,10 +709,24 @@ public sealed class SqlServerMigrationAndSeedingTests
             ("@today", today));
         deliveryCalendarCount.Should().Be(orderCount);
 
-        var planItemToApproveId = await ScalarIntAsync(
+        var productionPlanId = await ScalarIntAsync(
             connection,
             """
-            SELECT TOP 1 ppi.[Id]
+            SELECT TOP 1 [Id]
+            FROM [ProductionPlans]
+            WHERE [ProductionDate] = @today
+              AND [CreatedBy] = N'DemoSeeder'
+              AND [IsDeleted] = 0
+            ORDER BY [Id];
+            """,
+            ("@today", today));
+        productionPlanId.Should().BeGreaterThan(0);
+
+        var productionItemsToApprove = new List<(int Id, int PlannedQuantity)>();
+        await using (var approveCommand = connection.CreateCommand())
+        {
+            approveCommand.CommandText = """
+            SELECT ppi.[Id], ppi.[PlannedQuantity]
             FROM [ProductionPlanItems] ppi
             INNER JOIN [ProductionPlans] pp ON pp.[Id] = ppi.[ProductionPlanId]
             WHERE pp.[ProductionDate] = @today
@@ -568,29 +734,48 @@ public sealed class SqlServerMigrationAndSeedingTests
               AND pp.[IsDeleted] = 0
               AND ppi.[IsDeleted] = 0
             ORDER BY ppi.[Id];
-            """,
-            ("@today", today));
+            """;
+            approveCommand.Parameters.AddWithValue("@today", today);
 
-        var plannedQuantityToApprove = await ScalarIntAsync(
-            connection,
-            "SELECT [PlannedQuantity] FROM [ProductionPlanItems] WHERE [Id] = @planItemId;",
-            ("@planItemId", planItemToApproveId));
+            await using var reader = await approveCommand.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                productionItemsToApprove.Add((reader.GetInt32(0), reader.GetInt32(1)));
+            }
+        }
+
+        productionItemsToApprove.Should().NotBeEmpty();
 
         var productionService = scope.ServiceProvider.GetRequiredService<IProductionService>();
-        await productionService.ApproveCookingAsync(planItemToApproveId, plannedQuantityToApprove);
+        await productionService.ProduceSemiFinishedAsync(productionPlanId);
+
+        var pendingFefoAfterProductionStart = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(1)
+            FROM [ProductionPlanItems]
+            WHERE [ProductionPlanId] = @productionPlanId
+              AND [IsDeleted] = 0
+              AND [FefoDeductedAt] IS NULL;
+            """,
+            ("@productionPlanId", productionPlanId));
+        pendingFefoAfterProductionStart.Should().Be(0);
+
+        foreach (var productionItem in productionItemsToApprove)
+        {
+            await productionService.ApproveCookingAsync(productionItem.Id, productionItem.PlannedQuantity);
+        }
 
         var approvedPlanItemCount = await ScalarIntAsync(
             connection,
             """
             SELECT COUNT(1)
             FROM [ProductionPlanItems]
-            WHERE [Id] = @planItemId
-              AND [Status] = @cookedStatus
+            WHERE [Status] = @cookedStatus
               AND [PackagingDeductedAt] IS NOT NULL;
             """,
-            ("@planItemId", planItemToApproveId),
             ("@cookedStatus", (int)ProductionItemStatus.Cooked));
-        approvedPlanItemCount.Should().Be(1);
+        approvedPlanItemCount.Should().Be(productionItemsToApprove.Count);
 
         var seededRouteStopCount = await CountRouteStopsForDemoOrdersAsync(connection, orderNumberPrefix);
         seededRouteStopCount.Should().Be(0, "DatabaseSeeder prepares delivery candidates, while M4 generates routes");
@@ -737,6 +922,44 @@ public sealed class SqlServerMigrationAndSeedingTests
               AND drs.[IsDeleted] = 0;
             """,
             ("@orderNumberPrefix", orderNumberPrefix));
+    }
+
+    private static async Task InsertLegacyDietVariantMealReferenceToDemoMealAsync(SqlConnection connection)
+    {
+        await ExecuteNonQueryAsync(
+            connection,
+            """
+            DECLARE @MealId int =
+            (
+                SELECT TOP 1 [Id]
+                FROM [Meals]
+                WHERE [Name] LIKE N'Demo M2 %'
+                  AND [IsDeleted] = 0
+                ORDER BY [Id]
+            );
+
+            DECLARE @DietVariantId int =
+            (
+                SELECT TOP 1 dv.[Id]
+                FROM [DietVariants] dv
+                INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
+                WHERE d.[Name] <> N'Demo Lifecycle'
+                  AND NOT EXISTS
+                  (
+                      SELECT 1
+                      FROM [DietVariantMeals] dvm
+                      WHERE dvm.[DietVariantId] = dv.[Id]
+                        AND dvm.[MealId] = @MealId
+                  )
+                ORDER BY dv.[Id]
+            );
+
+            IF @MealId IS NOT NULL AND @DietVariantId IS NOT NULL
+            BEGIN
+                INSERT INTO [DietVariantMeals] ([DietVariantId], [MealId], [ServingSizeMultiplier], [SortOrder])
+                VALUES (@DietVariantId, @MealId, 1.00, 999);
+            END;
+            """);
     }
 
     private static async Task<int> ScalarIntAsync(

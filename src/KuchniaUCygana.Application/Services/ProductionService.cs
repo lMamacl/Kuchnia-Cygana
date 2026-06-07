@@ -175,6 +175,10 @@ public sealed class ProductionService : IProductionService
             EstimatedReadyTime = item.EstimatedReadyTime.HasValue
                 ? item.EstimatedReadyTime.Value.ToString("HH:mm")
                 : null,
+            Status = item.Status.ToString(),
+            FefoDeductedAt = item.FefoDeductedAt,
+            PackagingDeductedAt = item.PackagingDeductedAt,
+            HasM2Snapshot = !string.IsNullOrWhiteSpace(item.M2SnapshotJson),
             RawWeightGrams = details?.RawWeightGrams,
             CookedWeightGrams = details?.CookedWeightGrams,
             RequiresCoreTemperatureCheck = details?.RequiresCoreTemperatureCheck == true
@@ -216,6 +220,88 @@ public sealed class ProductionService : IProductionService
                 MinimumCoreTemperatureCelsius = ingredient.MinimumCoreTemperatureCelsius,
                 IsOptional = ingredient.IsOptional,
             });
+        }
+
+        return card;
+    }
+
+    public async Task<CookingComponentCardDto> GetCookingComponentCardAsync(
+        int planItemId,
+        int recipeComponentVersionId)
+    {
+        var item = await _itemRepository.GetByIdAsync(planItemId)
+            ?? throw new InvalidOperationException($"Pozycja planu {planItemId} nie istnieje.");
+        var snapshotItem = TryDeserializeSnapshotItem(item)
+            ?? throw new InvalidOperationException("Brak snapshotu M2 dla pozycji planu produkcji.");
+        var component = snapshotItem.Components
+            .FirstOrDefault(c => c.RecipeComponentVersionId == recipeComponentVersionId)
+            ?? throw new InvalidOperationException(
+                $"Snapshot M2 nie zawiera skladowej RecipeComponentVersionId {recipeComponentVersionId}.");
+        var plan = await _planRepository.GetByIdAsync(item.ProductionPlanId);
+
+        var card = new CookingComponentCardDto
+        {
+            PlanItemId = item.Id,
+            ProductionPlanId = item.ProductionPlanId,
+            ProductionDate = plan?.ProductionDate ?? snapshotItem.PlanDate,
+            MealId = item.MealId,
+            MealName = snapshotItem.MealName,
+            MealVariantId = snapshotItem.MealVariantId,
+            MealVariantName = snapshotItem.MealVariantName,
+            DietVariantId = item.DietVariantId,
+            PlannedQuantity = item.PlannedQuantity,
+            ProductionStatus = item.Status.ToString(),
+            FefoDeductedAt = item.FefoDeductedAt,
+            PackagingDeductedAt = item.PackagingDeductedAt,
+            RecipeComponentId = component.RecipeComponentId,
+            RecipeComponentVersionId = component.RecipeComponentVersionId,
+            ComponentName = component.ComponentName,
+            VersionNumber = component.VersionNumber,
+            VersionStatus = component.VersionStatus,
+            Role = component.Role,
+            QuantityPerServing = component.QuantityPerServing * snapshotItem.ServingMultiplier,
+            TotalQuantity = component.QuantityPerServing * snapshotItem.ServingMultiplier * item.PlannedQuantity,
+            Unit = component.Unit,
+            RawWeightGrams = component.RawWeightGrams,
+            CookedWeightGrams = component.CookedWeightGrams,
+            RequiresCoreTemperatureCheck = component.Ingredients.Any(i => i.RequiresCoreTemperatureCheck),
+            MinimumCoreTemperatureCelsius = MaxTemperature(component.Ingredients),
+            Allergens = component.Allergens,
+            NutritionFacts = component.Nutrition is null
+                ? null
+                : new CookingCardNutritionDto
+                {
+                    CaloriesPer100g = component.Nutrition.CaloriesPer100g,
+                    ProteinPer100g = component.Nutrition.ProteinPer100g,
+                    CarbohydratesPer100g = component.Nutrition.CarbohydratesPer100g,
+                    FatPer100g = component.Nutrition.FatPer100g,
+                    FiberPer100g = component.Nutrition.FiberPer100g,
+                },
+            InstructionSections = component.InstructionSections.Select(MapInstructionSection).ToList(),
+        };
+
+        foreach (var ingredient in component.Ingredients)
+        {
+            var weightPerServing = ingredient.WeightInGrams * component.QuantityPerServing * snapshotItem.ServingMultiplier;
+            card.Ingredients.Add(new CookingComponentIngredientDto
+            {
+                IngredientId = ingredient.IngredientId,
+                StockItemId = ingredient.StockItemId,
+                IngredientName = ingredient.IngredientName,
+                WarehouseCategoryName = ingredient.WarehouseCategoryName,
+                WeightPerServing = weightPerServing,
+                TotalWeight = weightPerServing * item.PlannedQuantity,
+                YieldFactor = ingredient.YieldFactor,
+                RequiresCoreTemperatureCheck = ingredient.RequiresCoreTemperatureCheck,
+                MinimumCoreTemperatureCelsius = ingredient.MinimumCoreTemperatureCelsius,
+                IsOptional = ingredient.IsOptional,
+            });
+        }
+
+        foreach (var packaging in component.PackagingRequirements)
+        {
+            var quantityPerServing = packaging.Quantity * component.QuantityPerServing * snapshotItem.ServingMultiplier;
+            card.PackagingRequirements.Add(MapPackaging(packaging, quantityPerServing, item.PlannedQuantity));
         }
 
         return card;
@@ -620,6 +706,10 @@ public sealed class ProductionService : IProductionService
             EstimatedReadyTime = item.EstimatedReadyTime.HasValue
                 ? item.EstimatedReadyTime.Value.ToString("HH:mm")
                 : null,
+            Status = item.Status.ToString(),
+            FefoDeductedAt = item.FefoDeductedAt,
+            PackagingDeductedAt = item.PackagingDeductedAt,
+            HasM2Snapshot = true,
             RawWeightGrams = snapshotItem.RawWeightGrams,
             CookedWeightGrams = snapshotItem.CookedWeightGrams,
             NutritionFacts = snapshotItem.Nutrition is null
@@ -646,6 +736,7 @@ public sealed class ProductionService : IProductionService
                 Unit = component.Unit,
                 TotalQuantity = component.QuantityPerServing * snapshotItem.ServingMultiplier * item.PlannedQuantity,
                 Instructions = component.Instructions,
+                InstructionSections = component.InstructionSections.Select(MapInstructionSection).ToList(),
                 RequiresCoreTemperatureCheck = component.Ingredients.Any(i => i.RequiresCoreTemperatureCheck),
                 MinimumCoreTemperatureCelsius = MaxTemperature(component.Ingredients),
             };
@@ -897,6 +988,29 @@ public sealed class ProductionService : IProductionService
             TotalQuantity = quantityPerServing * plannedQuantity,
             Unit = packaging.Unit,
             ContainerRole = packaging.ContainerRole,
+        };
+
+    private static CookingComponentInstructionSectionDto MapInstructionSection(ComponentInstructionSectionDto section)
+        => new()
+        {
+            SectionId = section.SectionId,
+            Title = section.Title,
+            SortOrder = section.SortOrder,
+            Steps = section.Steps
+                .OrderBy(step => step.SortOrder)
+                .ThenBy(step => step.StepId)
+                .Select(step => new CookingComponentInstructionStepDto
+                {
+                    StepId = step.StepId,
+                    StepText = step.StepText,
+                    SortOrder = step.SortOrder,
+                    RequiresControl = step.RequiresControl,
+                    ControlType = step.ControlType,
+                    ExpectedValue = step.ExpectedValue,
+                    ExpectedUnit = step.ExpectedUnit,
+                    IsCritical = step.IsCritical,
+                })
+                .ToList(),
         };
 
     private static decimal? MaxTemperature(IEnumerable<ComponentIngredientDto> ingredients)

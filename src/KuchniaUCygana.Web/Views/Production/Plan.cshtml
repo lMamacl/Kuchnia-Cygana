@@ -3,6 +3,9 @@
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Szczegóły Planu Produkcji";
     ViewData["Section"] = "Kuchnia";
+    var hasItems = Model.Items.Count > 0;
+    var hasPendingFefo = Model.Items.Any(item => !item.FefoDeductedAt.HasValue);
+    var canRunFefo = hasPendingFefo && Model.Status is not ("Completed" or "Cancelled");
     ViewData["Description"] = "Bieżące monitorowanie stanu przygotowania potraw, receptur oraz zatwierdzanie ugotowanych porcji.";
 }
 
@@ -89,7 +92,7 @@
                         </div>
                     </div>
                     <div class="col-auto">
-                        @if (Model.Status == "Draft" || Model.Status == "Active")
+                        @if (canRunFefo)
                         {
                             <form asp-action="ProduceSemiFinished" asp-route-planId="@Model.Id" method="post" class="d-inline">
                                 @Html.AntiForgeryToken()
@@ -99,7 +102,7 @@
                                 </button>
                             </form>
                         }
-                        else
+                        else if (hasItems)
                         {
                             <button type="button" class="btn btn-success me-2" disabled>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 10l5 -6l5 6v10a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1z" /><path d="M21 10l-2 8" /><path d="M3 10l2 8" /></svg>
@@ -127,6 +130,7 @@
                             <th>Nazwa Dania / Potrawy</th>
                             <th>Kategoria</th>
                             <th class="text-center">Zaplanowane Porcje</th>
+                            <th>FEFO</th>
                             <th>Status realizacji</th>
                             <th class="w-1 text-center">Operacje</th>
                         </tr>
@@ -144,6 +148,16 @@
                                 </td>
                                 <td class="text-center fw-bold text-dark">
                                     @item.PlannedQuantity szt.
+                                </td>
+                                <td>
+                                    @if (item.FefoDeductedAt.HasValue)
+                                    {
+                                        <span class="badge bg-success-lt text-success">zdjete</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning-lt text-warning">do wykonania</span>
+                                    }
                                 </td>
                                 <td>
                                     <span class="badge bg-@GetStatusColor(item.Status)-lt text-@GetStatusColor(item.Status) d-inline-flex align-items-center gap-1">

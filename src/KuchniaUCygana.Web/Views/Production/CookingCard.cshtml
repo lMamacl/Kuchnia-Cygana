@@ -58,6 +58,39 @@
 
                 <div class="hr my-3"></div>
 
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-secondary small">Status</div>
+                            <div class="fw-bold text-dark">@Model.Status</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-secondary small">Snapshot M2</div>
+                            <div class="fw-bold @(Model.HasM2Snapshot ? "text-success" : "text-warning")">
+                                @(Model.HasM2Snapshot ? "zamrozony" : "brak")
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-secondary small">FEFO skladnikow</div>
+                            <div class="fw-bold @(Model.FefoDeductedAt.HasValue ? "text-success" : "text-warning")">
+                                @(Model.FefoDeductedAt.HasValue ? $"wykonane {Model.FefoDeductedAt.Value.ToLocalTime():HH:mm}" : "do wykonania")
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-secondary small">Opakowania</div>
+                            <div class="fw-bold @(Model.PackagingDeductedAt.HasValue ? "text-success" : "text-secondary")">
+                                @(Model.PackagingDeductedAt.HasValue ? $"zdjete {Model.PackagingDeductedAt.Value.ToLocalTime():HH:mm}" : "czekaja")
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="d-flex justify-content-between mb-3">
                     <span class="text-secondary">Wymagane porcje:</span>
                     <strong class="text-dark">@Model.PlannedQuantity szt.</strong>
@@ -166,6 +199,17 @@
                                 </h2>
                                 <div id="@collapseId" class="accordion-collapse collapse" aria-labelledby="heading-@collapseId" data-bs-parent="#snapshotComponents">
                                     <div class="accordion-body">
+                                        <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                                            <div class="small text-secondary">
+                                                Kroki instrukcji: @component.InstructionSections.Sum(section => section.Steps.Count)
+                                            </div>
+                                            <a asp-action="CookingComponent"
+                                               asp-route-planItemId="@Model.PlanItemId"
+                                               asp-route-recipeComponentVersionId="@component.RecipeComponentVersionId"
+                                               class="btn btn-sm btn-primary">
+                                                Gotuj skladowa
+                                            </a>
+                                        </div>
                                         @if (!string.IsNullOrWhiteSpace(component.Instructions))
                                         {
                                             <div class="bg-light p-3 border rounded mb-3">@component.Instructions</div>

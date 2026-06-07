@@ -80,8 +80,8 @@ public sealed class ProductionControllerTests
             .ReturnsAsync(new PackingSynchronizationResultDto { Date = filter.Date });
         var controller = CreateController(
             new Mock<IProductionService>(),
-            packingService,
-            synchronizationService);
+            packingService: packingService,
+            packingSynchronizationService: synchronizationService);
 
         var result = await controller.FoilPrinting(filter);
 
@@ -117,14 +117,86 @@ public sealed class ProductionControllerTests
         controller.TempData["Success"].Should().BeNull();
     }
 
+    [Fact]
+    public async Task CookingComponent_ShouldLoadSnapshotCardAndPersistentSession()
+    {
+        const int PlanItemId = 42;
+        const int RecipeComponentVersionId = 501;
+        var card = new CookingComponentCardDto
+        {
+            PlanItemId = PlanItemId,
+            RecipeComponentVersionId = RecipeComponentVersionId,
+            ComponentName = "Ryż jaśminowy",
+        };
+        var session = new CookingComponentSessionDto
+        {
+            SessionId = 12,
+            Status = "InProgress",
+        };
+        var productionService = new Mock<IProductionService>();
+        productionService
+            .Setup(service => service.GetCookingComponentCardAsync(PlanItemId, RecipeComponentVersionId))
+            .ReturnsAsync(card);
+        var cookingSessionService = new Mock<ICookingSessionService>();
+        cookingSessionService
+            .Setup(service => service.GetComponentSessionAsync(PlanItemId, RecipeComponentVersionId))
+            .ReturnsAsync(session);
+        var controller = CreateController(productionService, cookingSessionService: cookingSessionService);
+
+        var result = await controller.CookingComponent(PlanItemId, RecipeComponentVersionId);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var model = view.Model.Should().BeOfType<CookingComponentCardDto>().Subject;
+        model.Should().BeSameAs(card);
+        model.Session.Should().BeSameAs(session);
+    }
+
+    [Fact]
+    public async Task ToggleCookingComponentStep_ShouldPersistStepAndRedirectBack()
+    {
+        const int PlanItemId = 42;
+        const int RecipeComponentVersionId = 501;
+        const int StepId = 711;
+        var cookingSessionService = new Mock<ICookingSessionService>();
+        var controller = CreateController(
+            new Mock<IProductionService>(),
+            cookingSessionService: cookingSessionService);
+
+        var result = await controller.ToggleCookingComponentStep(
+            PlanItemId,
+            RecipeComponentVersionId,
+            StepId,
+            isChecked: true,
+            actualValue: 76m,
+            actualUnit: "C",
+            notes: "OK");
+
+        cookingSessionService.Verify(
+            service => service.ToggleStepAsync(It.Is<ToggleCookingStepRequest>(request =>
+                request.ProductionPlanItemId == PlanItemId &&
+                request.RecipeComponentVersionId == RecipeComponentVersionId &&
+                request.StepId == StepId &&
+                request.IsChecked &&
+                request.ActualValue == 76m &&
+                request.ActualUnit == "C" &&
+                request.Notes == "OK")),
+            Times.Once);
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ProductionController.CookingComponent));
+        redirect.RouteValues.Should().ContainKey("planItemId").WhoseValue.Should().Be(PlanItemId);
+        redirect.RouteValues.Should().ContainKey("recipeComponentVersionId").WhoseValue.Should().Be(RecipeComponentVersionId);
+    }
+
     private static ProductionController CreateController(
         Mock<IProductionService> productionService,
+        Mock<ICookingSessionService>? cookingSessionService = null,
         Mock<IPackingService>? packingService = null,
         Mock<IPackingSynchronizationService>? packingSynchronizationService = null)
     {
         var httpContext = new DefaultHttpContext();
         var controller = new ProductionController(
             productionService.Object,
+            cookingSessionService?.Object ?? Mock.Of<ICookingSessionService>(),
             packingService?.Object ?? Mock.Of<IPackingService>(),
             Mock.Of<IPackingIncidentService>(),
             packingSynchronizationService?.Object ?? Mock.Of<IPackingSynchronizationService>())
