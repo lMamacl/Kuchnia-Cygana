@@ -24,6 +24,8 @@ public interface IHumanResourcesService
 
     Task<EmployeeDto?> UpdateEmployeeAsync(int id, UpdateEmployeeRequest request);
 
+    Task<EmployeeDto?> ChangeEmployeeDepartmentAsync(int id, int departmentId);
+
     Task<bool> DeactivateEmployeeAsync(int id, DateOnly? terminationDate = null);
 
     Task<bool> DeleteEmployeeAsync(int id);

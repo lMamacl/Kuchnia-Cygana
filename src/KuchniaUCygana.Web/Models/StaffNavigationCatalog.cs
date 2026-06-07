@@ -151,6 +151,7 @@ public static class StaffNavigationCatalog
             [
                 new("Dashboard BOK", "CustomerSupport", "Index", "support", "Zbiorczy ekran obslugi klienta.", "bok obsluga klienta"),
                 new("Zgloszenia", "CustomerSupport", "Tickets", "support", "Lista zgloszen klientow.", "zgloszenia tickety klient"),
+                new("Nowe zgloszenie", "CustomerSupport", "NewTicket", "plus", "Rejestracja nowego zgloszenia BOK.", "nowe zgloszenie bok reklamacja"),
             ]),
         new(
             "admin",

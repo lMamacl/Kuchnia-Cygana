@@ -40,13 +40,20 @@ public sealed class CustomerSupportController : Controller
         return View(await BuildModelAsync(ticketsPage: page, pageSize: pageSize));
     }
 
+    [HttpGet("tickets/new")]
+    public async Task<IActionResult> NewTicket()
+    {
+        SetViewData("Nowe zgloszenie", "Obsluga klienta", "Rejestracja zgloszenia klienta z powiazana dostawa.");
+        return View(await BuildModelAsync());
+    }
+
     [HttpPost("tickets")]
     public async Task<IActionResult> CreateTicket(CreateTicketRequest request)
     {
         if (!ModelState.IsValid)
         {
-            SetViewData("Zgloszenia", "Obsluga klienta", "Lista zgloszen z priorytetami, statusem i przypisaniem.");
-            return View("Tickets", await BuildModelAsync(newTicket: request));
+            SetViewData("Nowe zgloszenie", "Obsluga klienta", "Rejestracja zgloszenia klienta z powiazana dostawa.");
+            return View("NewTicket", await BuildModelAsync(newTicket: request));
         }
 
         try
@@ -82,7 +89,7 @@ public sealed class CustomerSupportController : Controller
         catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
-            return RedirectToAction(nameof(Tickets));
+            return RedirectToAction(nameof(NewTicket));
         }
     }
 
