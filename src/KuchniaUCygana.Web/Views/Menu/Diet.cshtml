@@ -1,2 +1,194 @@
-@await Html.PartialAsync("_CustomerPlaceholder")
+@model MenuDietDetailsViewModel
+@using System.Globalization
+@{
+    ViewData["Title"] = Model.Diet.Name;
+    var culture = new CultureInfo("pl-PL");
+    var imageUrl = string.IsNullOrWhiteSpace(Model.Diet.ThumbnailUrl)
+        ? Url.Content("~/img/chicken_teriyaki.png")
+        : Model.Diet.ThumbnailUrl;
+    var availableVariants = Model.Diet.Variants.Where(v => v.IsAvailable).ToList();
+    var groupedPlan = Model.WeekPlan
+        .GroupBy(item => item.PlanDate)
+        .OrderBy(group => group.Key)
+        .ToList();
+}
 
+<style>
+    .diet-details {
+        color: #17211b;
+    }
+
+    .diet-hero,
+    .diet-panel,
+    .plan-day {
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 14px 36px rgba(23, 33, 27, .08);
+    }
+
+    .diet-hero {
+        overflow: hidden;
+        background: linear-gradient(135deg, #edf8ef, #fff8ea);
+    }
+
+    .diet-hero img {
+        width: 100%;
+        height: 100%;
+        min-height: 330px;
+        object-fit: cover;
+    }
+
+    .variant-link {
+        border: 1px solid rgba(23, 33, 27, .12);
+        border-radius: 999px;
+        color: #17211b;
+        text-decoration: none;
+        padding: .45rem .75rem;
+    }
+
+    .variant-link.active {
+        border-color: #1f7a4d;
+        background: #1f7a4d;
+        color: #fff;
+    }
+
+    .meal-row {
+        border-top: 1px solid rgba(23, 33, 27, .08);
+    }
+</style>
+
+<div class="diet-details">
+    <a asp-controller="Menu" asp-action="Index" class="btn btn-link px-0 mb-3">Wróć do katalogu</a>
+
+    <section class="diet-hero mb-4">
+        <div class="row g-0">
+            <div class="col-lg-6">
+                <img src="@imageUrl" alt="@Model.Diet.Name" />
+            </div>
+            <div class="col-lg-6 p-4 p-md-5 d-flex flex-column justify-content-center">
+                <div class="text-success small fw-bold text-uppercase mb-2">Dieta z katalogu M2</div>
+                <h1 class="fw-bold mb-3">@Model.Diet.Name</h1>
+                <p class="text-muted mb-4">
+                    @(Model.Diet.MarketingDescription ?? Model.Diet.Description ?? "Aktualna dieta z katalogu modułu menu.")
+                </p>
+
+                @if (Model.SelectedVariant is not null)
+                {
+                    <div class="d-flex flex-wrap gap-2 mb-4">
+                        <span class="badge text-bg-success rounded-pill px-3 py-2">@Model.SelectedVariant.TargetCalories kcal</span>
+                        <span class="badge text-bg-light border rounded-pill px-3 py-2">
+                            @Model.SelectedVariant.PricePerDay.ToString("C", culture) / dzień
+                        </span>
+                        <span class="badge text-bg-light border rounded-pill px-3 py-2">
+                            mnożnik @Model.SelectedVariant.PriceMultiplier.ToString("F2", CultureInfo.InvariantCulture)
+                        </span>
+                    </div>
+
+                    <form asp-controller="Cart" asp-action="Add" method="post" class="row g-2 align-items-end">
+                        <input type="hidden" name="dietVariantId" value="@Model.SelectedVariant.DietVariantId" />
+                        <div class="col-sm-5">
+                            <label class="form-label fw-semibold">Liczba dni</label>
+                            <input type="number" name="totalDays" value="5" min="1" max="365" class="form-control form-control-lg" />
+                        </div>
+                        <div class="col-sm-7">
+                            <button type="submit" class="btn btn-success btn-lg w-100">Dodaj do koszyka</button>
+                        </div>
+                    </form>
+                }
+                else
+                {
+                    <div class="alert alert-light border mb-0">Ta dieta nie ma aktywnych wariantów do zamówienia.</div>
+                }
+            </div>
+        </div>
+    </section>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <aside class="diet-panel p-4">
+                <h2 class="h5 fw-bold mb-3">Warianty</h2>
+                @if (availableVariants.Any())
+                {
+                    <div class="d-flex flex-wrap gap-2 mb-4">
+                        @foreach (var variant in availableVariants)
+                        {
+                            var isActive = Model.SelectedVariant?.DietVariantId == variant.DietVariantId;
+                            <a asp-controller="Menu"
+                               asp-action="Diet"
+                               asp-route-id="@Model.Diet.DietId"
+                               asp-route-variantId="@variant.DietVariantId"
+                               class="variant-link @(isActive ? "active" : "")">
+                                @variant.Name
+                            </a>
+                        }
+                    </div>
+                }
+
+                <h3 class="h6 fw-bold mb-2">Okres jadłospisu</h3>
+                <form asp-controller="Menu" asp-action="Diet" asp-route-id="@Model.Diet.DietId" method="get" class="d-grid gap-2">
+                    <input type="hidden" name="variantId" value="@Model.SelectedVariant?.DietVariantId" />
+                    <input type="date" name="startDate" class="form-control" value="@Model.WeekStartDate.ToString("yyyy-MM-dd")" />
+                    <button type="submit" class="btn btn-outline-success">Pokaż tydzień</button>
+                </form>
+            </aside>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+                <div>
+                    <div class="text-success small fw-bold text-uppercase mb-1">Jadłospis</div>
+                    <h2 class="h4 fw-bold mb-0">Plan na 7 dni</h2>
+                </div>
+                @if (Model.SelectedVariant is not null)
+                {
+                    <a asp-controller="Menu"
+                       asp-action="WeekPlan"
+                       asp-route-dietId="@Model.Diet.DietId"
+                       asp-route-variantId="@Model.SelectedVariant.DietVariantId"
+                       asp-route-startDate="@Model.WeekStartDate.ToString("yyyy-MM-dd")"
+                       class="btn btn-outline-secondary">
+                        Pełny widok jadłospisu
+                    </a>
+                }
+            </div>
+
+            @if (!groupedPlan.Any())
+            {
+                <div class="diet-panel p-5 text-center">
+                    <div class="text-success small fw-bold text-uppercase mb-2">Brak planu</div>
+                    <h3 class="h5 fw-bold">Nie ma opublikowanego jadłospisu dla tego wariantu</h3>
+                    <p class="text-muted mb-0">Sprawdź, czy moduł menu ma opublikowane plany dla wybranego tygodnia.</p>
+                </div>
+            }
+            else
+            {
+                <div class="d-grid gap-3">
+                    @foreach (var day in groupedPlan)
+                    {
+                        <section class="plan-day">
+                            <div class="p-3 border-bottom">
+                                <h3 class="h6 fw-bold mb-0">@day.Key.ToString("dddd, dd.MM", culture)</h3>
+                            </div>
+                            @foreach (var meal in day.OrderBy(item => item.SortOrder).ThenBy(item => item.MealSlot))
+                            {
+                                <div class="meal-row p-3">
+                                    <div class="d-flex flex-wrap justify-content-between gap-2">
+                                        <div>
+                                            <div class="fw-semibold">@meal.MealName</div>
+                                            <div class="text-muted small">@meal.MealSlot @(!string.IsNullOrWhiteSpace(meal.CategoryName) ? $"· {meal.CategoryName}" : "")</div>
+                                        </div>
+                                        @if (meal.ServingWeightGrams > 0)
+                                        {
+                                            <span class="badge text-bg-light border rounded-pill">@meal.ServingWeightGrams.ToString("F0", culture) g</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </section>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>

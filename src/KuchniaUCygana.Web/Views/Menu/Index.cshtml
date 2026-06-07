@@ -1,2 +1,176 @@
-@await Html.PartialAsync("_CustomerPlaceholder")
+@model MenuCatalogViewModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Katalog diet";
+    var culture = new CultureInfo("pl-PL");
+}
 
+<style>
+    .catalog-shell {
+        color: #17211b;
+    }
+
+    .catalog-hero {
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 24px;
+        background:
+            linear-gradient(135deg, rgba(237, 248, 239, .95), rgba(255, 248, 234, .96)),
+            url('@Url.Content("~/img/pumpkin_soup.png")') right center/contain no-repeat;
+        box-shadow: 0 16px 45px rgba(23, 33, 27, .08);
+    }
+
+    .catalog-search {
+        max-width: 680px;
+    }
+
+    .diet-card {
+        height: 100%;
+        overflow: hidden;
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 14px 36px rgba(23, 33, 27, .08);
+    }
+
+    .diet-card img {
+        width: 100%;
+        height: 190px;
+        object-fit: cover;
+    }
+
+    .variant-pill {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid rgba(31, 122, 77, .2);
+        border-radius: 999px;
+        color: #1f7a4d;
+        font-size: .8rem;
+        font-weight: 700;
+        padding: .35rem .62rem;
+    }
+
+    .empty-catalog {
+        border: 1px dashed rgba(31, 122, 77, .35);
+        border-radius: 16px;
+        background: #fff;
+    }
+</style>
+
+<div class="catalog-shell">
+    <section class="catalog-hero p-4 p-md-5 mb-4">
+        <div class="col-lg-8">
+            <div class="text-success small fw-bold text-uppercase mb-2">Katalog Diet</div>
+            <h1 class="fw-bold mb-2">Wybierz dietę pudełkową</h1>
+            <p class="text-muted mb-4">
+                Diety i warianty są pobierane z aktualnego katalogu modułu menu. Po dodaniu pozycji przejdziesz przez koszyk,
+                adres dostawy, podsumowanie i płatność.
+            </p>
+            <form asp-controller="Menu" asp-action="Index" method="get" class="catalog-search">
+                <div class="input-group input-group-lg">
+                    <input type="search" name="search" value="@Model.SearchTerm" class="form-control" placeholder="Szukaj diety" />
+                    <button type="submit" class="btn btn-success px-4">Szukaj</button>
+                    @if (!string.IsNullOrWhiteSpace(Model.SearchTerm))
+                    {
+                        <a asp-controller="Menu" asp-action="Index" class="btn btn-outline-secondary px-4">Wyczyść</a>
+                    }
+                </div>
+            </form>
+        </div>
+    </section>
+
+    @if (TempData["Error"] is string error)
+    {
+        <div class="alert alert-warning border-0 shadow-sm">@error</div>
+    }
+
+    @if (!Model.Diets.Any())
+    {
+        <div class="empty-catalog p-5 text-center">
+            <div class="text-success small fw-bold text-uppercase mb-2">Brak diet</div>
+            <h2 class="h4 fw-bold">Nie znaleziono opublikowanych diet</h2>
+            <p class="text-muted mb-0">Sprawdź publikację katalogu w module menu albo zmień wyszukiwaną frazę.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var diet in Model.Diets)
+            {
+                var imageUrl = string.IsNullOrWhiteSpace(diet.ThumbnailUrl)
+                    ? Url.Content("~/img/baked_salmon.png")
+                    : diet.ThumbnailUrl;
+                var availableVariants = diet.Variants.Where(v => v.IsAvailable).ToList();
+                var selectedVariant = diet.DefaultVariant;
+
+                <div class="col-md-6 col-xl-4">
+                    <article class="diet-card">
+                        <img src="@imageUrl" alt="@diet.Name" />
+                        <div class="p-4">
+                            <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+                                <h2 class="h4 fw-bold mb-0">@diet.Name</h2>
+                                @if (selectedVariant is not null)
+                                {
+                                    <span class="badge text-bg-success rounded-pill">@selectedVariant.TargetCalories kcal</span>
+                                }
+                            </div>
+                            <p class="text-muted small mb-3">
+                                @(diet.MarketingDescription ?? diet.Description ?? "Dieta z katalogu modułu menu.")
+                            </p>
+
+                            <div class="d-flex flex-wrap gap-2 mb-3">
+                                @foreach (var variant in availableVariants.Take(3))
+                                {
+                                    <span class="variant-pill">@variant.Name · @variant.PricePerDay.ToString("C", culture)</span>
+                                }
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2 mb-3">
+                                <a asp-controller="Menu" asp-action="Diet" asp-route-id="@diet.DietId" class="btn btn-outline-success">
+                                    Szczegóły
+                                </a>
+                                @if (selectedVariant is not null)
+                                {
+                                    <a asp-controller="Menu"
+                                       asp-action="WeekPlan"
+                                       asp-route-dietId="@diet.DietId"
+                                       asp-route-variantId="@selectedVariant.DietVariantId"
+                                       class="btn btn-outline-secondary">
+                                        Jadłospis
+                                    </a>
+                                }
+                            </div>
+
+                            @if (availableVariants.Any())
+                            {
+                                <form asp-controller="Cart" asp-action="Add" method="post" class="d-grid gap-2">
+                                    <label class="form-label fw-semibold mb-0">Wariant</label>
+                                    <select name="dietVariantId" class="form-select">
+                                        @foreach (var variant in availableVariants)
+                                        {
+                                            <option value="@variant.DietVariantId" selected="@(variant.DietVariantId == selectedVariant?.DietVariantId)">
+                                                @variant.Name - @variant.TargetCalories kcal - @variant.PricePerDay.ToString("C", culture) / dzień
+                                            </option>
+                                        }
+                                    </select>
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-5">
+                                            <label class="form-label fw-semibold">Dni</label>
+                                            <input type="number" name="totalDays" class="form-control" value="5" min="1" max="365" />
+                                        </div>
+                                        <div class="col-7">
+                                            <button type="submit" class="btn btn-success w-100">Dodaj do koszyka</button>
+                                        </div>
+                                    </div>
+                                </form>
+                            }
+                            else
+                            {
+                                <div class="alert alert-light border mb-0">Brak aktywnych wariantów tej diety.</div>
+                            }
+                        </div>
+                    </article>
+                </div>
+            }
+        </div>
+    }
+</div>

@@ -7,11 +7,13 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class CartController : Controller
 {
     private readonly ICartService cartService;
+    private readonly IDietOrderingService dietOrderingService;
     private const string CartSessionKey = "cart";
 
-    public CartController(ICartService cartService)
+    public CartController(ICartService cartService, IDietOrderingService dietOrderingService)
     {
         this.cartService = cartService;
+        this.dietOrderingService = dietOrderingService;
     }
 
     [HttpGet]
@@ -22,10 +24,21 @@ public sealed class CartController : Controller
     }
 
     [HttpPost]
-    public IActionResult Add(CartItemDto item)
+    public async Task<IActionResult> Add(int dietVariantId, int totalDays)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
+        CartItemDto item;
+        try
+        {
+            item = await dietOrderingService.CreateCartItemAsync(dietVariantId, totalDays);
+        }
+        catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException)
+        {
+            if (Request.Headers.ContainsKey("HX-Request"))
+                return BadRequest(ex.Message);
+
+            TempData["Error"] = ex.Message;
+            return RedirectToAction("Index", "Menu");
+        }
 
         var cart = GetSessionCart();
         cart = cartService.AddItem(cart, item);
