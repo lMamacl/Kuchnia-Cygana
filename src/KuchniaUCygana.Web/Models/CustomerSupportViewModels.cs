@@ -13,5 +13,10 @@ public sealed class CustomerSupportDashboardViewModel
 
     public PagedList<TicketDto> TicketsPage { get; init; } = new();
 
+    public IReadOnlyDictionary<int, TicketOperationalContextDto> OperationalContexts { get; init; }
+        = new Dictionary<int, TicketOperationalContextDto>();
+
+    public IReadOnlyList<TicketDeliveryOptionDto> DeliveryOptions { get; init; } = [];
+
     public CreateTicketRequest NewTicket { get; init; } = new();
 }

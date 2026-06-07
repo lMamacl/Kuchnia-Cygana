@@ -3,6 +3,7 @@ using KuchniaUCygana.Application.DTOs.HR;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
+using KuchniaUCygana.Web.Filters;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -87,6 +88,7 @@ public sealed class AccountController : Controller
     [Authorize]
     [HttpPost]
     [Route("account/profile/leave")]
+    [AllowOutsideShift]
     public async Task<IActionResult> RequestLeave(CreateLeaveRequestRequest request)
     {
         var employee = await GetCurrentEmployeeAsync();

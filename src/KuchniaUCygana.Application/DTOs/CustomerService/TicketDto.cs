@@ -12,6 +12,10 @@ public sealed class TicketDto
 
     public string? ClientFullName { get; set; }
 
+    public int? OrderId { get; set; }
+
+    public int? DeliveryCalendarId { get; set; }
+
     public int? AssignedToUserId { get; set; }
 
     public string? AssignedToFullName { get; set; }

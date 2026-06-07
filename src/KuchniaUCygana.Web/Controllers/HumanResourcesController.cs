@@ -1,6 +1,7 @@
 using KuchniaUCygana.Application.DTOs.HR;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Notifications;
+using KuchniaUCygana.Web.Filters;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -162,6 +163,7 @@ public sealed class HumanResourcesController : Controller
     }
 
     [HttpPost("leaves")]
+    [AllowOutsideShift]
     public async Task<IActionResult> CreateLeaveRequest(CreateLeaveRequestRequest request)
     {
         if (!ModelState.IsValid)
@@ -261,6 +263,7 @@ public sealed class HumanResourcesController : Controller
     }
 
     [HttpPost("schedules")]
+    [AllowOutsideShift]
     public async Task<IActionResult> CreateWorkSchedule(CreateWorkScheduleRequest request)
     {
         if (!ModelState.IsValid)
@@ -306,6 +309,7 @@ public sealed class HumanResourcesController : Controller
 
     [Authorize(Roles = "HRManager,Admin")]
     [HttpPost("schedules/{id:int}/delete")]
+    [AllowOutsideShift]
     public async Task<IActionResult> DeleteWorkSchedule(int id)
     {
         var deleted = await humanResourcesService.DeleteWorkScheduleAsync(id);

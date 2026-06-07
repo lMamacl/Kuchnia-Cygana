@@ -62,6 +62,8 @@ public sealed class CustomerSupportController : Controller
                     ticket.Title,
                     ticket.ClientUserId,
                     ticket.ClientFullName,
+                    ticket.OrderId,
+                    ticket.DeliveryCalendarId,
                     ticket.Priority,
                     ticket.Status,
                 },
@@ -178,16 +180,23 @@ public sealed class CustomerSupportController : Controller
         var tickets = (await customerSupportService.GetTicketsAsync()).ToArray();
         var openTickets = (await customerSupportService.GetOpenTicketsAsync()).ToArray();
         var users = (await userService.GetAllAsync()).ToArray();
+        var ticketsPageModel = PagedList<TicketDto>.Create(
+            tickets.OrderByDescending(ticket => ticket.CreatedAt),
+            ticketsPage,
+            pageSize);
+        var today = DateTime.Today;
+        var deliveryOptions = await customerSupportService.GetDeliveryOptionsAsync(
+            today.AddDays(-21),
+            today.AddDays(14));
 
         return new CustomerSupportDashboardViewModel
         {
             Tickets = tickets,
             OpenTickets = openTickets,
             Users = users,
-            TicketsPage = PagedList<TicketDto>.Create(
-                tickets.OrderByDescending(ticket => ticket.CreatedAt),
-                ticketsPage,
-                pageSize),
+            TicketsPage = ticketsPageModel,
+            OperationalContexts = await customerSupportService.GetOperationalContextsAsync(ticketsPageModel.Items),
+            DeliveryOptions = deliveryOptions,
             NewTicket = newTicket ?? new CreateTicketRequest(),
         };
     }

@@ -4,6 +4,7 @@ using KuchniaUCygana.Application;
 using KuchniaUCygana.Infrastructure;
 using KuchniaUCygana.Infrastructure.Persistence.Migrations;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
+using KuchniaUCygana.Web.Filters;
 using KuchniaUCygana.Web.ModelBinding;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
@@ -81,6 +82,7 @@ builder.Services.AddSession(options =>
 builder.Services.AddControllersWithViews(options =>
     {
         options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+        options.Filters.Add<StaffShiftGuardFilter>();
         options.ModelBinderProviders.Insert(0, new FlexibleDecimalModelBinderProvider());
     })
     .AddFluentValidation(fv => fv.RegisterValidatorsFromAssemblyContaining<Program>());

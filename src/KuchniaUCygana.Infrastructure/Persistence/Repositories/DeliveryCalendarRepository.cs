@@ -18,6 +18,26 @@ public sealed class DeliveryCalendarRepository : BaseRepository<DeliveryCalendar
         return await db.QueryAsync<DeliveryCalendar>(sql, new { OrderId = orderId });
     }
 
+    public async Task<IEnumerable<DeliveryCalendar>> GetByDateRangeAsync(DateTime fromInclusive, DateTime toExclusive)
+    {
+        using var db = Factory.CreateConnection();
+        const string sql = @"
+            SELECT *
+            FROM DeliveryCalendar
+            WHERE DeliveryDate >= @FromInclusive
+              AND DeliveryDate < @ToExclusive
+              AND IsDeleted = 0
+            ORDER BY DeliveryDate DESC, Id DESC";
+
+        return await db.QueryAsync<DeliveryCalendar>(
+            sql,
+            new
+            {
+                FromInclusive = fromInclusive.Date,
+                ToExclusive = toExclusive.Date,
+            });
+    }
+
     public async Task<IEnumerable<DeliveryCalendar>> GetScheduledForDateAsync(DateTime date)
     {
         using var db = Factory.CreateConnection();

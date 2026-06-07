@@ -500,11 +500,11 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await db.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO [Tickets]
-                ([Title], [Description], [ClientUserId], [AssignedToUserId], [Status], [Priority],
+                ([Title], [Description], [ClientUserId], [OrderId], [DeliveryCalendarId], [AssignedToUserId], [Status], [Priority],
                  [ClosedAt], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy],
                  [CreatedAt], [UpdatedAt])
             SELECT
-                @Title, @Description, client.[Id], assigned.[Id], @Status, @Priority,
+                @Title, @Description, client.[Id], NULL, NULL, assigned.[Id], @Status, @Priority,
                 @ClosedAt, @CreatedBy, NULL, 0, NULL, NULL, @CreatedAt, NULL
             FROM [Users] client
             OUTER APPLY (
@@ -804,6 +804,13 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                OR [Notes] LIKE N'%Demo lifecycle%'
                OR [Notes] LIKE N'%Wspolny demo seed%';
 
+            UPDATE [Tickets]
+            SET [OrderId] = NULL,
+                [DeliveryCalendarId] = NULL,
+                [UpdatedAt] = SYSUTCDATETIME()
+            WHERE [OrderId] IN (SELECT [Id] FROM @DemoOrders)
+               OR [DeliveryCalendarId] IN (SELECT [Id] FROM @DemoDeliveryCalendar);
+
             DELETE FROM [BoxLabels]
             WHERE [PackingItemId] IN (SELECT [Id] FROM @DemoItems);
 
@@ -1093,6 +1100,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         }
 
         await EnsureUnifiedDemoProductionPlanAsync(today, auditUser, cancellationToken);
+        await SeedModule5TicketOrderLinksAsync(db, today, now, cancellationToken);
 
         this.logger.LogInformation(
             "Seeded unified M1/M2/M3/M4 demo data for {DemoDate}: {VehicleCount} vehicles, {DriverCount} drivers, {DeliveryCount} delivery candidates.",
@@ -1100,6 +1108,58 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             vehicles.Length,
             drivers.Length,
             deliveries.Length);
+    }
+
+    private async Task SeedModule5TicketOrderLinksAsync(
+        IDbConnection db,
+        DateOnly today,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            DECLARE @Links TABLE
+            (
+                [Title] nvarchar(200) NOT NULL,
+                [OrderNumber] nvarchar(100) NOT NULL
+            );
+
+            INSERT INTO @Links ([Title], [OrderNumber])
+            VALUES
+                (N'Brak jednego pudelka w dostawie', @OrderNumber03),
+                (N'Dostawa poza oknem czasowym', @OrderNumber05),
+                (N'Alergen niezgodny z profilem', @OrderNumber07),
+                (N'Reklamacja temperatury posilku', @OrderNumber10),
+                (N'Dodatkowa informacja dla kuriera', @OrderNumber12),
+                (N'Zmiana adresu dostawy na jutro', @OrderNumber01);
+
+            UPDATE ticket
+            SET ticket.[ClientUserId] = orders.[CustomerId],
+                ticket.[OrderId] = orders.[Id],
+                ticket.[DeliveryCalendarId] = deliveries.[Id],
+                ticket.[UpdatedAt] = @UpdatedAt
+            FROM [Tickets] ticket
+            INNER JOIN @Links links ON links.[Title] = ticket.[Title]
+            INNER JOIN [Orders] orders
+                ON orders.[OrderNumber] = links.[OrderNumber]
+               AND orders.[IsDeleted] = 0
+            INNER JOIN [DeliveryCalendar] deliveries
+                ON deliveries.[OrderId] = orders.[Id]
+               AND deliveries.[IsDeleted] = 0
+            WHERE ticket.[CreatedBy] = N'DatabaseSeeder'
+              AND ticket.[IsDeleted] = 0;
+            """,
+            new
+            {
+                OrderNumber01 = $"DEMO-M4-{today:yyyyMMdd}-01",
+                OrderNumber03 = $"DEMO-M4-{today:yyyyMMdd}-03",
+                OrderNumber05 = $"DEMO-M4-{today:yyyyMMdd}-05",
+                OrderNumber07 = $"DEMO-M4-{today:yyyyMMdd}-07",
+                OrderNumber10 = $"DEMO-M4-{today:yyyyMMdd}-10",
+                OrderNumber12 = $"DEMO-M4-{today:yyyyMMdd}-12",
+                UpdatedAt = now,
+            },
+            cancellationToken: cancellationToken));
     }
 
     private async Task EnsureUnifiedDemoProductionPlanAsync(

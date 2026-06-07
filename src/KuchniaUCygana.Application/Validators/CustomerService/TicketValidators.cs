@@ -9,6 +9,14 @@ public sealed class CreateTicketRequestValidator : AbstractValidator<CreateTicke
     {
         RuleFor(x => x.ClientUserId).GreaterThan(0);
 
+        RuleFor(x => x.OrderId)
+            .GreaterThan(0)
+            .When(x => x.OrderId.HasValue);
+
+        RuleFor(x => x.DeliveryCalendarId)
+            .GreaterThan(0)
+            .When(x => x.DeliveryCalendarId.HasValue);
+
         RuleFor(x => x.Title)
             .NotEmpty().WithMessage("Tytul zgloszenia jest wymagany.")
             .MaximumLength(200);
@@ -33,6 +41,14 @@ public sealed class UpdateTicketRequestValidator : AbstractValidator<UpdateTicke
 
         RuleFor(x => x.Description)
             .NotEmpty().WithMessage("Opis zgloszenia jest wymagany.");
+
+        RuleFor(x => x.OrderId)
+            .GreaterThan(0)
+            .When(x => x.OrderId.HasValue);
+
+        RuleFor(x => x.DeliveryCalendarId)
+            .GreaterThan(0)
+            .When(x => x.DeliveryCalendarId.HasValue);
 
         RuleFor(x => x.AssignedToUserId)
             .GreaterThan(0)

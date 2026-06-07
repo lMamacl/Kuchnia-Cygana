@@ -7,10 +7,12 @@ using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.ExternalServices.Maps;
 using KuchniaUCygana.Web.Models.Logistics;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
+[Authorize(Roles = "Logistics,LogisticsManager,Admin")]
 [Route("logistics")]
 public sealed class LogisticsController : Controller
 {

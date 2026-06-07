@@ -15,6 +15,10 @@ public interface ICustomerSupportService
 
     Task<TicketDto?> GetTicketByIdAsync(int id);
 
+    Task<IReadOnlyDictionary<int, TicketOperationalContextDto>> GetOperationalContextsAsync(IEnumerable<TicketDto> tickets);
+
+    Task<IReadOnlyList<TicketDeliveryOptionDto>> GetDeliveryOptionsAsync(DateTime fromInclusive, DateTime toInclusive);
+
     Task<TicketDto> CreateTicketAsync(CreateTicketRequest request);
 
     Task<TicketDto?> UpdateTicketAsync(int id, UpdateTicketRequest request);
