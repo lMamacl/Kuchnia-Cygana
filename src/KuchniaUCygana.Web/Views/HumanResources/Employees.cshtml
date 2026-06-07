@@ -3,89 +3,17 @@
     Layout = "_LayoutStaff";
     var employeesPage = Model.EmployeesPage;
     var usersById = Model.Users.ToDictionary(user => user.Id);
-    var staffUsers = Model.Users
-        .Where(user => !string.Equals(user.Role, "Client", StringComparison.Ordinal))
-        .OrderBy(user => user.FullName)
-        .ToArray();
 }
 
 <div class="row row-cards">
-    <div class="col-xl-4">
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Nowy pracownik</h3>
-            </div>
-            <form asp-action="CreateEmployee" method="post">
-                @Html.AntiForgeryToken()
-                <div class="card-body">
-                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
-                    <div class="mb-3">
-                        <label class="form-label" for="employee-user">Uzytkownik</label>
-                        <select id="employee-user" class="form-select" name="UserId" required>
-                            <option value="">Wybierz konto pracownicze</option>
-                            @foreach (var user in staffUsers)
-                            {
-                                <option value="@user.Id" selected="@(Model.NewEmployee.UserId == user.Id)">
-                                    @user.FullName (@user.Email, @user.Role)
-                                </option>
-                            }
-                        </select>
-                        @if (staffUsers.Length == 0)
-                        {
-                            <div class="form-hint text-warning">Brak kont pracowniczych w bazie.</div>
-                        }
-                    </div>
-                    <div class="row g-2">
-                        <div class="col-sm-6">
-                            <label class="form-label" for="employee-first-name">Imie</label>
-                            <input id="employee-first-name" class="form-control" name="FirstName" value="@Model.NewEmployee.FirstName" maxlength="50" required />
-                        </div>
-                        <div class="col-sm-6">
-                            <label class="form-label" for="employee-last-name">Nazwisko</label>
-                            <input id="employee-last-name" class="form-control" name="LastName" value="@Model.NewEmployee.LastName" maxlength="50" required />
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <label class="form-label" for="employee-email">Email</label>
-                        <input id="employee-email" class="form-control" name="Email" type="email" value="@Model.NewEmployee.Email" maxlength="100" required />
-                    </div>
-                    <div class="mt-3">
-                        <label class="form-label" for="employee-phone">Telefon</label>
-                        <input id="employee-phone" class="form-control" name="PhoneNumber" value="@Model.NewEmployee.PhoneNumber" maxlength="15" />
-                    </div>
-                    <div class="row g-2 mt-1">
-                        <div class="col-sm-6">
-                            <label class="form-label" for="employee-hire">Data zatrudnienia</label>
-                            <input id="employee-hire" class="form-control" name="HireDate" type="date" value="@Model.NewEmployee.HireDate.ToString("yyyy-MM-dd")" required />
-                        </div>
-                        <div class="col-sm-6">
-                            <label class="form-label" for="employee-department">Dzial</label>
-                            <select id="employee-department" class="form-select" name="DepartmentId" required>
-                                <option value="">Wybierz dzial</option>
-                                @foreach (var department in Model.Departments.OrderBy(x => x.Name))
-                                {
-                                    <option value="@department.Id" selected="@(Model.NewEmployee.DepartmentId == department.Id)">@department.Name</option>
-                                }
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <label class="form-label" for="employee-position">Stanowisko</label>
-                        <input id="employee-position" class="form-control" name="Position" value="@Model.NewEmployee.Position" maxlength="100" required />
-                    </div>
-                    <input type="hidden" name="IsActive" value="true" />
-                </div>
-                <div class="card-footer text-end">
-                    <button class="btn btn-primary" type="submit">Dodaj pracownika</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    <div class="col-xl-8">
+    <div class="col-12">
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Pracownicy</h3>
-                <span class="text-secondary small">Pokazuje @employeesPage.FirstItem-@employeesPage.LastItem z @employeesPage.TotalCount</span>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="text-secondary small">Pokazuje @employeesPage.FirstItem-@employeesPage.LastItem z @employeesPage.TotalCount</span>
+                    <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewEmployee">Dodaj pracownika</a>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">

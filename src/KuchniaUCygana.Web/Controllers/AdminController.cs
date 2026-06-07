@@ -56,6 +56,15 @@ public sealed class AdminController : Controller
         return View(await BuildModelAsync(usersPage: page, usersPageSize: pageSize));
     }
 
+    [HttpGet("users/new")]
+    public async Task<IActionResult> NewUser()
+    {
+        ViewData["Title"] = "Nowy uzytkownik";
+        ViewData["Section"] = "Administracja";
+        ViewData["Description"] = "Tworzenie konta uzytkownika.";
+        return View(await BuildModelAsync());
+    }
+
     [HttpGet("roles")]
     public async Task<IActionResult> Roles()
     {
@@ -95,19 +104,22 @@ public sealed class AdminController : Controller
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
         {
             TempData["Error"] = "Podaj email oraz haslo dluzsze niz 5 znakow.";
-            return RedirectToAction(nameof(Users));
+            SetNewUserViewData();
+            return View("NewUser", await BuildModelAsync(newUser: request));
         }
 
         if (!IsAllowedRole(role))
         {
             TempData["Error"] = "Wybrana rola nie jest dostepna.";
-            return RedirectToAction(nameof(Users));
+            SetNewUserViewData();
+            return View("NewUser", await BuildModelAsync(newUser: request));
         }
 
         if (await userRepository.FindByEmailAsync(email) is not null)
         {
             TempData["Error"] = "Konto z takim adresem email juz istnieje.";
-            return RedirectToAction(nameof(Users));
+            SetNewUserViewData();
+            return View("NewUser", await BuildModelAsync(newUser: request));
         }
 
         var user = new User
@@ -335,6 +347,7 @@ public sealed class AdminController : Controller
 
     private async Task<AdminDashboardViewModel> BuildModelAsync(
         AuditLogFilterViewModel? filter = null,
+        CreateAdminUserViewModel? newUser = null,
         int usersPage = 1,
         int usersPageSize = 10)
     {
@@ -355,7 +368,15 @@ public sealed class AdminController : Controller
             UsersPage = PagedList<UserDto>.Create(users, usersPage, usersPageSize),
             AuditPage = auditPage,
             AuditFilter = auditFilter,
+            NewUser = newUser ?? new CreateAdminUserViewModel(),
         };
+    }
+
+    private void SetNewUserViewData()
+    {
+        ViewData["Title"] = "Nowy uzytkownik";
+        ViewData["Section"] = "Administracja";
+        ViewData["Description"] = "Tworzenie konta uzytkownika.";
     }
 
     private static bool IsAllowedRole(string role)

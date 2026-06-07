@@ -28,54 +28,14 @@
 }
 
 <div class="row row-cards">
-    <div class="col-lg-4">
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Nowy wniosek</h3>
-            </div>
-            <form asp-action="CreateLeaveRequest" method="post">
-                @Html.AntiForgeryToken()
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label" for="leave-employee">Pracownik</label>
-                        <select id="leave-employee" class="form-select" name="EmployeeId" required>
-                            <option value="">Wybierz pracownika</option>
-                            @foreach (var employee in Model.Employees.Where(x => x.IsActive).OrderBy(x => x.FullName))
-                            {
-                                <option value="@employee.Id" selected="@(Model.NewLeaveRequest.EmployeeId == employee.Id)">@employee.FullName</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="leave-type">Typ urlopu</label>
-                        <select id="leave-type" class="form-select" name="LeaveType">
-                            <option value="0" selected="@(Model.NewLeaveRequest.LeaveType == 0)">Wypoczynkowy</option>
-                            <option value="1" selected="@(Model.NewLeaveRequest.LeaveType == 1)">Chorobowy</option>
-                            <option value="2" selected="@(Model.NewLeaveRequest.LeaveType == 2)">Okolicznosciowy</option>
-                        </select>
-                    </div>
-                    <div class="row g-2">
-                        <div class="col-sm-6">
-                            <label class="form-label" for="leave-start">Od</label>
-                            <input id="leave-start" class="form-control" name="StartDate" type="date" value="@Model.NewLeaveRequest.StartDate.ToString("yyyy-MM-dd")" required />
-                        </div>
-                        <div class="col-sm-6">
-                            <label class="form-label" for="leave-end">Do</label>
-                            <input id="leave-end" class="form-control" name="EndDate" type="date" value="@Model.NewLeaveRequest.EndDate.ToString("yyyy-MM-dd")" required />
-                        </div>
-                    </div>
-                </div>
-                <div class="card-footer text-end">
-                    <button class="btn btn-primary" type="submit">Dodaj wniosek</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    <div class="col-lg-8">
+    <div class="col-12">
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Wnioski urlopowe</h3>
-                <span class="text-secondary small">Pokazuje @leaveRequestsPage.FirstItem-@leaveRequestsPage.LastItem z @leaveRequestsPage.TotalCount</span>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="text-secondary small">Pokazuje @leaveRequestsPage.FirstItem-@leaveRequestsPage.LastItem z @leaveRequestsPage.TotalCount</span>
+                    <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewLeaveRequest">Nowy wniosek</a>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">

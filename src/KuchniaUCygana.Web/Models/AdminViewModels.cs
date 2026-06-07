@@ -16,6 +16,8 @@ public sealed class AdminDashboardViewModel
     public SystemLogPageDto AuditPage { get; init; } = new();
 
     public AuditLogFilterViewModel AuditFilter { get; init; } = new();
+
+    public CreateAdminUserViewModel NewUser { get; init; } = new();
 }
 
 public sealed class CreateAdminUserViewModel

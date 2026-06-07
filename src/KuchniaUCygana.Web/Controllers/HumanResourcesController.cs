@@ -83,13 +83,20 @@ public sealed class HumanResourcesController : Controller
         return View(await BuildModelAsync(employeesPage: page, pageSize: pageSize));
     }
 
+    [HttpGet("employees/new")]
+    public async Task<IActionResult> NewEmployee()
+    {
+        SetViewData("Nowy pracownik", "Kadry", "Dodanie pracownika do kartoteki HR.");
+        return View(await BuildModelAsync());
+    }
+
     [HttpPost("employees")]
     public async Task<IActionResult> CreateEmployee(CreateEmployeeRequest request)
     {
         if (!ModelState.IsValid)
         {
-            SetViewData("Pracownicy", "Kadry", "Kartoteka pracownikow i status zatrudnienia.");
-            return View("Employees", await BuildModelAsync(newEmployee: request));
+            SetViewData("Nowy pracownik", "Kadry", "Dodanie pracownika do kartoteki HR.");
+            return View("NewEmployee", await BuildModelAsync(newEmployee: request));
         }
 
         try
@@ -122,7 +129,7 @@ public sealed class HumanResourcesController : Controller
         catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
-            return RedirectToAction(nameof(Employees));
+            return RedirectToAction(nameof(NewEmployee));
         }
     }
 
@@ -217,14 +224,22 @@ public sealed class HumanResourcesController : Controller
         return View(await BuildModelAsync(leaveRequestsPage: page, pageSize: pageSize));
     }
 
+    [HttpGet("leaves/new")]
+    [AllowOutsideShift]
+    public async Task<IActionResult> NewLeaveRequest()
+    {
+        SetViewData("Nowy wniosek", "Kadry", "Rejestracja wniosku urlopowego.");
+        return View(await BuildModelAsync());
+    }
+
     [HttpPost("leaves")]
     [AllowOutsideShift]
     public async Task<IActionResult> CreateLeaveRequest(CreateLeaveRequestRequest request)
     {
         if (!ModelState.IsValid)
         {
-            SetViewData("Urlopy", "Kadry", "Wnioski urlopowe i decyzje kadrowe.");
-            return View("Leaves", await BuildModelAsync(newLeaveRequest: request));
+            SetViewData("Nowy wniosek", "Kadry", "Rejestracja wniosku urlopowego.");
+            return View("NewLeaveRequest", await BuildModelAsync(newLeaveRequest: request));
         }
 
         try
@@ -258,7 +273,7 @@ public sealed class HumanResourcesController : Controller
         catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
-            return RedirectToAction(nameof(Leaves));
+            return RedirectToAction(nameof(NewLeaveRequest));
         }
     }
 
@@ -317,14 +332,22 @@ public sealed class HumanResourcesController : Controller
         return View(await BuildModelAsync(workSchedulesPage: page, pageSize: pageSize));
     }
 
+    [HttpGet("schedules/new")]
+    [AllowOutsideShift]
+    public async Task<IActionResult> NewWorkSchedule()
+    {
+        SetViewData("Nowa zmiana", "Kadry", "Dodanie zmiany do grafiku.");
+        return View(await BuildModelAsync());
+    }
+
     [HttpPost("schedules")]
     [AllowOutsideShift]
     public async Task<IActionResult> CreateWorkSchedule(CreateWorkScheduleRequest request)
     {
         if (!ModelState.IsValid)
         {
-            SetViewData("Grafik", "Kadry", "Zmiany pracownikow i role na zmianie.");
-            return View("Schedules", await BuildModelAsync(newWorkSchedule: request));
+            SetViewData("Nowa zmiana", "Kadry", "Dodanie zmiany do grafiku.");
+            return View("NewWorkSchedule", await BuildModelAsync(newWorkSchedule: request));
         }
 
         try
@@ -358,8 +381,73 @@ public sealed class HumanResourcesController : Controller
         catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(NewWorkSchedule));
+        }
+    }
+
+    [HttpPost("schedules/{id:int}/update")]
+    [AllowOutsideShift]
+    public async Task<IActionResult> UpdateWorkSchedule(int id, UpdateWorkScheduleRequest request)
+    {
+        request.Id = id;
+        var before = await humanResourcesService.GetWorkScheduleByIdAsync(id);
+
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = "Niepoprawne dane zmiany.";
             return RedirectToAction(nameof(Schedules));
         }
+
+        try
+        {
+            var schedule = await humanResourcesService.UpdateWorkScheduleAsync(id, request);
+            if (schedule is null)
+            {
+                TempData["Error"] = "Nie znaleziono zmiany w grafiku.";
+                return RedirectToAction(nameof(Schedules));
+            }
+
+            await staffActivityService.RecordAsync(
+                "HR.UpdateWorkSchedule",
+                "WorkSchedule",
+                schedule.Id.ToString(),
+                oldValue: before is null
+                    ? null
+                    : new
+                    {
+                        before.Id,
+                        before.UserId,
+                        before.EmployeeFullName,
+                        before.ShiftDate,
+                        before.Shift,
+                        before.RoleAtShift,
+                    },
+                newValue: new
+                {
+                    schedule.Id,
+                    schedule.UserId,
+                    schedule.EmployeeFullName,
+                    schedule.ShiftDate,
+                    schedule.Shift,
+                    schedule.RoleAtShift,
+                },
+                notification: BuildNotification(
+                    "HR",
+                    NotificationSeverity.Info,
+                    "Zmieniono grafik",
+                    $"{schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}"} ma zaktualizowana zmiane {schedule.ShiftDate:dd.MM.yyyy}.",
+                    "/hr/schedules",
+                    "WorkSchedule",
+                    schedule.Id),
+                notifyRoles: HrNotificationRoles);
+            TempData["Success"] = "Zmiana w grafiku zostala zaktualizowana.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Schedules));
     }
 
     [Authorize(Roles = "HRManager,Admin")]
