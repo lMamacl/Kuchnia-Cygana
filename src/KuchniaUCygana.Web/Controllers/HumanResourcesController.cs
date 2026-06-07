@@ -133,19 +133,22 @@ public sealed class HumanResourcesController : Controller
         }
     }
 
-    [HttpPost("employees/{id:int}/department")]
-    public async Task<IActionResult> ChangeEmployeeDepartment(int id, int departmentId)
+    [HttpPost("employees/{id:int}/assignment")]
+    public async Task<IActionResult> ChangeEmployeeAssignment(int id, int departmentId, string position)
     {
+        var normalizedPosition = position?.Trim() ?? string.Empty;
         var before = await humanResourcesService.GetEmployeeByIdAsync(id);
-        if (before is not null && before.DepartmentId == departmentId)
+        if (before is not null &&
+            before.DepartmentId == departmentId &&
+            string.Equals(before.Position, normalizedPosition, StringComparison.Ordinal))
         {
-            TempData["Success"] = "Pracownik jest juz przypisany do wybranego dzialu.";
+            TempData["Success"] = "Pracownik ma juz wybrany dzial i stanowisko.";
             return RedirectToAction(nameof(Employees));
         }
 
         try
         {
-            var employee = await humanResourcesService.ChangeEmployeeDepartmentAsync(id, departmentId);
+            var employee = await humanResourcesService.ChangeEmployeeAssignmentAsync(id, departmentId, normalizedPosition);
             if (employee is null)
             {
                 TempData["Error"] = "Nie znaleziono pracownika.";
@@ -153,7 +156,7 @@ public sealed class HumanResourcesController : Controller
             }
 
             await staffActivityService.RecordAsync(
-                "HR.ChangeEmployeeDepartment",
+                "HR.ChangeEmployeeAssignment",
                 "Employee",
                 employee.Id.ToString(),
                 oldValue: new
@@ -161,6 +164,7 @@ public sealed class HumanResourcesController : Controller
                     Id = before?.Id ?? employee.Id,
                     DepartmentId = before?.DepartmentId,
                     DepartmentName = before?.DepartmentName,
+                    Position = before?.Position,
                 },
                 newValue: new
                 {
@@ -168,17 +172,18 @@ public sealed class HumanResourcesController : Controller
                     employee.FullName,
                     employee.DepartmentId,
                     employee.DepartmentName,
+                    employee.Position,
                 },
                 notification: BuildNotification(
                     "HR",
                     NotificationSeverity.Info,
-                    "Zmieniono dzial pracownika",
-                    $"{employee.FullName} przeniesiono do dzialu {employee.DepartmentName ?? "bez nazwy"}.",
+                    "Zmieniono przypisanie pracownika",
+                    $"{employee.FullName}: {employee.DepartmentName ?? "bez nazwy"}, {employee.Position}.",
                     "/hr/employees",
                     "Employee",
                     employee.Id),
                 notifyRoles: HrNotificationRoles);
-            TempData["Success"] = "Przypisanie pracownika do dzialu zostalo zmienione.";
+            TempData["Success"] = "Dzial i stanowisko pracownika zostaly zaktualizowane.";
         }
         catch (InvalidOperationException ex)
         {
