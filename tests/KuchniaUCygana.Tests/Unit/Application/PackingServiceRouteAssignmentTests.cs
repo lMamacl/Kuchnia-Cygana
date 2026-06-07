@@ -46,6 +46,34 @@ public sealed class PackingServiceRouteAssignmentTests
     }
 
     [Fact]
+    public async Task GetPackingBoardAsync_RejectsActiveOrderWithoutM1DeliveryAddress()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new ReorderedRouteManifestProvider(),
+            new MissingDeliveryAddressOrderProvider(date),
+            itemRepository);
+        await CreateSessionWithItemAsync(
+            date,
+            sessionRepository,
+            bagRepository,
+            itemRepository,
+            PackingItemStatus.Pending,
+            deliveryCalendarId: 100,
+            orderId: 1);
+
+        var act = async () => await service.GetPackingBoardAsync(date);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*adres*DeliveryCalendarId 100*");
+    }
+
+    [Fact]
     public async Task GenerateTransportLabelsAsync_DoesNotStoreClientNameInTransportLabelSnapshot()
     {
         var date = new DateOnly(2035, 6, 1);
@@ -1252,6 +1280,43 @@ public sealed class PackingServiceRouteAssignmentTests
         public Task<RouteEntry?> GetRouteByIdAsync(int routeId)
         {
             return Task.FromResult<RouteEntry?>(null);
+        }
+    }
+
+    private sealed class MissingDeliveryAddressOrderProvider : IOrderDataProvider
+    {
+        private readonly DateOnly date;
+
+        public MissingDeliveryAddressOrderProvider(DateOnly date)
+        {
+            this.date = date;
+        }
+
+        public Task<IEnumerable<ActiveOrderEntry>> GetActiveOrdersAsync(DateOnly deliveryDate)
+        {
+            return Task.FromResult<IEnumerable<ActiveOrderEntry>>(new[]
+            {
+                new ActiveOrderEntry
+                {
+                    DeliveryCalendarId = 100,
+                    OrderId = 1,
+                    ClientId = 1,
+                    ClientPublicId = "TEST0001",
+                    ClientName = "Klient 1",
+                    DietVariantId = 1,
+                    DeliveryDate = date,
+                },
+            });
+        }
+
+        public Task<ActiveOrderEntry?> GetOrderByIdAsync(int orderId)
+        {
+            return Task.FromResult<ActiveOrderEntry?>(null);
+        }
+
+        public Task<IEnumerable<OrderDeliveryInfo>> GetDeliveriesForDateAsync(DateTime date)
+        {
+            return Task.FromResult(Enumerable.Empty<OrderDeliveryInfo>());
         }
     }
 

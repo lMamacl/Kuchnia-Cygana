@@ -58,18 +58,16 @@ public sealed class DependencyInjectionTests
         provider.GetRequiredService<IDbConnectionFactory>().Should().BeOfType<SqlServerConnectionFactory>();
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("Mock")]
-    public void AddInfrastructure_Registers_MockOrderProvider_ByDefault(string? orderProvider)
+    [Fact]
+    public void AddInfrastructure_Registers_M1OrderProvider_ByDefault()
     {
-        var config = CreateConfiguration(orderProvider);
+        var config = CreateConfiguration();
         var services = new ServiceCollection();
 
         services.AddInfrastructure(config);
         var provider = services.BuildServiceProvider();
 
-        provider.GetRequiredService<IOrderDataProvider>().Should().BeOfType<MockOrderDataProvider>();
+        provider.GetRequiredService<IOrderDataProvider>().Should().BeOfType<M1OrderDataProvider>();
     }
 
     [Fact]
@@ -85,9 +83,45 @@ public sealed class DependencyInjectionTests
     }
 
     [Fact]
+    public void AddInfrastructure_Registers_MockOrderProvider_WhenExplicitlyConfigured()
+    {
+        var config = CreateConfiguration("Mock");
+        var services = new ServiceCollection();
+
+        services.AddInfrastructure(config);
+        var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IOrderDataProvider>().Should().BeOfType<MockOrderDataProvider>();
+    }
+
+    [Fact]
+    public void AddInfrastructure_Rejects_UnknownOrderProvider()
+    {
+        var config = CreateConfiguration("M!Typo");
+        var services = new ServiceCollection();
+
+        var action = () => services.AddInfrastructure(config);
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*OrderProvider*");
+    }
+
+    [Fact]
     public void AddInfrastructure_Registers_M4DeliveryManifestProvider_ByDefault()
     {
         var config = CreateConfiguration();
+        var services = new ServiceCollection();
+
+        services.AddInfrastructure(config);
+        var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IDeliveryManifestProvider>().Should().BeOfType<M4DeliveryManifestProvider>();
+    }
+
+    [Fact]
+    public void AddInfrastructure_Registers_M4DeliveryManifestProvider_WhenConfigured()
+    {
+        var config = CreateConfiguration(deliveryManifestProvider: "M4");
         var services = new ServiceCollection();
 
         services.AddInfrastructure(config);
@@ -106,6 +140,18 @@ public sealed class DependencyInjectionTests
         var provider = services.BuildServiceProvider();
 
         provider.GetRequiredService<IDeliveryManifestProvider>().Should().BeOfType<MockDeliveryManifestProvider>();
+    }
+
+    [Fact]
+    public void AddInfrastructure_Rejects_UnknownDeliveryManifestProvider()
+    {
+        var config = CreateConfiguration(deliveryManifestProvider: "M4Typo");
+        var services = new ServiceCollection();
+
+        var action = () => services.AddInfrastructure(config);
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*DeliveryManifestProvider*");
     }
 
     [Fact]

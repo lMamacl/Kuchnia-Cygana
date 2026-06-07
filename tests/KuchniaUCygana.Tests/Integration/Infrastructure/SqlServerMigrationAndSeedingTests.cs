@@ -114,7 +114,7 @@ public sealed class SqlServerMigrationAndSeedingTests
 
         var today = DateTime.Today;
         var tomorrow = today.AddDays(1);
-        var orderNumberPrefix = $"DEMO-M4-{DateOnly.FromDateTime(today):yyyyMMdd}-%";
+        var orderNumberPrefix = $"DEMO-M1-{DateOnly.FromDateTime(today):yyyyMMdd}-%";
 
         var todayPlanCount = await ScalarIntAsync(
             connection,
@@ -163,6 +163,25 @@ public sealed class SqlServerMigrationAndSeedingTests
             "SELECT COUNT(1) FROM [Orders] WHERE [OrderNumber] LIKE @orderNumberPrefix AND [IsDeleted] = 0;",
             ("@orderNumberPrefix", orderNumberPrefix));
         orderCount.Should().BeGreaterThanOrEqualTo(14);
+
+        var legacyM4CustomerCount = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(1) FROM [Users] WHERE [Email] LIKE N'demo-m4-klient-%@kuchnia.local';");
+        legacyM4CustomerCount.Should().Be(0);
+
+        var unifiedCustomerCount = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(DISTINCT u.[Id])
+            FROM [Users] u
+            INNER JOIN [Orders] o ON o.[CustomerId] = u.[Id]
+            WHERE o.[OrderNumber] LIKE @orderNumberPrefix
+              AND o.[IsDeleted] = 0
+              AND u.[Role] = N'Client'
+              AND u.[Email] LIKE N'demo-klient-%@kuchnia.local';
+            """,
+            ("@orderNumberPrefix", orderNumberPrefix));
+        unifiedCustomerCount.Should().Be(orderCount);
 
         var deliveryCalendarCount = await ScalarIntAsync(
             connection,
@@ -521,6 +540,48 @@ public sealed class SqlServerMigrationAndSeedingTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task DemoDataReset_Should_Remove_DemoCookingSessions_Before_ProductionPlanItems()
+    {
+        var seeder = new DatabaseSeeder(
+            new SqlServerConnectionFactory(this.fixture.AppConnectionString),
+            NullLogger<DatabaseSeeder>.Instance);
+
+        await seeder.SeedAsync(DatabaseSeedingProfile.DemoData, resetDemoData: true);
+
+        await using (var connection = new SqlConnection(this.fixture.AppConnectionString))
+        {
+            await connection.OpenAsync();
+
+            var insertedSessionId = await InsertCookingSessionForDemoProductionPlanItemAsync(connection);
+            insertedSessionId.Should().BeGreaterThan(0);
+
+            var insertedStepChecks = await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(1) FROM [CookingSessionStepChecks] WHERE [CookingSessionId] = @sessionId;",
+                ("@sessionId", insertedSessionId));
+            insertedStepChecks.Should().BeGreaterThan(0);
+        }
+
+        await seeder.SeedAsync(DatabaseSeedingProfile.DemoData, resetDemoData: true);
+
+        await using var verificationConnection = new SqlConnection(this.fixture.AppConnectionString);
+        await verificationConnection.OpenAsync();
+
+        var staleDemoSessions = await ScalarIntAsync(
+            verificationConnection,
+            """
+            SELECT COUNT(1)
+            FROM [CookingSessions] cs
+            INNER JOIN [ProductionPlanItems] ppi ON ppi.[Id] = cs.[ProductionPlanItemId]
+            INNER JOIN [ProductionPlans] pp ON pp.[Id] = ppi.[ProductionPlanId]
+            WHERE pp.[CreatedBy] = N'DemoSeeder'
+              AND cs.[CreatedBy] = N'IntegrationTest';
+            """);
+        staleDemoSessions.Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task DemoDataSeeding_Should_Replenish_PackagingInventory_WhenStockWasConsumed()
     {
         var seeder = new DatabaseSeeder(
@@ -591,7 +652,7 @@ public sealed class SqlServerMigrationAndSeedingTests
 
         var today = DateTime.Today;
         var todayOnly = DateOnly.FromDateTime(today);
-        var orderNumberPrefix = $"DEMO-M4-{todayOnly:yyyyMMdd}-%";
+        var orderNumberPrefix = $"DEMO-M1-{todayOnly:yyyyMMdd}-%";
 
         var orderCount = await ScalarIntAsync(
             connection,
@@ -960,6 +1021,71 @@ public sealed class SqlServerMigrationAndSeedingTests
                 VALUES (@DietVariantId, @MealId, 1.00, 999);
             END;
             """);
+    }
+
+    private static async Task<int> InsertCookingSessionForDemoProductionPlanItemAsync(SqlConnection connection)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            DECLARE @ProductionPlanItemId int =
+            (
+                SELECT TOP 1 ppi.[Id]
+                FROM [ProductionPlanItems] ppi
+                INNER JOIN [ProductionPlans] pp ON pp.[Id] = ppi.[ProductionPlanId]
+                WHERE pp.[CreatedBy] = N'DemoSeeder'
+                  AND pp.[IsDeleted] = 0
+                  AND ppi.[IsDeleted] = 0
+                ORDER BY ppi.[Id]
+            );
+
+            DECLARE @RecipeComponentVersionId int =
+            (
+                SELECT TOP 1 [Id]
+                FROM [RecipeComponentVersions]
+                WHERE [IsDeleted] = 0
+                ORDER BY [Id]
+            );
+
+            DECLARE @InstructionStepId int =
+            (
+                SELECT TOP 1 steps.[Id]
+                FROM [RecipeComponentInstructionSteps] steps
+                INNER JOIN [RecipeComponentInstructionSections] sections
+                    ON sections.[Id] = steps.[RecipeComponentInstructionSectionId]
+                WHERE steps.[IsDeleted] = 0
+                  AND sections.[IsDeleted] = 0
+                ORDER BY steps.[Id]
+            );
+
+            IF @ProductionPlanItemId IS NULL
+                THROW 51000, 'Demo production plan item was not seeded.', 1;
+
+            IF @RecipeComponentVersionId IS NULL
+                THROW 51001, 'Recipe component version was not seeded.', 1;
+
+            IF @InstructionStepId IS NULL
+                THROW 51002, 'Recipe component instruction step was not seeded.', 1;
+
+            INSERT INTO [CookingSessions]
+                ([RecipeComponentVersionId], [ProductionDate], [ProductionPlanItemId], [Status],
+                 [CreatedAt], [CreatedBy], [IsDeleted])
+            VALUES
+                (@RecipeComponentVersionId, CONVERT(date, GETDATE()), @ProductionPlanItemId, N'Draft',
+                 SYSDATETIMEOFFSET(), N'IntegrationTest', 0);
+
+            DECLARE @CookingSessionId int = CONVERT(int, SCOPE_IDENTITY());
+
+            INSERT INTO [CookingSessionStepChecks]
+                ([CookingSessionId], [RecipeComponentInstructionStepId], [Status],
+                 [CreatedAt], [CreatedBy], [IsDeleted])
+            VALUES
+                (@CookingSessionId, @InstructionStepId, N'Pending',
+                 SYSDATETIMEOFFSET(), N'IntegrationTest', 0);
+
+            SELECT @CookingSessionId;
+            """;
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync() ?? 0);
     }
 
     private static async Task<int> ScalarIntAsync(

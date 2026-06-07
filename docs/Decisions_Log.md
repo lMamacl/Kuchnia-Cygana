@@ -88,7 +88,7 @@ Projekt składa się z 5 modułów domenowych z wyraźnymi zależnościami kieru
 **Obszar:** `KuchniaUCygana.Domain.Interfaces.External`
 
 ### Decyzja
-Interfejsy kontraktów między modułami (`IOrderDataProvider`, `IDietDataProvider`, `IDeliveryManifestProvider`) definiowane w warstwie Domain. Implementacje mock w Domain/Mocks (tymczasowo), docelowe adaptery w Infrastructure (po integracji FAZY 5).
+Interfejsy kontraktów między modułami (`IOrderDataProvider`, `IDietDataProvider`, `IDeliveryManifestProvider`) definiowane w warstwie Domain. Runtime po integracji używa adapterów Infrastructure: M1 dla zamówień, M2 dla planów diet/menu oraz M4 dla manifestów logistycznych. Mocki zostają wyłącznie jako jawnie skonfigurowany tryb test/dev.
 
 ### Kontekst
 Moduł 3 (Produkcja) potrzebuje danych z Modułu 1 (zamówienia) i Modułu 2 (receptury), ale te moduły mogą nie być gotowe w momencie rozpoczęcia pracy nad M3. Potrzebna strategia umożliwiająca niezależny rozwój.

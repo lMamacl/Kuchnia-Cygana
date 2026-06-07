@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -35,8 +36,8 @@ public readonly record struct ProductionMealKey(
 
 /// <summary>
 /// Generator Planu Produkcji — tworzy dzienny plan na podstawie:
-/// - zamówień z M1 (IOrderDataProvider — mock)
-/// - planu diet z M2 (IDietDataProvider — prawdziwy adapter)
+/// - zamówień z M1 (IOrderDataProvider)
+/// - planu diet z M2 (IDietDataProvider)
 /// 
 /// Grupuje posiłki wg MealId+DietVariantId, oblicza Food Cost,
 /// przypisuje grupy produkcyjne i szacuje ETA.
@@ -224,6 +225,11 @@ public sealed class ProductionPlanGenerator
                     planItem.DietMenuPlanItemId == item.DietMenuPlanItemId.Value)
                 : null;
 
+            if (matchedPlanItem is null && item.DietMenuPlanItemId.HasValue)
+            {
+                throw CreateM2SnapshotMismatchException(item, productionDate);
+            }
+
             if (matchedPlanItem is null && item.MealVariantId.HasValue)
             {
                 matchedPlanItem = dietPlan.FirstOrDefault(planItem =>
@@ -236,13 +242,31 @@ public sealed class ProductionPlanGenerator
                 planItem.MealId == item.MealId.Value &&
                 planItem.DietVariantId == item.DietVariantId);
 
-            var key = matchedPlanItem is null
-                ? new ProductionMealKey(item.MealId.Value, item.DietVariantId, item.DietMenuPlanItemId, item.MealVariantId)
-                : CreateKey(matchedPlanItem);
+            if (matchedPlanItem is null)
+            {
+                throw CreateM2SnapshotMismatchException(item, productionDate);
+            }
+
+            var key = CreateKey(matchedPlanItem);
             quantities[key] = quantities.GetValueOrDefault(key) + 1;
         }
 
         return quantities;
+    }
+
+    private static InvalidOperationException CreateM2SnapshotMismatchException(
+        OrderItemInfo item,
+        DateOnly productionDate)
+    {
+        var mealVariantPart = item.MealVariantId.HasValue
+            ? item.MealVariantId.Value.ToString(CultureInfo.InvariantCulture)
+            : "brak";
+        var snapshotKey = item.DietMenuPlanItemId.HasValue
+            ? $"DietMenuPlanItemId {item.DietMenuPlanItemId.Value}"
+            : $"MealVariantId {mealVariantPart}";
+
+        return new InvalidOperationException(
+            $"Pozycja zamowienia z M1 nie pasuje do opublikowanego snapshotu M2 na dzien {productionDate:yyyy-MM-dd}: MealId {item.MealId.GetValueOrDefault()}, DietVariantId {item.DietVariantId}, {snapshotKey}.");
     }
 
     private static Dictionary<ProductionMealKey, int> CalculateLegacyDietVariantQuantities(

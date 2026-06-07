@@ -4,6 +4,7 @@ using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
+using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces.Orders;
 
 namespace KuchniaUCygana.Application.Services;
@@ -15,19 +16,22 @@ public sealed class OrderService : IOrderService
     private readonly IDeliveryCalendarRepository deliveryCalendarRepository;
     private readonly IAddressRepository addressRepository;
     private readonly IMapper mapper;
+    private readonly IDietDataProvider dietDataProvider;
 
     public OrderService(
         IOrderRepository orderRepository,
         IOrderItemRepository orderItemRepository,
         IDeliveryCalendarRepository deliveryCalendarRepository,
         IAddressRepository addressRepository,
-        IMapper mapper)
+        IMapper mapper,
+        IDietDataProvider dietDataProvider)
     {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.deliveryCalendarRepository = deliveryCalendarRepository;
         this.addressRepository = addressRepository;
         this.mapper = mapper;
+        this.dietDataProvider = dietDataProvider;
     }
 
     public async Task<IEnumerable<OrderSummaryDto>> GetByCustomerIdAsync(int customerId)
@@ -65,6 +69,8 @@ public sealed class OrderService : IOrderService
 
     public async Task<int> CreateOrderAsync(CreateOrderRequest request, int customerId)
     {
+        var materializedItems = await MaterializeOrderItemsAsync(request);
+
         // 1. Generuj unikalny numer zamowienia
         var orderNumber = await orderRepository.GenerateOrderNumberAsync();
 
@@ -88,21 +94,10 @@ public sealed class OrderService : IOrderService
         var orderId = await orderRepository.InsertAsync(order);
 
         // 4. Zapisz pozycje zamowienia
-        foreach (var item in request.Items)
+        foreach (var orderItem in materializedItems)
         {
-            var orderItem = new OrderItem
-            {
-                OrderId = orderId,
-                DietId = item.DietId,
-                DietVariantId = item.DietVariantId,
-                DietName = item.DietName,
-                VariantName = item.VariantName,
-                CaloriesPerDay = item.CaloriesPerDay,
-                PricePerDay = item.PricePerDay,
-                TotalDays = item.TotalDays,
-                TotalPrice = item.PricePerDay * item.TotalDays,
-                CreatedAt = DateTimeOffset.UtcNow,
-            };
+            orderItem.OrderId = orderId;
+            orderItem.CreatedAt = DateTimeOffset.UtcNow;
             await orderItemRepository.InsertAsync(orderItem);
         }
 
@@ -130,6 +125,90 @@ public sealed class OrderService : IOrderService
         }
 
         return orderId;
+    }
+
+    private async Task<List<OrderItem>> MaterializeOrderItemsAsync(CreateOrderRequest request)
+    {
+        var snapshots = new Dictionary<DateOnly, PublishedDietPlanSnapshotDto>();
+        var result = new List<OrderItem>();
+
+        foreach (var item in request.Items)
+        {
+            for (var dayOffset = 0; dayOffset < item.TotalDays; dayOffset++)
+            {
+                var deliveryDate = DateOnly.FromDateTime(request.StartDate.Date.AddDays(dayOffset));
+                var snapshot = await GetPublishedSnapshotAsync(deliveryDate, snapshots);
+                var planItems = snapshot.Items
+                    .Where(planItem => planItem.DietVariantId == item.DietVariantId)
+                    .OrderBy(planItem => planItem.SortOrder)
+                    .ThenBy(planItem => planItem.DietMenuPlanItemId)
+                    .ToList();
+
+                if (planItems.Count == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Opublikowany snapshot M2 na dzien {deliveryDate:yyyy-MM-dd} nie zawiera wariantu diety {item.DietVariantId}.");
+                }
+
+                AddMaterializedDayItems(result, item, deliveryDate, planItems);
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<PublishedDietPlanSnapshotDto> GetPublishedSnapshotAsync(
+        DateOnly deliveryDate,
+        Dictionary<DateOnly, PublishedDietPlanSnapshotDto> snapshots)
+    {
+        if (snapshots.TryGetValue(deliveryDate, out var cached))
+        {
+            return cached;
+        }
+
+        var snapshot = await dietDataProvider.GetPublishedPlanSnapshotAsync(deliveryDate);
+        if (snapshot is null)
+        {
+            throw new InvalidOperationException(
+                $"Brak opublikowanego snapshotu M2 dla dnia {deliveryDate:yyyy-MM-dd}. Nie mozna utworzyc zamowienia bez faktycznego planu menu.");
+        }
+
+        snapshots[deliveryDate] = snapshot;
+        return snapshot;
+    }
+
+    private static void AddMaterializedDayItems(
+        List<OrderItem> result,
+        CreateOrderItemRequest requestItem,
+        DateOnly deliveryDate,
+        IReadOnlyList<PublishedDietPlanItemDto> planItems)
+    {
+        var accumulatedPrice = 0m;
+        for (var index = 0; index < planItems.Count; index++)
+        {
+            var planItem = planItems[index];
+            var price = index == planItems.Count - 1
+                ? requestItem.PricePerDay - accumulatedPrice
+                : decimal.Round(requestItem.PricePerDay / planItems.Count, 2, MidpointRounding.AwayFromZero);
+            accumulatedPrice += price;
+
+            result.Add(new OrderItem
+            {
+                DietId = requestItem.DietId,
+                DietVariantId = requestItem.DietVariantId,
+                MealId = planItem.MealId,
+                MealVariantId = planItem.MealVariantId,
+                DietMenuPlanItemId = planItem.DietMenuPlanItemId,
+                DietName = requestItem.DietName,
+                VariantName = $"{requestItem.VariantName} / {planItem.MealSlot}",
+                MealSlot = planItem.MealSlot,
+                DeliveryDate = deliveryDate.ToDateTime(TimeOnly.MinValue),
+                CaloriesPerDay = requestItem.CaloriesPerDay,
+                PricePerDay = price,
+                TotalDays = 1,
+                TotalPrice = price,
+            });
+        }
     }
 
     public async Task<bool> CancelOrderAsync(int orderId, int customerId)

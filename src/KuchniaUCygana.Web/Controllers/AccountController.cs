@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using KuchniaUCygana.Application.DTOs.HR;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Web.Models;
@@ -47,6 +48,7 @@ public sealed class AccountController : Controller
             [UserRoles.Logistics] = "logistics@kuchnia.local",
             [UserRoles.LogisticsManager] = "logisticsm@kuchnia.local",
             [UserRoles.Driver] = "driver@kuchnia.local",
+            [UserRoles.DriverManager] = "driverm@kuchnia.local",
             [UserRoles.HR] = "hr@kuchnia.local",
             [UserRoles.HRManager] = "hrm@kuchnia.local",
             [UserRoles.BOK] = "bok@kuchnia.local",
@@ -118,14 +120,18 @@ public sealed class AccountController : Controller
 
     [AllowAnonymous]
     [HttpGet]
-    public IActionResult Login(string? returnUrl = null)
+    public IActionResult Login(string? returnUrl = null, string? email = null)
     {
         if (User.Identity?.IsAuthenticated == true)
         {
             return RedirectToRoleHome(GetPrimaryRole(User), returnUrl);
         }
 
-        return View(new LoginViewModel { ReturnUrl = returnUrl });
+        return View(new LoginViewModel
+        {
+            ReturnUrl = returnUrl,
+            Email = email?.Trim() ?? string.Empty,
+        });
     }
 
     [AllowAnonymous]
@@ -137,7 +143,11 @@ public sealed class AccountController : Controller
             return RedirectToAction(nameof(Login), new { returnUrl });
         }
 
-        return View(new LoginViewModel { ReturnUrl = returnUrl });
+        return View(new LoginViewModel
+        {
+            ReturnUrl = returnUrl,
+            Email = DevRoleEmails[UserRoles.Admin],
+        });
     }
 
     [AllowAnonymous]
@@ -180,9 +190,31 @@ public sealed class AccountController : Controller
     [HttpPost]
     public async Task<IActionResult> Register(RegisterViewModel model)
     {
-        await Task.CompletedTask;
-        TempData["Success"] = "Rejestracja jest pominieta w wersji preview.";
-        return RedirectToAction(nameof(Index));
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var normalizedEmail = model.Email.Trim().ToLowerInvariant();
+        if (await userRepository.ExistsWithEmailAsync(normalizedEmail))
+        {
+            ModelState.AddModelError(nameof(RegisterViewModel.Email), "Konto z tym adresem e-mail juz istnieje.");
+            model.Email = normalizedEmail;
+            return View(model);
+        }
+
+        var user = new User
+        {
+            Email = normalizedEmail,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.Password),
+            FirstName = model.FirstName.Trim(),
+            LastName = model.LastName.Trim(),
+            Role = UserRoles.Client,
+        };
+
+        await userRepository.InsertAsync(user);
+        TempData["Success"] = "Konto zostalo utworzone. Mozesz sie zalogowac.";
+        return RedirectToAction(nameof(Login), new { email = normalizedEmail });
     }
 
     [AllowAnonymous]
@@ -200,18 +232,19 @@ public sealed class AccountController : Controller
             return BadRequest("Nieznana rola deweloperska.");
         }
 
-        var seedUser = DevRoleEmails.TryGetValue(role, out var seedEmail)
-            ? await userRepository.FindByEmailAsync(seedEmail)
-            : null;
+        if (!DevRoleEmails.TryGetValue(role, out var seedEmail))
+        {
+            return BadRequest("Brak domyslnego konta dla wybranej roli.");
+        }
 
-        await SignInAsync(
-            seedUser?.Id.ToString() ?? "0",
-            seedUser is null ? $"Dev {role}" : $"{seedUser.FirstName} {seedUser.LastName}".Trim(),
-            seedUser?.Email ?? $"dev-{role.ToLowerInvariant()}@kuchniaucygana.pl",
-            role);
+        var seedUser = await userRepository.FindByEmailAsync(seedEmail);
+        if (seedUser is null)
+        {
+            TempData["Error"] = $"Brak seedowanego konta {seedEmail}. Uruchom seeder przed logowaniem.";
+            return RedirectToAction(nameof(Login), new { returnUrl });
+        }
 
-        TempData["Success"] = $"Zalogowano jako: {role} (dev).";
-        return RedirectToRoleHome(role, returnUrl);
+        return RedirectToAction(nameof(Login), new { returnUrl, email = seedUser.Email });
     }
 
     [Authorize]

@@ -1,10 +1,7 @@
 @using System.Security.Claims
 @using KuchniaUCygana.Domain.Constants
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
-@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 @{
-    var isDevelopment = Env.IsDevelopment();
-    var currentReturnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
     var canAccessStaffPanel = User.Identity?.IsAuthenticated == true &&
         User.Claims
             .Where(claim => claim.Type == ClaimTypes.Role)
@@ -52,28 +49,6 @@
                         {
                             <li class="nav-item">
                                 <a class="nav-link text-dark" asp-controller="Staff" asp-action="Index">Panel pracowniczy</a>
-                            </li>
-                        }
-                        @if (isDevelopment)
-                        {
-                            <li class="nav-item dropdown">
-                                <button class="nav-link dropdown-toggle btn btn-link text-dark" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <span class="badge text-bg-warning me-1">DEV</span>
-                                    Szybkie logowanie
-                                </button>
-                                <div class="dropdown-menu">
-                                    @foreach (var role in AppRoles.StaffRoleNames)
-                                    {
-                                        <form asp-controller="Account" asp-action="DevLogin" method="post" asp-route-returnUrl="@currentReturnUrl">
-                                            <input type="hidden" name="role" value="@role" />
-                                            <button type="submit" class="dropdown-item">@role</button>
-                                        </form>
-                                    }
-                                    <div class="dropdown-divider"></div>
-                                    <a class="dropdown-item" asp-controller="Account" asp-action="StaffLogin" asp-route-returnUrl="@currentReturnUrl">
-                                        Pelny ekran rol
-                                    </a>
-                                </div>
                             </li>
                         }
                     </ul>

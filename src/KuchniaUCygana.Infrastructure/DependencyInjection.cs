@@ -119,24 +119,39 @@ public static class DependencyInjection
             new SqlServerConnectionFactory(migrationConnectionString),
             sp.GetRequiredService<ILogger<DatabaseSeeder>>()));
 
-        if (configuration["OrderProvider"] == "M1")
+        var orderProvider = configuration["OrderProvider"];
+        if (string.IsNullOrWhiteSpace(orderProvider)
+            || string.Equals(orderProvider, "M1", StringComparison.OrdinalIgnoreCase))
         {
             services.AddScoped<IOrderDataProvider, M1OrderDataProvider>();
         }
-        else
+        else if (string.Equals(orderProvider, "Mock", StringComparison.OrdinalIgnoreCase))
         {
             services.AddScoped<IOrderDataProvider, MockOrderDataProvider>();
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Nieznany OrderProvider '{orderProvider}'. Dozwolone wartosci: M1, Mock.");
         }
 
         services.AddScoped<IDietDataProvider, DietDataAdapter>();
         services.AddScoped<IDietCatalogProvider, DietCatalogAdapter>();
-        if (string.Equals(configuration["DeliveryManifestProvider"], "Mock", StringComparison.OrdinalIgnoreCase))
+
+        var deliveryManifestProvider = configuration["DeliveryManifestProvider"];
+        if (string.IsNullOrWhiteSpace(deliveryManifestProvider)
+            || string.Equals(deliveryManifestProvider, "M4", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IDeliveryManifestProvider, M4DeliveryManifestProvider>();
+        }
+        else if (string.Equals(deliveryManifestProvider, "Mock", StringComparison.OrdinalIgnoreCase))
         {
             services.AddScoped<IDeliveryManifestProvider, MockDeliveryManifestProvider>();
         }
         else
         {
-            services.AddScoped<IDeliveryManifestProvider, M4DeliveryManifestProvider>();
+            throw new InvalidOperationException(
+                $"Nieznany DeliveryManifestProvider '{deliveryManifestProvider}'. Dozwolone wartosci: M4, Mock.");
         }
 
         services.AddScoped<ILogisticsDeliveryDataProvider, LogisticsDeliveryDataProvider>();

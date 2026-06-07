@@ -7,8 +7,8 @@ using KuchniaUCygana.Domain.Interfaces.External;
 namespace KuchniaUCygana.Infrastructure.Mocks;
 
 /// <summary>
-/// Mock dostawcy danych logistycznych (Modul 4 niedostepny).
-/// Zwraca deterministyczne trasy zgodne z MockOrderDataProvider.
+/// Jawny tryb test/dev dla danych logistycznych.
+/// Runtime uzywa M4DeliveryManifestProvider.
 /// </summary>
 public sealed class MockDeliveryManifestProvider : IDeliveryManifestProvider
 {

@@ -48,14 +48,48 @@ KuchniaUCygana.Infrastructure   ← DAL (Dapper, Migrations, External APIs, Cach
 | 4 | **Logistyka i Dostawy** | DEV 04 | Trasy, kierowcy, pojazdy, geokodowanie (OpenStreetMap) |
 | 5 | **Administracja, HR i Komunikacja** | DEV 05 | Tickety, grafiki pracy, zarządzanie użytkownikami |
 
-## 🔐 Role w Systemie
+## Konta testowe i role
 
-| Rola | Dostęp |
-|------|--------|
-| `Client` | Portal B2C — zamówienia, profil, płatności |
-| `Kitchen` | Panel kuchni — produkcja, kompletacja, magazyn |
-| `Driver` | Panel kierowcy — trasy, dostawy |
-| `Admin` | Pełny dostęp — administracja, raporty, HR |
+Seeder tworzy ponizsze konta aplikacyjne w profilach `MinimalRealistic` i `DemoData`.
+Logowanie pracownicze korzysta ze zwyklego formularza `/Account/Login` albo `/staff/login`;
+haslo jest weryfikowane przeciwko `PasswordHash` w tabeli `Users`.
+
+Rejestracja klienta dziala przez `/Account/Register`: tworzy nowe konto z rola `Client`,
+normalizuje email i zapisuje haslo jako hash BCrypt. Role pracownicze nie maja samodzielnej
+rejestracji; do testow korzystaja z kont seedowanych ponizej.
+
+### Konta bazowe (`MinimalRealistic`)
+
+| Rola | Email | Haslo | Modul / uzycie |
+|------|-------|-------|----------------|
+| `Admin` | `admin@kuchnia.local` | `Admin123!` | Administracja, pelny dostep |
+| `Kitchen` | `kitchen@kuchnia.local` | `Kitchen123!` | M3 produkcja |
+| `KitchenManager` | `kitchenm@kuchnia.local` | `Kitchen123!` | M3 kierownik produkcji |
+| `Warehouse` | `warehouse@kuchnia.local` | `Warehouse123!` | M3 magazyn |
+| `WarehouseManager` | `warehousem@kuchnia.local` | `Warehouse123!` | M3 kierownik magazynu |
+| `Packing` | `packing@kuchnia.local` | `Packing123!` | M3 kompletacja |
+| `PackingManager` | `packingm@kuchnia.local` | `Packing123!` | M3 kierownik kompletacji |
+| `Dietitian` | `dietitian@kuchnia.local` | `Diet123!` | M2 katalog diet i receptur |
+| `Logistics` | `logistics@kuchnia.local` | `Logistics123!` | M4 logistyka |
+| `LogisticsManager` | `logisticsm@kuchnia.local` | `Logistics123!` | M4 kierownik logistyki |
+| `Driver` | `driver@kuchnia.local` | `Driver123!` | M4 kierowca |
+| `DriverManager` | `driverm@kuchnia.local` | `Driver123!` | M4 koordynator kierowcow |
+| `HR` | `hr@kuchnia.local` | `HR123!` | M5 HR |
+| `HRManager` | `hrm@kuchnia.local` | `HR123!` | M5 kierownik HR |
+| `BOK` | `bok@kuchnia.local` | `BOK123!` | M5 obsluga klienta |
+| `BOKManager` | `bokm@kuchnia.local` | `BOK123!` | M5 kierownik BOK |
+
+### Konta demo (`DemoData`)
+
+| Rola | Email | Haslo | Uzycie |
+|------|-------|-------|--------|
+| `Client` | `demo-klient-01@kuchnia.local` ... `demo-klient-15@kuchnia.local` | `Demo123!` | Wspolni klienci M1/M2/M3/M4 z seedowanych zamowien |
+| `Driver` | `driver2@kuchnia.local` | `Driver123!` | Dodatkowy kierowca scenariusza tras M4 |
+| `Driver` | `driver3@kuchnia.local` | `Driver123!` | Dodatkowy kierowca scenariusza tras M4 |
+
+Loginy SQL Server nie sa kontami aplikacji. Docker tworzy loginy `admin`, `pracownik` i `klient`
+z haslami z `.env`; testy integracyjne Testcontainers uzywaja odpowiednio `Admin123!Integration`,
+`Pracownik123!Integration` i `Klient123!Integration`.
 
 ---
 

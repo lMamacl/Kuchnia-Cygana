@@ -16,6 +16,7 @@ using KuchniaUCygana.Domain.Interfaces.Warehouse;
 using KuchniaUCygana.Infrastructure.Adapters;
 using KuchniaUCygana.Infrastructure.Mocks;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+using KuchniaUCygana.Infrastructure.Persistence.Providers;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Packing;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories.Production;
@@ -136,6 +137,13 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var unique = $"Pref-{Guid.NewGuid():N}"[..14];
         var prefixItemId = await CreateStockItemAsync(connectionFactory, $"{unique}-Alpha");
         var containsItemId = await CreateStockItemAsync(connectionFactory, $"Other {unique}");
+
+        using (var db = connectionFactory.CreateConnection())
+        {
+            await db.ExecuteAsync(
+                "UPDATE [StockItems] SET [Name] = @name WHERE [Id] = @id;",
+                new { id = prefixItemId, name = $"{unique}-Alpha" });
+        }
 
         await InsertBatchAsync(connectionFactory, prefixItemId, "PREF-NAME-1", DateTimeOffset.UtcNow.AddDays(10), false, false);
         await InsertBatchAsync(connectionFactory, containsItemId, "PREF-NAME-2", DateTimeOffset.UtcNow.AddDays(10), false, false);
@@ -972,6 +980,134 @@ public sealed class WarehouseRepositoriesSqlServerTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task M1OrderDataProvider_GetDeliveriesForDateAsync_ShouldReturnOnlyItemsForDeliveryDate()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var deliveryDate = new DateOnly(2036, 6, 1);
+        var nextDeliveryDate = deliveryDate.AddDays(1);
+        var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 31);
+
+        using var db = connectionFactory.CreateConnection();
+        var firstItemId = await db.QuerySingleAsync<int>(
+            "SELECT TOP 1 [Id] FROM [OrderItems] WHERE [OrderId] = @orderId ORDER BY [Id];",
+            new { orderId = seeded.OrderId });
+        await db.ExecuteAsync(
+            """
+            UPDATE [OrderItems]
+            SET [DeliveryDate] = @deliveryDate,
+                [MealId] = 801,
+                [MealVariantId] = 901,
+                [DietMenuPlanItemId] = 1001,
+                [MealSlot] = N'Breakfast'
+            WHERE [Id] = @firstItemId;
+            """,
+            new
+            {
+                firstItemId,
+                deliveryDate = deliveryDate.ToDateTime(TimeOnly.MinValue),
+            });
+        await db.ExecuteAsync(
+            """
+            INSERT INTO [OrderItems]
+                ([OrderId], [DietId], [DietName], [DietVariantId], [VariantName], [MealId], [MealVariantId],
+                 [DietMenuPlanItemId], [MealSlot], [CaloriesPerDay], [PricePerDay], [TotalDays], [TotalPrice],
+                 [DeliveryDate], [IsDeleted], [CreatedAt])
+            VALUES
+                (@orderId, 301, N'Test diet', @dietVariantId, N'2000 kcal', 802, 902,
+                 2001, N'Dinner', 2000, 100, 1, 100,
+                 @nextDeliveryDate, 0, @createdAt);
+            """,
+            new
+            {
+                orderId = seeded.OrderId,
+                dietVariantId = seeded.DietVariantId,
+                nextDeliveryDate = nextDeliveryDate.ToDateTime(TimeOnly.MinValue),
+                createdAt = DateTimeOffset.UtcNow,
+            });
+
+        var provider = new M1OrderDataProvider(connectionFactory);
+        var delivery = (await provider.GetDeliveriesForDateAsync(deliveryDate.ToDateTime(TimeOnly.MinValue)))
+            .Single(result => result.OrderId == seeded.OrderId);
+
+        delivery.Items.Should().ContainSingle();
+        delivery.Items[0].DietMenuPlanItemId.Should().Be(1001);
+        delivery.Items[0].MealId.Should().Be(801);
+        delivery.Items[0].MealSlot.Should().Be("Breakfast");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task LogisticsDeliveryDataProvider_GetDeliveriesForDateAsync_ShouldOnlyExposeActiveScheduledM1Deliveries()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var deliveryDate = new DateOnly(2036, 5, 20);
+        var active = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 11);
+        var pendingPayment = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 12);
+        var cancelledDelivery = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 13);
+
+        using var db = connectionFactory.CreateConnection();
+        await db.ExecuteAsync(
+            "UPDATE Orders SET Status = @status WHERE Id = @orderId;",
+            new { status = (int)OrderStatus.PendingPayment, orderId = pendingPayment.OrderId });
+        await db.ExecuteAsync(
+            "UPDATE DeliveryCalendar SET Status = @status WHERE OrderId = @orderId;",
+            new { status = (int)DeliveryStatus.Cancelled, orderId = cancelledDelivery.OrderId });
+
+        var provider = new LogisticsDeliveryDataProvider(connectionFactory);
+        var result = (await provider.GetDeliveriesForDateAsync(deliveryDate.ToDateTime(TimeOnly.MinValue))).ToList();
+
+        result.Select(delivery => delivery.OrderId).Should().Contain(active.OrderId);
+        result.Select(delivery => delivery.OrderId).Should().NotContain(new[]
+        {
+            pendingPayment.OrderId,
+            cancelledDelivery.OrderId,
+        });
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task LogisticsDeliveryDataProvider_GetDeliveriesForDateAsync_ShouldEstimateLoadFromItemsForDeliveryDateOnly()
+    {
+        var connectionFactory = CreateConnectionFactory();
+        var deliveryDate = new DateOnly(2036, 6, 2);
+        var nextDeliveryDate = deliveryDate.AddDays(1);
+        var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 32);
+
+        using var db = connectionFactory.CreateConnection();
+        await db.ExecuteAsync(
+            "UPDATE [OrderItems] SET [DeliveryDate] = @deliveryDate WHERE [OrderId] = @orderId;",
+            new
+            {
+                orderId = seeded.OrderId,
+                deliveryDate = deliveryDate.ToDateTime(TimeOnly.MinValue),
+            });
+        await db.ExecuteAsync(
+            """
+            INSERT INTO [OrderItems]
+                ([OrderId], [DietId], [DietName], [DietVariantId], [VariantName], [CaloriesPerDay],
+                 [PricePerDay], [TotalDays], [TotalPrice], [DeliveryDate], [IsDeleted], [CreatedAt])
+            VALUES
+                (@orderId, 301, N'Test diet', @dietVariantId, N'2000 kcal', 2000,
+                 100, 1, 100, @nextDeliveryDate, 0, @createdAt);
+            """,
+            new
+            {
+                orderId = seeded.OrderId,
+                dietVariantId = seeded.DietVariantId,
+                nextDeliveryDate = nextDeliveryDate.ToDateTime(TimeOnly.MinValue),
+                createdAt = DateTimeOffset.UtcNow,
+            });
+
+        var provider = new LogisticsDeliveryDataProvider(connectionFactory);
+        var result = (await provider.GetDeliveriesForDateAsync(
+            deliveryDate.ToDateTime(TimeOnly.MinValue),
+            defaultDeliveryLoadKg: 1m)).Single(delivery => delivery.OrderId == seeded.OrderId);
+
+        result.EstimatedLoadKg.Should().Be(1m);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task PackingService_GetPackingBoardAsync_ShouldCreateOneBagPerOrder_WithoutDuplicates()
     {
         var connectionFactory = CreateConnectionFactory();
@@ -1017,6 +1153,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var deliveryDate = new DateOnly(2036, 4, 12);
         var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
         var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2);
+        await SeedCookedProductionPlanAndM2OrderItemsAsync(connectionFactory, deliveryDate, seededOne.OrderId, seededTwo.OrderId);
         var service = CreatePackingService(connectionFactory);
 
         var syncService = CreatePackingSynchronizationService(connectionFactory);
@@ -1056,6 +1193,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 13);
         var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        await SeedCookedProductionPlanAndM2OrderItemsAsync(connectionFactory, deliveryDate, seeded.OrderId);
         var service = CreatePackingService(connectionFactory);
 
         var syncService = CreatePackingSynchronizationService(connectionFactory);
@@ -1116,6 +1254,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var deliveryDate = new DateOnly(2036, 4, 14);
         var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
         var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2);
+        await SeedCookedProductionPlanAndM2OrderItemsAsync(connectionFactory, deliveryDate, seededOne.OrderId, seededTwo.OrderId);
         var packingService = CreatePackingService(connectionFactory);
         var loadingService = CreateLoadingService(connectionFactory, packingService);
 
@@ -1174,6 +1313,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 15);
         var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        await SeedCookedProductionPlanAndM2OrderItemsAsync(connectionFactory, deliveryDate, seeded.OrderId);
         var packingService = CreatePackingService(connectionFactory);
         var loadingService = CreateLoadingService(connectionFactory, packingService);
 
@@ -1434,6 +1574,138 @@ public sealed class WarehouseRepositoriesSqlServerTests
         string CustomerName,
         int DietVariantId);
 
+    private static async Task SeedCookedProductionPlanAndM2OrderItemsAsync(
+        IDbConnectionFactory connectionFactory,
+        DateOnly deliveryDate,
+        params int[] orderIds)
+    {
+        using var db = connectionFactory.CreateConnection();
+        var now = DateTimeOffset.UtcNow;
+        var planDate = deliveryDate.ToDateTime(TimeOnly.MinValue);
+
+        var planId = await db.QuerySingleOrDefaultAsync<int?>(
+            """
+            SELECT TOP 1 [Id]
+            FROM [ProductionPlans]
+            WHERE [ProductionDate] = @planDate
+              AND [IsDeleted] = 0;
+            """,
+            new { planDate });
+
+        if (!planId.HasValue)
+        {
+            planId = await db.QuerySingleAsync<int>(
+                """
+                INSERT INTO [ProductionPlans] ([ProductionDate], [Status], [CreatedAt], [IsDeleted])
+                VALUES (@planDate, @status, @createdAt, 0);
+                SELECT CAST(SCOPE_IDENTITY() AS int);
+                """,
+                new
+                {
+                    planDate,
+                    status = (int)ProductionPlanStatus.InProgress,
+                    createdAt = now,
+                });
+        }
+
+        var snapshot = CreatePackingSnapshot(deliveryDate);
+        await db.ExecuteAsync(
+            """
+            IF NOT EXISTS (
+                SELECT 1
+                FROM [ProductionPlanItems]
+                WHERE [ProductionPlanId] = @planId
+                  AND [DietMenuPlanItemId] = @dietMenuPlanItemId
+                  AND [IsDeleted] = 0)
+            BEGIN
+                INSERT INTO [ProductionPlanItems]
+                    ([ProductionPlanId], [MealId], [MealName], [DietVariantId], [DietMenuPlanItemId],
+                     [PlannedQuantity], [CookedQuantity], [Status], [M2SnapshotHash], [M2SnapshotJson],
+                     [PackagingDeductedAt], [PackagingReferenceDocument], [CreatedAt], [IsDeleted])
+                VALUES
+                    (@planId, @mealId, @mealName, @dietVariantId, @dietMenuPlanItemId,
+                     10, 10, @status, @snapshotHash, @snapshotJson,
+                     @packagingDeductedAt, @packagingReferenceDocument, @createdAt, 0);
+            END
+            """,
+            new
+            {
+                planId,
+                mealId = snapshot.MealId,
+                mealName = snapshot.MealName,
+                dietVariantId = snapshot.DietVariantId,
+                dietMenuPlanItemId = snapshot.DietMenuPlanItemId,
+                status = (int)ProductionItemStatus.Cooked,
+                snapshotHash = "test-snapshot",
+                snapshotJson = JsonSerializer.Serialize(snapshot),
+                packagingDeductedAt = now,
+                packagingReferenceDocument = "TEST-PACK",
+                createdAt = now,
+            });
+
+        await db.ExecuteAsync(
+            """
+            UPDATE [OrderItems]
+            SET [DeliveryDate] = @deliveryDate,
+                [MealId] = @mealId,
+                [MealVariantId] = NULL,
+                [DietMenuPlanItemId] = @dietMenuPlanItemId,
+                [MealSlot] = @mealSlot,
+                [DietName] = @dietName,
+                [VariantName] = @variantName
+            WHERE [OrderId] IN @orderIds
+              AND [IsDeleted] = 0;
+            """,
+            new
+            {
+                orderIds,
+                deliveryDate = planDate,
+                mealId = snapshot.MealId,
+                dietMenuPlanItemId = snapshot.DietMenuPlanItemId,
+                mealSlot = snapshot.MealSlot,
+                dietName = $"Test diet: {snapshot.MealName}",
+                variantName = $"2000 kcal / {snapshot.MealSlot}",
+            });
+    }
+
+    private static PublishedDietPlanItemDto CreatePackingSnapshot(DateOnly deliveryDate)
+        => new()
+        {
+            DietMenuPlanId = deliveryDate.DayNumber,
+            DietMenuPlanItemId = 1001,
+            PlanDate = deliveryDate,
+            MealId = 801,
+            MealName = "Test breakfast",
+            DietVariantId = 501,
+            MealSlot = "Breakfast",
+            SortOrder = 1,
+            FinalWeightGrams = 300m,
+            FinalWeightAfterMultiplierGrams = 300m,
+            CompletenessStatus = "Complete",
+            IsCompleteForProduction = true,
+            Nutrition = new LabelNutritionDto
+            {
+                CaloriesPer100g = 120m,
+                ProteinPer100g = 10m,
+                CarbohydratesPer100g = 15m,
+                FatPer100g = 4m,
+                FiberPer100g = 2m,
+                CaloriesPerServing = 360m,
+            },
+            PackagingRequirements =
+            [
+                new PackagingRequirementDto
+                {
+                    OwnerType = "Meal",
+                    MealId = 801,
+                    ResourceName = "Pojemnik testowy",
+                    Quantity = 1m,
+                    Unit = "pcs",
+                    IsCustomerFacing = true,
+                },
+            ],
+        };
+
     private sealed class TestDietDataProvider : IDietDataProvider
     {
         public Task<IEnumerable<DietPlanEntry>> Get7DayPlanAsync(DateOnly startDate)
@@ -1444,6 +1716,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
                 {
                     PlanDate = startDate,
                     PlanStatus = "Published",
+                    DietMenuPlanItemId = 1001,
                     MealId = 801,
                     MealName = "Test breakfast",
                     DietVariantId = 501,
@@ -1456,6 +1729,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
                 {
                     PlanDate = startDate,
                     PlanStatus = "Published",
+                    DietMenuPlanItemId = 1002,
                     MealId = 802,
                     MealName = "Test dinner",
                     DietVariantId = 501,

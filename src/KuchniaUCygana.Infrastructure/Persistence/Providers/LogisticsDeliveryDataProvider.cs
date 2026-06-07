@@ -1,4 +1,5 @@
 using Dapper;
+using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 
@@ -6,60 +7,6 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Providers;
 
 public sealed class LogisticsDeliveryDataProvider : ILogisticsDeliveryDataProvider
 {
-    private readonly IDbConnectionFactory _connectionFactory;
-
-    public LogisticsDeliveryDataProvider(IDbConnectionFactory connectionFactory)
-    {
-        _connectionFactory = connectionFactory;
-    }
-
-    public async Task<IReadOnlyList<LogisticsDeliveryCandidate>> GetDeliveriesForDateAsync(
-        DateTime deliveryDate,
-        decimal defaultDeliveryLoadKg = 1m)
-    {
-        using var db = _connectionFactory.CreateConnection();
-        var from = deliveryDate.Date;
-        var to = from.AddDays(1);
-        var deliveries = await db.QueryAsync<LogisticsDeliveryCandidate>(
-            BaseSql + @"
-            WHERE dc.[DeliveryDate] >= @From
-              AND dc.[DeliveryDate] < @To
-              AND dc.[IsSkipped] = 0
-              AND dc.[IsDeleted] = 0
-              AND o.[IsDeleted] = 0
-              AND a.[IsDeleted] = 0
-            " + GroupBySql,
-            new { From = from, To = to, DefaultDeliveryLoadKg = defaultDeliveryLoadKg });
-
-        return deliveries.ToList();
-    }
-
-    public async Task<IReadOnlyList<LogisticsDeliveryCandidate>> GetDeliveriesByCalendarIdsAsync(
-        IReadOnlyCollection<int> deliveryCalendarIds,
-        decimal defaultDeliveryLoadKg = 1m)
-    {
-        if (deliveryCalendarIds.Count == 0)
-        {
-            return Array.Empty<LogisticsDeliveryCandidate>();
-        }
-
-        using var db = _connectionFactory.CreateConnection();
-        var deliveries = await db.QueryAsync<LogisticsDeliveryCandidate>(
-            BaseSql + @"
-            WHERE dc.[Id] IN @DeliveryCalendarIds
-              AND dc.[IsDeleted] = 0
-              AND o.[IsDeleted] = 0
-              AND a.[IsDeleted] = 0
-            " + GroupBySql,
-            new
-            {
-                DeliveryCalendarIds = deliveryCalendarIds,
-                DefaultDeliveryLoadKg = defaultDeliveryLoadKg,
-            });
-
-        return deliveries.ToList();
-    }
-
     private const string BaseSql = @"
         SELECT
             dc.[Id] AS DeliveryCalendarId,
@@ -89,7 +36,10 @@ public sealed class LogisticsDeliveryDataProvider : ILogisticsDeliveryDataProvid
         FROM [DeliveryCalendar] dc
         INNER JOIN [Orders] o ON o.[Id] = dc.[OrderId]
         INNER JOIN [Addresses] a ON a.[Id] = dc.[AddressId]
-        LEFT JOIN [OrderItems] oi ON oi.[OrderId] = o.[Id] AND oi.[IsDeleted] = 0
+        LEFT JOIN [OrderItems] oi
+            ON oi.[OrderId] = o.[Id]
+           AND oi.[IsDeleted] = 0
+           AND (oi.[DeliveryDate] IS NULL OR (oi.[DeliveryDate] >= CONVERT(date, dc.[DeliveryDate]) AND oi.[DeliveryDate] < DATEADD(day, 1, CONVERT(date, dc.[DeliveryDate]))))
     ";
 
     private const string GroupBySql = @"
@@ -106,4 +56,78 @@ public sealed class LogisticsDeliveryDataProvider : ILogisticsDeliveryDataProvid
             a.[Latitude],
             a.[Longitude]
         ORDER BY dc.[DeliveryDate], dc.[Id];";
+
+    private static readonly int[] ActiveOrderStatuses =
+    [
+        (int)OrderStatus.Paid,
+        (int)OrderStatus.InProduction,
+    ];
+
+    private readonly IDbConnectionFactory _connectionFactory;
+
+    public LogisticsDeliveryDataProvider(IDbConnectionFactory connectionFactory)
+    {
+        _connectionFactory = connectionFactory;
+    }
+
+    public async Task<IReadOnlyList<LogisticsDeliveryCandidate>> GetDeliveriesForDateAsync(
+        DateTime deliveryDate,
+        decimal defaultDeliveryLoadKg = 1m)
+    {
+        using var db = _connectionFactory.CreateConnection();
+        var from = deliveryDate.Date;
+        var to = from.AddDays(1);
+        var deliveries = await db.QueryAsync<LogisticsDeliveryCandidate>(
+            BaseSql + @"
+            WHERE dc.[DeliveryDate] >= @From
+              AND dc.[DeliveryDate] < @To
+              AND dc.[Status] = @ScheduledStatus
+              AND dc.[IsSkipped] = 0
+              AND dc.[IsDeleted] = 0
+              AND o.[Status] IN @ActiveOrderStatuses
+              AND o.[IsDeleted] = 0
+              AND a.[IsDeleted] = 0
+            " + GroupBySql,
+            new
+            {
+                From = from,
+                To = to,
+                ScheduledStatus = (int)DeliveryStatus.Scheduled,
+                ActiveOrderStatuses,
+                DefaultDeliveryLoadKg = defaultDeliveryLoadKg,
+            });
+
+        return deliveries.ToList();
+    }
+
+    public async Task<IReadOnlyList<LogisticsDeliveryCandidate>> GetDeliveriesByCalendarIdsAsync(
+        IReadOnlyCollection<int> deliveryCalendarIds,
+        decimal defaultDeliveryLoadKg = 1m)
+    {
+        if (deliveryCalendarIds.Count == 0)
+        {
+            return Array.Empty<LogisticsDeliveryCandidate>();
+        }
+
+        using var db = _connectionFactory.CreateConnection();
+        var deliveries = await db.QueryAsync<LogisticsDeliveryCandidate>(
+            BaseSql + @"
+            WHERE dc.[Id] IN @DeliveryCalendarIds
+              AND dc.[Status] = @ScheduledStatus
+              AND dc.[IsSkipped] = 0
+              AND dc.[IsDeleted] = 0
+              AND o.[Status] IN @ActiveOrderStatuses
+              AND o.[IsDeleted] = 0
+              AND a.[IsDeleted] = 0
+            " + GroupBySql,
+            new
+            {
+                DeliveryCalendarIds = deliveryCalendarIds,
+                ScheduledStatus = (int)DeliveryStatus.Scheduled,
+                ActiveOrderStatuses,
+                DefaultDeliveryLoadKg = defaultDeliveryLoadKg,
+            });
+
+        return deliveries.ToList();
+    }
 }

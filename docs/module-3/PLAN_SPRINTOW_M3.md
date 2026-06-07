@@ -48,7 +48,7 @@
 |-----------|--------|------|
 | **Migracje** | ✅ | 001-009 (M3 core: users, warehouse, production, packing, manifests), 100-107 (M1 orders), 301-303 (M2 menu). **Brak**: migracji 307+ (wizja: StockItemId w InventoryTransactions, BatchExpiryChangeLogs, PackingStatusLogs) |
 | **Repositories** | ✅ | Warehouse: 4 repo (Batch, InventoryTransaction, StockItem, TemperatureLog). Production: 1 repo. Packing: 1 repo (duży). BaseRepository<T> generyczny |
-| **Mocks** | ✅ | `MockOrderDataProvider`, `MockDeliveryManifestProvider` |
+| **Adaptery M1/M2/M4** | ✅ | Runtime: `M1OrderDataProvider`, `DietDataAdapter`, `M4DeliveryManifestProvider`; mocki zostaja tylko do testow/dev |
 | **PDF** | ✅ | `QuestPdfGenerator` (IPdfGenerator) |
 | **DI** | ✅ | Pełna rejestracja wszystkiego w `Infrastructure/DependencyInjection.cs` |
 
@@ -541,7 +541,7 @@ graph TD
 | Refaktor PackingController/PackingService (S5.4 + S7.1) — regresje routingu | 🔴 Wys. | 🔴 | Osobny PR. Docker test. Zachować stare URL jako redirecty tymczasowo |
 | God Service PackingService (41KB) — trudny do podzielenia | 🟡 Śr. | 🟡 | Wyciągnąć metody loading 1:1, nie refaktorować logiki wewnętrznej |
 | M2 nie dostarcza wersjonowanych składowych i packaging requirements → pełna kuchnia S8 zablokowana | 🟡 Śr. | 🟡 | M3 buduje kontrakt, snapshot, mock provider i walidacje wcześniej; pełne gotowanie składowych włącza po M2 |
-| M4 (Logistyka) nie dostarcza `IDeliveryManifestProvider` → Mock pozostaje | 🟡 Śr. | 🟢 | `MockDeliveryManifestProvider` istnieje. M3 nie blokuje się na M4 |
+| Rozjazd statusów M1/M4 przy trasach i kompletacji | 🟡 Śr. | 🟡 | Runtime używa `M4DeliveryManifestProvider`; kandydaci logistyczni są filtrowani po aktywnych zamówieniach M1 i zaplanowanych dostawach. Mock tylko test/dev |
 | Niejasna granica M3/M4 w kwestii załadunku | 🟡 Śr. | 🟡 | M3 = manifest + załadunek aut. M4 = widok kierowcy + logistyka dostawy. Udokumentowane w sekcji 0.7 + `intermodule_integration_qna.md` |
 | Numeracja migracji (wizja: 307+, kod: 010+) | 🟢 Nis. | 🟢 | Używamy kolejnych numerów (010+). Wizja ma inne numery — ignorujemy |
 | Backfill `StockItemId` w migracji 010 na pustej bazie dev | 🟢 Nis. | 🟢 | Backfill SQL z IF EXISTS. Na dev bazie to kilka rekordów |

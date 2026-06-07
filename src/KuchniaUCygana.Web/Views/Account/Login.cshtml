@@ -1,5 +1,4 @@
 @model KuchniaUCygana.Web.Models.LoginViewModel
-@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 @{
     ViewData["Title"] = "Zaloguj sie";
 }
@@ -31,44 +30,6 @@
 
                     <button type="submit" class="btn btn-primary w-100 py-2 mb-3">Zaloguj sie</button>
                 </form>
-
-                @if (Env.IsDevelopment())
-                {
-                    var devRoles = new[]
-                    {
-                        ("Admin", "Administrator"),
-                        ("KitchenManager", "Szef kuchni"),
-                        ("Kitchen", "Kucharz"),
-                        ("WarehouseManager", "Kierownik magazynu"),
-                        ("Warehouse", "Magazynier"),
-                        ("PackingManager", "Kierownik kompletacji"),
-                        ("Packing", "Pakowacz"),
-                        ("Dietitian", "Dietetyk"),
-                        ("LogisticsManager", "Kierownik logistyki"),
-                        ("Logistics", "Logistyk"),
-                        ("Driver", "Kierowca"),
-                        ("HRManager", "Kierownik HR"),
-                        ("HR", "HR"),
-                        ("BOKManager", "Kierownik BOK"),
-                        ("BOK", "BOK"),
-                    };
-
-                    <hr class="my-4" />
-                    <div class="developer-bypass-panel text-center">
-                        <h5 class="text-warning fw-bold mb-3">
-                            <span class="badge bg-warning text-dark me-2">DEV</span> Logowanie testowe
-                        </h5>
-                        <div class="d-flex flex-wrap justify-content-center gap-2">
-                            @foreach (var (role, label) in devRoles)
-                            {
-                                <form asp-action="DevLogin" method="post" asp-route-returnUrl="@Model.ReturnUrl">
-                                    <input type="hidden" name="role" value="@role" />
-                                    <button type="submit" class="btn btn-sm btn-outline-secondary">@label</button>
-                                </form>
-                            }
-                        </div>
-                    </div>
-                }
             </div>
         </div>
     </div>

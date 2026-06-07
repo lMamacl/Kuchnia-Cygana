@@ -62,6 +62,38 @@ public sealed class ProductionServiceTests
     }
 
     [Fact]
+    public async Task GeneratePlanAsync_ShouldRejectExplicitOrderItem_WhenM2SnapshotDoesNotContainIt()
+    {
+        var date = new DateOnly(2026, 6, 5);
+        var (generator, _) = CreatePlanGenerator(CreateSnapshot(date));
+        SetupDeliveries(
+            generator.OrderProvider,
+            date,
+            new OrderItemInfo(1, "Dieta", 1, "2000", 2000, 99, 999, 9999, "lunch"));
+
+        var act = () => generator.Instance.GeneratePlanAsync(date, "test");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*snapshotu M2*MealId 99*DietMenuPlanItemId 9999*");
+    }
+
+    [Fact]
+    public async Task GeneratePlanAsync_ShouldRejectStaleDietMenuPlanItemId_EvenWhenMealVariantMatches()
+    {
+        var date = new DateOnly(2026, 6, 5);
+        var (generator, _) = CreatePlanGenerator(CreateSnapshot(date));
+        SetupDeliveries(
+            generator.OrderProvider,
+            date,
+            new OrderItemInfo(1, "Dieta", 1, "2000", 2000, 10, 101, 9999, "lunch"));
+
+        var act = () => generator.Instance.GeneratePlanAsync(date, "test");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*snapshotu M2*MealId 10*DietMenuPlanItemId 9999*");
+    }
+
+    [Fact]
     public async Task ApproveCookingAsync_ShouldBlock_WhenPlanItemHasNoM2Snapshot()
     {
         var itemRepository = new Mock<IRepository<ProductionPlanItem>>();

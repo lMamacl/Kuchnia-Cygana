@@ -119,7 +119,21 @@ public sealed class CheckoutController : Controller
             }).ToList(),
         };
 
-        var orderId = await orderService.CreateOrderAsync(request, userId);
+        int orderId;
+        try
+        {
+            orderId = await orderService.CreateOrderAsync(request, userId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex, "Order checkout failed before payment initialization for user {UserId}.", userId);
+            ModelState.AddModelError(string.Empty, ex.Message);
+            model.Cart = cart;
+            model.Addresses = await addressService.GetByUserIdAsync(userId);
+            model.Windows = mapper.Map<IEnumerable<DeliveryWindowDto>>(
+                await deliveryWindowRepository.GetActiveWindowsAsync());
+            return View(model);
+        }
 
         // Czyscimy koszyk po utworzeniu zamowienia
         HttpContext.Session.Remove(CartSessionKey);

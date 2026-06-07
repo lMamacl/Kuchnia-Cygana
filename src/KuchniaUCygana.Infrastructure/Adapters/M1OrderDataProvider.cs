@@ -100,7 +100,17 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
             : (await db.QueryAsync<OrderItemRow>(
                 OrderItemsForDeliveriesSql,
                 new { orderIds })).ToList();
-        var itemsByOrder = itemRows
+        var datedItemsByOrderAndDate = itemRows
+            .Where(item => item.DeliveryDate.HasValue)
+            .GroupBy(item => (item.OrderId, DeliveryDate: item.DeliveryDate!.Value.Date))
+            .ToDictionary(group => group.Key, group => group.ToList());
+        var orderIdsWithDatedItems = itemRows
+            .Where(item => item.DeliveryDate.HasValue)
+            .Select(item => item.OrderId)
+            .Distinct()
+            .ToHashSet();
+        var legacyItemsByOrder = itemRows
+            .Where(item => !item.DeliveryDate.HasValue)
             .GroupBy(item => item.OrderId)
             .ToDictionary(group => group.Key, group => group.ToList());
 
@@ -108,7 +118,14 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
 
         foreach (var delivery in deliveries)
         {
-            itemsByOrder.TryGetValue(delivery.OrderId, out var items);
+            var deliveryDate = delivery.DeliveryDate.Date;
+            var itemKey = (delivery.OrderId, DeliveryDate: deliveryDate);
+            var items = datedItemsByOrderAndDate.TryGetValue(itemKey, out var datedItems)
+                ? datedItems
+                : orderIdsWithDatedItems.Contains(delivery.OrderId)
+                    ? new List<OrderItemRow>()
+                    : legacyItemsByOrder.GetValueOrDefault(delivery.OrderId) ?? new List<OrderItemRow>();
+
             result.Add(new OrderDeliveryInfo(
                 delivery.DeliveryCalendarId,
                 delivery.OrderId,
@@ -156,6 +173,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
           AND dc.DeliveryDate < @to
           AND o.Status IN (@paidStatus, @inProductionStatus)
           AND dc.Status = @scheduledStatus
+          AND (oi.DeliveryDate IS NULL OR (oi.DeliveryDate >= CONVERT(date, dc.DeliveryDate) AND oi.DeliveryDate < DATEADD(day, 1, CONVERT(date, dc.DeliveryDate))))
           AND dc.IsSkipped = 0
           AND o.IsDeleted = 0
           AND oi.IsDeleted = 0
@@ -180,6 +198,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         WHERE o.Id = @orderId
           AND o.Status IN (@paidStatus, @inProductionStatus)
           AND dc.Status = @scheduledStatus
+          AND (oi.DeliveryDate IS NULL OR (oi.DeliveryDate >= CONVERT(date, dc.DeliveryDate) AND oi.DeliveryDate < DATEADD(day, 1, CONVERT(date, dc.DeliveryDate))))
           AND dc.IsSkipped = 0
           AND o.IsDeleted = 0
           AND oi.IsDeleted = 0
@@ -234,7 +253,8 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
             MealId,
             MealVariantId,
             DietMenuPlanItemId,
-            MealSlot
+            MealSlot,
+            DeliveryDate
         FROM OrderItems
         WHERE OrderId = @orderId
           AND IsDeleted = 0
@@ -252,11 +272,12 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
             MealId,
             MealVariantId,
             DietMenuPlanItemId,
-            MealSlot
+            MealSlot,
+            DeliveryDate
         FROM OrderItems
         WHERE OrderId IN @orderIds
           AND IsDeleted = 0
-        ORDER BY OrderId, Id;
+        ORDER BY OrderId, DeliveryDate, Id;
         """;
 
     private sealed class ActiveOrderRow
@@ -326,5 +347,7 @@ public sealed class M1OrderDataProvider : IOrderDataProvider
         public int? DietMenuPlanItemId { get; set; }
 
         public string? MealSlot { get; set; }
+
+        public DateTime? DeliveryDate { get; set; }
     }
 }

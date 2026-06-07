@@ -17,6 +17,10 @@ namespace KuchniaUCygana.Infrastructure.Persistence.Seeding;
 public sealed class DatabaseSeeder : IDatabaseSeeder
 {
     private const int PackagingWarehouseCategoryId = 5;
+    private const string UnifiedDemoCustomerEmailPrefix = "demo-klient-";
+    private const string UnifiedDemoCustomerEmailSuffix = "@kuchnia.local";
+    private const string UnifiedDemoCustomerPassword = "Demo123!";
+    private const string UnifiedDemoOrderPrefix = "DEMO-M1";
 
     private readonly IDbConnectionFactory connectionFactory;
     private readonly ILogger<DatabaseSeeder> logger;
@@ -79,6 +83,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             MakeUser("logistics@kuchnia.local", "Logistics123!", "Logistyka", "Operator", UserRoles.Logistics, now),
             MakeUser("logisticsm@kuchnia.local", "Logistics123!", "Logistyka", "Kierownik", UserRoles.LogisticsManager, now),
             MakeUser("driver@kuchnia.local", "Driver123!", "Dostawa", "Kierowca", UserRoles.Driver, now),
+            MakeUser("driverm@kuchnia.local", "Driver123!", "Dostawa", "Koordynator", UserRoles.DriverManager, now),
             MakeUser("hr@kuchnia.local", "HR123!", "HR", "Specjalista", UserRoles.HR, now),
             MakeUser("hrm@kuchnia.local", "HR123!", "HR", "Kierownik", UserRoles.HRManager, now),
             MakeUser("bok@kuchnia.local", "BOK123!", "BOK", "Konsultant", UserRoles.BOK, now),
@@ -354,6 +359,19 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                OR [Notes] LIKE N'%Demo lifecycle%'
                OR [Notes] LIKE N'%Wspolny demo seed%';
 
+            DECLARE @DemoProductionPlanItems TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @DemoProductionPlanItems ([Id])
+            SELECT [Id]
+            FROM [ProductionPlanItems]
+            WHERE [ProductionPlanId] IN (SELECT [Id] FROM @DemoProductionPlans);
+
+            DECLARE @DemoCookingSessions TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @DemoCookingSessions ([Id])
+            SELECT DISTINCT [Id]
+            FROM [CookingSessions]
+            WHERE [ProductionPlanItemId] IN (SELECT [Id] FROM @DemoProductionPlanItems)
+               OR [CreatedBy] = N'DemoSeeder';
+
             DELETE FROM [BoxLabels]
             WHERE [PackingItemId] IN (SELECT [Id] FROM @DemoItems);
 
@@ -410,11 +428,17 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             DELETE FROM [ThermalBags]
             WHERE [SerialNumber] LIKE N'THERM-DEMO-%';
 
+            DELETE FROM [CookingSessionStepChecks]
+            WHERE [CookingSessionId] IN (SELECT [Id] FROM @DemoCookingSessions);
+
+            DELETE FROM [CookingSessions]
+            WHERE [Id] IN (SELECT [Id] FROM @DemoCookingSessions);
+
             DELETE FROM [ProductionBatches]
             WHERE [ProductionPlanId] IN (SELECT [Id] FROM @DemoProductionPlans);
 
             DELETE FROM [ProductionPlanItems]
-            WHERE [ProductionPlanId] IN (SELECT [Id] FROM @DemoProductionPlans);
+            WHERE [Id] IN (SELECT [Id] FROM @DemoProductionPlanItems);
 
             DELETE FROM [ProductionPlans]
             WHERE [Id] IN (SELECT [Id] FROM @DemoProductionPlans);
@@ -433,7 +457,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             WHERE [Id] IN (SELECT [Id] FROM @DemoOrders);
 
             DELETE FROM [Addresses]
-            WHERE [Label] LIKE N'Demo M4%'
+            WHERE [Label] LIKE N'Demo klient %'
+               OR [Label] LIKE N'Demo M4%'
                OR [Label] = N'Demo lifecycle';
 
             DELETE FROM [CustomerProfiles]
@@ -441,7 +466,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             (
                 SELECT [Id]
                 FROM [Users]
-                WHERE [Email] LIKE N'demo-m4-klient-%@kuchnia.local'
+                WHERE [Email] LIKE N'demo-klient-%@kuchnia.local'
+                   OR [Email] LIKE N'demo-m4-klient-%@kuchnia.local'
                    OR [Email] = N'demo-klient@kuchnia.local'
             );
 
@@ -466,7 +492,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             WHERE [RegistrationNumber] IN (N'BI 1001A', N'BI 2042C', N'BI 3307E', N'BI 4040S');
 
             DELETE FROM [Users]
-            WHERE [Email] LIKE N'demo-m4-klient-%@kuchnia.local'
+            WHERE [Email] LIKE N'demo-klient-%@kuchnia.local'
+               OR [Email] LIKE N'demo-m4-klient-%@kuchnia.local'
                OR [Email] = N'demo-klient@kuchnia.local'
                OR [Email] IN (N'driver2@kuchnia.local', N'driver3@kuchnia.local');
 
@@ -612,20 +639,21 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 cancellationToken);
         }
 
-        var deliveries = GetLogisticsDemoDeliveries();
-        for (var index = 0; index < deliveries.Length; index++)
+        // Customers live in M1 tables. M2 provides menu references, while M4/M3 consume OrderId and DeliveryCalendarId.
+        var customerSeeds = GetUnifiedDemoCustomerSeeds();
+        for (var index = 0; index < customerSeeds.Length; index++)
         {
-            var delivery = deliveries[index];
-            var customerId = await EnsureLogisticsDemoCustomerAsync(db, index + 1, delivery, now, cancellationToken);
-            var addressId = await EnsureLogisticsDemoAddressAsync(
+            var customerSeed = customerSeeds[index];
+            var customerId = await EnsureUnifiedDemoCustomerAsync(db, index + 1, customerSeed, now, cancellationToken);
+            var addressId = await EnsureUnifiedDemoCustomerAddressAsync(
                 db,
                 customerId,
                 index + 1,
-                delivery,
+                customerSeed,
                 now,
                 auditUser,
                 cancellationToken);
-            await EnsureDemoLifecycleCustomerProfileAsync(
+            await EnsureUnifiedDemoCustomerProfileAsync(
                 db,
                 customerId,
                 addressId,
@@ -638,7 +666,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 .OrderBy(meal => meal.SortOrder)
                 .Take(mealCount)
                 .ToList();
-            var orderNumber = $"DEMO-M4-{today:yyyyMMdd}-{index + 1:D2}";
+            var orderNumber = $"{UnifiedDemoOrderPrefix}-{today:yyyyMMdd}-{index + 1:D2}";
             var totalPrice = orderMeals.Sum(meal => meal.PricePerDay);
             var orderId = await EnsureTodayDemoOrderAsync(
                 db,
@@ -650,7 +678,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 auditUser,
                 cancellationToken);
 
-            await EnsureTodayDemoOrderItemsAsync(db, orderId, orderMeals, now, auditUser, cancellationToken);
+            await EnsureTodayDemoOrderItemsAsync(db, orderId, orderMeals, today, now, auditUser, cancellationToken);
             var deliveryCalendarId = await EnsureTodayDemoDeliveryCalendarAsync(
                 db,
                 orderId,
@@ -676,7 +704,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             today,
             vehicles.Length,
             drivers.Length,
-            deliveries.Length);
+            customerSeeds.Length);
     }
 
     private async Task EnsureUnifiedDemoProductionPlanAsync(
@@ -924,14 +952,14 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             cancellationToken: cancellationToken));
     }
 
-    private static async Task<int> EnsureLogisticsDemoCustomerAsync(
+    private static async Task<int> EnsureUnifiedDemoCustomerAsync(
         IDbConnection db,
         int sequence,
-        LogisticsDemoDelivery delivery,
+        UnifiedDemoCustomerSeed customer,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var email = $"demo-m4-klient-{sequence:D2}@kuchnia.local";
+        var email = $"{UnifiedDemoCustomerEmailPrefix}{sequence:D2}{UnifiedDemoCustomerEmailSuffix}";
         var userId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
             "SELECT [Id] FROM [Users] WHERE [Email] = @email;",
             new { email },
@@ -951,8 +979,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 new
                 {
                     userId = userId.Value,
-                    delivery.FirstName,
-                    delivery.LastName,
+                    customer.FirstName,
+                    customer.LastName,
                     role = UserRoles.Client,
                     now,
                 },
@@ -969,25 +997,25 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             new
             {
                 email,
-                passwordHash = BCrypt.Net.BCrypt.HashPassword("Demo123!"),
-                delivery.FirstName,
-                delivery.LastName,
+                passwordHash = BCrypt.Net.BCrypt.HashPassword(UnifiedDemoCustomerPassword),
+                customer.FirstName,
+                customer.LastName,
                 role = UserRoles.Client,
                 now,
             },
             cancellationToken: cancellationToken));
     }
 
-    private static async Task<int> EnsureLogisticsDemoAddressAsync(
+    private static async Task<int> EnsureUnifiedDemoCustomerAddressAsync(
         IDbConnection db,
         int customerId,
         int sequence,
-        LogisticsDemoDelivery delivery,
+        UnifiedDemoCustomerSeed customer,
         DateTimeOffset now,
         string auditUser,
         CancellationToken cancellationToken)
     {
-        var label = $"Demo M4 {sequence:D2}";
+        var label = $"Demo klient {sequence:D2}";
         var addressId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
             """
             SELECT TOP 1 [Id]
@@ -1010,7 +1038,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                     [City] = N'Bialystok',
                     [PostalCode] = @postalCode,
                     [IsDefault] = 1,
-                    [DeliveryNotes] = N'Demo M4: punkt do generowania tras logistycznych.',
+                    [DeliveryNotes] = N'Unified demo: adres klienta M1 uzywany przez M4 do tras.',
                     [Latitude] = @latitude,
                     [Longitude] = @longitude,
                     [UpdatedAt] = @now,
@@ -1021,12 +1049,12 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 new
                 {
                     addressId = addressId.Value,
-                    delivery.Street,
-                    delivery.BuildingNumber,
-                    delivery.ApartmentNumber,
-                    delivery.PostalCode,
-                    delivery.Latitude,
-                    delivery.Longitude,
+                    customer.Street,
+                    customer.BuildingNumber,
+                    customer.ApartmentNumber,
+                    customer.PostalCode,
+                    customer.Latitude,
+                    customer.Longitude,
                     now,
                     auditUser,
                 },
@@ -1041,26 +1069,26 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                  [IsDefault], [DeliveryNotes], [CreatedAt], [CreatedBy], [IsDeleted], [Latitude], [Longitude])
             VALUES
                 (@customerId, @label, @street, @buildingNumber, @apartmentNumber, N'Bialystok', @postalCode,
-                 1, N'Demo M4: punkt do generowania tras logistycznych.', @now, @auditUser, 0, @latitude, @longitude);
+                 1, N'Unified demo: adres klienta M1 uzywany przez M4 do tras.', @now, @auditUser, 0, @latitude, @longitude);
             SELECT CAST(SCOPE_IDENTITY() as int);
             """,
             new
             {
                 customerId,
                 label,
-                delivery.Street,
-                delivery.BuildingNumber,
-                delivery.ApartmentNumber,
-                delivery.PostalCode,
-                delivery.Latitude,
-                delivery.Longitude,
+                customer.Street,
+                customer.BuildingNumber,
+                customer.ApartmentNumber,
+                customer.PostalCode,
+                customer.Latitude,
+                customer.Longitude,
                 now,
                 auditUser,
             },
             cancellationToken: cancellationToken));
     }
 
-    private static LogisticsDemoDelivery[] GetLogisticsDemoDeliveries() =>
+    private static UnifiedDemoCustomerSeed[] GetUnifiedDemoCustomerSeeds() =>
     [
         new("Katarzyna", "Nowak", "Lipowa", "12", "4", "15-427", 53.13218, 23.15841),
         new("Piotr", "Kaminski", "Warszawska", "8", null, "15-062", 53.13073, 23.17442),
@@ -2242,7 +2270,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             SET IDENTITY_INSERT [Diets] OFF;
             """, new { now, auditUser });
 
-        // 6. Warianty diet dopasowane do MockOrderDataProvider (IDs: 1, 2, 3, 4, 5)
+        // 6. Warianty diet uzywane przez unified M1/M2 seed (IDs: 1, 2, 3, 4, 5)
         await db.ExecuteAsync(
             """
             SET IDENTITY_INSERT [DietVariants] ON;
@@ -4399,107 +4427,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         return dietVariantId.Value;
     }
 
-    private static async Task<int> EnsureDemoLifecycleCustomerAsync(IDbConnection db, DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        const string email = "demo-klient@kuchnia.local";
-
-        var userId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
-            "SELECT [Id] FROM [Users] WHERE [Email] = @email;",
-            new { email },
-            cancellationToken: cancellationToken));
-
-        if (userId.HasValue)
-        {
-            await db.ExecuteAsync(new CommandDefinition(
-                """
-                UPDATE [Users]
-                SET [FirstName] = N'Demo',
-                    [LastName] = N'Klient',
-                    [Role] = @role,
-                    [UpdatedAt] = @now
-                WHERE [Id] = @userId;
-                """,
-                new { userId = userId.Value, role = UserRoles.Client, now },
-                cancellationToken: cancellationToken));
-
-            return userId.Value;
-        }
-
-        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
-            """
-            INSERT INTO [Users] ([Email], [PasswordHash], [FirstName], [LastName], [Role], [CreatedAt], [UpdatedAt])
-            VALUES (@email, @passwordHash, N'Demo', N'Klient', @role, @now, NULL);
-            SELECT CAST(SCOPE_IDENTITY() as int);
-            """,
-            new
-            {
-                email,
-                passwordHash = BCrypt.Net.BCrypt.HashPassword("Demo123!"),
-                role = UserRoles.Client,
-                now,
-            },
-            cancellationToken: cancellationToken));
-    }
-
-    private static async Task<int> EnsureDemoLifecycleAddressAsync(
-        IDbConnection db,
-        int customerId,
-        DateTimeOffset now,
-        string auditUser,
-        CancellationToken cancellationToken)
-    {
-        var addressId = await db.ExecuteScalarAsync<int?>(new CommandDefinition(
-            """
-            SELECT TOP 1 [Id]
-            FROM [Addresses]
-            WHERE [UserId] = @customerId
-              AND [Label] = N'Demo lifecycle'
-              AND [IsDeleted] = 0
-            ORDER BY [Id];
-            """,
-            new { customerId },
-            cancellationToken: cancellationToken));
-
-        if (addressId.HasValue)
-        {
-            await db.ExecuteAsync(new CommandDefinition(
-                """
-                UPDATE [Addresses]
-                SET [Street] = N'Lipowa',
-                    [BuildingNumber] = N'1',
-                    [ApartmentNumber] = N'2',
-                    [City] = N'Bialystok',
-                    [PostalCode] = N'15-424',
-                    [IsDefault] = 1,
-                    [DeliveryNotes] = N'Dane demo na dzisiejsza sciezke zycia zamowienia.',
-                    [Latitude] = 53.1322,
-                    [Longitude] = 23.1584,
-                    [UpdatedAt] = @now,
-                    [UpdatedBy] = @auditUser,
-                    [IsDeleted] = 0
-                WHERE [Id] = @addressId;
-                """,
-                new { addressId = addressId.Value, now, auditUser },
-                cancellationToken: cancellationToken));
-
-            return addressId.Value;
-        }
-
-        return await db.ExecuteScalarAsync<int>(new CommandDefinition(
-            """
-            INSERT INTO [Addresses]
-                ([UserId], [Label], [Street], [BuildingNumber], [ApartmentNumber], [City], [PostalCode],
-                 [IsDefault], [DeliveryNotes], [CreatedAt], [CreatedBy], [IsDeleted], [Latitude], [Longitude])
-            VALUES
-                (@customerId, N'Demo lifecycle', N'Lipowa', N'1', N'2', N'Bialystok', N'15-424',
-                 1, N'Dane demo na dzisiejsza sciezke zycia zamowienia.', @now, @auditUser, 0, 53.1322, 23.1584);
-            SELECT CAST(SCOPE_IDENTITY() as int);
-            """,
-            new { customerId, now, auditUser },
-            cancellationToken: cancellationToken));
-    }
-
-    private static async Task<string> EnsureDemoLifecycleCustomerProfileAsync(
+    private static async Task<string> EnsureUnifiedDemoCustomerProfileAsync(
         IDbConnection db,
         int customerId,
         int addressId,
@@ -4518,7 +4446,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 """
                 UPDATE [CustomerProfiles]
                 SET [Phone] = N'+48 500 000 001',
-                    [DietaryNotes] = N'Demo: kilka dan w jednym zamowieniu na dzisiaj.',
+                    [DietaryNotes] = N'Unified demo: klient M1 uzywany przez M2/M3/M4 workflow.',
                     [DefaultAddressId] = @addressId,
                     [UpdatedAt] = @now,
                     [UpdatedBy] = @auditUser,
@@ -4535,7 +4463,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 INSERT INTO [CustomerProfiles]
                     ([UserId], [Phone], [DietaryNotes], [DefaultAddressId], [CreatedAt], [CreatedBy], [IsDeleted])
                 VALUES
-                    (@customerId, N'+48 500 000 001', N'Demo: kilka dan w jednym zamowieniu na dzisiaj.', @addressId, @now, @auditUser, 0);
+                    (@customerId, N'+48 500 000 001', N'Unified demo: klient M1 uzywany przez M2/M3/M4 workflow.', @addressId, @now, @auditUser, 0);
                 """,
                 new { customerId, addressId, now, auditUser },
                 cancellationToken: cancellationToken));
@@ -4731,7 +4659,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                     [TotalPrice] = @totalPrice,
                     [DiscountAmount] = 0,
                     [FinalPrice] = @totalPrice,
-                    [Notes] = N'Demo lifecycle: dzisiejsze zamowienie z kilkoma daniami.',
+                    [Notes] = N'Unified demo: zamowienie M1 uzywane przez M2/M3/M4 workflow.',
                     [StartDate] = @todayDate,
                     [EndDate] = @todayDate,
                     [UpdatedAt] = @now,
@@ -4760,7 +4688,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 ([CustomerId], [OrderNumber], [Status], [TotalPrice], [DiscountAmount], [FinalPrice], [Notes],
                  [StartDate], [EndDate], [CreatedAt], [CreatedBy], [IsDeleted])
             VALUES
-                (@customerId, @orderNumber, @status, @totalPrice, 0, @totalPrice, N'Demo lifecycle: dzisiejsze zamowienie z kilkoma daniami.',
+                (@customerId, @orderNumber, @status, @totalPrice, 0, @totalPrice, N'Unified demo: zamowienie M1 uzywane przez M2/M3/M4 workflow.',
                  @todayDate, @todayDate, @now, @auditUser, 0);
             SELECT CAST(SCOPE_IDENTITY() as int);
             """,
@@ -4781,6 +4709,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         IDbConnection db,
         int orderId,
         IReadOnlyList<DemoLifecycleMeal> meals,
+        DateOnly deliveryDate,
         DateTimeOffset now,
         string auditUser,
         CancellationToken cancellationToken)
@@ -4796,11 +4725,11 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 """
                 INSERT INTO [OrderItems]
                     ([OrderId], [DietId], [DietVariantId], [MealId], [MealVariantId], [DietMenuPlanItemId],
-                     [DietName], [VariantName], [MealSlot], [CaloriesPerDay],
+                     [DietName], [VariantName], [MealSlot], [DeliveryDate], [CaloriesPerDay],
                      [PricePerDay], [TotalDays], [TotalPrice], [CreatedAt], [CreatedBy], [IsDeleted])
                 VALUES
                     (@orderId, @dietId, @dietVariantId, @mealId, @mealVariantId, @dietMenuPlanItemId,
-                     @dietName, @variantName, @mealSlot, @caloriesPerDay,
+                     @dietName, @variantName, @mealSlot, @deliveryDate, @caloriesPerDay,
                      @pricePerDay, 1, @pricePerDay, @now, @auditUser, 0);
                 """,
                 new
@@ -4814,6 +4743,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                     dietName = $"{meal.DietName}: {meal.MealName}",
                     variantName = $"{meal.VariantName} / {meal.MealSlot}",
                     mealSlot = meal.MealSlot,
+                    deliveryDate = deliveryDate.ToDateTime(TimeOnly.MinValue),
                     caloriesPerDay = meal.CaloriesPerDay,
                     pricePerDay = meal.PricePerDay,
                     now,
@@ -5521,7 +5451,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         string LicenseNumber,
         string VehicleRegistration);
 
-    private sealed record LogisticsDemoDelivery(
+    private sealed record UnifiedDemoCustomerSeed(
         string FirstName,
         string LastName,
         string Street,

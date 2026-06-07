@@ -313,7 +313,7 @@ Fazy implementacji (dla asystenta – lista wymaganych plików na podstawie istn
 **Faza 4 – warstwa infrastruktury (repozytoria Dapper, adaptery, seeding):**
   - Implementacje repozytoriów: `BatchRepository`, `StockItemRepository`, `InventoryTransactionRepository`, `TemperatureLogRepository`, `ProductionPlanRepository`, `PackingSessionRepository`
   - Repozytoria dla zamówień: `OrderRepository`, `AddressRepository`, `DiscountCodeRepository`, `DeliveryCalendarRepository`, itd.
-  - Adaptery: `M1OrderDataProvider`, `DietDataAdapter`, `MockDeliveryManifestProvider`
+  - Adaptery: `M1OrderDataProvider`, `DietDataAdapter`, `M4DeliveryManifestProvider` (mocki tylko test/dev)
   - `DatabaseSeeder` (MinimalRealistic, DemoData)
   - `DependencyInjection.cs` (rejestracja wszystkich serwisów)
 

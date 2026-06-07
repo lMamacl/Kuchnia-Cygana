@@ -26,6 +26,8 @@ public sealed class OrderItem : AuditableEntity
     [StringLength(50)]
     public string? MealSlot { get; set; }
 
+    public DateTime? DeliveryDate { get; set; }
+
     public int CaloriesPerDay { get; set; }
 
     public decimal PricePerDay { get; set; }

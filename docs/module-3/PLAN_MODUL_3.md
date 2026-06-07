@@ -245,7 +245,7 @@ Interfejsy w `Domain/Interfaces/External/`:
 | Wysiłek refaktoryzacji | Minimalny — zamiana implementacji w DI | Brak — ale trzeba czekać |
 | Realistyczność danych | Niska — statyczne/fakeowe | Wysoka — prawdziwe dane |
 
-**Wybór:** Opcja A (teraz) → Opcja B (FAZA 5 integracji). Interfejsy `IOrderDataProvider` i `IDietDataProvider` w Domain, implementacje mock w `Domain/Mocks`, docelowe adaptery w Infrastructure.
+**Wybór:** Opcja A (startowo) → Opcja B (po integracji). Interfejsy `IOrderDataProvider` i `IDietDataProvider` zostają w Domain, runtime korzysta z adapterów Infrastructure dla danych M1/M2, a mocki zostają wyłącznie jako jawnie skonfigurowany tryb test/dev.
 
 ### Alternatywa 3: FEFO w kodzie aplikacyjnym vs. SQL query
 

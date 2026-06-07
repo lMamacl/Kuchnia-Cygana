@@ -1764,6 +1764,16 @@ public sealed class PackingService : IPackingService
                 deliveryCalendarId = delivery?.DeliveryCalendarId ?? 0;
             }
 
+            if (delivery is null || string.IsNullOrWhiteSpace(delivery.AddressFullLine))
+            {
+                var deliveryKey = deliveryCalendarId > 0
+                    ? $"DeliveryCalendarId {deliveryCalendarId}"
+                    : $"OrderId {order.OrderId}";
+
+                throw new InvalidOperationException(
+                    $"Brak adresu dostawy z M1 dla {deliveryKey}. Nie mozna przygotowac kompletacji, etykiet ani manifestu na danych zastepczych.");
+            }
+
             var routeStop = deliveryCalendarId > 0 && stopsByDeliveryCalendarId.TryGetValue(deliveryCalendarId, out var matchedStop)
                 ? matchedStop
                 : new RouteStop(
@@ -1782,9 +1792,9 @@ public sealed class PackingService : IPackingService
                 routeStop.Route,
                 routeStop.Stop,
                 deliveryCalendarId,
-                delivery?.ClientPublicId ?? order.ClientPublicId,
-                delivery?.AddressFullLine ?? CreateFallbackAddress(order.OrderId),
-                delivery?.DeliveryWindowName ?? $"{routeStop.Stop.DeliveryWindowFrom}-{routeStop.Stop.DeliveryWindowTo}".Trim('-')));
+                delivery.ClientPublicId ?? order.ClientPublicId,
+                delivery.AddressFullLine,
+                delivery.DeliveryWindowName ?? $"{routeStop.Stop.DeliveryWindowFrom}-{routeStop.Stop.DeliveryWindowTo}".Trim('-')));
         }
 
         return assignments;
@@ -2146,11 +2156,6 @@ public sealed class PackingService : IPackingService
     {
         var orderPart = session.OrderId?.ToString("D6") ?? session.Id.ToString("D6");
         return $"BOX-{orderPart}-{sequence:D2}";
-    }
-
-    private static string CreateFallbackAddress(int orderId)
-    {
-        return $"Warszawa, ul. Przykładowa {orderId % 100 + 1}";
     }
 
     private static string GetDietType(int dietVariantId)
