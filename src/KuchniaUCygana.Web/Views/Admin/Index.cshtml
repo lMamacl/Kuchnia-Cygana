@@ -5,13 +5,10 @@
     var logs = Model.SystemLogs
         .OrderByDescending(x => x.Timestamp)
         .ToArray();
-    var users = Model.Users
-        .OrderBy(x => x.FullName)
-        .ToArray();
-    var roleGroups = users
-        .GroupBy(x => string.IsNullOrWhiteSpace(x.Role) ? "Brak roli" : x.Role)
-        .OrderByDescending(x => x.Count())
-        .ThenBy(x => x.Key)
+    var userSummary = Model.UserSummary;
+    var roleGroups = userSummary.Roles
+        .OrderByDescending(x => x.TotalCount)
+        .ThenBy(x => x.Role)
         .ToArray();
     var auditTotal = Model.AuditPage.TotalCount;
 }
@@ -21,7 +18,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Uzytkownicy</div>
-                <div class="h1 mb-0">@users.Length</div>
+                <div class="h1 mb-0">@userSummary.TotalCount</div>
             </div>
         </div>
     </div>
@@ -29,7 +26,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Role w uzyciu</div>
-                <div class="h1 mb-0">@roleGroups.Length</div>
+                <div class="h1 mb-0">@userSummary.ActiveRoleCount</div>
             </div>
         </div>
     </div>
@@ -102,8 +99,8 @@
                 @foreach (var role in roleGroups)
                 {
                     <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <span class="fw-semibold">@role.Key</span>
-                        <span class="badge bg-blue-lt text-blue">@role.Count()</span>
+                        <span class="fw-semibold">@role.Role</span>
+                        <span class="badge bg-blue-lt text-blue">@role.TotalCount</span>
                     </div>
                 }
                 @if (roleGroups.Length == 0)

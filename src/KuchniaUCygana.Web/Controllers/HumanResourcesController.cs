@@ -2,6 +2,7 @@ using KuchniaUCygana.Application.DTOs;
 using KuchniaUCygana.Application.DTOs.HR;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Notifications;
+using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Web.Filters;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -31,14 +32,14 @@ public sealed class HumanResourcesController : Controller
     public async Task<IActionResult> Index()
     {
         SetViewData("HR", "Kadry", "Dashboard HR: pracownicy, dzialy, urlopy i grafik.");
-        return View(await BuildModelAsync());
+        return View(await BuildDashboardModelAsync());
     }
 
     [HttpGet("departments")]
     public async Task<IActionResult> Departments([FromQuery] DepartmentListFilterViewModel filter)
     {
         SetViewData("Dzialy", "Kadry", "Struktura organizacyjna i odpowiedzialni pracownicy.");
-        return View(await BuildModelAsync(departmentsFilter: filter));
+        return View(await BuildDepartmentsModelAsync(filter));
     }
 
     [HttpPost("departments")]
@@ -47,7 +48,7 @@ public sealed class HumanResourcesController : Controller
         if (!ModelState.IsValid)
         {
             SetViewData("Dzialy", "Kadry", "Struktura organizacyjna i odpowiedzialni pracownicy.");
-            return View("Departments", await BuildModelAsync(newDepartment: request));
+            return View("Departments", await BuildDepartmentsModelAsync(new DepartmentListFilterViewModel(), request));
         }
 
         try
@@ -81,14 +82,14 @@ public sealed class HumanResourcesController : Controller
     public async Task<IActionResult> Employees([FromQuery] EmployeeListFilterViewModel filter)
     {
         SetViewData("Pracownicy", "Kadry", "Kartoteka pracownikow i status zatrudnienia.");
-        return View(await BuildModelAsync(employeesFilter: filter));
+        return View(await BuildEmployeesModelAsync(filter));
     }
 
     [HttpGet("employees/new")]
     public async Task<IActionResult> NewEmployee()
     {
         SetViewData("Nowy pracownik", "Kadry", "Dodanie pracownika do kartoteki HR.");
-        return View(await BuildModelAsync());
+        return View(await BuildNewEmployeeModelAsync());
     }
 
     [HttpPost("employees")]
@@ -97,7 +98,7 @@ public sealed class HumanResourcesController : Controller
         if (!ModelState.IsValid)
         {
             SetViewData("Nowy pracownik", "Kadry", "Dodanie pracownika do kartoteki HR.");
-            return View("NewEmployee", await BuildModelAsync(newEmployee: request));
+            return View("NewEmployee", await BuildNewEmployeeModelAsync(request));
         }
 
         try
@@ -227,7 +228,7 @@ public sealed class HumanResourcesController : Controller
     public async Task<IActionResult> Leaves([FromQuery] LeaveRequestListFilterViewModel filter)
     {
         SetViewData("Urlopy", "Kadry", "Wnioski urlopowe i decyzje kadrowe.");
-        return View(await BuildModelAsync(leaveRequestsFilter: filter));
+        return View(await BuildLeavesModelAsync(filter));
     }
 
     [HttpGet("leaves/new")]
@@ -235,7 +236,7 @@ public sealed class HumanResourcesController : Controller
     public async Task<IActionResult> NewLeaveRequest()
     {
         SetViewData("Nowy wniosek", "Kadry", "Rejestracja wniosku urlopowego.");
-        return View(await BuildModelAsync());
+        return View(await BuildNewLeaveRequestModelAsync());
     }
 
     [HttpPost("leaves")]
@@ -245,7 +246,7 @@ public sealed class HumanResourcesController : Controller
         if (!ModelState.IsValid)
         {
             SetViewData("Nowy wniosek", "Kadry", "Rejestracja wniosku urlopowego.");
-            return View("NewLeaveRequest", await BuildModelAsync(newLeaveRequest: request));
+            return View("NewLeaveRequest", await BuildNewLeaveRequestModelAsync(request));
         }
 
         try
@@ -335,7 +336,7 @@ public sealed class HumanResourcesController : Controller
     public async Task<IActionResult> Schedules([FromQuery] WorkScheduleListFilterViewModel filter)
     {
         SetViewData("Grafik", "Kadry", "Zmiany pracownikow i role na zmianie.");
-        return View(await BuildModelAsync(workSchedulesFilter: filter));
+        return View(await BuildSchedulesModelAsync(filter));
     }
 
     [HttpGet("schedules/new")]
@@ -343,7 +344,7 @@ public sealed class HumanResourcesController : Controller
     public async Task<IActionResult> NewWorkSchedule()
     {
         SetViewData("Nowa zmiana", "Kadry", "Dodanie zmiany do grafiku.");
-        return View(await BuildModelAsync());
+        return View(await BuildNewWorkScheduleModelAsync());
     }
 
     [HttpPost("schedules")]
@@ -353,7 +354,7 @@ public sealed class HumanResourcesController : Controller
         if (!ModelState.IsValid)
         {
             SetViewData("Nowa zmiana", "Kadry", "Dodanie zmiany do grafiku.");
-            return View("NewWorkSchedule", await BuildModelAsync(newWorkSchedule: request));
+            return View("NewWorkSchedule", await BuildNewWorkScheduleModelAsync(request));
         }
 
         try
@@ -486,80 +487,158 @@ public sealed class HumanResourcesController : Controller
         return RedirectToAction(nameof(Schedules));
     }
 
-    private async Task<HumanResourcesDashboardViewModel> BuildModelAsync(
-        CreateDepartmentRequest? newDepartment = null,
-        CreateEmployeeRequest? newEmployee = null,
-        CreateLeaveRequestRequest? newLeaveRequest = null,
-        CreateWorkScheduleRequest? newWorkSchedule = null,
-        DepartmentListFilterViewModel? departmentsFilter = null,
-        EmployeeListFilterViewModel? employeesFilter = null,
-        LeaveRequestListFilterViewModel? leaveRequestsFilter = null,
-        WorkScheduleListFilterViewModel? workSchedulesFilter = null)
+    private async Task<HumanResourcesDashboardViewModel> BuildDashboardModelAsync()
     {
-        var departments = (await humanResourcesService.GetDepartmentsAsync()).ToArray();
-        var employees = (await humanResourcesService.GetEmployeesAsync()).ToArray();
-        var leaveRequests = (await humanResourcesService.GetLeaveRequestsAsync()).ToArray();
-        var workSchedules = (await humanResourcesService.GetWorkSchedulesAsync()).ToArray();
-        var users = (await userService.GetAllAsync()).ToArray();
-        var usersById = users.ToDictionary(user => user.Id);
-
-        departmentsFilter ??= new DepartmentListFilterViewModel();
-        employeesFilter ??= new EmployeeListFilterViewModel();
-        leaveRequestsFilter ??= new LeaveRequestListFilterViewModel();
-        workSchedulesFilter ??= new WorkScheduleListFilterViewModel();
-
-        var departmentsPageModel = PagedList<DepartmentDto>.Create(
-            FilterDepartments(departments, employees, departmentsFilter).OrderBy(department => department.Name),
-            departmentsFilter.Page,
-            departmentsFilter.PageSize);
-        var employeesPageModel = PagedList<EmployeeDto>.Create(
-            FilterEmployees(employees, usersById, employeesFilter)
-                .OrderBy(employee => employee.LastName)
-                .ThenBy(employee => employee.FirstName),
-            employeesFilter.Page,
-            employeesFilter.PageSize);
-        var leaveRequestsPageModel = PagedList<LeaveRequestDto>.Create(
-            FilterLeaveRequests(leaveRequests, leaveRequestsFilter).OrderByDescending(request => request.CreatedAt),
-            leaveRequestsFilter.Page,
-            leaveRequestsFilter.PageSize);
-        var workSchedulesPageModel = PagedList<WorkScheduleDto>.Create(
-            FilterWorkSchedules(workSchedules, usersById, workSchedulesFilter)
-                .OrderBy(schedule => schedule.ShiftDate)
-                .ThenBy(schedule => schedule.Shift),
-            workSchedulesFilter.Page,
-            workSchedulesFilter.PageSize);
-
-        SyncFilter(departmentsFilter, departmentsPageModel.Page, departmentsPageModel.PageSize);
-        SyncFilter(employeesFilter, employeesPageModel.Page, employeesPageModel.PageSize);
-        SyncFilter(leaveRequestsFilter, leaveRequestsPageModel.Page, leaveRequestsPageModel.PageSize);
-        SyncFilter(workSchedulesFilter, workSchedulesPageModel.Page, workSchedulesPageModel.PageSize);
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var pendingLeaves = await humanResourcesService.SearchLeaveRequestsAsync(new LeaveRequestSearchRequest
+        {
+            Status = 0,
+            Page = 1,
+            PageSize = 8,
+        });
+        var todaySchedules = await humanResourcesService.SearchWorkSchedulesAsync(new WorkScheduleSearchRequest
+        {
+            From = today,
+            To = today,
+            Page = 1,
+            PageSize = 8,
+        });
 
         return new HumanResourcesDashboardViewModel
         {
-            Departments = departments,
-            Employees = employees,
-            LeaveRequests = leaveRequests,
-            WorkSchedules = workSchedules,
-            Users = users,
-            DepartmentsPage = departmentsPageModel,
-            EmployeesPage = employeesPageModel,
-            LeaveRequestsPage = leaveRequestsPageModel,
-            WorkSchedulesPage = workSchedulesPageModel,
-            DepartmentsFilter = departmentsFilter,
-            EmployeesFilter = employeesFilter,
-            LeaveRequestsFilter = leaveRequestsFilter,
-            WorkSchedulesFilter = workSchedulesFilter,
+            Summary = await humanResourcesService.GetSummaryAsync(today),
+            DepartmentSummaries = await humanResourcesService.GetDepartmentStaffSummariesAsync(),
+            LeaveRequests = pendingLeaves.Items,
+            WorkSchedules = todaySchedules.Items,
+        };
+    }
+
+    private async Task<HumanResourcesDashboardViewModel> BuildDepartmentsModelAsync(
+        DepartmentListFilterViewModel filter,
+        CreateDepartmentRequest? newDepartment = null)
+    {
+        filter ??= new DepartmentListFilterViewModel();
+        var page = await humanResourcesService.SearchDepartmentsAsync(new DepartmentSearchRequest
+        {
+            Search = filter.Search,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+        });
+        SyncFilter(filter, page.Page, page.PageSize);
+
+        return new HumanResourcesDashboardViewModel
+        {
+            Departments = page.Items,
+            Employees = await humanResourcesService.GetEmployeeOptionsAsync(activeOnly: true),
+            DepartmentSummaries = await humanResourcesService.GetDepartmentStaffSummariesAsync(filter.Search),
+            DepartmentsPage = ToPagedList(page.Items, page.Page, page.PageSize, page.TotalCount),
+            DepartmentsFilter = filter,
             NewDepartment = newDepartment ?? new CreateDepartmentRequest(),
+        };
+    }
+
+    private async Task<HumanResourcesDashboardViewModel> BuildEmployeesModelAsync(EmployeeListFilterViewModel filter)
+    {
+        filter ??= new EmployeeListFilterViewModel();
+        var page = await humanResourcesService.SearchEmployeesAsync(new EmployeeSearchRequest
+        {
+            Search = filter.Search,
+            DepartmentId = filter.DepartmentId,
+            Status = filter.Status,
+            Role = filter.Role,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+        });
+        SyncFilter(filter, page.Page, page.PageSize);
+
+        return new HumanResourcesDashboardViewModel
+        {
+            Departments = await GetDepartmentOptionsAsync(),
+            Employees = page.Items,
+            EmployeesPage = ToPagedList(page.Items, page.Page, page.PageSize, page.TotalCount),
+            EmployeesFilter = filter,
+            AvailableRoles = StaffUserRoles,
+        };
+    }
+
+    private async Task<HumanResourcesDashboardViewModel> BuildNewEmployeeModelAsync(CreateEmployeeRequest? newEmployee = null)
+    {
+        return new HumanResourcesDashboardViewModel
+        {
+            Departments = await GetDepartmentOptionsAsync(),
+            Users = await userService.GetByRolesAsync(StaffUserRoles),
             NewEmployee = newEmployee ?? new CreateEmployeeRequest
             {
                 HireDate = DateOnly.FromDateTime(DateTime.Today),
                 IsActive = true,
             },
+        };
+    }
+
+    private async Task<HumanResourcesDashboardViewModel> BuildLeavesModelAsync(LeaveRequestListFilterViewModel filter)
+    {
+        filter ??= new LeaveRequestListFilterViewModel();
+        var page = await humanResourcesService.SearchLeaveRequestsAsync(new LeaveRequestSearchRequest
+        {
+            Search = filter.Search,
+            Status = filter.Status,
+            LeaveType = filter.LeaveType,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+        });
+        SyncFilter(filter, page.Page, page.PageSize);
+
+        return new HumanResourcesDashboardViewModel
+        {
+            Employees = await humanResourcesService.GetEmployeeOptionsAsync(activeOnly: true),
+            LeaveRequests = page.Items,
+            LeaveRequestsPage = ToPagedList(page.Items, page.Page, page.PageSize, page.TotalCount),
+            LeaveRequestsFilter = filter,
+        };
+    }
+
+    private async Task<HumanResourcesDashboardViewModel> BuildNewLeaveRequestModelAsync(CreateLeaveRequestRequest? newLeaveRequest = null)
+    {
+        return new HumanResourcesDashboardViewModel
+        {
+            Employees = await humanResourcesService.GetEmployeeOptionsAsync(activeOnly: true),
             NewLeaveRequest = newLeaveRequest ?? new CreateLeaveRequestRequest
             {
                 StartDate = DateOnly.FromDateTime(DateTime.Today),
                 EndDate = DateOnly.FromDateTime(DateTime.Today),
             },
+        };
+    }
+
+    private async Task<HumanResourcesDashboardViewModel> BuildSchedulesModelAsync(WorkScheduleListFilterViewModel filter)
+    {
+        filter ??= new WorkScheduleListFilterViewModel();
+        var page = await humanResourcesService.SearchWorkSchedulesAsync(new WorkScheduleSearchRequest
+        {
+            Search = filter.Search,
+            From = filter.From,
+            To = filter.To,
+            Shift = ParseWorkShift(filter.Shift),
+            Role = filter.Role,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+        });
+        SyncFilter(filter, page.Page, page.PageSize);
+
+        return new HumanResourcesDashboardViewModel
+        {
+            WorkSchedules = page.Items,
+            WorkSchedulesPage = ToPagedList(page.Items, page.Page, page.PageSize, page.TotalCount),
+            WorkSchedulesFilter = filter,
+            AvailableRoles = StaffUserRoles,
+        };
+    }
+
+    private async Task<HumanResourcesDashboardViewModel> BuildNewWorkScheduleModelAsync(CreateWorkScheduleRequest? newWorkSchedule = null)
+    {
+        return new HumanResourcesDashboardViewModel
+        {
+            Users = await userService.GetByRolesAsync(StaffUserRoles),
             NewWorkSchedule = newWorkSchedule ?? new CreateWorkScheduleRequest
             {
                 ShiftDate = DateOnly.FromDateTime(DateTime.Today),
@@ -567,190 +646,34 @@ public sealed class HumanResourcesController : Controller
         };
     }
 
-    private static IEnumerable<DepartmentDto> FilterDepartments(
-        IEnumerable<DepartmentDto> departments,
-        IReadOnlyCollection<EmployeeDto> employees,
-        DepartmentListFilterViewModel filter)
+    private static WorkShift? ParseWorkShift(string? shift)
+        => Enum.TryParse<WorkShift>(shift, ignoreCase: true, out var parsed)
+            ? parsed
+            : null;
+
+    private async Task<IReadOnlyList<DepartmentDto>> GetDepartmentOptionsAsync()
     {
-        var query = departments;
-        if (!string.IsNullOrWhiteSpace(filter.Search))
+        var page = await humanResourcesService.SearchDepartmentsAsync(new DepartmentSearchRequest
         {
-            query = query.Where(department =>
-            {
-                var searchValues = new List<string?>
-                {
-                    department.Name,
-                    department.Description,
-                    department.HeadEmployeeFullName,
-                };
-                searchValues.AddRange(employees
-                    .Where(employee => employee.DepartmentId == department.Id)
-                    .Select(employee => employee.FullName));
+            Page = 1,
+            PageSize = 200,
+        });
 
-                return MatchesSearch(filter.Search, searchValues.ToArray());
-            });
-        }
-
-        return query;
+        return page.Items;
     }
 
-    private static IEnumerable<EmployeeDto> FilterEmployees(
-        IEnumerable<EmployeeDto> employees,
-        IReadOnlyDictionary<int, UserDto> usersById,
-        EmployeeListFilterViewModel filter)
-    {
-        var query = employees;
-        if (filter.DepartmentId is > 0)
+    private static PagedList<T> ToPagedList<T>(
+        IReadOnlyList<T> items,
+        int page,
+        int pageSize,
+        int totalCount)
+        => new()
         {
-            query = query.Where(employee => employee.DepartmentId == filter.DepartmentId.Value);
-        }
-
-        if (string.Equals(filter.Status, "Active", StringComparison.OrdinalIgnoreCase))
-        {
-            query = query.Where(employee => employee.IsActive);
-        }
-        else if (string.Equals(filter.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
-        {
-            query = query.Where(employee => !employee.IsActive);
-        }
-
-        if (!string.IsNullOrWhiteSpace(filter.Role))
-        {
-            query = query.Where(employee =>
-                usersById.TryGetValue(employee.UserId, out var user) &&
-                string.Equals(user.Role, filter.Role, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (!string.IsNullOrWhiteSpace(filter.Search))
-        {
-            query = query.Where(employee =>
-            {
-                usersById.TryGetValue(employee.UserId, out var user);
-                return MatchesSearch(
-                    filter.Search,
-                    employee.FullName,
-                    employee.Email,
-                    employee.PhoneNumber,
-                    employee.DepartmentName,
-                    employee.Position,
-                    user?.Role,
-                    employee.Id.ToString(),
-                    employee.UserId.ToString());
-            });
-        }
-
-        return query;
-    }
-
-    private static IEnumerable<LeaveRequestDto> FilterLeaveRequests(
-        IEnumerable<LeaveRequestDto> leaveRequests,
-        LeaveRequestListFilterViewModel filter)
-    {
-        var query = leaveRequests;
-        if (filter.Status.HasValue)
-        {
-            query = query.Where(request => request.Status == filter.Status.Value);
-        }
-
-        if (filter.LeaveType.HasValue)
-        {
-            query = query.Where(request => request.LeaveType == filter.LeaveType.Value);
-        }
-
-        if (!string.IsNullOrWhiteSpace(filter.Search))
-        {
-            query = query.Where(request => MatchesSearch(
-                filter.Search,
-                request.EmployeeFullName,
-                request.ApprovedByEmployeeFullName,
-                request.RejectionReason,
-                LeaveTypeName(request.LeaveType),
-                LeaveStatusName(request.Status),
-                request.Id.ToString(),
-                request.EmployeeId.ToString()));
-        }
-
-        return query;
-    }
-
-    private static IEnumerable<WorkScheduleDto> FilterWorkSchedules(
-        IEnumerable<WorkScheduleDto> workSchedules,
-        IReadOnlyDictionary<int, UserDto> usersById,
-        WorkScheduleListFilterViewModel filter)
-    {
-        var query = workSchedules;
-        if (filter.From.HasValue)
-        {
-            query = query.Where(schedule => schedule.ShiftDate >= filter.From.Value);
-        }
-
-        if (filter.To.HasValue)
-        {
-            query = query.Where(schedule => schedule.ShiftDate <= filter.To.Value);
-        }
-
-        if (!string.IsNullOrWhiteSpace(filter.Shift))
-        {
-            query = query.Where(schedule =>
-                string.Equals(schedule.Shift, filter.Shift, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (!string.IsNullOrWhiteSpace(filter.Role))
-        {
-            query = query.Where(schedule =>
-                usersById.TryGetValue(schedule.UserId, out var user) &&
-                string.Equals(user.Role, filter.Role, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (!string.IsNullOrWhiteSpace(filter.Search))
-        {
-            query = query.Where(schedule =>
-            {
-                usersById.TryGetValue(schedule.UserId, out var user);
-                return MatchesSearch(
-                    filter.Search,
-                    schedule.EmployeeFullName,
-                    schedule.Shift,
-                    schedule.RoleAtShift,
-                    user?.Email,
-                    user?.FullName,
-                    user?.Role,
-                    schedule.Id.ToString(),
-                    schedule.UserId.ToString());
-            });
-        }
-
-        return query;
-    }
-
-    private static bool MatchesSearch(string? search, params string?[] values)
-    {
-        if (string.IsNullOrWhiteSpace(search))
-        {
-            return true;
-        }
-
-        var normalizedSearch = search.Trim();
-        return values.Any(value =>
-            !string.IsNullOrWhiteSpace(value) &&
-            value.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string LeaveTypeName(int value) => value switch
-    {
-        0 => "Wypoczynkowy",
-        1 => "Chorobowy",
-        2 => "Okolicznosciowy",
-        _ => $"Typ {value}",
-    };
-
-    private static string LeaveStatusName(int value) => value switch
-    {
-        0 => "Oczekuje",
-        1 => "Zaakceptowany",
-        2 => "Odrzucony",
-        _ => $"Status {value}",
-    };
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+        };
 
     private static void SyncFilter(StaffListFilterViewModel filter, int page, int pageSize)
     {
@@ -768,6 +691,26 @@ public sealed class HumanResourcesController : Controller
     private static readonly string[] HrNotificationRoles = ["HR", "HRManager", "Admin"];
 
     private static readonly string[] HrManagerNotificationRoles = ["HRManager", "Admin"];
+
+    private static readonly string[] StaffUserRoles =
+    [
+        UserRoles.Kitchen,
+        UserRoles.KitchenManager,
+        UserRoles.Warehouse,
+        UserRoles.WarehouseManager,
+        UserRoles.Packing,
+        UserRoles.PackingManager,
+        UserRoles.Dietitian,
+        UserRoles.Logistics,
+        UserRoles.LogisticsManager,
+        UserRoles.Driver,
+        UserRoles.DriverManager,
+        UserRoles.Admin,
+        UserRoles.HR,
+        UserRoles.HRManager,
+        UserRoles.BOK,
+        UserRoles.BOKManager,
+    ];
 
     private static Notification BuildNotification(
         string type,

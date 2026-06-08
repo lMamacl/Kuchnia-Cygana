@@ -91,11 +91,14 @@ public sealed class PackingIncidentListFilterViewModel : StaffListFilterViewMode
     public PackingIncidentFilterDto ToSearchRequest()
         => new()
         {
+            Search = Search,
             Date = Date,
             Status = Status,
             Type = Type,
             ClientPublicId = ClientPublicId,
             DeliveryCalendarId = DeliveryCalendarId,
+            Page = Page,
+            PageSize = PageSize,
         };
 
     public override IDictionary<string, object?> ToRouteValues()

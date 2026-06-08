@@ -50,7 +50,7 @@
                                 <option value="">Wszystkie</option>
                                 @foreach (var status in Enum.GetValues<TicketStatus>())
                                 {
-                                    <option value="@status" selected="@(string.Equals(filter.Status, status.ToString(), StringComparison.OrdinalIgnoreCase))">@status</option>
+                                    <option value="@status" selected="@(string.Equals(filter.Status, status.ToString(), StringComparison.OrdinalIgnoreCase))">@EnumDisplayNames.DisplayName(status)</option>
                                 }
                             </select>
                         </div>
@@ -60,7 +60,7 @@
                                 <option value="">Wszystkie</option>
                                 @foreach (var priority in Enum.GetValues<TicketPriority>())
                                 {
-                                    <option value="@priority" selected="@(string.Equals(filter.Priority, priority.ToString(), StringComparison.OrdinalIgnoreCase))">@priority</option>
+                                    <option value="@priority" selected="@(string.Equals(filter.Priority, priority.ToString(), StringComparison.OrdinalIgnoreCase))">@EnumDisplayNames.DisplayName(priority)</option>
                                 }
                             </select>
                         </div>
@@ -122,8 +122,8 @@
                                     </div>
                                 </td>
                                 <td>@(ticket.ClientFullName ?? $"#{ticket.ClientUserId}")</td>
-                                <td><span class="badge @StatusClass(ticket.Status)">@ticket.Status</span></td>
-                                <td><span class="badge @PriorityClass(ticket.Priority)">@ticket.Priority</span></td>
+                                <td><span class="badge @StatusClass(ticket.Status)">@EnumDisplayNames.TicketStatusName(ticket.Status)</span></td>
+                                <td><span class="badge @PriorityClass(ticket.Priority)">@EnumDisplayNames.TicketPriorityName(ticket.Priority)</span></td>
                                 <td>@(ticket.AssignedToFullName ?? "-")</td>
                                 <td class="text-end">
                                     <div class="d-inline-flex flex-wrap justify-content-end gap-2">
@@ -143,7 +143,7 @@
                                             <select class="form-select form-select-sm" name="status">
                                                 @foreach (var status in Enum.GetValues<TicketStatus>())
                                                 {
-                                                    <option value="@status" selected="@(string.Equals(ticket.Status, status.ToString(), StringComparison.Ordinal))">@status</option>
+                                                    <option value="@status" selected="@(string.Equals(ticket.Status, status.ToString(), StringComparison.Ordinal))">@EnumDisplayNames.DisplayName(status)</option>
                                                 }
                                             </select>
                                             <button class="btn btn-sm btn-outline-secondary" type="submit">Zmien</button>

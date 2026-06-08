@@ -30,21 +30,21 @@ public sealed class CustomerSupportController : Controller
     public async Task<IActionResult> Index()
     {
         SetViewData("BOK", "Obsluga klienta", "Dashboard zgloszen klientow i kolejki pracy.");
-        return View(await BuildModelAsync());
+        return View(await BuildDashboardModelAsync());
     }
 
     [HttpGet("tickets")]
     public async Task<IActionResult> Tickets([FromQuery] TicketListFilterViewModel filter)
     {
         SetViewData("Zgloszenia", "Obsluga klienta", "Lista zgloszen z priorytetami, statusem i przypisaniem.");
-        return View(await BuildModelAsync(ticketsFilter: filter));
+        return View(await BuildTicketsModelAsync(filter));
     }
 
     [HttpGet("tickets/new")]
     public async Task<IActionResult> NewTicket()
     {
         SetViewData("Nowe zgloszenie", "Obsluga klienta", "Rejestracja zgloszenia klienta z powiazana dostawa.");
-        return View(await BuildModelAsync());
+        return View(await BuildNewTicketModelAsync());
     }
 
     [HttpPost("tickets")]
@@ -53,7 +53,7 @@ public sealed class CustomerSupportController : Controller
         if (!ModelState.IsValid)
         {
             SetViewData("Nowe zgloszenie", "Obsluga klienta", "Rejestracja zgloszenia klienta z powiazana dostawa.");
-            return View("NewTicket", await BuildModelAsync(newTicket: request));
+            return View("NewTicket", await BuildNewTicketModelAsync(request));
         }
 
         try
@@ -179,93 +179,98 @@ public sealed class CustomerSupportController : Controller
         return RedirectToAction(nameof(Tickets));
     }
 
-    private async Task<CustomerSupportDashboardViewModel> BuildModelAsync(
-        CreateTicketRequest? newTicket = null,
-        TicketListFilterViewModel? ticketsFilter = null)
+    private async Task<CustomerSupportDashboardViewModel> BuildDashboardModelAsync()
     {
-        var tickets = (await customerSupportService.GetTicketsAsync()).ToArray();
-        var openTickets = (await customerSupportService.GetOpenTicketsAsync()).ToArray();
-        var users = (await userService.GetAllAsync()).ToArray();
-        ticketsFilter ??= new TicketListFilterViewModel();
-        var ticketsPageModel = PagedList<TicketDto>.Create(
-            FilterTickets(tickets, ticketsFilter).OrderByDescending(ticket => ticket.CreatedAt),
-            ticketsFilter.Page,
-            ticketsFilter.PageSize);
-        ticketsFilter.Page = ticketsPageModel.Page;
-        ticketsFilter.PageSize = ticketsPageModel.PageSize;
+        var summary = await customerSupportService.GetTicketDashboardSummaryAsync();
+        var queue = await customerSupportService.SearchTicketsAsync(new TicketSearchRequest
+        {
+            OpenOnly = true,
+            QueueOrder = true,
+            Page = 1,
+            PageSize = 10,
+        });
+        var unassigned = await customerSupportService.SearchTicketsAsync(new TicketSearchRequest
+        {
+            OpenOnly = true,
+            UnassignedOnly = true,
+            QueueOrder = true,
+            Page = 1,
+            PageSize = 8,
+        });
+
+        return new CustomerSupportDashboardViewModel
+        {
+            Tickets = queue.Items,
+            OpenTickets = unassigned.Items,
+            Summary = summary,
+        };
+    }
+
+    private async Task<CustomerSupportDashboardViewModel> BuildTicketsModelAsync(TicketListFilterViewModel filter)
+    {
+        filter ??= new TicketListFilterViewModel();
+        var ticketPage = await customerSupportService.SearchTicketsAsync(new TicketSearchRequest
+        {
+            Search = filter.Search,
+            Status = ParseTicketStatus(filter.Status),
+            Priority = ParseTicketPriority(filter.Priority),
+            AssignedToUserId = filter.AssignedToUserId is > 0 ? filter.AssignedToUserId : null,
+            UnassignedOnly = filter.AssignedToUserId == -1,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+        });
+        filter.Page = ticketPage.Page;
+        filter.PageSize = ticketPage.PageSize;
+        var ticketsPageModel = new PagedList<TicketDto>
+        {
+            Items = ticketPage.Items,
+            Page = ticketPage.Page,
+            PageSize = ticketPage.PageSize,
+            TotalCount = ticketPage.TotalCount,
+        };
+        var supportUsers = await userService.GetByRolesAsync(BokAssignmentRoles);
+
+        return new CustomerSupportDashboardViewModel
+        {
+            Tickets = ticketPage.Items,
+            Users = supportUsers,
+            TicketsPage = ticketsPageModel,
+            TicketsFilter = filter,
+            OperationalContexts = await customerSupportService.GetOperationalContextsAsync(ticketPage.Items),
+        };
+    }
+
+    private async Task<CustomerSupportDashboardViewModel> BuildNewTicketModelAsync(CreateTicketRequest? newTicket = null)
+    {
         var today = DateTime.Today;
         var deliveryOptions = await customerSupportService.GetDeliveryOptionsAsync(
             today.AddDays(-21),
             today.AddDays(14));
+        var clientsPage = await userService.SearchAsync(UserRoles.Client, search: null, page: 1, pageSize: 100);
+        var users = clientsPage.Items.ToList();
+        if (newTicket?.ClientUserId is > 0 && users.All(user => user.Id != newTicket.ClientUserId))
+        {
+            var selectedUsers = await userService.GetByIdsAsync([newTicket.ClientUserId]);
+            users.AddRange(selectedUsers.Where(user => string.Equals(user.Role, UserRoles.Client, StringComparison.Ordinal)));
+        }
 
         return new CustomerSupportDashboardViewModel
         {
-            Tickets = tickets,
-            OpenTickets = openTickets,
             Users = users,
-            TicketsPage = ticketsPageModel,
-            TicketsFilter = ticketsFilter,
-            OperationalContexts = await customerSupportService.GetOperationalContextsAsync(ticketsPageModel.Items),
             DeliveryOptions = deliveryOptions,
             NewTicket = newTicket ?? new CreateTicketRequest(),
         };
     }
 
-    private static IEnumerable<TicketDto> FilterTickets(
-        IEnumerable<TicketDto> tickets,
-        TicketListFilterViewModel filter)
-    {
-        var query = tickets;
-        if (!string.IsNullOrWhiteSpace(filter.Status))
-        {
-            query = query.Where(ticket => string.Equals(ticket.Status, filter.Status, StringComparison.OrdinalIgnoreCase));
-        }
+    private static TicketStatus? ParseTicketStatus(string? status)
+        => Enum.TryParse<TicketStatus>(status, ignoreCase: true, out var parsed)
+            ? parsed
+            : null;
 
-        if (!string.IsNullOrWhiteSpace(filter.Priority))
-        {
-            query = query.Where(ticket => string.Equals(ticket.Priority, filter.Priority, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (filter.AssignedToUserId == -1)
-        {
-            query = query.Where(ticket => !ticket.AssignedToUserId.HasValue);
-        }
-        else if (filter.AssignedToUserId is > 0)
-        {
-            query = query.Where(ticket => ticket.AssignedToUserId == filter.AssignedToUserId.Value);
-        }
-
-        if (!string.IsNullOrWhiteSpace(filter.Search))
-        {
-            query = query.Where(ticket => MatchesSearch(
-                filter.Search,
-                ticket.Title,
-                ticket.Description,
-                ticket.ClientFullName,
-                ticket.AssignedToFullName,
-                ticket.Status,
-                ticket.Priority,
-                ticket.Id.ToString(),
-                ticket.ClientUserId.ToString(),
-                ticket.OrderId?.ToString(),
-                ticket.DeliveryCalendarId?.ToString()));
-        }
-
-        return query;
-    }
-
-    private static bool MatchesSearch(string? search, params string?[] values)
-    {
-        if (string.IsNullOrWhiteSpace(search))
-        {
-            return true;
-        }
-
-        var normalizedSearch = search.Trim();
-        return values.Any(value =>
-            !string.IsNullOrWhiteSpace(value) &&
-            value.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase));
-    }
+    private static TicketPriority? ParseTicketPriority(string? priority)
+        => Enum.TryParse<TicketPriority>(priority, ignoreCase: true, out var parsed)
+            ? parsed
+            : null;
 
     private void SetViewData(string title, string section, string description)
     {
@@ -274,8 +279,8 @@ public sealed class CustomerSupportController : Controller
         ViewData["Description"] = description;
     }
 
-    private static readonly string[] BokNotificationRoles = ["BOK", "BOKManager", "Admin"];
-
+    private static readonly string[] BokAssignmentRoles = ["BOK", "BOKManager", "Admin"];
+    private static readonly string[] BokNotificationRoles = BokAssignmentRoles;
     private static Notification BuildNotification(
         string type,
         string severity,

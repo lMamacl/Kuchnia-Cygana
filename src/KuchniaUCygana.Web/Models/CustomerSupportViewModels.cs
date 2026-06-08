@@ -9,6 +9,8 @@ public sealed class CustomerSupportDashboardViewModel
 
     public IReadOnlyList<TicketDto> OpenTickets { get; init; } = [];
 
+    public TicketDashboardSummaryDto Summary { get; init; } = new();
+
     public IReadOnlyList<UserDto> Users { get; init; } = [];
 
     public PagedList<TicketDto> TicketsPage { get; init; } = new();

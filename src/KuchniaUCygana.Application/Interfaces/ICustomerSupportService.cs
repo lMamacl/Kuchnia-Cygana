@@ -5,9 +5,9 @@ namespace KuchniaUCygana.Application.Interfaces;
 
 public interface ICustomerSupportService
 {
-    Task<IEnumerable<TicketDto>> GetTicketsAsync();
+    Task<TicketPageDto> SearchTicketsAsync(TicketSearchRequest request);
 
-    Task<IEnumerable<TicketDto>> GetOpenTicketsAsync();
+    Task<TicketDashboardSummaryDto> GetTicketDashboardSummaryAsync();
 
     Task<IEnumerable<TicketDto>> GetTicketsByClientIdAsync(int clientUserId);
 

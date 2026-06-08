@@ -3,15 +3,7 @@
     Layout = "_LayoutStaff";
     var workSchedulesPage = Model.WorkSchedulesPage;
     var filter = Model.WorkSchedulesFilter;
-    var usersById = Model.Users.ToDictionary(user => user.Id);
-    var staffUsers = Model.Users
-        .Where(user => !string.Equals(user.Role, "Client", StringComparison.Ordinal))
-        .OrderBy(user => user.FullName)
-        .ToArray();
-    var roles = staffUsers
-        .Select(user => user.Role)
-        .Where(role => !string.IsNullOrWhiteSpace(role))
-        .Distinct(StringComparer.Ordinal)
+    var roles = Model.AvailableRoles
         .OrderBy(role => role)
         .ToArray();
 }
@@ -45,7 +37,7 @@
                                 <option value="">Wszystkie</option>
                                 @foreach (var shift in Enum.GetValues<WorkShift>())
                                 {
-                                    <option value="@shift" selected="@(string.Equals(filter.Shift, shift.ToString(), StringComparison.OrdinalIgnoreCase))">@shift</option>
+                                    <option value="@shift" selected="@(string.Equals(filter.Shift, shift.ToString(), StringComparison.OrdinalIgnoreCase))">@EnumDisplayNames.DisplayName(shift)</option>
                                 }
                             </select>
                         </div>
@@ -91,12 +83,10 @@
                     <tbody>
                         @foreach (var schedule in workSchedulesPage.Items)
                         {
-                            var accountRole = usersById.TryGetValue(schedule.UserId, out var account)
-                                ? account.Role
-                                : "-";
+                            var accountRole = string.IsNullOrWhiteSpace(schedule.UserRole) ? "-" : schedule.UserRole;
                             <tr>
                                 <td class="text-nowrap">@schedule.ShiftDate.ToString("dd.MM.yyyy")</td>
-                                <td>@schedule.Shift</td>
+                                <td>@EnumDisplayNames.WorkShiftName(schedule.Shift)</td>
                                 <td>@(schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}")</td>
                                 <td><span class="badge bg-blue-lt text-blue">@accountRole</span></td>
                                 <td>@(schedule.RoleAtShift ?? "-")</td>
@@ -110,19 +100,15 @@
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label small" for="schedule-user-@schedule.Id">Uzytkownik</label>
-                                            <select id="schedule-user-@schedule.Id" class="form-select form-select-sm" name="UserId" required>
-                                                @foreach (var user in staffUsers)
-                                                {
-                                                    <option value="@user.Id" selected="@(schedule.UserId == user.Id)">@user.FullName</option>
-                                                }
-                                            </select>
+                                            <input type="hidden" name="UserId" value="@schedule.UserId" />
+                                            <input id="schedule-user-@schedule.Id" class="form-control form-control-sm" value="@(schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}")" disabled />
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small" for="schedule-shift-@schedule.Id">Zmiana</label>
                                             <select id="schedule-shift-@schedule.Id" class="form-select form-select-sm" name="Shift" required>
                                                 @foreach (var shift in Enum.GetValues<WorkShift>())
                                                 {
-                                                    <option value="@shift" selected="@(string.Equals(schedule.Shift, shift.ToString(), StringComparison.Ordinal))">@shift</option>
+                                                    <option value="@shift" selected="@(string.Equals(schedule.Shift, shift.ToString(), StringComparison.Ordinal))">@EnumDisplayNames.DisplayName(shift)</option>
                                                 }
                                             </select>
                                         </div>

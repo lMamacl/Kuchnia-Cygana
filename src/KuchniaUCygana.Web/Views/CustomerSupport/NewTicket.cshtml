@@ -65,7 +65,7 @@
                             <select id="ticket-priority" class="form-select" name="Priority">
                                 @foreach (var priority in Enum.GetValues<TicketPriority>())
                                 {
-                                    <option value="@priority" selected="@(Model.NewTicket.Priority == priority)">@priority</option>
+                                    <option value="@priority" selected="@(Model.NewTicket.Priority == priority)">@EnumDisplayNames.DisplayName(priority)</option>
                                 }
                             </select>
                         </div>

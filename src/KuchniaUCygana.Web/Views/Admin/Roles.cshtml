@@ -2,14 +2,11 @@
 @{
     Layout = "_LayoutStaff";
 
-    var users = Model.Users.ToArray();
     var roles = Model.AvailableRoles.OrderBy(role => role).ToArray();
-    var assignedRoles = users
-        .GroupBy(user => string.IsNullOrWhiteSpace(user.Role) ? "Brak roli" : user.Role)
-        .ToDictionary(group => group.Key, group => group.ToArray());
-    var activeRoles = assignedRoles.Count(group => group.Value.Length > 0);
-    var staffCount = users.Count(user => !string.Equals(user.Role, "Client", StringComparison.Ordinal));
-    var clientCount = users.Count(user => string.Equals(user.Role, "Client", StringComparison.Ordinal));
+    var summariesByRole = Model.UserSummary.Roles.ToDictionary(summary => summary.Role);
+    var activeRoles = roles.Count(role => summariesByRole.TryGetValue(role, out var summary) && summary.TotalCount > 0);
+    var staffCount = Model.UserSummary.StaffCount;
+    var clientCount = Model.UserSummary.ClientCount;
 }
 
 <div class="row row-cards">
@@ -65,8 +62,9 @@
                     <tbody>
                         @foreach (var role in roles)
                         {
-                            assignedRoles.TryGetValue(role, out var roleUsers);
-                            roleUsers ??= Array.Empty<KuchniaUCygana.Application.DTOs.UserDto>();
+                            summariesByRole.TryGetValue(role, out var roleSummary);
+                            var roleUserCount = roleSummary?.TotalCount ?? 0;
+                            var sampleUsers = roleSummary?.SampleUsers;
 
                             <tr>
                                 <td class="fw-semibold">@role</td>
@@ -80,18 +78,18 @@
                                         <span class="badge bg-blue-lt text-blue">Pracownik</span>
                                     }
                                 </td>
-                                <td>@roleUsers.Length</td>
+                                <td>@roleUserCount</td>
                                 <td class="text-secondary">
-                                    @if (roleUsers.Length == 0)
+                                    @if (roleUserCount == 0)
                                     {
                                         <span>Brak</span>
                                     }
                                     else
                                     {
-                                        @string.Join(", ", roleUsers.Take(3).Select(user => string.IsNullOrWhiteSpace(user.FullName) ? user.Email : user.FullName))
-                                        @if (roleUsers.Length > 3)
+                                        @sampleUsers
+                                        @if (roleUserCount > 3)
                                         {
-                                            <span> +@(roleUsers.Length - 3)</span>
+                                            <span> +@(roleUserCount - 3)</span>
                                         }
                                     }
                                 </td>
