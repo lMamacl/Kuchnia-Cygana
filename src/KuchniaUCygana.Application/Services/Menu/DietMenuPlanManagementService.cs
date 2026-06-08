@@ -440,20 +440,20 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
             NutritionSource = result?.NutritionSource ?? "Aggregated",
             NutritionOverrideReason = result?.OverrideReason,
             Nutrition = MapSnapshotNutrition(result, item.ServingSizeMultiplier),
-            Allergens = result?.Allergens.Select(allergen => allergen.Name).Distinct().OrderBy(name => name).ToList()
-                ?? new List<string>(),
-            Components = result?.Components.Select(MapSnapshotComponent).ToList()
-                ?? new List<MealComponentVersionDto>(),
-            AggregateIngredients = result?.Ingredients.Select(MapSnapshotAggregateIngredient).ToList()
-                ?? new List<AggregateIngredientDto>(),
-            PackagingRequirements = result?.PackagingRequirements.Select(MapSnapshotPackaging).ToList()
-                ?? new List<PackagingRequirementDto>(),
+            Allergens = result?.Allergens.Select(allergen => allergen.Name).Distinct().OrderBy(name => name).ToArray()
+                ?? Array.Empty<string>(),
+            Components = result?.Components.Select(MapSnapshotComponent).ToArray()
+                ?? Array.Empty<MealComponentVersionDto>(),
+            AggregateIngredients = result?.Ingredients.Select(MapSnapshotAggregateIngredient).ToArray()
+                ?? Array.Empty<AggregateIngredientDto>(),
+            PackagingRequirements = result?.PackagingRequirements.Select(MapSnapshotPackaging).ToArray()
+                ?? Array.Empty<PackagingRequirementDto>(),
             RecipeComponentVersionIds = result?.Components
                 .Select(component => component.RecipeComponentVersionId)
                 .Where(id => id > 0)
                 .Distinct()
                 .OrderBy(id => id)
-                .ToList() ?? new List<int>(),
+                .ToArray() ?? Array.Empty<int>(),
             ValidationWarnings = item.ValidationWarnings,
             CompletenessStatus = item.CompletenessStatus,
             IsAggregated = result?.IsAggregated ?? false,

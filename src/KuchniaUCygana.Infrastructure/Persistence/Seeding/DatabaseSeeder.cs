@@ -7,6 +7,7 @@ using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Services;
+using KuchniaUCygana.Application.Services.Menu;
 using KuchniaUCygana.Infrastructure.Adapters;
 using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
 using KuchniaUCygana.Infrastructure.Persistence.Repositories;
@@ -51,10 +52,12 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 }
 
                 await SeedDemoDataAsync(cancellationToken);
+                await BackfillPublishedDietMenuSnapshotsAsync(cancellationToken);
                 return;
             case DatabaseSeedingProfile.VolumeDemo:
                 await SeedMinimalRealisticAsync(cancellationToken);
                 await SeedM2VolumeDemoAsync(cancellationToken);
+                await BackfillPublishedDietMenuSnapshotsAsync(cancellationToken);
                 return;
             default:
                 throw new InvalidOperationException($"Unsupported seeding profile: {profile}");
@@ -1487,6 +1490,119 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             cancellationToken: cancellationToken));
 
         this.logger.LogInformation("Ensured M2 VolumeDemo dataset with prefix {Prefix}.", M2VolumePrefix);
+    }
+
+    private async Task BackfillPublishedDietMenuSnapshotsAsync(CancellationToken cancellationToken)
+    {
+        using var db = connectionFactory.CreateConnection();
+        var plans = (await db.QueryAsync<PublishedMenuPlanBackfillRow>(new CommandDefinition(
+            """
+            SELECT
+                p.[Id],
+                p.[PlanDate]
+            FROM [DietMenuPlans] p
+            WHERE p.[Status] = N'Published'
+              AND p.[IsDeleted] = 0
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM [DietMenuPlanItems] i
+                  WHERE i.[DietMenuPlanId] = p.[Id]
+                    AND i.[IsDeleted] = 0
+                    AND i.[IsActive] = 1
+                    AND (i.[PublishedSnapshotJson] IS NULL OR i.[PublishedSnapshotHash] IS NULL)
+              )
+            ORDER BY p.[PlanDate], p.[Id];
+            """,
+            cancellationToken: cancellationToken))).ToList();
+
+        if (plans.Count == 0)
+        {
+            return;
+        }
+
+        var adapter = new DietDataAdapter(connectionFactory, new MealVariantResultCalculator());
+        var now = DateTimeOffset.UtcNow;
+        var auditUser = "DatabaseSeeder";
+        var backfilledItems = 0;
+
+        foreach (var plan in plans)
+        {
+            var snapshot = await adapter.GetPublishedPlanSnapshotAsync(DateOnly.FromDateTime(plan.PlanDate));
+            if (snapshot is null || snapshot.Items.Count == 0)
+            {
+                continue;
+            }
+
+            var rows = snapshot.Items
+                .Select(item =>
+                {
+                    var payload = ProductionSnapshotPayloadFactory.Create(item);
+                    return new PublishedMenuPlanItemSnapshotBackfillRow
+                    {
+                        PlanId = plan.Id,
+                        DietMenuPlanItemId = item.DietMenuPlanItemId,
+                        SnapshotJson = payload.Json,
+                        SnapshotHash = payload.Hash,
+                    };
+                })
+                .ToList();
+
+            if (rows.Count == 0)
+            {
+                continue;
+            }
+
+            var planSnapshotHash = ProductionSnapshotPayloadFactory.CreatePlanHash(rows.Select(row => row.SnapshotHash));
+
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [DietMenuPlans]
+                SET [PublishedSnapshotHash] = @planSnapshotHash,
+                    [PublishedSnapshotItemCount] = @snapshotCount,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser
+                WHERE [Id] = @planId;
+                """,
+                new
+                {
+                    planId = plan.Id,
+                    planSnapshotHash,
+                    snapshotCount = rows.Count,
+                    now,
+                    auditUser,
+                },
+                cancellationToken: cancellationToken));
+
+            await db.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE [DietMenuPlanItems]
+                SET [PublishedSnapshotJson] = @SnapshotJson,
+                    [PublishedSnapshotHash] = @SnapshotHash,
+                    [PublishedSnapshotCreatedAt] = @now,
+                    [UpdatedAt] = @now,
+                    [UpdatedBy] = @auditUser
+                WHERE [Id] = @DietMenuPlanItemId
+                  AND [DietMenuPlanId] = @PlanId;
+                """,
+                rows.Select(row => new
+                {
+                    row.PlanId,
+                    row.DietMenuPlanItemId,
+                    row.SnapshotJson,
+                    row.SnapshotHash,
+                    now,
+                    auditUser,
+                }),
+                cancellationToken: cancellationToken));
+
+            backfilledItems += rows.Count;
+        }
+
+        logger.LogInformation(
+            "Backfilled M2 published diet menu snapshots: {ItemCount} items across {PlanCount} plans.",
+            backfilledItems,
+            plans.Count);
     }
 
     private async Task ResetDemoDataAsync(CancellationToken cancellationToken)
@@ -6714,6 +6830,24 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         decimal MinimumLevel,
         decimal TargetQuantity,
         int LeadTimeDays);
+
+    private sealed class PublishedMenuPlanBackfillRow
+    {
+        public int Id { get; set; }
+
+        public DateTime PlanDate { get; set; }
+    }
+
+    private sealed class PublishedMenuPlanItemSnapshotBackfillRow
+    {
+        public int PlanId { get; set; }
+
+        public int DietMenuPlanItemId { get; set; }
+
+        public string SnapshotJson { get; set; } = string.Empty;
+
+        public string SnapshotHash { get; set; } = string.Empty;
+    }
 
     private static Task<int> CountRowsAsync(IDbConnection db, string tableName, CancellationToken cancellationToken)
         => db.ExecuteScalarAsync<int>(new CommandDefinition(
