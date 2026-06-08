@@ -23,6 +23,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
     private const string UnifiedDemoCustomerEmailSuffix = "@kuchnia.local";
     private const string UnifiedDemoCustomerPassword = "Demo123!";
     private const string UnifiedDemoOrderPrefix = "DEMO-M1";
+    private static readonly DateOnly PresentationDemoDate = new(2026, 6, 9);
     private const string M2VolumePrefix = "VOL-M2-";
 
     private readonly IDbConnectionFactory connectionFactory;
@@ -1893,20 +1894,12 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
-        var todayDate = today.ToDateTime(TimeOnly.MinValue);
+        var demoDates = new[] { today, PresentationDemoDate }
+            .Distinct()
+            .OrderBy(date => date)
+            .ToArray();
         var preferredDietVariantId = await EnsureDemoLifecycleMenuFoundationAsync(db, now, auditUser, cancellationToken);
         await EnsureDemoPackagingRequirementsAsync(db, now, auditUser, cancellationToken);
-        var dietMenuPlanId = await EnsureTodayDemoDietMenuPlanAsync(db, todayDate, now, auditUser, cancellationToken);
-        var meals = (await GetTodayDemoMealsAsync(db, dietMenuPlanId, preferredDietVariantId, cancellationToken)).ToList();
-
-        if (meals.Count < 3)
-        {
-            this.logger.LogWarning(
-                "Skipped logistics demo seed because only {MealCount} menu plan items were available for {DemoDate}.",
-                meals.Count,
-                today);
-            return;
-        }
 
         var vehicles = new[]
         {
@@ -1952,7 +1945,57 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
         // Customers live in M1 tables. M2 provides menu references, while M4/M3 consume OrderId and DeliveryCalendarId.
         var customerSeeds = GetUnifiedDemoCustomerSeeds();
-        for (var index = 0; index < customerSeeds.Length; index++)
+        foreach (var demoDate in demoDates)
+        {
+            var seededDeliveryCount = await SeedUnifiedDemoDeliveriesForDateAsync(
+                db,
+                demoDate,
+                preferredDietVariantId,
+                customerSeeds,
+                now,
+                auditUser,
+                cancellationToken);
+
+            if (seededDeliveryCount == 0)
+            {
+                continue;
+            }
+
+            await EnsureUnifiedDemoProductionPlanAsync(demoDate, auditUser, cancellationToken);
+            await SeedModule5TicketOrderLinksAsync(db, demoDate, now, cancellationToken);
+        }
+
+        this.logger.LogInformation(
+            "Seeded unified M1/M2/M3/M4 demo data for {DemoDates}: {VehicleCount} vehicles, {DriverCount} drivers, {DeliveryCount} delivery candidates per date.",
+            string.Join(", ", demoDates.Select(date => date.ToString("yyyy-MM-dd"))),
+            vehicles.Length,
+            drivers.Length,
+            customerSeeds.Length);
+    }
+
+    private async Task<int> SeedUnifiedDemoDeliveriesForDateAsync(
+        IDbConnection db,
+        DateOnly deliveryDate,
+        int preferredDietVariantId,
+        IReadOnlyList<UnifiedDemoCustomerSeed> customerSeeds,
+        DateTimeOffset now,
+        string auditUser,
+        CancellationToken cancellationToken)
+    {
+        var deliveryDateStart = deliveryDate.ToDateTime(TimeOnly.MinValue);
+        var dietMenuPlanId = await EnsureTodayDemoDietMenuPlanAsync(db, deliveryDateStart, now, auditUser, cancellationToken);
+        var meals = (await GetTodayDemoMealsAsync(db, dietMenuPlanId, preferredDietVariantId, cancellationToken)).ToList();
+
+        if (meals.Count < 3)
+        {
+            this.logger.LogWarning(
+                "Skipped logistics demo seed because only {MealCount} menu plan items were available for {DemoDate}.",
+                meals.Count,
+                deliveryDate);
+            return 0;
+        }
+
+        for (var index = 0; index < customerSeeds.Count; index++)
         {
             var customerSeed = customerSeeds[index];
             var customerId = await EnsureUnifiedDemoCustomerAsync(db, index + 1, customerSeed, now, cancellationToken);
@@ -1977,24 +2020,24 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 .OrderBy(meal => meal.SortOrder)
                 .Take(mealCount)
                 .ToList();
-            var orderNumber = $"{UnifiedDemoOrderPrefix}-{today:yyyyMMdd}-{index + 1:D2}";
+            var orderNumber = $"{UnifiedDemoOrderPrefix}-{deliveryDate:yyyyMMdd}-{index + 1:D2}";
             var totalPrice = orderMeals.Sum(meal => meal.PricePerDay);
             var orderId = await EnsureTodayDemoOrderAsync(
                 db,
                 customerId,
                 orderNumber,
-                todayDate,
+                deliveryDateStart,
                 totalPrice,
                 now,
                 auditUser,
                 cancellationToken);
 
-            await EnsureTodayDemoOrderItemsAsync(db, orderId, orderMeals, today, now, auditUser, cancellationToken);
-            var deliveryCalendarId = await EnsureTodayDemoDeliveryCalendarAsync(
+            await EnsureTodayDemoOrderItemsAsync(db, orderId, orderMeals, deliveryDate, now, auditUser, cancellationToken);
+            await EnsureTodayDemoDeliveryCalendarAsync(
                 db,
                 orderId,
                 addressId,
-                today.ToDateTime(new TimeOnly(6 + ((index * 35) / 60), (index * 35) % 60)),
+                deliveryDate.ToDateTime(new TimeOnly(6 + ((index * 35) / 60), (index * 35) % 60)),
                 now,
                 auditUser,
                 cancellationToken);
@@ -2008,15 +2051,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 cancellationToken);
         }
 
-        await EnsureUnifiedDemoProductionPlanAsync(today, auditUser, cancellationToken);
-        await SeedModule5TicketOrderLinksAsync(db, today, now, cancellationToken);
-
-        this.logger.LogInformation(
-            "Seeded unified M1/M2/M3/M4 demo data for {DemoDate}: {VehicleCount} vehicles, {DriverCount} drivers, {DeliveryCount} delivery candidates.",
-            today,
-            vehicles.Length,
-            drivers.Length,
-            customerSeeds.Length);
+        return customerSeeds.Count;
     }
 
     private async Task SeedModule5TicketOrderLinksAsync(
