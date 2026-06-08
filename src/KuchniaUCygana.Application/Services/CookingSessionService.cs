@@ -6,6 +6,7 @@ using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.External;
+using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 
 namespace KuchniaUCygana.Application.Services;
 
@@ -18,13 +19,13 @@ public sealed class CookingSessionService : ICookingSessionService
     private const string PendingStatus = "Pending";
 
     private readonly IRepository<ProductionPlanItem> itemRepository;
-    private readonly IRepository<CookingSession> sessionRepository;
-    private readonly IRepository<CookingSessionStepCheck> stepCheckRepository;
+    private readonly ICookingSessionRepository sessionRepository;
+    private readonly ICookingSessionStepCheckRepository stepCheckRepository;
 
     public CookingSessionService(
         IRepository<ProductionPlanItem> itemRepository,
-        IRepository<CookingSession> sessionRepository,
-        IRepository<CookingSessionStepCheck> stepCheckRepository)
+        ICookingSessionRepository sessionRepository,
+        ICookingSessionStepCheckRepository stepCheckRepository)
     {
         this.itemRepository = itemRepository;
         this.sessionRepository = sessionRepository;
@@ -109,10 +110,7 @@ public sealed class CookingSessionService : ICookingSessionService
             throw new InvalidOperationException("Nie mozna zmieniac krokow ukonczonej sesji gotowania.");
         }
 
-        var checks = (await this.stepCheckRepository.GetAllAsync()).ToList();
-        var check = checks.FirstOrDefault(row =>
-            row.CookingSessionId == session.Id &&
-            row.RecipeComponentInstructionStepId == step.StepId);
+        var check = await this.stepCheckRepository.GetBySessionAndStepAsync(session.Id, step.StepId);
         if (check is null)
         {
             check = new CookingSessionStepCheck
@@ -140,9 +138,7 @@ public sealed class CookingSessionService : ICookingSessionService
         var component = FindSnapshotComponent(item, recipeComponentVersionId);
         var session = await FindSessionAsync(productionPlanItemId, recipeComponentVersionId)
             ?? throw new InvalidOperationException("Najpierw uruchom sesje gotowania skladowej.");
-        var checks = (await this.stepCheckRepository.GetAllAsync())
-            .Where(check => check.CookingSessionId == session.Id)
-            .ToList();
+        var checks = await this.stepCheckRepository.GetBySessionAsync(session.Id);
         var checkedStepIds = checks
             .Where(check => check.Status == CheckedStatus)
             .Select(check => check.RecipeComponentInstructionStepId)
@@ -203,19 +199,14 @@ public sealed class CookingSessionService : ICookingSessionService
 
     private async Task<CookingSession?> FindSessionAsync(int productionPlanItemId, int recipeComponentVersionId)
     {
-        var sessions = await this.sessionRepository.GetAllAsync();
-        return sessions
-            .Where(session =>
-                session.ProductionPlanItemId == productionPlanItemId &&
-                session.RecipeComponentVersionId == recipeComponentVersionId)
-            .OrderByDescending(session => session.Id)
-            .FirstOrDefault();
+        return await this.sessionRepository.GetLatestForComponentAsync(
+            productionPlanItemId,
+            recipeComponentVersionId);
     }
 
     private async Task<CookingComponentSessionDto> BuildSessionDtoAsync(CookingSession session)
     {
-        var checks = (await this.stepCheckRepository.GetAllAsync())
-            .Where(check => check.CookingSessionId == session.Id)
+        var checks = (await this.stepCheckRepository.GetBySessionAsync(session.Id))
             .ToDictionary(
                 check => check.RecipeComponentInstructionStepId,
                 check => new CookingStepCheckDto

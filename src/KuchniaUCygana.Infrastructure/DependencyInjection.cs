@@ -104,6 +104,8 @@ public static class DependencyInjection
         services.AddScoped<IRecipeRepository, RecipeRepository>();
         services.AddScoped<IRecipeComponentRepository, RecipeComponentRepository>();
         services.AddScoped<IDietMenuPlanRepository, DietMenuPlanRepository>();
+        services.AddScoped<ICookingSessionRepository, CookingSessionRepository>();
+        services.AddScoped<ICookingSessionStepCheckRepository, CookingSessionStepCheckRepository>();
 
         // Module 4 (Logistics) repositories.
         services.AddScoped<IDeliveryRouteRepository, DeliveryRouteRepository>();

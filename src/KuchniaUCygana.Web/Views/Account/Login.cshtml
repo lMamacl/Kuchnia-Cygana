@@ -1,6 +1,6 @@
 @model KuchniaUCygana.Web.Models.LoginViewModel
 @{
-    ViewData["Title"] = "Zaloguj sie";
+    ViewData["Title"] = "Zaloguj się";
 }
 
 <style>
@@ -74,14 +74,14 @@
                             <div class="auth-aside h-100 p-5 d-flex flex-column justify-content-between">
                                 <div>
                                     <div class="auth-kicker mb-3">Panel klienta</div>
-                                    <h1 class="display-6 fw-bold mb-3">Wroc do swojego planu dostaw.</h1>
+                                    <h1 class="display-6 fw-bold mb-3">Wróć do swojego planu dostaw.</h1>
                                     <p class="mb-0 opacity-75">
-                                        Zamowienia, adresy i platnosci sa w jednym miejscu, bez szukania po panelu.
+                                        Zamówienia, adresy i płatności są w jednym miejscu, bez szukania po panelu.
                                     </p>
                                 </div>
                                 <div class="pt-5">
                                     <div class="border-top border-light border-opacity-25 pt-4 small opacity-75">
-                                        Koszyk, checkout i kalendarz dostaw dzialaja na realnych kontach klientow.
+                                        Koszyk, checkout i kalendarz dostaw działają na realnych kontach klientów.
                                     </div>
                                 </div>
                             </div>
@@ -91,8 +91,8 @@
                             <div class="p-4 p-md-5">
                                 <div class="mb-4">
                                     <div class="text-success small fw-bold text-uppercase mb-2">Kuchnia u Cygana</div>
-                                    <h2 class="fw-bold mb-1">Zaloguj sie</h2>
-                                    <p class="text-muted mb-0">Wpisz dane konta, aby przejsc do zamowien i platnosci.</p>
+                                    <h2 class="fw-bold mb-1">Zaloguj się</h2>
+                                    <p class="text-muted mb-0">Wpisz dane konta, aby przejść do zamówień i płatności.</p>
                                 </div>
 
                                 <form asp-action="Login" method="post" asp-route-returnUrl="@Model.ReturnUrl" class="auth-form">
@@ -106,28 +106,23 @@
                                     </div>
 
                                     <div class="mb-4">
-                                        <label asp-for="Password" class="form-label fw-semibold">Haslo</label>
-                                        <input asp-for="Password" class="form-control" type="password" placeholder="Wpisz haslo" autocomplete="current-password" required />
+                                        <label asp-for="Password" class="form-label fw-semibold">Hasło</label>
+                                        <input asp-for="Password" class="form-control" type="password" placeholder="Wpisz hasło" autocomplete="current-password" required />
                                         <span asp-validation-for="Password" class="text-danger small"></span>
                                     </div>
 
-                                    <button type="submit" class="btn btn-auth btn-lg w-100 mb-3">Zaloguj sie</button>
+                                    <button type="submit" class="btn btn-auth btn-lg w-100 mb-3">Zaloguj się</button>
                                 </form>
 
                                 <div class="auth-fallback p-3 mt-3">
                                     <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
                                         <div>
                                             <div class="fw-semibold">Nie masz konta klienta?</div>
-                                            <div class="text-muted small">Rejestracja tworzy realne konto z rola Client.</div>
+                                            <div class="text-muted small">Rejestracja tworzy realne konto klienta.</div>
                                         </div>
-                                        <a asp-action="Register" class="btn btn-outline-success">Zarejestruj sie</a>
+                                        <a asp-action="Register" class="btn btn-outline-success">Zarejestruj się</a>
                                     </div>
                                 </div>
-
-                                <p class="text-center small mb-0 mt-4">
-                                    Konto pracownika?
-                                    <a asp-action="StaffLogin" class="fw-semibold text-success">Przejdz do logowania staff</a>
-                                </p>
                             </div>
                         </div>
                     </div>

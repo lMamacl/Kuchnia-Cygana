@@ -7,6 +7,7 @@ using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.External;
+using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
 using Moq;
 using Xunit;
 
@@ -71,16 +72,14 @@ public sealed class CookingSessionServiceTests
             M2SnapshotJson = CreateSnapshotJson(),
         });
         harness.SessionRepository
-            .Setup(repository => repository.GetAllAsync())
-            .ReturnsAsync(new[]
-            {
+            .Setup(repository => repository.GetLatestForComponentAsync(21, 501))
+            .ReturnsAsync(
                 new CookingSession
-                {
-                    Id = 7,
-                    ProductionPlanItemId = 21,
-                    RecipeComponentVersionId = 501,
-                    Status = "InProgress",
-                },
+            {
+                Id = 7,
+                ProductionPlanItemId = 21,
+                RecipeComponentVersionId = 501,
+                Status = "InProgress",
             });
         CookingSessionStepCheck? inserted = null;
         harness.StepCheckRepository
@@ -122,21 +121,19 @@ public sealed class CookingSessionServiceTests
             M2SnapshotJson = CreateSnapshotJson(),
         });
         harness.SessionRepository
-            .Setup(repository => repository.GetAllAsync())
-            .ReturnsAsync(new[]
-            {
+            .Setup(repository => repository.GetLatestForComponentAsync(21, 501))
+            .ReturnsAsync(
                 new CookingSession
-                {
-                    Id = 7,
-                    ProductionPlanItemId = 21,
-                    RecipeComponentVersionId = 501,
-                    Status = "InProgress",
-                    StartedBy = "Chef",
-                    StartedAt = DateTimeOffset.UtcNow,
-                },
+            {
+                Id = 7,
+                ProductionPlanItemId = 21,
+                RecipeComponentVersionId = 501,
+                Status = "InProgress",
+                StartedBy = "Chef",
+                StartedAt = DateTimeOffset.UtcNow,
             });
         harness.StepCheckRepository
-            .Setup(repository => repository.GetAllAsync())
+            .Setup(repository => repository.GetBySessionAsync(7))
             .ReturnsAsync(new[]
             {
                 new CookingSessionStepCheck
@@ -184,20 +181,18 @@ public sealed class CookingSessionServiceTests
             M2SnapshotJson = CreateSnapshotJson(),
         });
         harness.SessionRepository
-            .Setup(repository => repository.GetAllAsync())
-            .ReturnsAsync(new[]
-            {
+            .Setup(repository => repository.GetLatestForComponentAsync(21, 501))
+            .ReturnsAsync(
                 new CookingSession
-                {
-                    Id = 7,
-                    ProductionPlanItemId = 21,
-                    RecipeComponentVersionId = 501,
-                    Status = "InProgress",
-                },
+            {
+                Id = 7,
+                ProductionPlanItemId = 21,
+                RecipeComponentVersionId = 501,
+                Status = "InProgress",
             });
         harness.StepCheckRepository
-            .Setup(repository => repository.GetAllAsync())
-            .ReturnsAsync(new[] { existingCheck });
+            .Setup(repository => repository.GetBySessionAndStepAsync(7, 711))
+            .ReturnsAsync(existingCheck);
 
         await harness.Service.ToggleStepAsync(new ToggleCookingStepRequest
         {
@@ -228,19 +223,17 @@ public sealed class CookingSessionServiceTests
             M2SnapshotJson = CreateSnapshotJson(),
         });
         harness.SessionRepository
-            .Setup(repository => repository.GetAllAsync())
-            .ReturnsAsync(new[]
-            {
+            .Setup(repository => repository.GetLatestForComponentAsync(21, 501))
+            .ReturnsAsync(
                 new CookingSession
-                {
-                    Id = 7,
-                    ProductionPlanItemId = 21,
-                    RecipeComponentVersionId = 501,
-                    Status = "InProgress",
-                },
+            {
+                Id = 7,
+                ProductionPlanItemId = 21,
+                RecipeComponentVersionId = 501,
+                Status = "InProgress",
             });
         harness.StepCheckRepository
-            .Setup(repository => repository.GetAllAsync())
+            .Setup(repository => repository.GetBySessionAsync(7))
             .ReturnsAsync(Array.Empty<CookingSessionStepCheck>());
 
         var act = () => harness.Service.CompleteComponentSessionAsync(21, 501, "Chef");
@@ -256,15 +249,18 @@ public sealed class CookingSessionServiceTests
             .Setup(repository => repository.GetByIdAsync(item.Id))
             .ReturnsAsync(item);
 
-        var sessionRepository = new Mock<IRepository<CookingSession>>();
+        var sessionRepository = new Mock<ICookingSessionRepository>();
         sessionRepository
-            .Setup(repository => repository.GetAllAsync())
-            .ReturnsAsync(Array.Empty<CookingSession>());
+            .Setup(repository => repository.GetLatestForComponentAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((CookingSession?)null);
 
-        var stepCheckRepository = new Mock<IRepository<CookingSessionStepCheck>>();
+        var stepCheckRepository = new Mock<ICookingSessionStepCheckRepository>();
         stepCheckRepository
-            .Setup(repository => repository.GetAllAsync())
+            .Setup(repository => repository.GetBySessionAsync(It.IsAny<int>()))
             .ReturnsAsync(Array.Empty<CookingSessionStepCheck>());
+        stepCheckRepository
+            .Setup(repository => repository.GetBySessionAndStepAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((CookingSessionStepCheck?)null);
 
         return new Harness(
             new CookingSessionService(
@@ -325,6 +321,6 @@ public sealed class CookingSessionServiceTests
     private sealed record Harness(
         CookingSessionService Service,
         Mock<IRepository<ProductionPlanItem>> ItemRepository,
-        Mock<IRepository<CookingSession>> SessionRepository,
-        Mock<IRepository<CookingSessionStepCheck>> StepCheckRepository);
+        Mock<ICookingSessionRepository> SessionRepository,
+        Mock<ICookingSessionStepCheckRepository> StepCheckRepository);
 }
