@@ -37,16 +37,41 @@ public sealed class DietManagementService : IDietManagementService
 
     public async Task<IEnumerable<DietDto>> GetActiveDietsAsync()
     {
-        var diets = await this.dietRepository.GetActiveWithVariantsAsync();
-        var result = new List<DietDto>();
-        foreach (var diet in diets)
-        {
-            var dto = this.mapper.Map<DietDto>(diet);
-            var variants = await this.dietVariantRepository.GetByDietIdAsync(diet.Id);
-            dto.Variants = this.mapper.Map<List<DietVariantDto>>(variants);
-            result.Add(dto);
-        }
-        return result;
+        var rows = await this.dietRepository.GetActiveDietVariantRowsAsync();
+        return rows
+            .GroupBy(row => new
+            {
+                row.DietId,
+                row.DietName,
+                row.Description,
+                row.MarketingDescription,
+                row.Status,
+                row.IsActive,
+                row.ThumbnailUrl,
+            })
+            .Select(group => new DietDto
+            {
+                Id = group.Key.DietId,
+                Name = group.Key.DietName,
+                Description = group.Key.Description,
+                MarketingDescription = group.Key.MarketingDescription,
+                Status = group.Key.Status,
+                IsActive = group.Key.IsActive,
+                ThumbnailUrl = group.Key.ThumbnailUrl,
+                Variants = group
+                    .Where(row => row.DietVariantId.HasValue)
+                    .Select(row => new DietVariantDto
+                    {
+                        Id = row.DietVariantId!.Value,
+                        DietId = group.Key.DietId,
+                        Name = row.VariantName ?? string.Empty,
+                        TargetCalories = row.TargetCalories,
+                        PriceMultiplier = row.PriceMultiplier,
+                        IsDefault = row.IsDefault,
+                    })
+                    .ToList(),
+            })
+            .ToList();
     }
 
     public async Task<DietDto> CreateDietAsync(CreateDietRequest request)

@@ -23,6 +23,7 @@ public sealed class MealManagementService : IMealManagementService
     private readonly IMealVariantResultCalculator resultCalculator;
     private readonly ICurrentUserService currentUser;
     private readonly IMapper mapper;
+    private readonly IMenuPlanningCache planningCache;
 
     public MealManagementService(
         IMealRepository mealRepository,
@@ -33,7 +34,8 @@ public sealed class MealManagementService : IMealManagementService
         IMealImageRepository mealImageRepository,
         IMealVariantResultCalculator resultCalculator,
         ICurrentUserService currentUser,
-        IMapper mapper)
+        IMapper mapper,
+        IMenuPlanningCache? planningCache = null)
     {
         this.mealRepository = mealRepository;
         this.recipeRepository = recipeRepository;
@@ -44,6 +46,7 @@ public sealed class MealManagementService : IMealManagementService
         this.resultCalculator = resultCalculator;
         this.currentUser = currentUser;
         this.mapper = mapper;
+        this.planningCache = planningCache ?? new NullMenuPlanningCache();
     }
 
     public async Task<PagedResultDto<MealListItemDto>> SearchAsync(MealSearchFilterDto filter)
@@ -129,6 +132,45 @@ public sealed class MealManagementService : IMealManagementService
     }
 
     public async Task<MealVariantResultDto?> GetMealVariantResultAsync(int mealId, int? mealVariantId)
+    {
+        return await this.GetMealVariantResultFreshAsync(mealId, mealVariantId);
+    }
+
+    public async Task<IReadOnlyDictionary<MealVariantResultKey, MealVariantResultDto?>> GetMealVariantResultsAsync(
+        IEnumerable<MealVariantResultKey> keys,
+        MealVariantResultCacheMode cacheMode = MealVariantResultCacheMode.CachePreferred)
+    {
+        var normalizedKeys = keys
+            .Where(key => key.MealId > 0)
+            .Distinct()
+            .ToList();
+        var results = new Dictionary<MealVariantResultKey, MealVariantResultDto?>();
+
+        foreach (var key in normalizedKeys)
+        {
+            var cacheKey = MenuPlanningCacheKeys.MealResult(key);
+            if (cacheMode == MealVariantResultCacheMode.CachePreferred)
+            {
+                var cached = await this.planningCache.GetAsync<MealVariantResultDto>(cacheKey);
+                if (cached is not null)
+                {
+                    results[key] = cached;
+                    continue;
+                }
+            }
+
+            var fresh = await this.GetMealVariantResultFreshAsync(key.MealId, key.MealVariantId);
+            results[key] = fresh;
+            if (fresh is not null)
+            {
+                await this.planningCache.SetAsync(cacheKey, fresh, TimeSpan.FromMinutes(10));
+            }
+        }
+
+        return results;
+    }
+
+    private async Task<MealVariantResultDto?> GetMealVariantResultFreshAsync(int mealId, int? mealVariantId)
     {
         var meal = await this.mealRepository.GetByIdAsync(mealId);
         if (meal is null)
@@ -226,7 +268,7 @@ public sealed class MealManagementService : IMealManagementService
             sourceVariantId = (await this.mealVariantRepository.GetDefaultByMealIdAsync(request.MealId))?.Id;
         }
 
-        return await this.mealVariantRepository.CreateAsync(new MealVariant
+        var createdId = await this.mealVariantRepository.CreateAsync(new MealVariant
         {
             MealId = request.MealId,
             Name = request.Name.Trim(),
@@ -240,6 +282,8 @@ public sealed class MealManagementService : IMealManagementService
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedBy = this.UserName(),
         }, sourceVariantId, this.UserName());
+        await this.InvalidateMealResultCacheAsync();
+        return createdId;
     }
 
     public async Task UpdateMealVariantAsync(int mealVariantId, UpdateMealVariantRequest request)
@@ -305,6 +349,8 @@ public sealed class MealManagementService : IMealManagementService
         {
             await this.mealVariantRepository.ReplaceAllergensAsync(mealVariantId, allergensToPersist);
         }
+
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task SaveMealVariantComponentAsync(int mealVariantId, SaveMealVariantComponentRequest request)
@@ -339,11 +385,13 @@ public sealed class MealManagementService : IMealManagementService
             UpdatedAt = request.Id > 0 ? DateTimeOffset.UtcNow : null,
             UpdatedBy = request.Id > 0 ? this.UserName() : null,
         });
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task DeleteMealVariantComponentAsync(int componentId)
     {
         await this.mealVariantRepository.DeleteComponentAsync(componentId, this.UserName());
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task SaveMealVariantPackagingAsync(int mealVariantId, SaveMealVariantPackagingRequest request)
@@ -384,6 +432,7 @@ public sealed class MealManagementService : IMealManagementService
             UpdatedAt = request.Id > 0 ? DateTimeOffset.UtcNow : null,
             UpdatedBy = request.Id > 0 ? this.UserName() : null,
         });
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task DeleteMealVariantPackagingAsync(int mealVariantId, int packagingRequirementId)
@@ -392,6 +441,7 @@ public sealed class MealManagementService : IMealManagementService
             mealVariantId,
             packagingRequirementId,
             this.UserName());
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task UpdateMealAsync(int mealId, UpdateMealRequest request)
@@ -404,11 +454,13 @@ public sealed class MealManagementService : IMealManagementService
 
         this.mapper.Map(request, meal);
         await this.mealRepository.UpdateAsync(meal);
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task DeleteMealAsync(int mealId)
     {
         await this.mealRepository.DeleteAsync(mealId);
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task PublishMealAsync(int mealId)
@@ -428,6 +480,7 @@ public sealed class MealManagementService : IMealManagementService
         meal.UpdatedAt = DateTimeOffset.UtcNow;
         meal.UpdatedBy = this.UserName();
         await this.mealRepository.UpdateAsync(meal);
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task PublishMealVariantAsync(int mealVariantId)
@@ -450,6 +503,7 @@ public sealed class MealManagementService : IMealManagementService
         await this.mealVariantRepository.ReplaceAllergensAsync(
             mealVariantId,
             result.Allergens.Select(MapAllergenForPersistence).ToList());
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task ArchiveMealAsync(int mealId)
@@ -464,6 +518,7 @@ public sealed class MealManagementService : IMealManagementService
         meal.UpdatedAt = DateTimeOffset.UtcNow;
         meal.UpdatedBy = this.UserName();
         await this.mealRepository.UpdateAsync(meal);
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task ArchiveMealVariantAsync(int mealVariantId)
@@ -477,6 +532,12 @@ public sealed class MealManagementService : IMealManagementService
         variant.UpdatedAt = DateTimeOffset.UtcNow;
         variant.UpdatedBy = this.UserName();
         await this.mealVariantRepository.UpdateAsync(variant);
+        await this.InvalidateMealResultCacheAsync();
+    }
+
+    private async Task InvalidateMealResultCacheAsync()
+    {
+        await this.planningCache.RemoveByPrefixAsync(MenuPlanningCacheKeys.MealResultPrefix);
     }
 
     private async Task<MealVariantResultDto> BuildMealVariantResultAsync(Meal meal, MealVariantRow? variant)

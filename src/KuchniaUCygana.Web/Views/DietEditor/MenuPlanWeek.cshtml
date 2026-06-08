@@ -47,15 +47,19 @@
                                         <span class="badge bg-secondary-lt text-secondary">Brak planu</span>
                                     }
                                 </td>
-                                <td class="text-center">@day.Items.Count</td>
+                                <td class="text-center">@day.ActiveItemCount</td>
                                 <td>
-                                    @if (day.Validation.Warnings.Count == 0)
+                                    @if (!day.HasPlan)
+                                    {
+                                        <span class="badge bg-secondary-lt text-secondary">Brak draftu</span>
+                                    }
+                                    else if (day.QuickWarningCount == 0)
                                     {
                                         <span class="badge bg-success-lt text-success">Kompletny</span>
                                     }
                                     else
                                     {
-                                        <span class="badge bg-warning-lt text-warning">@day.Validation.Warnings.Count brakow</span>
+                                        <span class="badge bg-warning-lt text-warning">@day.QuickWarningCount brakow</span>
                                     }
                                     @if (!day.CanEdit && !string.IsNullOrWhiteSpace(day.EditBlockReason))
                                     {
@@ -72,7 +76,7 @@
                                                 <form asp-controller="DietMenuPlan" asp-action="Publish" asp-route-planId="@day.Id" method="post">
                                                     @Html.AntiForgeryToken()
                                                     <input type="hidden" name="planDate" value="@day.PlanDate.ToString("yyyy-MM-dd")" />
-                                                    <button type="submit" class="btn btn-sm btn-outline-success" @(day.Validation.CanPublish ? null : "disabled")>Publikuj</button>
+                                                    <button type="submit" class="btn btn-sm btn-outline-success" @(day.CanPublishQuick ? null : "disabled")>Publikuj</button>
                                                 </form>
                                             }
                                         }

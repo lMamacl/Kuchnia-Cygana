@@ -8,6 +8,10 @@ public interface IDietMenuPlanManagementService
 
     Task<DietMenuDayDto> GetDayAsync(DateOnly date);
 
+    Task<DietMenuDayShellDto> GetDayShellAsync(DateOnly date);
+
+    Task<DietMenuDietVariantItemsDto> GetDietVariantItemsAsync(int planId, int dietVariantId);
+
     Task<int> CreateDayAsync(CreateDietMenuPlanRequest request);
 
     Task AddItemAsync(AddDietMenuPlanItemRequest request);

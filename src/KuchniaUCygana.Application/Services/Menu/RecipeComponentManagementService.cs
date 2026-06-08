@@ -11,13 +11,16 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
 {
     private readonly IRecipeComponentRepository repository;
     private readonly ICurrentUserService currentUser;
+    private readonly IMenuPlanningCache planningCache;
 
     public RecipeComponentManagementService(
         IRecipeComponentRepository repository,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IMenuPlanningCache? planningCache = null)
     {
         this.repository = repository;
         this.currentUser = currentUser;
+        this.planningCache = planningCache ?? new NullMenuPlanningCache();
     }
 
     public async Task<PagedResultDto<RecipeComponentListItemDto>> SearchAsync(RecipeComponentSearchFilterDto filter)
@@ -219,6 +222,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
                 UpdatedAt = DateTimeOffset.UtcNow,
                 UpdatedBy = this.UserName(),
             });
+            await this.InvalidateMealResultCacheAsync();
             return;
         }
 
@@ -235,6 +239,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
                 request.ChangeSummary?.Trim(),
                 request.NonTechnologyChangeReason.Trim(),
                 this.UserName());
+            await this.InvalidateMealResultCacheAsync();
             return;
         }
 
@@ -279,11 +284,13 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             UpdatedAt = request.Id > 0 ? DateTimeOffset.UtcNow : null,
             UpdatedBy = request.Id > 0 ? this.UserName() : null,
         });
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task DeleteIngredientAsync(int ingredientId)
     {
         await this.repository.DeleteIngredientAsync(ingredientId, this.UserName());
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task SavePackagingAsync(SavePackagingRequirementRequest request)
@@ -331,11 +338,13 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             UpdatedAt = request.Id > 0 ? DateTimeOffset.UtcNow : null,
             UpdatedBy = request.Id > 0 ? this.UserName() : null,
         });
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task DeletePackagingAsync(int packagingRequirementId)
     {
         await this.repository.DeletePackagingAsync(packagingRequirementId, this.UserName());
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task SaveInstructionSectionAsync(SaveInstructionSectionRequest request)
@@ -408,6 +417,7 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         }
 
         await this.repository.PublishVersionAsync(versionId, this.UserName());
+        await this.InvalidateMealResultCacheAsync();
     }
 
     public async Task AttachComponentToMealAsync(AttachComponentToMealRequest request)
@@ -441,6 +451,12 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedBy = this.UserName(),
         });
+        await this.InvalidateMealResultCacheAsync();
+    }
+
+    private async Task InvalidateMealResultCacheAsync()
+    {
+        await this.planningCache.RemoveByPrefixAsync(MenuPlanningCacheKeys.MealResultPrefix);
     }
 
     private static RecipeComponentListItemDto MapListItem(RecipeComponentListRow row)

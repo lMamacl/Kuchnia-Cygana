@@ -1,6 +1,7 @@
 using AutoMapper;
 using FluentAssertions;
 using KuchniaUCygana.Application.DTOs.Menu;
+using KuchniaUCygana.Application.Interfaces.Menu;
 using KuchniaUCygana.Application.Services.Menu;
 using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Enums;
@@ -159,10 +160,37 @@ public sealed class MealManagementServiceTests
         variantRepository.Verify(r => r.SaveComponentAsync(It.IsAny<MealVariantComponent>()), Times.Never);
     }
 
+    [Fact]
+    public async Task GetMealVariantResultsAsync_DeduplicatesKeys_AndUsesCacheOnNextRead()
+    {
+        var mealRepository = new Mock<IMealRepository>();
+        mealRepository.Setup(r => r.GetByIdAsync(5)).ReturnsAsync(new Meal
+        {
+            Id = 5,
+            Name = "Lunch testowy",
+        });
+        var componentRepository = new Mock<IRecipeComponentRepository>();
+        SetupCompleteBaseMeal(componentRepository);
+        var cache = new InMemoryMenuPlanningCache();
+        var service = CreateService(
+            mealRepository: mealRepository,
+            componentRepository: componentRepository,
+            planningCache: cache);
+        var key = new MealVariantResultKey(5, null);
+
+        var first = await service.GetMealVariantResultsAsync(new[] { key, key });
+        var second = await service.GetMealVariantResultsAsync(new[] { key });
+
+        first[key].Should().NotBeNull();
+        second[key].Should().NotBeNull();
+        mealRepository.Verify(r => r.GetByIdAsync(5), Times.Once);
+    }
+
     private static MealManagementService CreateService(
         Mock<IMealRepository>? mealRepository = null,
         Mock<IRecipeComponentRepository>? componentRepository = null,
-        Mock<IMealVariantRepository>? variantRepository = null)
+        Mock<IMealVariantRepository>? variantRepository = null,
+        IMenuPlanningCache? planningCache = null)
     {
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.Setup(u => u.GetUserName()).Returns("test-user");
@@ -179,7 +207,8 @@ public sealed class MealManagementServiceTests
             Mock.Of<IMealImageRepository>(),
             new MealVariantResultCalculator(),
             currentUser.Object,
-            Mock.Of<IMapper>());
+            Mock.Of<IMapper>(),
+            planningCache);
     }
 
     private static void SetupCompleteBaseMeal(Mock<IRecipeComponentRepository> componentRepository)
@@ -279,4 +308,30 @@ public sealed class MealManagementServiceTests
             FiberPer100g = 1m,
             AllergensApproved = true,
         };
+
+    private sealed class InMemoryMenuPlanningCache : IMenuPlanningCache
+    {
+        private readonly Dictionary<string, object?> values = new();
+
+        public Task<T?> GetAsync<T>(string key)
+        {
+            return Task.FromResult(this.values.TryGetValue(key, out var value) ? (T?)value : default);
+        }
+
+        public Task SetAsync<T>(string key, T value, TimeSpan? expiry = null)
+        {
+            this.values[key] = value;
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveByPrefixAsync(string prefix)
+        {
+            foreach (var key in this.values.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).ToList())
+            {
+                this.values.Remove(key);
+            }
+
+            return Task.CompletedTask;
+        }
+    }
 }

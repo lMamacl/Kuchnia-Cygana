@@ -1,10 +1,7 @@
-@model KuchniaUCygana.Application.DTOs.Menu.DietMenuDayDto
-@using KuchniaUCygana.Application.DTOs.Menu
+@model KuchniaUCygana.Application.DTOs.Menu.DietMenuDayShellDto
 @{
     Layout = "_LayoutStaff";
-    var diets = ViewBag.Diets as IEnumerable<DietDto> ?? Enumerable.Empty<DietDto>();
-    var slots = ViewBag.Slots as IEnumerable<string> ?? new[] { "Breakfast", "Snack1", "Lunch", "Snack2", "Dinner" };
-    var variants = diets.SelectMany(d => d.Variants.Select(v => new { Diet = d.Name, Variant = v })).ToList();
+    var defaultVariant = Model.DietVariants.FirstOrDefault(v => v.ActiveItemCount > 0) ?? Model.DietVariants.FirstOrDefault();
 }
 
 <div class="row row-cards">
@@ -22,7 +19,15 @@
                 {
                     <div class="d-flex flex-wrap gap-2 align-items-center">
                         <span class="badge @(Model.Status == "Published" ? "bg-success-lt text-success" : "bg-blue-lt text-blue")">@Model.Status</span>
-                        <span class="text-secondary">@Model.Items.Count pozycji</span>
+                        <span class="text-secondary">@Model.ActiveItemCount pozycji</span>
+                        @if (Model.QuickWarningCount == 0)
+                        {
+                            <span class="badge bg-success-lt text-success">Szybka walidacja OK</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-warning-lt text-warning">@Model.QuickWarningCount brakow</span>
+                        }
                         @if (Model.PublishedAt.HasValue)
                         {
                             <span class="text-secondary">Opublikowano: @Model.PublishedAt.Value.ToString("yyyy-MM-dd HH:mm") przez @Model.PublishedBy</span>
@@ -53,252 +58,51 @@
 
     @if (Model.HasPlan)
     {
-        <div class="col-lg-8">
+        <div class="col-lg-4">
             <div class="card card-premium">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h3 class="card-title">Pozycje planu</h3>
+                    <h3 class="card-title">Warianty diet</h3>
                     @if (Model.CanEdit)
                     {
                         <form asp-controller="DietMenuPlan" asp-action="Publish" asp-route-planId="@Model.Id" method="post">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
-                            <button type="submit" class="btn btn-sm btn-success" disabled="@(!Model.Validation.CanPublish)">Publikuj</button>
+                            <button type="submit" class="btn btn-sm btn-success" disabled="@(!Model.CanPublishQuick)">Publikuj</button>
                         </form>
                     }
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-vcenter card-table">
-                        <thead>
-                            <tr>
-                                <th>Slot</th>
-                                <th>Wariant</th>
-                                <th>Posilek</th>
-                                <th class="text-end">Gramatura</th>
-                                <th class="text-center">Skladowe</th>
-                                <th>Status</th>
-                                <th class="w-1"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if (Model.Items.Count == 0)
-                            {
-                                <tr><td colspan="7" class="text-center text-secondary py-4">Brak pozycji w dniu menu.</td></tr>
-                            }
-                            @foreach (var item in Model.Items.OrderBy(i => i.SortOrder).ThenBy(i => i.Id))
-                            {
-                                <tr>
-                                    <td>
-                                        <div class="fw-bold">@item.MealSlot</div>
-                                        <div class="text-secondary small">#@item.SortOrder</div>
-                                    </td>
-                                    <td>
-                                        <div>@item.DietName</div>
-                                        <div class="text-secondary small">@item.VariantName</div>
-                                    </td>
-                                    <td>
-                                        <div class="fw-bold">@item.MealName</div>
-                                        <div class="text-secondary small">@item.MealStatus</div>
-                                        <div class="d-flex flex-wrap gap-1 mt-1">
-                                            <span class="badge @(item.UsesSpecialMealVariant ? "bg-purple-lt text-purple" : "bg-secondary-lt text-secondary")">
-                                                @(item.MealVariantName ?? "wariant bazowy")
-                                            </span>
-                                            <span class="badge @(item.UsesServingMultiplier ? "bg-orange-lt text-orange" : "bg-secondary-lt text-secondary")">
-                                                multiplier x @item.ServingSizeMultiplier.ToString("0.##")
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td class="text-end">
-                                        @if (item.FinalWeightAfterMultiplierGrams.HasValue)
-                                        {
-                                            <div class="fw-bold">@item.FinalWeightAfterMultiplierGrams.Value.ToString("0.##") g</div>
-                                            <div class="text-secondary small">baza @item.FinalWeightGrams?.ToString("0.##") g</div>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-secondary">-</span>
-                                        }
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge bg-blue-lt">@item.ComponentCount</span>
-                                        @if (item.LegacyRecipeCount > 0)
-                                        {
-                                            <span class="badge bg-secondary-lt">legacy @item.LegacyRecipeCount</span>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (item.ValidationWarnings.Count == 0)
-                                        {
-                                            <span class="badge bg-success-lt text-success">@item.CompletenessStatus</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-warning-lt text-warning">@item.CompletenessStatus / @item.ValidationWarnings.Count brakow</span>
-                                            <div class="text-secondary small">@string.Join("; ", item.ValidationWarnings)</div>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (Model.CanEdit)
-                                        {
-                                            <form asp-controller="DietMenuPlan" asp-action="DeleteItem" asp-route-planId="@Model.Id" asp-route-itemId="@item.Id" method="post">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
-                                                <button type="submit" class="btn btn-sm btn-outline-danger">Usun</button>
-                                            </form>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            @if (Model.CanEdit)
-            {
-                <div class="card card-premium mt-3">
-                    <div class="card-header">
-                        <h3 class="card-title">Edycja pozycji</h3>
-                    </div>
-                    <div class="card-body">
-                        @foreach (var item in Model.Items.OrderBy(i => i.SortOrder).ThenBy(i => i.Id))
-                        {
-                            <form asp-controller="DietMenuPlan" asp-action="UpdateItem" asp-route-planId="@Model.Id" asp-route-itemId="@item.Id" method="post" class="row g-2 align-items-end mb-3 menu-plan-item-form">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
-                                <div class="col-md-3">
-                                    <label class="form-label">Wariant</label>
-                                    <select name="DietVariantId" class="form-select form-select-sm" required>
-                                        @foreach (var variant in variants)
-                                        {
-                                            <option value="@variant.Variant.Id" selected="@(variant.Variant.Id == item.DietVariantId)">@variant.Diet / @variant.Variant.Name</option>
-                                        }
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Slot</label>
-                                    <select name="MealSlot" class="form-select form-select-sm" required>
-                                        @foreach (var slot in slots)
-                                        {
-                                            <option value="@slot" selected="@(slot == item.MealSlot)">@slot</option>
-                                        }
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Posilek</label>
-                                    <div class="menu-plan-meal-lookup" data-selected-meal-id="@item.MealId" data-selected-meal-name="@item.MealName">
-                                        <input type="hidden" name="MealId" class="js-meal-id" value="@item.MealId" />
-                                        <input type="search" class="form-control form-control-sm js-meal-query" value="@item.MealName" autocomplete="off" />
-                                        <div class="list-group mt-1 shadow-sm d-none js-meal-results"></div>
-                                        <div class="small text-secondary mt-1 js-meal-status">@item.MealStatus</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label">Wariant dania</label>
-                                    <select name="MealVariantId" class="form-select form-select-sm js-meal-variant-select" data-selected-variant-id="@(item.MealVariantId?.ToString() ?? string.Empty)" disabled>
-                                        <option value="">Ladowanie wariantow...</option>
-                                    </select>
-                                    <div class="small text-secondary mt-1 js-variant-status">@(item.MealVariantStatus ?? "wariant bazowy")</div>
-                                </div>
-                                <div class="col-md-1">
-                                    <label class="form-label">x</label>
-                                    <input name="ServingSizeMultiplier" type="number" step="0.01" min="0.01" value="@item.ServingSizeMultiplier" class="form-control form-control-sm" />
-                                </div>
-                                <div class="col-md-1">
-                                    <label class="form-label">Lp.</label>
-                                    <input name="SortOrder" type="number" value="@item.SortOrder" class="form-control form-control-sm" />
-                                </div>
-                                <div class="col-md-1">
-                                    <button type="submit" class="btn btn-sm btn-outline-primary w-100">Zapisz</button>
-                                </div>
-                            </form>
-                        }
-                    </div>
-                </div>
-            }
-        </div>
-
-        <div class="col-lg-4">
-            <div class="card card-premium">
-                <div class="card-header">
-                    <h3 class="card-title">Walidacja publikacji</h3>
-                </div>
-                <div class="card-body">
-                    @if (Model.Validation.Warnings.Count == 0)
+                <div class="list-group list-group-flush">
+                    @foreach (var variant in Model.DietVariants)
                     {
-                        <span class="badge bg-success-lt text-success">Plan gotowy do publikacji</span>
-                    }
-                    else
-                    {
-                        <ul class="mb-0">
-                            @foreach (var warning in Model.Validation.Warnings)
-                            {
-                                <li>@warning</li>
-                            }
-                        </ul>
+                        var isDefault = defaultVariant?.DietVariantId == variant.DietVariantId;
+                        <button type="button"
+                                class="list-group-item list-group-item-action js-load-diet-variant @(isDefault ? "active" : null)"
+                                data-default="@(isDefault ? "true" : "false")"
+                                data-url="@Url.Action("DietVariantItems", "DietMenuPlan", new { planId = Model.Id, dietVariantId = variant.DietVariantId })">
+                            <div class="d-flex justify-content-between gap-3">
+                                <div>
+                                    <div class="fw-bold">@variant.DietName</div>
+                                    <div class="small @(isDefault ? "text-white-50" : "text-secondary")">@variant.VariantName · @variant.TargetCalories kcal</div>
+                                </div>
+                                <div class="text-end">
+                                    <div>@variant.ActiveItemCount</div>
+                                    @if (variant.QuickWarningCount > 0)
+                                    {
+                                        <span class="badge bg-warning-lt text-warning">@variant.QuickWarningCount</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success-lt text-success">OK</span>
+                                    }
+                                </div>
+                            </div>
+                        </button>
                     }
                 </div>
             </div>
 
             @if (Model.CanEdit)
             {
-                <div class="card card-premium mt-3">
-                    <div class="card-header">
-                        <h3 class="card-title">Dodaj pozycje</h3>
-                    </div>
-                    <div class="card-body">
-                        <form asp-controller="DietMenuPlan" asp-action="AddItem" asp-route-planId="@Model.Id" method="post" class="menu-plan-item-form">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
-                            <div class="mb-3">
-                                <label class="form-label">Wariant diety</label>
-                                <select name="DietVariantId" class="form-select" required>
-                                    <option value="">Wybierz wariant</option>
-                                    @foreach (var variant in variants)
-                                    {
-                                        <option value="@variant.Variant.Id">@variant.Diet / @variant.Variant.Name</option>
-                                    }
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Slot</label>
-                                <select name="MealSlot" class="form-select" required>
-                                    @foreach (var slot in slots)
-                                    {
-                                        <option value="@slot">@slot</option>
-                                    }
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Posilek</label>
-                                <div class="menu-plan-meal-lookup">
-                                    <input type="hidden" name="MealId" class="js-meal-id" value="" />
-                                    <input type="search" class="form-control js-meal-query" autocomplete="off" />
-                                    <div class="list-group mt-1 shadow-sm d-none js-meal-results"></div>
-                                    <div class="small text-secondary mt-1 js-meal-status">Wpisz nazwe dania.</div>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Wariant dania</label>
-                                <select name="MealVariantId" class="form-select js-meal-variant-select" data-selected-variant-id="" disabled>
-                                    <option value="">Najpierw wybierz posilek</option>
-                                </select>
-                                <div class="small text-secondary mt-1 js-variant-status">Brak wybranego wariantu.</div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <label class="form-label">Mnoznik</label>
-                                    <input name="ServingSizeMultiplier" type="number" step="0.01" min="0.01" value="1" class="form-control" />
-                                </div>
-                                <div class="col-6">
-                                    <label class="form-label">Kolejnosc</label>
-                                    <input name="SortOrder" type="number" value="0" class="form-control" />
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100 mt-3">Dodaj</button>
-                        </form>
-                    </div>
-                </div>
-
                 <div class="card card-premium mt-3">
                     <div class="card-header">
                         <h3 class="card-title">Kopiuj dzien</h3>
@@ -315,13 +119,24 @@
                 </div>
             }
         </div>
+
+        <div class="col-lg-8">
+            <div id="dietVariantDetails" class="min-vh-25">
+                <div class="card card-premium">
+                    <div class="card-body text-secondary">Wybierz wariant diety.</div>
+                </div>
+            </div>
+        </div>
     }
 </div>
 
 <script>
 (function () {
+    const details = document.getElementById('dietVariantDetails');
+    const buttons = Array.from(document.querySelectorAll('.js-load-diet-variant'));
     const mealsLookupUrl = '@Url.Content("~/diet-editor/menu-plan/lookups/meals")';
     const variantsLookupUrlTemplate = '@Url.Content("~/diet-editor/menu-plan/lookups/meals/__mealId__/variants")';
+    const variantCache = new Map();
 
     const valueOf = function (item, camelName, pascalName) {
         return item[camelName] ?? item[pascalName];
@@ -437,6 +252,8 @@
             variantSelect.value = '';
         }
 
+        variantSelect.dataset.loaded = 'true';
+        variantSelect.dataset.loading = 'false';
         variantSelect.disabled = false;
         updateVariantStatus(variantSelect, variantStatus);
     };
@@ -491,115 +308,172 @@
 
     const loadVariants = async function (mealId, variantSelect, variantStatus, selectedVariantId) {
         variantSelect.disabled = true;
+        variantSelect.dataset.loading = 'true';
         setVariantPlaceholder(variantSelect, 'Ladowanie wariantow...');
         variantStatus.textContent = 'Ladowanie statusu wariantow...';
 
         try {
-            const response = await fetch(variantsLookupUrlTemplate.replace('__mealId__', encodeURIComponent(mealId)), {
-                headers: { 'Accept': 'application/json' },
-            });
-            if (!response.ok) {
-                throw new Error('Lookup wariantow zwrocil blad.');
+            let variants = variantCache.get(mealId.toString());
+            if (!variants) {
+                const response = await fetch(variantsLookupUrlTemplate.replace('__mealId__', encodeURIComponent(mealId)), {
+                    headers: { 'Accept': 'application/json' },
+                });
+                if (!response.ok) {
+                    throw new Error('Lookup wariantow zwrocil blad.');
+                }
+
+                variants = asArray(await response.json());
+                variantCache.set(mealId.toString(), variants);
             }
 
-            const variants = asArray(await response.json());
             renderVariantOptions(variantSelect, variantStatus, variants, selectedVariantId || '');
         } catch {
             setVariantPlaceholder(variantSelect, 'Nie udalo sie pobrac wariantow');
+            variantSelect.dataset.loading = 'false';
             variantSelect.disabled = true;
             variantStatus.textContent = 'Blad pobierania wariantow.';
         }
     };
 
-    document.querySelectorAll('.menu-plan-item-form').forEach(function (form) {
-        const lookup = form.querySelector('.menu-plan-meal-lookup');
-        const mealIdInput = form.querySelector('.js-meal-id');
-        const mealQuery = form.querySelector('.js-meal-query');
-        const resultsBox = form.querySelector('.js-meal-results');
-        const mealStatus = form.querySelector('.js-meal-status');
-        const variantSelect = form.querySelector('.js-meal-variant-select');
-        const variantStatus = form.querySelector('.js-variant-status');
-        if (!lookup || !mealIdInput || !mealQuery || !resultsBox || !variantSelect || !variantStatus) {
+    const initializeMenuPlanForms = function (root) {
+        root.querySelectorAll('.menu-plan-item-form').forEach(function (form) {
+            if (form.dataset.initialized === 'true') {
+                return;
+            }
+
+            form.dataset.initialized = 'true';
+            const lookup = form.querySelector('.menu-plan-meal-lookup');
+            const mealIdInput = form.querySelector('.js-meal-id');
+            const mealQuery = form.querySelector('.js-meal-query');
+            const resultsBox = form.querySelector('.js-meal-results');
+            const mealStatus = form.querySelector('.js-meal-status');
+            const variantSelect = form.querySelector('.js-meal-variant-select');
+            const variantStatus = form.querySelector('.js-variant-status');
+            if (!lookup || !mealIdInput || !mealQuery || !resultsBox || !variantSelect || !variantStatus) {
+                return;
+            }
+
+            const searchMeals = debounce(async function () {
+                const query = mealQuery.value.trim();
+                if (query.length < 2) {
+                    resultsBox.classList.add('d-none');
+                    mealStatus.textContent = mealIdInput.value ? mealStatus.textContent : 'Wpisz minimum 2 znaki.';
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${mealsLookupUrl}?query=${encodeURIComponent(query)}`, {
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    if (!response.ok) {
+                        throw new Error('Lookup dan zwrocil blad.');
+                    }
+
+                    const meals = asArray(await response.json());
+                    renderMealResults(resultsBox, meals, function (mealId, mealName, meal) {
+                        mealIdInput.value = mealId;
+                        mealQuery.value = mealName;
+                        resultsBox.classList.add('d-none');
+                        mealStatus.textContent = mealStatusText(meal);
+                        variantSelect.dataset.selectedVariantId = '';
+                        variantSelect.dataset.loaded = 'false';
+                        loadVariants(mealId, variantSelect, variantStatus, '');
+                    });
+                } catch {
+                    resultsBox.classList.add('d-none');
+                    mealStatus.textContent = 'Blad pobierania dan.';
+                }
+            }, 250);
+
+            const ensureVariantsLoaded = function () {
+                if (!mealIdInput.value || variantSelect.dataset.loaded === 'true' || variantSelect.dataset.loading === 'true') {
+                    return;
+                }
+
+                loadVariants(
+                    mealIdInput.value,
+                    variantSelect,
+                    variantStatus,
+                    variantSelect.dataset.selectedVariantId || variantSelect.value || '');
+            };
+
+            mealQuery.addEventListener('input', function () {
+                mealIdInput.value = '';
+                variantSelect.dataset.selectedVariantId = '';
+                variantSelect.dataset.loaded = 'false';
+                variantSelect.disabled = true;
+                setVariantPlaceholder(variantSelect, 'Najpierw wybierz posilek');
+                variantStatus.textContent = 'Brak wybranego wariantu.';
+                searchMeals();
+            });
+
+            mealQuery.addEventListener('focus', function () {
+                if (!mealIdInput.value) {
+                    searchMeals();
+                }
+            });
+
+            variantSelect.addEventListener('focus', ensureVariantsLoaded);
+            variantSelect.addEventListener('pointerdown', ensureVariantsLoaded);
+            variantSelect.addEventListener('change', function () {
+                updateVariantStatus(variantSelect, variantStatus);
+            });
+
+            form.addEventListener('submit', function (event) {
+                if (!mealIdInput.value) {
+                    event.preventDefault();
+                    mealStatus.textContent = 'Wybierz danie z listy wynikow.';
+                    mealQuery.focus();
+                    return;
+                }
+
+                if (variantSelect.dataset.loading === 'true') {
+                    event.preventDefault();
+                    variantStatus.textContent = 'Poczekaj na zaladowanie wariantow.';
+                }
+            });
+
+            document.addEventListener('click', function (event) {
+                if (!lookup.contains(event.target)) {
+                    resultsBox.classList.add('d-none');
+                }
+            });
+        });
+    };
+
+    const loadDietVariant = async function (button) {
+        if (!details || !button) {
             return;
         }
 
-        const searchMeals = debounce(async function () {
-            const query = mealQuery.value.trim();
-            if (query.length < 2) {
-                resultsBox.classList.add('d-none');
-                mealStatus.textContent = mealIdInput.value ? mealStatus.textContent : 'Wpisz minimum 2 znaki.';
-                return;
+        buttons.forEach(item => item.classList.remove('active'));
+        button.classList.add('active');
+        details.innerHTML = '<div class="card card-premium"><div class="card-body text-secondary">Ladowanie...</div></div>';
+
+        try {
+            const response = await fetch(button.dataset.url, {
+                headers: { 'Accept': 'text/html' },
+            });
+            if (!response.ok) {
+                throw new Error('Nie udalo sie pobrac pozycji wariantu.');
             }
 
-            try {
-                const response = await fetch(`${mealsLookupUrl}?query=${encodeURIComponent(query)}`, {
-                    headers: { 'Accept': 'application/json' },
-                });
-                if (!response.ok) {
-                    throw new Error('Lookup dan zwrocil blad.');
-                }
-
-                const meals = asArray(await response.json());
-                renderMealResults(resultsBox, meals, function (mealId, mealName, meal) {
-                    mealIdInput.value = mealId;
-                    mealQuery.value = mealName;
-                    resultsBox.classList.add('d-none');
-                    mealStatus.textContent = mealStatusText(meal);
-                    variantSelect.dataset.selectedVariantId = '';
-                    loadVariants(mealId, variantSelect, variantStatus, '');
-                });
-            } catch {
-                resultsBox.classList.add('d-none');
-                mealStatus.textContent = 'Blad pobierania dan.';
-            }
-        }, 250);
-
-        mealQuery.addEventListener('input', function () {
-            mealIdInput.value = '';
-            variantSelect.dataset.selectedVariantId = '';
-            variantSelect.disabled = true;
-            setVariantPlaceholder(variantSelect, 'Najpierw wybierz posilek');
-            variantStatus.textContent = 'Brak wybranego wariantu.';
-            searchMeals();
-        });
-
-        mealQuery.addEventListener('focus', function () {
-            if (!mealIdInput.value) {
-                searchMeals();
-            }
-        });
-
-        variantSelect.addEventListener('change', function () {
-            updateVariantStatus(variantSelect, variantStatus);
-        });
-
-        form.addEventListener('submit', function (event) {
-            if (!mealIdInput.value) {
-                event.preventDefault();
-                mealStatus.textContent = 'Wybierz danie z listy wynikow.';
-                mealQuery.focus();
-                return;
-            }
-
-            if (variantSelect.disabled) {
-                event.preventDefault();
-                variantStatus.textContent = 'Poczekaj na zaladowanie wariantow.';
-            }
-        });
-
-        document.addEventListener('click', function (event) {
-            if (!lookup.contains(event.target)) {
-                resultsBox.classList.add('d-none');
-            }
-        });
-
-        if (mealIdInput.value) {
-            loadVariants(
-                mealIdInput.value,
-                variantSelect,
-                variantStatus,
-                variantSelect.dataset.selectedVariantId || '');
+            details.innerHTML = await response.text();
+            initializeMenuPlanForms(details);
+        } catch {
+            details.innerHTML = '<div class="card card-premium"><div class="card-body text-danger">Nie udalo sie zaladowac pozycji.</div></div>';
         }
+    };
+
+    buttons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            loadDietVariant(button);
+        });
     });
+
+    const initial = buttons.find(button => button.dataset.default === 'true') || buttons[0];
+    if (initial) {
+        loadDietVariant(initial);
+    }
 })();
 </script>

@@ -16,6 +16,10 @@ public interface IMealManagementService
 
     Task<MealVariantResultDto?> GetMealVariantResultAsync(int mealId, int? mealVariantId);
 
+    Task<IReadOnlyDictionary<MealVariantResultKey, MealVariantResultDto?>> GetMealVariantResultsAsync(
+        IEnumerable<MealVariantResultKey> keys,
+        MealVariantResultCacheMode cacheMode = MealVariantResultCacheMode.CachePreferred);
+
     Task<IReadOnlyList<MealVariantPlanOptionDto>> GetMealVariantOptionsAsync(int mealId);
 
     Task<IReadOnlyList<MenuPlanMealVariantLookupDto>> GetPlanningMealVariantOptionsAsync(int mealId);

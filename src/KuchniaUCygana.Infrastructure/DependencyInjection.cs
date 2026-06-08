@@ -227,7 +227,9 @@ public static class DependencyInjection
             .AddLogging(loggingBuilder => loggingBuilder.AddFluentMigratorConsole());
 
         services.AddMemoryCache();
-        services.AddSingleton<ICacheService, MemoryCacheService>();
+        services.AddSingleton<MemoryCacheService>();
+        services.AddSingleton<ICacheService>(sp => sp.GetRequiredService<MemoryCacheService>());
+        services.AddSingleton<MenuAppInterfaces.IMenuPlanningCache>(sp => sp.GetRequiredService<MemoryCacheService>());
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IGeocodeService, OpenStreetMapService>();
         services.AddScoped<IAiDescriptionService, OpenAiDescriptionService>();

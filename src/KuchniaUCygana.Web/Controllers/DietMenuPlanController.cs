@@ -12,16 +12,13 @@ public sealed class DietMenuPlanController : Controller
     private static readonly string[] Slots = ["Breakfast", "Snack1", "Lunch", "Snack2", "Dinner"];
 
     private readonly IDietMenuPlanManagementService menuPlanService;
-    private readonly IDietManagementService dietService;
     private readonly IMealManagementService mealService;
 
     public DietMenuPlanController(
         IDietMenuPlanManagementService menuPlanService,
-        IDietManagementService dietService,
         IMealManagementService mealService)
     {
         this.menuPlanService = menuPlanService;
-        this.dietService = dietService;
         this.mealService = mealService;
     }
 
@@ -37,10 +34,18 @@ public sealed class DietMenuPlanController : Controller
     [HttpGet("day/{date}")]
     public async Task<IActionResult> Day(DateOnly date)
     {
-        var model = await this.menuPlanService.GetDayAsync(date);
-        await this.LoadLookupsAsync();
+        var model = await this.menuPlanService.GetDayShellAsync(date);
+        this.ViewBag.Slots = Slots;
         this.SetHeader("Dzien menu", $"Edycja planu na {date:yyyy-MM-dd}.");
         return this.View("~/Views/DietEditor/MenuPlanDay.cshtml", model);
+    }
+
+    [HttpGet("day/{planId:int}/diet-variants/{dietVariantId:int}")]
+    public async Task<IActionResult> DietVariantItems(int planId, int dietVariantId)
+    {
+        var model = await this.menuPlanService.GetDietVariantItemsAsync(planId, dietVariantId);
+        this.ViewBag.Slots = Slots;
+        return this.PartialView("~/Views/DietEditor/_MenuPlanDietVariantItems.cshtml", model);
     }
 
     [HttpPost("day/create")]
@@ -163,12 +168,6 @@ public sealed class DietMenuPlanController : Controller
     {
         var variants = await this.mealService.GetPlanningMealVariantOptionsAsync(mealId);
         return this.Json(variants);
-    }
-
-    private async Task LoadLookupsAsync()
-    {
-        this.ViewBag.Diets = await this.dietService.GetActiveDietsAsync();
-        this.ViewBag.Slots = Slots;
     }
 
     private void SetHeader(string title, string description)

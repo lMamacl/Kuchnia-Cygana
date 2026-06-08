@@ -18,13 +18,13 @@ public sealed class DietMenuPlanManagementServiceTests
         DateOnly capturedStart = default;
         DateOnly capturedEnd = default;
         repository
-            .Setup(r => r.GetPlansAsync(It.IsAny<DateOnly>(), It.IsAny<DateOnly>()))
+            .Setup(r => r.GetPlanSummariesAsync(It.IsAny<DateOnly>(), It.IsAny<DateOnly>()))
             .Callback<DateOnly, DateOnly>((start, end) =>
             {
                 capturedStart = start;
                 capturedEnd = end;
             })
-            .ReturnsAsync(Array.Empty<DietMenuPlanDayRow>());
+            .ReturnsAsync(Array.Empty<DietMenuPlanDaySummaryRow>());
         var service = CreateService(repository);
         var startDate = DateOnly.FromDateTime(DateTime.Today);
 
@@ -34,6 +34,7 @@ public sealed class DietMenuPlanManagementServiceTests
         result.Days.Should().HaveCount(7);
         capturedStart.Should().Be(startDate);
         capturedEnd.Should().Be(startDate.AddDays(6));
+        repository.Verify(r => r.GetPlanItemsAsync(It.IsAny<int>()), Times.Never);
     }
 
     [Fact]
@@ -52,6 +53,73 @@ public sealed class DietMenuPlanManagementServiceTests
     }
 
     [Fact]
+    public async Task GetDayShellAsync_LoadsVariantSummariesWithoutPlanItems()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        repository.Setup(r => r.GetPlanByDateAsync(It.IsAny<DateOnly>())).ReturnsAsync(CreateDraftPlan());
+        repository.Setup(r => r.GetPlanDietVariantSummariesAsync(10)).ReturnsAsync(new[]
+        {
+            new DietMenuPlanDietVariantSummaryRow
+            {
+                DietVariantId = 2,
+                DietName = "Slim",
+                VariantName = "1800 kcal",
+                TargetCalories = 1800,
+                ActiveItemCount = 5,
+                QuickWarningCount = 1,
+            },
+        });
+        var mealService = CreateDefaultMealService();
+        var service = CreateService(repository, mealService);
+
+        var result = await service.GetDayShellAsync(DateOnly.FromDateTime(DateTime.Today));
+
+        result.Id.Should().Be(10);
+        result.ActiveItemCount.Should().Be(5);
+        result.QuickWarningCount.Should().Be(1);
+        result.DietVariants.Should().ContainSingle(v => v.DietVariantId == 2);
+        repository.Verify(r => r.GetPlanItemsAsync(It.IsAny<int>()), Times.Never);
+        mealService.Verify(s => s.GetMealVariantResultsAsync(
+            It.IsAny<IEnumerable<MealVariantResultKey>>(),
+            It.IsAny<MealVariantResultCacheMode>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetDietVariantItemsAsync_LoadsOnlySelectedVariant_AndUsesCachePreferredBatch()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreateDraftPlan());
+        repository.Setup(r => r.GetPlanDietVariantSummariesAsync(10)).ReturnsAsync(new[]
+        {
+            new DietMenuPlanDietVariantSummaryRow
+            {
+                DietVariantId = 2,
+                DietName = "Slim",
+                VariantName = "1800 kcal",
+                TargetCalories = 1800,
+                ActiveItemCount = 1,
+            },
+        });
+        repository.Setup(r => r.GetPlanItemsAsync(10, 2)).ReturnsAsync(new[] { CreateValidItem() });
+        var mealService = new Mock<IMealManagementService>();
+        mealService
+            .Setup(s => s.GetMealVariantResultsAsync(
+                It.IsAny<IEnumerable<MealVariantResultKey>>(),
+                MealVariantResultCacheMode.CachePreferred))
+            .ReturnsAsync(BatchResult(CreateCompleteResult()));
+        var service = CreateService(repository, mealService);
+
+        var result = await service.GetDietVariantItemsAsync(10, 2);
+
+        result.DietVariantId.Should().Be(2);
+        result.Items.Should().ContainSingle();
+        repository.Verify(r => r.GetPlanItemsAsync(10, 2), Times.Once);
+        mealService.Verify(s => s.GetMealVariantResultsAsync(
+            It.IsAny<IEnumerable<MealVariantResultKey>>(),
+            MealVariantResultCacheMode.CachePreferred), Times.Once);
+    }
+
+    [Fact]
     public async Task PublishAsync_PublishesWhenCalculatorResultIsComplete_EvenWhenSqlCountsAreMissing()
     {
         var repository = new Mock<IDietMenuPlanRepository>();
@@ -62,7 +130,11 @@ public sealed class DietMenuPlanManagementServiceTests
         repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreateDraftPlan());
         repository.Setup(r => r.GetPlanItemsAsync(10)).ReturnsAsync(new[] { item });
         var mealService = new Mock<IMealManagementService>();
-        mealService.Setup(s => s.GetMealVariantResultAsync(5, null)).ReturnsAsync(CreateCompleteResult());
+        mealService
+            .Setup(s => s.GetMealVariantResultsAsync(
+                It.IsAny<IEnumerable<MealVariantResultKey>>(),
+                MealVariantResultCacheMode.Fresh))
+            .ReturnsAsync(BatchResult(CreateCompleteResult()));
         var service = CreateService(repository, mealService);
 
         await service.PublishAsync(new PublishDietMenuPlanRequest { DietMenuPlanId = 10 });
@@ -77,14 +149,18 @@ public sealed class DietMenuPlanManagementServiceTests
         repository.Setup(r => r.GetPlanByIdAsync(10)).ReturnsAsync(CreateDraftPlan());
         repository.Setup(r => r.GetPlanItemsAsync(10)).ReturnsAsync(new[] { CreateValidItem() });
         var mealService = new Mock<IMealManagementService>();
-        mealService.Setup(s => s.GetMealVariantResultAsync(5, null)).ReturnsAsync(new MealVariantResultDto
-        {
-            MealId = 5,
-            MealName = "Lunch testowy",
-            IsComplete = false,
-            CompletenessStatus = "Incomplete",
-            ValidationWarnings = ["brak opakowania produkcyjnego", "brak kompletnego nutrition"],
-        });
+        mealService
+            .Setup(s => s.GetMealVariantResultsAsync(
+                It.IsAny<IEnumerable<MealVariantResultKey>>(),
+                MealVariantResultCacheMode.Fresh))
+            .ReturnsAsync(BatchResult(new MealVariantResultDto
+            {
+                MealId = 5,
+                MealName = "Lunch testowy",
+                IsComplete = false,
+                CompletenessStatus = "Incomplete",
+                ValidationWarnings = ["brak opakowania produkcyjnego", "brak kompletnego nutrition"],
+            }));
         var service = CreateService(repository, mealService);
 
         var act = async () => await service.PublishAsync(new PublishDietMenuPlanRequest { DietMenuPlanId = 10 });
@@ -229,8 +305,23 @@ public sealed class DietMenuPlanManagementServiceTests
         mealService
             .Setup(s => s.GetMealVariantResultAsync(It.IsAny<int>(), It.IsAny<int?>()))
             .ReturnsAsync(CreateCompleteResult());
+        mealService
+            .Setup(s => s.GetMealVariantResultsAsync(
+                It.IsAny<IEnumerable<MealVariantResultKey>>(),
+                It.IsAny<MealVariantResultCacheMode>()))
+            .ReturnsAsync((IEnumerable<MealVariantResultKey> keys, MealVariantResultCacheMode _) =>
+                keys.ToDictionary(key => key, _ => (MealVariantResultDto?)CreateCompleteResult()));
         return mealService;
     }
+
+    private static IReadOnlyDictionary<MealVariantResultKey, MealVariantResultDto?> BatchResult(
+        MealVariantResultDto? result,
+        int mealId = 5,
+        int? mealVariantId = null)
+        => new Dictionary<MealVariantResultKey, MealVariantResultDto?>
+        {
+            [new MealVariantResultKey(mealId, mealVariantId)] = result,
+        };
 
     private static DietMenuPlanDayRow CreateDraftPlan()
     {

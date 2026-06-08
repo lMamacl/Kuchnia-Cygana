@@ -42,6 +42,73 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
         return rows.ToList();
     }
 
+    public async Task<IReadOnlyList<DietMenuPlanDaySummaryRow>> GetPlanSummariesAsync(DateOnly startDate, DateOnly endDate)
+    {
+        using var db = this.factory.CreateConnection();
+        var rows = await db.QueryAsync<DietMenuPlanDaySummaryRow>(
+            """
+            SELECT
+                p.[Id],
+                p.[PlanDate],
+                p.[Status],
+                p.[PublishedAt],
+                p.[PublishedBy],
+                COUNT(i.[Id]) AS [ActiveItemCount],
+                COALESCE(SUM(CASE
+                    WHEN i.[Id] IS NULL THEN 0
+                    WHEN m.[Id] IS NULL THEN 1
+                    WHEN m.[Status] NOT IN (N'Published', N'Active') THEN 1
+                    WHEN i.[MealVariantId] IS NOT NULL
+                     AND (mv.[Id] IS NULL OR mv.[Status] NOT IN (N'Published', N'Active')) THEN 1
+                    WHEN COALESCE(componentCounts.[ComponentCount], 0) = 0
+                     AND COALESCE(recipeCounts.[LegacyRecipeCount], 0) = 0 THEN 1
+                    ELSE 0
+                END), 0) AS [QuickWarningCount]
+            FROM [DietMenuPlans] p
+            LEFT JOIN [DietMenuPlanItems] i ON i.[DietMenuPlanId] = p.[Id]
+                AND i.[IsDeleted] = 0
+                AND i.[IsActive] = 1
+            LEFT JOIN [Meals] m ON m.[Id] = i.[MealId]
+                AND m.[IsDeleted] = 0
+                AND m.[IsActive] = 1
+            LEFT JOIN [MealVariants] mv ON mv.[Id] = i.[MealVariantId]
+                AND mv.[IsDeleted] = 0
+            OUTER APPLY (
+                SELECT COUNT(*) AS [ComponentCount]
+                FROM (
+                    SELECT mrc.[RecipeComponentVersionId]
+                    FROM [MealRecipeComponents] mrc
+                    WHERE i.[MealVariantId] IS NULL
+                      AND mrc.[MealId] = i.[MealId]
+                      AND mrc.[IsDeleted] = 0
+
+                    UNION ALL
+
+                    SELECT mvc.[RecipeComponentVersionId]
+                    FROM [MealVariantComponents] mvc
+                    WHERE mvc.[MealVariantId] = i.[MealVariantId]
+                      AND mvc.[IsDeleted] = 0
+                ) componentSource
+                INNER JOIN [RecipeComponentVersions] rcv ON rcv.[Id] = componentSource.[RecipeComponentVersionId]
+                WHERE rcv.[IsDeleted] = 0
+            ) componentCounts
+            OUTER APPLY (
+                SELECT COUNT(*) AS [LegacyRecipeCount]
+                FROM [Recipes] r
+                WHERE r.[MealId] = i.[MealId]
+                  AND r.[IsDeleted] = 0
+            ) recipeCounts
+            WHERE p.[IsDeleted] = 0
+              AND p.[PlanDate] >= @startDate
+              AND p.[PlanDate] <= @endDate
+            GROUP BY p.[Id], p.[PlanDate], p.[Status], p.[PublishedAt], p.[PublishedBy]
+            ORDER BY p.[PlanDate];
+            """,
+            new { startDate, endDate });
+
+        return rows.ToList();
+    }
+
     public async Task<DietMenuPlanDayRow?> GetPlanByDateAsync(DateOnly date)
     {
         using var db = this.factory.CreateConnection();
@@ -60,9 +127,83 @@ public sealed class DietMenuPlanRepository : IDietMenuPlanRepository
 
     public async Task<IReadOnlyList<DietMenuPlanItemRow>> GetPlanItemsAsync(int planId)
     {
+        return await this.GetPlanItemsAsync(planId, null);
+    }
+
+    public async Task<IReadOnlyList<DietMenuPlanItemRow>> GetPlanItemsAsync(int planId, int? dietVariantId)
+    {
         using var db = this.factory.CreateConnection();
         var rows = await db.QueryAsync<DietMenuPlanItemRow>(
-            ItemSql("i.[DietMenuPlanId] = @planId"),
+            ItemSql("i.[DietMenuPlanId] = @planId AND (@dietVariantId IS NULL OR i.[DietVariantId] = @dietVariantId)"),
+            new { planId, dietVariantId });
+
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<DietMenuPlanDietVariantSummaryRow>> GetPlanDietVariantSummariesAsync(int planId)
+    {
+        using var db = this.factory.CreateConnection();
+        var rows = await db.QueryAsync<DietMenuPlanDietVariantSummaryRow>(
+            """
+            SELECT
+                dv.[Id] AS [DietVariantId],
+                d.[Name] AS [DietName],
+                dv.[Name] AS [VariantName],
+                dv.[TargetCalories],
+                dv.[IsDefault],
+                COUNT(i.[Id]) AS [ActiveItemCount],
+                COALESCE(SUM(CASE
+                    WHEN i.[Id] IS NULL THEN 0
+                    WHEN m.[Id] IS NULL THEN 1
+                    WHEN m.[Status] NOT IN (N'Published', N'Active') THEN 1
+                    WHEN i.[MealVariantId] IS NOT NULL
+                     AND (mv.[Id] IS NULL OR mv.[Status] NOT IN (N'Published', N'Active')) THEN 1
+                    WHEN COALESCE(componentCounts.[ComponentCount], 0) = 0
+                     AND COALESCE(recipeCounts.[LegacyRecipeCount], 0) = 0 THEN 1
+                    ELSE 0
+                END), 0) AS [QuickWarningCount]
+            FROM [DietVariants] dv
+            INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
+                AND d.[IsDeleted] = 0
+                AND d.[IsActive] = 1
+            LEFT JOIN [DietMenuPlanItems] i ON i.[DietVariantId] = dv.[Id]
+                AND i.[DietMenuPlanId] = @planId
+                AND i.[IsDeleted] = 0
+                AND i.[IsActive] = 1
+            LEFT JOIN [Meals] m ON m.[Id] = i.[MealId]
+                AND m.[IsDeleted] = 0
+                AND m.[IsActive] = 1
+            LEFT JOIN [MealVariants] mv ON mv.[Id] = i.[MealVariantId]
+                AND mv.[IsDeleted] = 0
+            OUTER APPLY (
+                SELECT COUNT(*) AS [ComponentCount]
+                FROM (
+                    SELECT mrc.[RecipeComponentVersionId]
+                    FROM [MealRecipeComponents] mrc
+                    WHERE i.[MealVariantId] IS NULL
+                      AND mrc.[MealId] = i.[MealId]
+                      AND mrc.[IsDeleted] = 0
+
+                    UNION ALL
+
+                    SELECT mvc.[RecipeComponentVersionId]
+                    FROM [MealVariantComponents] mvc
+                    WHERE mvc.[MealVariantId] = i.[MealVariantId]
+                      AND mvc.[IsDeleted] = 0
+                ) componentSource
+                INNER JOIN [RecipeComponentVersions] rcv ON rcv.[Id] = componentSource.[RecipeComponentVersionId]
+                WHERE rcv.[IsDeleted] = 0
+            ) componentCounts
+            OUTER APPLY (
+                SELECT COUNT(*) AS [LegacyRecipeCount]
+                FROM [Recipes] r
+                WHERE r.[MealId] = i.[MealId]
+                  AND r.[IsDeleted] = 0
+            ) recipeCounts
+            WHERE dv.[IsDeleted] = 0
+            GROUP BY dv.[Id], d.[Name], dv.[Name], dv.[TargetCalories], dv.[IsDefault]
+            ORDER BY d.[Name], dv.[TargetCalories], dv.[Name];
+            """,
             new { planId });
 
         return rows.ToList();

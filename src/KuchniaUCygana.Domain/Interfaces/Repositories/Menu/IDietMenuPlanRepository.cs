@@ -6,11 +6,17 @@ public interface IDietMenuPlanRepository
 {
     Task<IReadOnlyList<DietMenuPlanDayRow>> GetPlansAsync(DateOnly startDate, DateOnly endDate);
 
+    Task<IReadOnlyList<DietMenuPlanDaySummaryRow>> GetPlanSummariesAsync(DateOnly startDate, DateOnly endDate);
+
     Task<DietMenuPlanDayRow?> GetPlanByDateAsync(DateOnly date);
 
     Task<DietMenuPlanDayRow?> GetPlanByIdAsync(int planId);
 
     Task<IReadOnlyList<DietMenuPlanItemRow>> GetPlanItemsAsync(int planId);
+
+    Task<IReadOnlyList<DietMenuPlanItemRow>> GetPlanItemsAsync(int planId, int? dietVariantId);
+
+    Task<IReadOnlyList<DietMenuPlanDietVariantSummaryRow>> GetPlanDietVariantSummariesAsync(int planId);
 
     Task<DietMenuPlanItemRow?> GetPlanItemAsync(int itemId);
 
@@ -44,6 +50,40 @@ public sealed class DietMenuPlanDayRow
     public string? PublishedBy { get; set; }
 
     public int ActiveItemCount { get; set; }
+}
+
+public sealed class DietMenuPlanDaySummaryRow
+{
+    public int Id { get; set; }
+
+    public DateOnly PlanDate { get; set; }
+
+    public string Status { get; set; } = string.Empty;
+
+    public DateTimeOffset? PublishedAt { get; set; }
+
+    public string? PublishedBy { get; set; }
+
+    public int ActiveItemCount { get; set; }
+
+    public int QuickWarningCount { get; set; }
+}
+
+public sealed class DietMenuPlanDietVariantSummaryRow
+{
+    public int DietVariantId { get; set; }
+
+    public string DietName { get; set; } = string.Empty;
+
+    public string VariantName { get; set; } = string.Empty;
+
+    public int TargetCalories { get; set; }
+
+    public bool IsDefault { get; set; }
+
+    public int ActiveItemCount { get; set; }
+
+    public int QuickWarningCount { get; set; }
 }
 
 public sealed class DietMenuPlanItemRow

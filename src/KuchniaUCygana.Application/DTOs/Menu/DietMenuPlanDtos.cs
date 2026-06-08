@@ -8,7 +8,99 @@ public sealed class DietMenuWeekDto
 
     public int DaysCount { get; set; } = 7;
 
-    public List<DietMenuDayDto> Days { get; set; } = new();
+    public List<DietMenuDaySummaryDto> Days { get; set; } = new();
+}
+
+public sealed class DietMenuDaySummaryDto
+{
+    public int Id { get; set; }
+
+    public DateOnly PlanDate { get; set; }
+
+    public string Status { get; set; } = "Missing";
+
+    public DateTimeOffset? PublishedAt { get; set; }
+
+    public string? PublishedBy { get; set; }
+
+    public bool HasPlan => Id > 0;
+
+    public bool CanEdit { get; set; }
+
+    public string? EditBlockReason { get; set; }
+
+    public int ActiveItemCount { get; set; }
+
+    public int QuickWarningCount { get; set; }
+
+    public bool CanPublishQuick => HasPlan && ActiveItemCount > 0 && QuickWarningCount == 0;
+}
+
+public sealed class DietMenuDayShellDto
+{
+    public int Id { get; set; }
+
+    public DateOnly PlanDate { get; set; }
+
+    public string Status { get; set; } = "Missing";
+
+    public string? Notes { get; set; }
+
+    public DateTimeOffset? PublishedAt { get; set; }
+
+    public string? PublishedBy { get; set; }
+
+    public bool HasPlan => Id > 0;
+
+    public bool CanEdit { get; set; }
+
+    public string? EditBlockReason { get; set; }
+
+    public int ActiveItemCount { get; set; }
+
+    public int QuickWarningCount { get; set; }
+
+    public bool CanPublishQuick => HasPlan && ActiveItemCount > 0 && QuickWarningCount == 0;
+
+    public List<DietMenuPlanDietVariantSummaryDto> DietVariants { get; set; } = new();
+}
+
+public sealed class DietMenuPlanDietVariantSummaryDto
+{
+    public int DietVariantId { get; set; }
+
+    public string DietName { get; set; } = string.Empty;
+
+    public string VariantName { get; set; } = string.Empty;
+
+    public int TargetCalories { get; set; }
+
+    public bool IsDefault { get; set; }
+
+    public int ActiveItemCount { get; set; }
+
+    public int QuickWarningCount { get; set; }
+}
+
+public sealed class DietMenuDietVariantItemsDto
+{
+    public int DietMenuPlanId { get; set; }
+
+    public DateOnly PlanDate { get; set; }
+
+    public string PlanStatus { get; set; } = "Missing";
+
+    public bool CanEdit { get; set; }
+
+    public int DietVariantId { get; set; }
+
+    public string DietName { get; set; } = string.Empty;
+
+    public string VariantName { get; set; } = string.Empty;
+
+    public List<DietMenuPlanItemDto> Items { get; set; } = new();
+
+    public DietMenuPlanValidationDto Validation { get; set; } = new();
 }
 
 public sealed class DietMenuDayDto
@@ -102,6 +194,14 @@ public sealed class MealVariantPlanOptionDto
     public string Status { get; set; } = "Draft";
 
     public bool IsDefault { get; set; }
+}
+
+public readonly record struct MealVariantResultKey(int MealId, int? MealVariantId);
+
+public enum MealVariantResultCacheMode
+{
+    CachePreferred = 0,
+    Fresh = 1,
 }
 
 public sealed class MenuPlanMealLookupDto

@@ -35,30 +35,26 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
     {
         var daysCount = Math.Max(days, 7);
         var endDate = startDate.AddDays(daysCount - 1);
-        var plans = await this.repository.GetPlansAsync(startDate, endDate);
+        var plans = await this.repository.GetPlanSummariesAsync(startDate, endDate);
         var byDate = plans.ToDictionary(p => p.PlanDate);
-        var dayDtos = new List<DietMenuDayDto>();
+        var dayDtos = new List<DietMenuDaySummaryDto>();
 
         for (var offset = 0; offset < daysCount; offset++)
         {
             var date = startDate.AddDays(offset);
             if (!byDate.TryGetValue(date, out var row))
             {
-                dayDtos.Add(new DietMenuDayDto
+                dayDtos.Add(new DietMenuDaySummaryDto
                 {
                     PlanDate = date,
                     Status = "Missing",
                     CanEdit = true,
-                    Validation = new DietMenuPlanValidationDto
-                    {
-                        Warnings = ["Brak draftu planu dla dnia."],
-                    },
+                    QuickWarningCount = 1,
                 });
                 continue;
             }
 
-            var day = await this.MapDayAsync(row);
-            dayDtos.Add(day);
+            dayDtos.Add(this.MapSummary(row));
         }
 
         return new DietMenuWeekDto
@@ -88,6 +84,62 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
         }
 
         return await this.MapDayAsync(row);
+    }
+
+    public async Task<DietMenuDayShellDto> GetDayShellAsync(DateOnly date)
+    {
+        var row = await this.repository.GetPlanByDateAsync(date);
+        if (row is null)
+        {
+            return new DietMenuDayShellDto
+            {
+                PlanDate = date,
+                Status = "Missing",
+                CanEdit = true,
+                QuickWarningCount = 1,
+            };
+        }
+
+        var editState = this.GetEditState(row);
+        var variantSummaries = await this.repository.GetPlanDietVariantSummariesAsync(row.Id);
+        return new DietMenuDayShellDto
+        {
+            Id = row.Id,
+            PlanDate = row.PlanDate,
+            Status = row.Status,
+            Notes = row.Notes,
+            PublishedAt = row.PublishedAt,
+            PublishedBy = row.PublishedBy,
+            CanEdit = editState.CanEdit,
+            EditBlockReason = editState.Reason,
+            ActiveItemCount = variantSummaries.Sum(summary => summary.ActiveItemCount),
+            QuickWarningCount = variantSummaries.Sum(summary => summary.QuickWarningCount),
+            DietVariants = variantSummaries.Select(MapDietVariantSummary).ToList(),
+        };
+    }
+
+    public async Task<DietMenuDietVariantItemsDto> GetDietVariantItemsAsync(int planId, int dietVariantId)
+    {
+        var plan = await this.repository.GetPlanByIdAsync(planId)
+            ?? throw new InvalidOperationException($"Plan menu #{planId} nie istnieje.");
+        var editState = this.GetEditState(plan);
+        var summaries = await this.repository.GetPlanDietVariantSummariesAsync(planId);
+        var selectedSummary = summaries.FirstOrDefault(summary => summary.DietVariantId == dietVariantId);
+        var items = await this.repository.GetPlanItemsAsync(planId, dietVariantId);
+        var itemDtos = await this.MapItemsAsync(items, MealVariantResultCacheMode.CachePreferred);
+
+        return new DietMenuDietVariantItemsDto
+        {
+            DietMenuPlanId = plan.Id,
+            PlanDate = plan.PlanDate,
+            PlanStatus = plan.Status,
+            CanEdit = editState.CanEdit,
+            DietVariantId = dietVariantId,
+            DietName = selectedSummary?.DietName ?? string.Empty,
+            VariantName = selectedSummary?.VariantName ?? string.Empty,
+            Items = itemDtos,
+            Validation = BuildValidation(itemDtos),
+        };
     }
 
     public async Task<int> CreateDayAsync(CreateDietMenuPlanRequest request)
@@ -204,12 +256,7 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
     {
         var editState = this.GetEditState(row);
         var items = await this.repository.GetPlanItemsAsync(row.Id);
-        var itemDtos = new List<DietMenuPlanItemDto>();
-
-        foreach (var item in items)
-        {
-            itemDtos.Add(await this.MapItemAsync(item));
-        }
+        var itemDtos = await this.MapItemsAsync(items, MealVariantResultCacheMode.CachePreferred);
 
         return new DietMenuDayDto
         {
@@ -226,7 +273,57 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
         };
     }
 
-    private async Task<DietMenuPlanItemDto> MapItemAsync(DietMenuPlanItemRow row)
+    private DietMenuDaySummaryDto MapSummary(DietMenuPlanDaySummaryRow row)
+    {
+        var editState = this.GetEditState(row.PlanDate, row.Status);
+        return new DietMenuDaySummaryDto
+        {
+            Id = row.Id,
+            PlanDate = row.PlanDate,
+            Status = row.Status,
+            PublishedAt = row.PublishedAt,
+            PublishedBy = row.PublishedBy,
+            CanEdit = editState.CanEdit,
+            EditBlockReason = editState.Reason,
+            ActiveItemCount = row.ActiveItemCount,
+            QuickWarningCount = row.QuickWarningCount,
+        };
+    }
+
+    private static DietMenuPlanDietVariantSummaryDto MapDietVariantSummary(DietMenuPlanDietVariantSummaryRow row)
+        => new()
+        {
+            DietVariantId = row.DietVariantId,
+            DietName = row.DietName,
+            VariantName = row.VariantName,
+            TargetCalories = row.TargetCalories,
+            IsDefault = row.IsDefault,
+            ActiveItemCount = row.ActiveItemCount,
+            QuickWarningCount = row.QuickWarningCount,
+        };
+
+    private async Task<List<DietMenuPlanItemDto>> MapItemsAsync(
+        IReadOnlyList<DietMenuPlanItemRow> rows,
+        MealVariantResultCacheMode cacheMode)
+    {
+        var resultKeys = rows
+            .Select(row => new MealVariantResultKey(row.MealId, row.MealVariantId))
+            .Distinct()
+            .ToList();
+        var results = await this.mealManagementService.GetMealVariantResultsAsync(resultKeys, cacheMode);
+        var mapped = new List<DietMenuPlanItemDto>();
+
+        foreach (var row in rows)
+        {
+            var key = new MealVariantResultKey(row.MealId, row.MealVariantId);
+            results.TryGetValue(key, out var result);
+            mapped.Add(this.MapItem(row, result));
+        }
+
+        return mapped;
+    }
+
+    private DietMenuPlanItemDto MapItem(DietMenuPlanItemRow row, MealVariantResultDto? result)
     {
         var warnings = new List<string>();
         var isMealPublished = IsPublishedMealStatus(row.MealStatus);
@@ -240,7 +337,6 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
             warnings.Add("wariant dania nie jest opublikowany");
         }
 
-        var result = await this.mealManagementService.GetMealVariantResultAsync(row.MealId, row.MealVariantId);
         if (result is null)
         {
             warnings.Add(row.MealVariantId.HasValue
@@ -293,11 +389,7 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
             };
         }
 
-        var mapped = new List<DietMenuPlanItemDto>();
-        foreach (var item in items)
-        {
-            mapped.Add(await this.MapItemAsync(item));
-        }
+        var mapped = await this.MapItemsAsync(items, MealVariantResultCacheMode.Fresh);
 
         return BuildValidation(mapped);
     }
@@ -334,19 +426,22 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
     }
 
     private EditState GetEditState(DietMenuPlanDayRow plan)
+        => this.GetEditState(plan.PlanDate, plan.Status);
+
+    private EditState GetEditState(DateOnly planDate, string status)
     {
-        if (plan.Status == "Draft")
+        if (status == "Draft")
         {
             return new EditState(true, null);
         }
 
-        if (plan.Status != "Published")
+        if (status != "Published")
         {
-            return new EditState(false, $"Plan w statusie {plan.Status} nie jest edytowalny.");
+            return new EditState(false, $"Plan w statusie {status} nie jest edytowalny.");
         }
 
         var nowWarsaw = GetWarsawNow();
-        var cutoff = plan.PlanDate.AddDays(-3).ToDateTime(TimeOnly.MinValue);
+        var cutoff = planDate.AddDays(-3).ToDateTime(TimeOnly.MinValue);
         if (nowWarsaw.DateTime < cutoff)
         {
             return new EditState(true, null);

@@ -16,14 +16,36 @@ public sealed class DietRepository : BaseRepository<Diet>, IDietRepository
     {
         using var db = this.Factory.CreateConnection();
         const string dietSql = "SELECT * FROM [Diets] WHERE [IsActive] = 1 AND [IsDeleted] = 0;";
-        var diets = await db.QueryAsync<Diet>(dietSql);
-        foreach (var diet in diets)
-        {
-            var variantSql = "SELECT * FROM [DietVariants] WHERE [DietId] = @DietId AND [IsDeleted] = 0;";
-            var variants = await db.QueryAsync<DietVariant>(variantSql, new { DietId = diet.Id });
-            // variants nie są używane dalej – jeśli trzeba, przypisać do diet.Variants (ale Diet nie ma takiej właściwości)
-        }
-        return diets;
+        return await db.QueryAsync<Diet>(dietSql);
+    }
+
+    public async Task<IReadOnlyList<ActiveDietVariantRow>> GetActiveDietVariantRowsAsync()
+    {
+        using var db = this.Factory.CreateConnection();
+        var rows = await db.QueryAsync<ActiveDietVariantRow>(
+            """
+            SELECT
+                d.[Id] AS [DietId],
+                d.[Name] AS [DietName],
+                d.[Description],
+                d.[MarketingDescription],
+                d.[Status],
+                d.[IsActive],
+                d.[ThumbnailUrl],
+                dv.[Id] AS [DietVariantId],
+                dv.[Name] AS [VariantName],
+                dv.[TargetCalories],
+                dv.[PriceMultiplier],
+                dv.[IsDefault]
+            FROM [Diets] d
+            LEFT JOIN [DietVariants] dv ON dv.[DietId] = d.[Id]
+                AND dv.[IsDeleted] = 0
+            WHERE d.[IsActive] = 1
+              AND d.[IsDeleted] = 0
+            ORDER BY d.[Name], dv.[TargetCalories], dv.[Name];
+            """);
+
+        return rows.ToList();
     }
 }
 
