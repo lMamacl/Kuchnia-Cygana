@@ -7,8 +7,6 @@
     var logs = auditPage.Items;
     var fromValue = filter.From?.ToString("yyyy-MM-dd");
     var toValue = filter.To?.ToString("yyyy-MM-dd");
-    var previousPage = Math.Max(1, auditPage.Page - 1);
-    var nextPage = Math.Min(auditPage.TotalPages, auditPage.Page + 1);
 
     string ShortJson(string? value)
     {
@@ -147,35 +145,13 @@
                     </tbody>
                 </table>
             </div>
-            <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <span class="text-secondary small">Zakres strony: @auditPage.PageSize wpisow</span>
-                <div class="btn-list">
-                    <a class="btn btn-outline-secondary @(auditPage.Page <= 1 ? "disabled" : string.Empty)"
-                       asp-controller="Admin"
-                       asp-action="Logs"
-                       asp-route-Search="@filter.Search"
-                       asp-route-UserId="@filter.UserId"
-                       asp-route-Action="@filter.Action"
-                       asp-route-TargetEntity="@filter.TargetEntity"
-                       asp-route-From="@fromValue"
-                       asp-route-To="@toValue"
-                       asp-route-IncludeArchived="@filter.IncludeArchived"
-                       asp-route-Page="@previousPage"
-                       asp-route-PageSize="@auditPage.PageSize">Poprzednia</a>
-                    <a class="btn btn-outline-secondary @(auditPage.Page >= auditPage.TotalPages ? "disabled" : string.Empty)"
-                       asp-controller="Admin"
-                       asp-action="Logs"
-                       asp-route-Search="@filter.Search"
-                       asp-route-UserId="@filter.UserId"
-                       asp-route-Action="@filter.Action"
-                       asp-route-TargetEntity="@filter.TargetEntity"
-                       asp-route-From="@fromValue"
-                       asp-route-To="@toValue"
-                       asp-route-IncludeArchived="@filter.IncludeArchived"
-                       asp-route-Page="@nextPage"
-                       asp-route-PageSize="@auditPage.PageSize">Nastepna</a>
-                </div>
-            </div>
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.Create(
+                "Admin",
+                "Logs",
+                auditPage.Page,
+                auditPage.PageSize,
+                auditPage.TotalCount,
+                filter.ToRouteValues()))
         </div>
     </div>
 </div>

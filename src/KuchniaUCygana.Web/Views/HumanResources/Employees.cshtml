@@ -2,7 +2,14 @@
 @{
     Layout = "_LayoutStaff";
     var employeesPage = Model.EmployeesPage;
+    var filter = Model.EmployeesFilter;
     var usersById = Model.Users.ToDictionary(user => user.Id);
+    var roles = Model.Users
+        .Select(user => user.Role)
+        .Where(role => !string.IsNullOrWhiteSpace(role))
+        .Distinct(StringComparer.Ordinal)
+        .OrderBy(role => role)
+        .ToArray();
 }
 
 <div class="row row-cards">
@@ -10,10 +17,59 @@
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Pracownicy</h3>
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="text-secondary small">Pokazuje @employeesPage.FirstItem-@employeesPage.LastItem z @employeesPage.TotalCount</span>
-                    <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewEmployee">Dodaj pracownika</a>
-                </div>
+                <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewEmployee">Dodaj pracownika</a>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" asp-controller="HumanResources" asp-action="Employees">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label" for="Search">Szukaj</label>
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Imie, email, stanowisko..." />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="DepartmentId">Dzial</label>
+                            <select class="form-select" id="DepartmentId" name="DepartmentId">
+                                <option value="">Wszystkie</option>
+                                @foreach (var department in Model.Departments.OrderBy(department => department.Name))
+                                {
+                                    <option value="@department.Id" selected="@(filter.DepartmentId == department.Id)">@department.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="Status">Status</label>
+                            <select class="form-select" id="Status" name="Status">
+                                <option value="">Wszystkie</option>
+                                <option value="Active" selected="@(string.Equals(filter.Status, "Active", StringComparison.OrdinalIgnoreCase))">Aktywni</option>
+                                <option value="Inactive" selected="@(string.Equals(filter.Status, "Inactive", StringComparison.OrdinalIgnoreCase))">Nieaktywni</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="Role">Rola konta</label>
+                            <select class="form-select" id="Role" name="Role">
+                                <option value="">Wszystkie</option>
+                                @foreach (var role in roles)
+                                {
+                                    <option value="@role" selected="@(string.Equals(filter.Role, role, StringComparison.OrdinalIgnoreCase))">@role</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label" for="PageSize">Na stronie</label>
+                            <select class="form-select" id="PageSize" name="PageSize">
+                                @foreach (var size in new[] { 10, 25, 50, 100 })
+                                {
+                                    <option value="@size" selected="@(filter.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex justify-content-md-end gap-2">
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Employees">Wyczysc</a>
+                            <button class="btn btn-primary" type="submit">Filtruj</button>
+                        </div>
+                    </div>
+                </form>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -103,31 +159,20 @@
                         {
                             <tr>
                                 <td colspan="7" class="text-secondary text-center py-4">
-                                    Brak pracownikow w bazie. Uruchom seeding albo dodaj pierwszego pracownika formularzem.
+                                    @(filter.HasActiveCriteria
+                                        ? "Brak pracownikow dla wybranych filtrow."
+                                        : "Brak pracownikow w bazie. Uruchom seeding albo dodaj pierwszego pracownika formularzem.")
                                 </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
-            @if (employeesPage.TotalCount > 0)
-            {
-                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <span class="text-secondary small">Strona @employeesPage.Page / @employeesPage.TotalPages, po @employeesPage.PageSize rekordow</span>
-                    <div class="btn-list">
-                        <a class="btn btn-outline-secondary @(employeesPage.HasPrevious ? string.Empty : "disabled")"
-                           asp-controller="HumanResources"
-                           asp-action="Employees"
-                           asp-route-page="@employeesPage.PreviousPage"
-                           asp-route-pageSize="@employeesPage.PageSize">Poprzednia</a>
-                        <a class="btn btn-outline-secondary @(employeesPage.HasNext ? string.Empty : "disabled")"
-                           asp-controller="HumanResources"
-                           asp-action="Employees"
-                           asp-route-page="@employeesPage.NextPage"
-                           asp-route-pageSize="@employeesPage.PageSize">Nastepna</a>
-                    </div>
-                </div>
-            }
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                employeesPage,
+                "HumanResources",
+                "Employees",
+                filter.ToRouteValues()))
         </div>
     </div>
 </div>

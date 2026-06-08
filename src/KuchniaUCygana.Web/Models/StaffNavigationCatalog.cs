@@ -168,6 +168,7 @@ public static class StaffNavigationCatalog
                 new("Nowy uzytkownik", "Admin", "NewUser", "plus", "Tworzenie konta uzytkownika.", "nowy uzytkownik konto"),
                 new("Role", "Admin", "Roles", "shield", "Role i uprawnienia.", "role uprawnienia"),
                 new("Logi systemowe", "Admin", "Logs", "report", "Audyt zmian i zdarzen systemowych.", "logi audyt zmiany"),
+                new("Awarie kompletacji", "Admin", "PackingIncidents", "alert", "Zgloszenia problemow z kompletacji.", "awarie kompletacja zgloszenia"),
                 new("Ustawienia", "Admin", "Settings", "settings", "Ustawienia systemowe.", "ustawienia konfiguracja"),
             ]),
         new(

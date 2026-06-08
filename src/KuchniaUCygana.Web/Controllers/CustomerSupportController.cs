@@ -34,10 +34,10 @@ public sealed class CustomerSupportController : Controller
     }
 
     [HttpGet("tickets")]
-    public async Task<IActionResult> Tickets(int page = 1, int pageSize = 10)
+    public async Task<IActionResult> Tickets([FromQuery] TicketListFilterViewModel filter)
     {
         SetViewData("Zgloszenia", "Obsluga klienta", "Lista zgloszen z priorytetami, statusem i przypisaniem.");
-        return View(await BuildModelAsync(ticketsPage: page, pageSize: pageSize));
+        return View(await BuildModelAsync(ticketsFilter: filter));
     }
 
     [HttpGet("tickets/new")]
@@ -181,16 +181,18 @@ public sealed class CustomerSupportController : Controller
 
     private async Task<CustomerSupportDashboardViewModel> BuildModelAsync(
         CreateTicketRequest? newTicket = null,
-        int ticketsPage = 1,
-        int pageSize = 10)
+        TicketListFilterViewModel? ticketsFilter = null)
     {
         var tickets = (await customerSupportService.GetTicketsAsync()).ToArray();
         var openTickets = (await customerSupportService.GetOpenTicketsAsync()).ToArray();
         var users = (await userService.GetAllAsync()).ToArray();
+        ticketsFilter ??= new TicketListFilterViewModel();
         var ticketsPageModel = PagedList<TicketDto>.Create(
-            tickets.OrderByDescending(ticket => ticket.CreatedAt),
-            ticketsPage,
-            pageSize);
+            FilterTickets(tickets, ticketsFilter).OrderByDescending(ticket => ticket.CreatedAt),
+            ticketsFilter.Page,
+            ticketsFilter.PageSize);
+        ticketsFilter.Page = ticketsPageModel.Page;
+        ticketsFilter.PageSize = ticketsPageModel.PageSize;
         var today = DateTime.Today;
         var deliveryOptions = await customerSupportService.GetDeliveryOptionsAsync(
             today.AddDays(-21),
@@ -202,10 +204,67 @@ public sealed class CustomerSupportController : Controller
             OpenTickets = openTickets,
             Users = users,
             TicketsPage = ticketsPageModel,
+            TicketsFilter = ticketsFilter,
             OperationalContexts = await customerSupportService.GetOperationalContextsAsync(ticketsPageModel.Items),
             DeliveryOptions = deliveryOptions,
             NewTicket = newTicket ?? new CreateTicketRequest(),
         };
+    }
+
+    private static IEnumerable<TicketDto> FilterTickets(
+        IEnumerable<TicketDto> tickets,
+        TicketListFilterViewModel filter)
+    {
+        var query = tickets;
+        if (!string.IsNullOrWhiteSpace(filter.Status))
+        {
+            query = query.Where(ticket => string.Equals(ticket.Status, filter.Status, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Priority))
+        {
+            query = query.Where(ticket => string.Equals(ticket.Priority, filter.Priority, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (filter.AssignedToUserId == -1)
+        {
+            query = query.Where(ticket => !ticket.AssignedToUserId.HasValue);
+        }
+        else if (filter.AssignedToUserId is > 0)
+        {
+            query = query.Where(ticket => ticket.AssignedToUserId == filter.AssignedToUserId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            query = query.Where(ticket => MatchesSearch(
+                filter.Search,
+                ticket.Title,
+                ticket.Description,
+                ticket.ClientFullName,
+                ticket.AssignedToFullName,
+                ticket.Status,
+                ticket.Priority,
+                ticket.Id.ToString(),
+                ticket.ClientUserId.ToString(),
+                ticket.OrderId?.ToString(),
+                ticket.DeliveryCalendarId?.ToString()));
+        }
+
+        return query;
+    }
+
+    private static bool MatchesSearch(string? search, params string?[] values)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return true;
+        }
+
+        var normalizedSearch = search.Trim();
+        return values.Any(value =>
+            !string.IsNullOrWhiteSpace(value) &&
+            value.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase));
     }
 
     private void SetViewData(string title, string section, string description)

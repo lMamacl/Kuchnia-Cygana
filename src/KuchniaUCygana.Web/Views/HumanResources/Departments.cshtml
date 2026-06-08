@@ -2,6 +2,7 @@
 @{
     Layout = "_LayoutStaff";
     var departmentsPage = Model.DepartmentsPage;
+    var filter = Model.DepartmentsFilter;
 }
 
 <div class="row row-cards">
@@ -43,7 +44,30 @@
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Dzialy</h3>
-                <span class="text-secondary small">Pokazuje @departmentsPage.FirstItem-@departmentsPage.LastItem z @departmentsPage.TotalCount</span>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" asp-controller="HumanResources" asp-action="Departments">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label" for="Search">Szukaj</label>
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Nazwa, opis, kierownik..." />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="PageSize">Na stronie</label>
+                            <select class="form-select" id="PageSize" name="PageSize">
+                                @foreach (var size in new[] { 10, 25, 50, 100 })
+                                {
+                                    <option value="@size" selected="@(filter.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex justify-content-md-end gap-2">
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Departments">Wyczysc</a>
+                            <button class="btn btn-primary" type="submit">Filtruj</button>
+                        </div>
+                    </div>
+                </form>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -89,31 +113,20 @@
                         {
                             <tr>
                                 <td colspan="4" class="text-secondary text-center py-4">
-                                    Brak dzialow w bazie. Seeder powinien utworzyc podstawowa strukture firmy.
+                                    @(filter.HasActiveCriteria
+                                        ? "Brak dzialow dla wybranych filtrow."
+                                        : "Brak dzialow w bazie. Seeder powinien utworzyc podstawowa strukture firmy.")
                                 </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
-            @if (departmentsPage.TotalCount > 0)
-            {
-                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <span class="text-secondary small">Strona @departmentsPage.Page / @departmentsPage.TotalPages, po @departmentsPage.PageSize rekordow</span>
-                    <div class="btn-list">
-                        <a class="btn btn-outline-secondary @(departmentsPage.HasPrevious ? string.Empty : "disabled")"
-                           asp-controller="HumanResources"
-                           asp-action="Departments"
-                           asp-route-page="@departmentsPage.PreviousPage"
-                           asp-route-pageSize="@departmentsPage.PageSize">Poprzednia</a>
-                        <a class="btn btn-outline-secondary @(departmentsPage.HasNext ? string.Empty : "disabled")"
-                           asp-controller="HumanResources"
-                           asp-action="Departments"
-                           asp-route-page="@departmentsPage.NextPage"
-                           asp-route-pageSize="@departmentsPage.PageSize">Nastepna</a>
-                    </div>
-                </div>
-            }
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                departmentsPage,
+                "HumanResources",
+                "Departments",
+                filter.ToRouteValues()))
         </div>
     </div>
 </div>

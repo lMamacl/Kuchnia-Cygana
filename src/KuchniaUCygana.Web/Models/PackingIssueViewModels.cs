@@ -60,9 +60,57 @@ public sealed class PackingBagIssueFormViewModel
 
 public sealed class PackingIncidentListViewModel
 {
-    public PackingIncidentFilterDto Filter { get; set; } = new();
+    public PackingIncidentListFilterViewModel Filter { get; set; } = new();
+
+    public PagedList<PackingIncidentDto> IncidentsPage { get; set; } = new();
 
     public IReadOnlyList<PackingIncidentDto> Incidents { get; set; } = Array.Empty<PackingIncidentDto>();
+}
+
+public sealed class PackingIncidentListFilterViewModel : StaffListFilterViewModel
+{
+    public DateOnly? Date { get; set; }
+
+    public PackingIncidentStatus? Status { get; set; }
+
+    public PackingIncidentType? Type { get; set; }
+
+    public string? ClientPublicId { get; set; }
+
+    public int? DeliveryCalendarId { get; set; }
+
+    public override bool HasActiveCriteria =>
+        base.HasActiveCriteria ||
+        Date.HasValue ||
+        Status.HasValue ||
+        Type.HasValue ||
+        !string.IsNullOrWhiteSpace(ClientPublicId) ||
+        DeliveryCalendarId.HasValue;
+
+    public PackingIncidentFilterDto ToSearchRequest()
+        => new()
+        {
+            Date = Date,
+            Status = Status,
+            Type = Type,
+            ClientPublicId = ClientPublicId,
+            DeliveryCalendarId = DeliveryCalendarId,
+        };
+
+    public override IDictionary<string, object?> ToRouteValues()
+    {
+        var values = base.ToRouteValues();
+        if (Date.HasValue)
+        {
+            values[nameof(Date)] = Date.Value.ToString("yyyy-MM-dd");
+        }
+
+        AddIfSet(values, nameof(Status), Status?.ToString());
+        AddIfSet(values, nameof(Type), Type?.ToString());
+        AddIfSet(values, nameof(ClientPublicId), ClientPublicId);
+        AddIfSet(values, nameof(DeliveryCalendarId), DeliveryCalendarId);
+        return values;
+    }
 }
 
 public sealed class KitchenReworkViewModel

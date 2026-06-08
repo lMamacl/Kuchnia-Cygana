@@ -2,6 +2,8 @@
 @model KuchniaUCygana.Web.Models.PackingIncidentListViewModel
 @{
     Layout = "_LayoutStaff";
+    var incidentsPage = Model.IncidentsPage;
+    var filter = Model.Filter;
 }
 
 @functions {
@@ -45,7 +47,12 @@
                 <h3 class="card-title">Awarie kompletacji</h3>
             </div>
             <div class="card-body">
-                <form method="get" class="row g-2 align-items-end">
+                <form method="get" asp-controller="Admin" asp-action="PackingIncidents" class="row g-2 align-items-end">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="col-md-3">
+                        <label asp-for="Filter.Search" class="form-label">Szukaj</label>
+                        <input asp-for="Filter.Search" name="Search" type="search" class="form-control" placeholder="Klient, posilek, kod, powod..." />
+                    </div>
                     <div class="col-md-2">
                         <label asp-for="Filter.Date" class="form-label">Data</label>
                         <input asp-for="Filter.Date" name="Date" type="date" class="form-control" />
@@ -79,7 +86,17 @@
                         <input asp-for="Filter.DeliveryCalendarId" name="DeliveryCalendarId" class="form-control" />
                     </div>
                     <div class="col-md-2">
-                        <button type="submit" class="btn btn-indigo w-100">Filtruj</button>
+                        <label asp-for="Filter.PageSize" class="form-label">Na stronie</label>
+                        <select asp-for="Filter.PageSize" name="PageSize" class="form-select">
+                            @foreach (var size in new[] { 10, 25, 50, 100 })
+                            {
+                                <option value="@size">@size</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex justify-content-md-end gap-2">
+                        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="PackingIncidents">Wyczysc</a>
+                        <button type="submit" class="btn btn-primary">Filtruj</button>
                     </div>
                 </form>
             </div>
@@ -197,6 +214,11 @@
                     </tbody>
                 </table>
             </div>
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                incidentsPage,
+                "Admin",
+                "PackingIncidents",
+                filter.ToRouteValues()))
         </div>
     </div>
 </div>

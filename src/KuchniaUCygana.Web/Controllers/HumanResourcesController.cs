@@ -1,3 +1,4 @@
+using KuchniaUCygana.Application.DTOs;
 using KuchniaUCygana.Application.DTOs.HR;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Notifications;
@@ -34,10 +35,10 @@ public sealed class HumanResourcesController : Controller
     }
 
     [HttpGet("departments")]
-    public async Task<IActionResult> Departments(int page = 1, int pageSize = 10)
+    public async Task<IActionResult> Departments([FromQuery] DepartmentListFilterViewModel filter)
     {
         SetViewData("Dzialy", "Kadry", "Struktura organizacyjna i odpowiedzialni pracownicy.");
-        return View(await BuildModelAsync(departmentsPage: page, pageSize: pageSize));
+        return View(await BuildModelAsync(departmentsFilter: filter));
     }
 
     [HttpPost("departments")]
@@ -77,10 +78,10 @@ public sealed class HumanResourcesController : Controller
     }
 
     [HttpGet("employees")]
-    public async Task<IActionResult> Employees(int page = 1, int pageSize = 10)
+    public async Task<IActionResult> Employees([FromQuery] EmployeeListFilterViewModel filter)
     {
         SetViewData("Pracownicy", "Kadry", "Kartoteka pracownikow i status zatrudnienia.");
-        return View(await BuildModelAsync(employeesPage: page, pageSize: pageSize));
+        return View(await BuildModelAsync(employeesFilter: filter));
     }
 
     [HttpGet("employees/new")]
@@ -223,10 +224,10 @@ public sealed class HumanResourcesController : Controller
     }
 
     [HttpGet("leaves")]
-    public async Task<IActionResult> Leaves(int page = 1, int pageSize = 10)
+    public async Task<IActionResult> Leaves([FromQuery] LeaveRequestListFilterViewModel filter)
     {
         SetViewData("Urlopy", "Kadry", "Wnioski urlopowe i decyzje kadrowe.");
-        return View(await BuildModelAsync(leaveRequestsPage: page, pageSize: pageSize));
+        return View(await BuildModelAsync(leaveRequestsFilter: filter));
     }
 
     [HttpGet("leaves/new")]
@@ -331,10 +332,10 @@ public sealed class HumanResourcesController : Controller
     }
 
     [HttpGet("schedules")]
-    public async Task<IActionResult> Schedules(int page = 1, int pageSize = 10)
+    public async Task<IActionResult> Schedules([FromQuery] WorkScheduleListFilterViewModel filter)
     {
         SetViewData("Grafik", "Kadry", "Zmiany pracownikow i role na zmianie.");
-        return View(await BuildModelAsync(workSchedulesPage: page, pageSize: pageSize));
+        return View(await BuildModelAsync(workSchedulesFilter: filter));
     }
 
     [HttpGet("schedules/new")]
@@ -490,17 +491,48 @@ public sealed class HumanResourcesController : Controller
         CreateEmployeeRequest? newEmployee = null,
         CreateLeaveRequestRequest? newLeaveRequest = null,
         CreateWorkScheduleRequest? newWorkSchedule = null,
-        int departmentsPage = 1,
-        int employeesPage = 1,
-        int leaveRequestsPage = 1,
-        int workSchedulesPage = 1,
-        int pageSize = 10)
+        DepartmentListFilterViewModel? departmentsFilter = null,
+        EmployeeListFilterViewModel? employeesFilter = null,
+        LeaveRequestListFilterViewModel? leaveRequestsFilter = null,
+        WorkScheduleListFilterViewModel? workSchedulesFilter = null)
     {
         var departments = (await humanResourcesService.GetDepartmentsAsync()).ToArray();
         var employees = (await humanResourcesService.GetEmployeesAsync()).ToArray();
         var leaveRequests = (await humanResourcesService.GetLeaveRequestsAsync()).ToArray();
         var workSchedules = (await humanResourcesService.GetWorkSchedulesAsync()).ToArray();
         var users = (await userService.GetAllAsync()).ToArray();
+        var usersById = users.ToDictionary(user => user.Id);
+
+        departmentsFilter ??= new DepartmentListFilterViewModel();
+        employeesFilter ??= new EmployeeListFilterViewModel();
+        leaveRequestsFilter ??= new LeaveRequestListFilterViewModel();
+        workSchedulesFilter ??= new WorkScheduleListFilterViewModel();
+
+        var departmentsPageModel = PagedList<DepartmentDto>.Create(
+            FilterDepartments(departments, employees, departmentsFilter).OrderBy(department => department.Name),
+            departmentsFilter.Page,
+            departmentsFilter.PageSize);
+        var employeesPageModel = PagedList<EmployeeDto>.Create(
+            FilterEmployees(employees, usersById, employeesFilter)
+                .OrderBy(employee => employee.LastName)
+                .ThenBy(employee => employee.FirstName),
+            employeesFilter.Page,
+            employeesFilter.PageSize);
+        var leaveRequestsPageModel = PagedList<LeaveRequestDto>.Create(
+            FilterLeaveRequests(leaveRequests, leaveRequestsFilter).OrderByDescending(request => request.CreatedAt),
+            leaveRequestsFilter.Page,
+            leaveRequestsFilter.PageSize);
+        var workSchedulesPageModel = PagedList<WorkScheduleDto>.Create(
+            FilterWorkSchedules(workSchedules, usersById, workSchedulesFilter)
+                .OrderBy(schedule => schedule.ShiftDate)
+                .ThenBy(schedule => schedule.Shift),
+            workSchedulesFilter.Page,
+            workSchedulesFilter.PageSize);
+
+        SyncFilter(departmentsFilter, departmentsPageModel.Page, departmentsPageModel.PageSize);
+        SyncFilter(employeesFilter, employeesPageModel.Page, employeesPageModel.PageSize);
+        SyncFilter(leaveRequestsFilter, leaveRequestsPageModel.Page, leaveRequestsPageModel.PageSize);
+        SyncFilter(workSchedulesFilter, workSchedulesPageModel.Page, workSchedulesPageModel.PageSize);
 
         return new HumanResourcesDashboardViewModel
         {
@@ -509,22 +541,14 @@ public sealed class HumanResourcesController : Controller
             LeaveRequests = leaveRequests,
             WorkSchedules = workSchedules,
             Users = users,
-            DepartmentsPage = PagedList<DepartmentDto>.Create(
-                departments.OrderBy(department => department.Name),
-                departmentsPage,
-                pageSize),
-            EmployeesPage = PagedList<EmployeeDto>.Create(
-                employees.OrderBy(employee => employee.LastName).ThenBy(employee => employee.FirstName),
-                employeesPage,
-                pageSize),
-            LeaveRequestsPage = PagedList<LeaveRequestDto>.Create(
-                leaveRequests.OrderByDescending(request => request.CreatedAt),
-                leaveRequestsPage,
-                pageSize),
-            WorkSchedulesPage = PagedList<WorkScheduleDto>.Create(
-                workSchedules.OrderBy(schedule => schedule.ShiftDate).ThenBy(schedule => schedule.Shift),
-                workSchedulesPage,
-                pageSize),
+            DepartmentsPage = departmentsPageModel,
+            EmployeesPage = employeesPageModel,
+            LeaveRequestsPage = leaveRequestsPageModel,
+            WorkSchedulesPage = workSchedulesPageModel,
+            DepartmentsFilter = departmentsFilter,
+            EmployeesFilter = employeesFilter,
+            LeaveRequestsFilter = leaveRequestsFilter,
+            WorkSchedulesFilter = workSchedulesFilter,
             NewDepartment = newDepartment ?? new CreateDepartmentRequest(),
             NewEmployee = newEmployee ?? new CreateEmployeeRequest
             {
@@ -541,6 +565,197 @@ public sealed class HumanResourcesController : Controller
                 ShiftDate = DateOnly.FromDateTime(DateTime.Today),
             },
         };
+    }
+
+    private static IEnumerable<DepartmentDto> FilterDepartments(
+        IEnumerable<DepartmentDto> departments,
+        IReadOnlyCollection<EmployeeDto> employees,
+        DepartmentListFilterViewModel filter)
+    {
+        var query = departments;
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            query = query.Where(department =>
+            {
+                var searchValues = new List<string?>
+                {
+                    department.Name,
+                    department.Description,
+                    department.HeadEmployeeFullName,
+                };
+                searchValues.AddRange(employees
+                    .Where(employee => employee.DepartmentId == department.Id)
+                    .Select(employee => employee.FullName));
+
+                return MatchesSearch(filter.Search, searchValues.ToArray());
+            });
+        }
+
+        return query;
+    }
+
+    private static IEnumerable<EmployeeDto> FilterEmployees(
+        IEnumerable<EmployeeDto> employees,
+        IReadOnlyDictionary<int, UserDto> usersById,
+        EmployeeListFilterViewModel filter)
+    {
+        var query = employees;
+        if (filter.DepartmentId is > 0)
+        {
+            query = query.Where(employee => employee.DepartmentId == filter.DepartmentId.Value);
+        }
+
+        if (string.Equals(filter.Status, "Active", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(employee => employee.IsActive);
+        }
+        else if (string.Equals(filter.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(employee => !employee.IsActive);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Role))
+        {
+            query = query.Where(employee =>
+                usersById.TryGetValue(employee.UserId, out var user) &&
+                string.Equals(user.Role, filter.Role, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            query = query.Where(employee =>
+            {
+                usersById.TryGetValue(employee.UserId, out var user);
+                return MatchesSearch(
+                    filter.Search,
+                    employee.FullName,
+                    employee.Email,
+                    employee.PhoneNumber,
+                    employee.DepartmentName,
+                    employee.Position,
+                    user?.Role,
+                    employee.Id.ToString(),
+                    employee.UserId.ToString());
+            });
+        }
+
+        return query;
+    }
+
+    private static IEnumerable<LeaveRequestDto> FilterLeaveRequests(
+        IEnumerable<LeaveRequestDto> leaveRequests,
+        LeaveRequestListFilterViewModel filter)
+    {
+        var query = leaveRequests;
+        if (filter.Status.HasValue)
+        {
+            query = query.Where(request => request.Status == filter.Status.Value);
+        }
+
+        if (filter.LeaveType.HasValue)
+        {
+            query = query.Where(request => request.LeaveType == filter.LeaveType.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            query = query.Where(request => MatchesSearch(
+                filter.Search,
+                request.EmployeeFullName,
+                request.ApprovedByEmployeeFullName,
+                request.RejectionReason,
+                LeaveTypeName(request.LeaveType),
+                LeaveStatusName(request.Status),
+                request.Id.ToString(),
+                request.EmployeeId.ToString()));
+        }
+
+        return query;
+    }
+
+    private static IEnumerable<WorkScheduleDto> FilterWorkSchedules(
+        IEnumerable<WorkScheduleDto> workSchedules,
+        IReadOnlyDictionary<int, UserDto> usersById,
+        WorkScheduleListFilterViewModel filter)
+    {
+        var query = workSchedules;
+        if (filter.From.HasValue)
+        {
+            query = query.Where(schedule => schedule.ShiftDate >= filter.From.Value);
+        }
+
+        if (filter.To.HasValue)
+        {
+            query = query.Where(schedule => schedule.ShiftDate <= filter.To.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Shift))
+        {
+            query = query.Where(schedule =>
+                string.Equals(schedule.Shift, filter.Shift, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Role))
+        {
+            query = query.Where(schedule =>
+                usersById.TryGetValue(schedule.UserId, out var user) &&
+                string.Equals(user.Role, filter.Role, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            query = query.Where(schedule =>
+            {
+                usersById.TryGetValue(schedule.UserId, out var user);
+                return MatchesSearch(
+                    filter.Search,
+                    schedule.EmployeeFullName,
+                    schedule.Shift,
+                    schedule.RoleAtShift,
+                    user?.Email,
+                    user?.FullName,
+                    user?.Role,
+                    schedule.Id.ToString(),
+                    schedule.UserId.ToString());
+            });
+        }
+
+        return query;
+    }
+
+    private static bool MatchesSearch(string? search, params string?[] values)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return true;
+        }
+
+        var normalizedSearch = search.Trim();
+        return values.Any(value =>
+            !string.IsNullOrWhiteSpace(value) &&
+            value.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string LeaveTypeName(int value) => value switch
+    {
+        0 => "Wypoczynkowy",
+        1 => "Chorobowy",
+        2 => "Okolicznosciowy",
+        _ => $"Typ {value}",
+    };
+
+    private static string LeaveStatusName(int value) => value switch
+    {
+        0 => "Oczekuje",
+        1 => "Zaakceptowany",
+        2 => "Odrzucony",
+        _ => $"Status {value}",
+    };
+
+    private static void SyncFilter(StaffListFilterViewModel filter, int page, int pageSize)
+    {
+        filter.Page = page;
+        filter.PageSize = pageSize;
     }
 
     private void SetViewData(string title, string section, string description)
