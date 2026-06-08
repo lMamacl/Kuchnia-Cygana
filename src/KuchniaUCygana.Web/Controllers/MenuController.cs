@@ -23,13 +23,15 @@ public sealed class MenuController : Controller
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index([FromQuery] string? search)
+    public async Task<IActionResult> Index([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 12)
     {
         ViewData["Title"] = "Katalog diet";
 
         var catalog = await dietCatalogProvider.GetCurrentCatalogAsync(new DietCatalogQuery
         {
             SearchTerm = search,
+            Page = page,
+            PageSize = pageSize,
         });
 
         return View(new MenuCatalogViewModel
@@ -37,6 +39,9 @@ public sealed class MenuController : Controller
             SearchTerm = search,
             BasePricePerDay = dietOrderingService.BasePricePerDay,
             Diets = catalog.Diets.Select(MapDiet).ToList(),
+            Page = catalog.Page,
+            PageSize = catalog.PageSize,
+            TotalCount = catalog.TotalCount,
         });
     }
 

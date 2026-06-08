@@ -9,6 +9,24 @@ public sealed class MenuCatalogViewModel
     public decimal BasePricePerDay { get; set; }
 
     public IReadOnlyList<MenuDietViewModel> Diets { get; set; } = Array.Empty<MenuDietViewModel>();
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 12;
+
+    public int TotalCount { get; set; }
+
+    public int TotalPages => TotalCount == 0
+        ? 1
+        : (int)Math.Ceiling(TotalCount / (double)PageSize);
+
+    public int FirstItem => TotalCount == 0 ? 0 : ((Page - 1) * PageSize) + 1;
+
+    public int LastItem => Math.Min(Page * PageSize, TotalCount);
+
+    public bool HasPrevious => Page > 1;
+
+    public bool HasNext => Page < TotalPages;
 }
 
 public sealed class MenuDietViewModel

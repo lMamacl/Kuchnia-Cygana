@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using KuchniaUCygana.Application.DTOs.Orders;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Orders;
@@ -12,32 +12,57 @@ namespace KuchniaUCygana.Application.Services;
 public sealed class OrderService : IOrderService
 {
     private readonly IOrderRepository orderRepository;
-    private readonly IOrderItemRepository orderItemRepository;
     private readonly IDeliveryCalendarRepository deliveryCalendarRepository;
     private readonly IAddressRepository addressRepository;
     private readonly IMapper mapper;
     private readonly IDietDataProvider dietDataProvider;
+    private readonly IDietOrderingService dietOrderingService;
 
     public OrderService(
         IOrderRepository orderRepository,
-        IOrderItemRepository orderItemRepository,
         IDeliveryCalendarRepository deliveryCalendarRepository,
         IAddressRepository addressRepository,
         IMapper mapper,
-        IDietDataProvider dietDataProvider)
+        IDietDataProvider dietDataProvider,
+        IDietOrderingService dietOrderingService)
     {
         this.orderRepository = orderRepository;
-        this.orderItemRepository = orderItemRepository;
         this.deliveryCalendarRepository = deliveryCalendarRepository;
         this.addressRepository = addressRepository;
         this.mapper = mapper;
         this.dietDataProvider = dietDataProvider;
+        this.dietOrderingService = dietOrderingService;
     }
 
     public async Task<IEnumerable<OrderSummaryDto>> GetByCustomerIdAsync(int customerId)
     {
         var orders = await orderRepository.GetByCustomerIdAsync(customerId);
         return mapper.Map<IEnumerable<OrderSummaryDto>>(orders);
+    }
+
+    public async Task<OrderHistoryPageDto> SearchByCustomerAsync(int customerId, OrderHistoryQueryDto query)
+    {
+        var pageSize = Math.Clamp(query.PageSize <= 0 ? 10 : query.PageSize, 5, 50);
+        var page = Math.Max(1, query.Page);
+
+        var repositoryQuery = CreateCustomerOrderSearchQuery(customerId, query, page, pageSize);
+        var (rows, totalCount) = await orderRepository.SearchByCustomerAsync(repositoryQuery);
+
+        var totalPages = totalCount == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize);
+        if (page > totalPages)
+        {
+            page = totalPages;
+            repositoryQuery = CreateCustomerOrderSearchQuery(customerId, query, page, pageSize);
+            (rows, totalCount) = await orderRepository.SearchByCustomerAsync(repositoryQuery);
+        }
+
+        return new OrderHistoryPageDto
+        {
+            Items = rows.Select(MapOrderSummary).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+        };
     }
 
     public async Task<OrderDto?> GetByIdAsync(int orderId, int customerId)
@@ -47,7 +72,6 @@ public sealed class OrderService : IOrderService
 
         var orderDto = mapper.Map<OrderDto>(order);
 
-        // Uzupelniamy AddressFullLine dla dni dostawy (brak lazy loading w OrmLite)
         if (order.DeliveryDays.Count > 0)
         {
             var addressCache = new Dictionary<int, string>();
@@ -69,62 +93,131 @@ public sealed class OrderService : IOrderService
 
     public async Task<int> CreateOrderAsync(CreateOrderRequest request, int customerId)
     {
-        var materializedItems = await MaterializeOrderItemsAsync(request);
+        await ValidateAddressAsync(request.AddressId, customerId);
 
-        // 1. Generuj unikalny numer zamowienia
-        var orderNumber = await orderRepository.GenerateOrderNumberAsync();
+        var serverRequest = await RepriceRequestAsync(request);
+        var materializedItems = await MaterializeOrderItemsAsync(serverRequest);
+        var deliveryDates = materializedItems
+            .Select(item => item.DeliveryDate?.Date)
+            .Where(date => date.HasValue)
+            .Select(date => date!.Value)
+            .Distinct()
+            .OrderBy(date => date)
+            .ToList();
 
-        // 2. Oblicz ceny
-        var totalPrice = request.Items.Sum(i => i.PricePerDay * i.TotalDays);
+        if (deliveryDates.Count == 0)
+            throw new InvalidOperationException("Nie udalo sie wyznaczyc dni dostawy dla zamowienia.");
 
-        // 3. Utworz naglowek zamowienia
+        var totalPrice = materializedItems.Sum(i => i.TotalPrice);
+        var now = DateTimeOffset.UtcNow;
+
         var order = new Order
         {
             CustomerId = customerId,
-            OrderNumber = orderNumber,
             Status = OrderStatus.PendingPayment,
             TotalPrice = totalPrice,
             DiscountAmount = 0m,
             FinalPrice = totalPrice,
-            Notes = request.Notes,
-            StartDate = request.StartDate,
-            CreatedAt = DateTimeOffset.UtcNow,
+            Notes = serverRequest.Notes,
+            StartDate = deliveryDates.First(),
+            EndDate = deliveryDates.Last(),
+            CreatedAt = now,
         };
 
-        var orderId = await orderRepository.InsertAsync(order);
-
-        // 4. Zapisz pozycje zamowienia
         foreach (var orderItem in materializedItems)
         {
-            orderItem.OrderId = orderId;
-            orderItem.CreatedAt = DateTimeOffset.UtcNow;
-            await orderItemRepository.InsertAsync(orderItem);
+            orderItem.CreatedAt = now;
         }
 
-        // 5. Generuj kalendarz dostaw
-        var totalDays = request.Items.Max(i => i.TotalDays);
         var deliveryDays = BuildDeliveryCalendar(
-            orderId: orderId,
-            addressId: request.AddressId,
-            deliveryWindowId: request.DeliveryWindowId,
-            startDate: request.StartDate,
-            totalDays: totalDays);
+            addressId: serverRequest.AddressId,
+            deliveryWindowId: serverRequest.DeliveryWindowId,
+            deliveryDates: deliveryDates);
 
         foreach (var day in deliveryDays)
         {
-            day.CreatedAt = DateTimeOffset.UtcNow;
-            await deliveryCalendarRepository.InsertAsync(day);
+            day.CreatedAt = now;
         }
 
-        // 6. Zaktualizuj EndDate w zamowieniu
-        if (deliveryDays.Any())
+        return await orderRepository.InsertCheckoutAsync(order, materializedItems, deliveryDays);
+    }
+
+    public async Task<bool> CancelOrderAsync(int orderId, int customerId)
+    {
+        var order = await orderRepository.GetByIdAsync(orderId);
+        if (order is null || order.CustomerId != customerId) return false;
+
+        if (order.Status is not (OrderStatus.Draft or OrderStatus.PendingPayment))
+            return false;
+
+        order.Status = OrderStatus.Cancelled;
+        order.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var deliveries = await deliveryCalendarRepository.GetByOrderIdAsync(orderId);
+        foreach (var delivery in deliveries)
         {
-            order.Id = orderId;
-            order.EndDate = deliveryDays.Last().DeliveryDate;
-            await orderRepository.UpdateAsync(order);
+            delivery.Status = DeliveryStatus.Cancelled;
+            delivery.UpdatedAt = DateTimeOffset.UtcNow;
+            await deliveryCalendarRepository.UpdateAsync(delivery);
         }
 
-        return orderId;
+        return await orderRepository.UpdateAsync(order);
+    }
+
+    public async Task<CheckoutSummaryDto> GetCheckoutSummaryAsync(int orderId, int customerId)
+    {
+        var orderDto = await GetByIdAsync(orderId, customerId)
+            ?? throw new KeyNotFoundException($"Zamowienie {orderId} nie istnieje.");
+
+        return new CheckoutSummaryDto
+        {
+            OrderId = orderId,
+            Items = orderDto.Items,
+            DeliveryDays = orderDto.DeliveryDays,
+            TotalPrice = orderDto.TotalPrice,
+            DiscountAmount = orderDto.DiscountAmount,
+            FinalPrice = orderDto.FinalPrice,
+        };
+    }
+
+    private async Task ValidateAddressAsync(int addressId, int customerId)
+    {
+        var address = await addressRepository.GetByIdAsync(addressId);
+        if (address is null || address.UserId != customerId)
+        {
+            throw new InvalidOperationException("Wybrany adres dostawy nie istnieje albo nie nalezy do zalogowanego klienta.");
+        }
+    }
+
+    private async Task<CreateOrderRequest> RepriceRequestAsync(CreateOrderRequest request)
+    {
+        if (request.Items.Count == 0)
+            throw new InvalidOperationException("Koszyk jest pusty.");
+
+        var serverItems = new List<CreateOrderItemRequest>(request.Items.Count);
+        foreach (var item in request.Items)
+        {
+            var cartItem = await dietOrderingService.CreateCartItemAsync(item.DietVariantId, item.TotalDays);
+            serverItems.Add(new CreateOrderItemRequest
+            {
+                DietId = cartItem.DietId,
+                DietVariantId = cartItem.DietVariantId,
+                DietName = cartItem.DietName,
+                VariantName = cartItem.VariantName,
+                CaloriesPerDay = cartItem.CaloriesPerDay,
+                PricePerDay = cartItem.PricePerDay,
+                TotalDays = cartItem.TotalDays,
+            });
+        }
+
+        return new CreateOrderRequest
+        {
+            AddressId = request.AddressId,
+            DeliveryWindowId = request.DeliveryWindowId,
+            StartDate = request.StartDate,
+            Notes = request.Notes,
+            Items = serverItems,
+        };
     }
 
     private async Task<List<OrderItem>> MaterializeOrderItemsAsync(CreateOrderRequest request)
@@ -134,9 +227,9 @@ public sealed class OrderService : IOrderService
 
         foreach (var item in request.Items)
         {
-            for (var dayOffset = 0; dayOffset < item.TotalDays; dayOffset++)
+            foreach (var deliveryDateTime in BuildDeliveryDates(request.StartDate, item.TotalDays))
             {
-                var deliveryDate = DateOnly.FromDateTime(request.StartDate.Date.AddDays(dayOffset));
+                var deliveryDate = DateOnly.FromDateTime(deliveryDateTime);
                 var snapshot = await GetPublishedSnapshotAsync(deliveryDate, snapshots);
                 var planItems = snapshot.Items
                     .Where(planItem => planItem.DietVariantId == item.DietVariantId)
@@ -200,7 +293,7 @@ public sealed class OrderService : IOrderService
                 MealVariantId = planItem.MealVariantId,
                 DietMenuPlanItemId = planItem.DietMenuPlanItemId,
                 DietName = requestItem.DietName,
-                VariantName = $"{requestItem.VariantName} / {planItem.MealSlot}",
+                VariantName = requestItem.VariantName,
                 MealSlot = planItem.MealSlot,
                 DeliveryDate = deliveryDate.ToDateTime(TimeOnly.MinValue),
                 CaloriesPerDay = requestItem.CaloriesPerDay,
@@ -211,72 +304,73 @@ public sealed class OrderService : IOrderService
         }
     }
 
-    public async Task<bool> CancelOrderAsync(int orderId, int customerId)
+    private static IReadOnlyList<DateTime> BuildDeliveryDates(DateTime startDate, int totalDays)
     {
-        var order = await orderRepository.GetByIdAsync(orderId);
-        if (order is null || order.CustomerId != customerId) return false;
+        if (totalDays is < 1 or > 365)
+            throw new ArgumentOutOfRangeException(nameof(totalDays), "Liczba dni musi byc z zakresu 1-365.");
 
-        if (order.Status is not (OrderStatus.Draft or OrderStatus.PendingPayment))
-            return false;
-
-        order.Status = OrderStatus.Cancelled;
-        order.UpdatedAt = DateTimeOffset.UtcNow;
-
-        var deliveries = await deliveryCalendarRepository.GetByOrderIdAsync(orderId);
-        foreach (var delivery in deliveries)
-        {
-            delivery.Status = DeliveryStatus.Cancelled;
-            delivery.UpdatedAt = DateTimeOffset.UtcNow;
-            await deliveryCalendarRepository.UpdateAsync(delivery);
-        }
-
-        return await orderRepository.UpdateAsync(order);
-    }
-
-    public async Task<CheckoutSummaryDto> GetCheckoutSummaryAsync(int orderId, int customerId)
-    {
-        var orderDto = await GetByIdAsync(orderId, customerId)
-            ?? throw new KeyNotFoundException($"Zamowienie {orderId} nie istnieje.");
-
-        return new CheckoutSummaryDto
-        {
-            OrderId = orderId,
-            Items = orderDto.Items,
-            DeliveryDays = orderDto.DeliveryDays,
-            TotalPrice = orderDto.TotalPrice,
-            DiscountAmount = orderDto.DiscountAmount,
-            FinalPrice = orderDto.FinalPrice,
-        };
-    }
-
-    // Logika biznesowa generowania kalendarza dostaw
-    private static List<DeliveryCalendar> BuildDeliveryCalendar(
-        int orderId, int addressId, int? deliveryWindowId,
-        DateTime startDate, int totalDays)
-    {
-        var calendar = new List<DeliveryCalendar>();
+        var dates = new List<DateTime>(totalDays);
         var current = startDate.Date;
-        var daysAdded = 0;
 
-        while (daysAdded < totalDays)
+        while (dates.Count < totalDays)
         {
-            calendar.Add(new DeliveryCalendar
+            if (current.DayOfWeek != DayOfWeek.Sunday)
             {
-                OrderId = orderId,
-                AddressId = addressId,
-                DeliveryWindowId = deliveryWindowId,
-                DeliveryDate = current,
-                Status = DeliveryStatus.Scheduled,
-                IsSkipped = false,
-                CutoffTime = new DateTimeOffset(
-                    current.AddDays(-1).Date.AddHours(10),
-                    TimeSpan.Zero),
-            });
+                dates.Add(current);
+            }
 
-            daysAdded++;
             current = current.AddDays(1);
         }
 
-        return calendar;
+        return dates;
     }
+
+    private static List<DeliveryCalendar> BuildDeliveryCalendar(
+        int addressId,
+        int? deliveryWindowId,
+        IReadOnlyList<DateTime> deliveryDates)
+    {
+        return deliveryDates
+            .Select(date => new DeliveryCalendar
+            {
+                AddressId = addressId,
+                DeliveryWindowId = deliveryWindowId,
+                DeliveryDate = date.Date,
+                Status = DeliveryStatus.Scheduled,
+                IsSkipped = false,
+                CutoffTime = new DateTimeOffset(
+                    date.Date.AddDays(-1).AddHours(10),
+                    TimeSpan.Zero),
+            })
+            .ToList();
+    }
+
+    private static CustomerOrderSearchQuery CreateCustomerOrderSearchQuery(
+        int customerId,
+        OrderHistoryQueryDto query,
+        int page,
+        int pageSize)
+        => new()
+        {
+            CustomerId = customerId,
+            Page = page,
+            PageSize = pageSize,
+            Status = query.Status,
+            DateFrom = query.DateFrom,
+            DateTo = query.DateTo,
+            OrderNumber = query.OrderNumber,
+        };
+
+    private static OrderSummaryDto MapOrderSummary(CustomerOrderSearchRow row)
+        => new()
+        {
+            Id = row.Id,
+            OrderNumber = row.OrderNumber,
+            Status = row.Status,
+            FinalPrice = row.FinalPrice,
+            StartDate = row.StartDate,
+            EndDate = row.EndDate,
+            CreatedAt = row.CreatedAt,
+            ItemCount = row.ItemCount,
+        };
 }

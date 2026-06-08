@@ -13,7 +13,14 @@ public sealed class CartService : ICartService
         if (string.IsNullOrWhiteSpace(serializedCart))
             return new CartDto();
 
-        return JsonSerializer.Deserialize<CartDto>(serializedCart) ?? new CartDto();
+        try
+        {
+            return JsonSerializer.Deserialize<CartDto>(serializedCart) ?? new CartDto();
+        }
+        catch (JsonException)
+        {
+            return new CartDto();
+        }
     }
 
     public CartDto AddItem(CartDto cart, CartItemDto item)

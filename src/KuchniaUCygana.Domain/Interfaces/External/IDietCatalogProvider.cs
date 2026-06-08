@@ -5,11 +5,25 @@ public sealed class DietCatalogQuery
     public string? SearchTerm { get; set; }
 
     public bool IncludeInactive { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 12;
 }
 
 public sealed class DietCatalogDto
 {
     public IReadOnlyList<DietCatalogItemDto> Diets { get; set; } = Array.Empty<DietCatalogItemDto>();
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 12;
+
+    public int TotalCount { get; set; }
+
+    public int TotalPages => TotalCount == 0
+        ? 1
+        : (int)Math.Ceiling(TotalCount / (double)PageSize);
 }
 
 public sealed class DietCatalogItemDto

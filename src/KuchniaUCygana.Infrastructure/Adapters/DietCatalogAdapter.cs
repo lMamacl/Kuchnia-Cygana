@@ -18,9 +18,48 @@ public sealed class DietCatalogAdapter : IDietCatalogProvider
         using var db = this.connectionFactory.CreateConnection();
         var search = NormalizeSearch(query?.SearchTerm);
         var includeInactive = query?.IncludeInactive ?? false;
+        var pageSize = Math.Clamp(query?.PageSize > 0 ? query.PageSize : 12, 1, 60);
+        var page = Math.Max(1, query?.Page ?? 1);
+
+        var parameters = new
+        {
+            includeInactive,
+            search,
+            like = $"%{search}%",
+            offset = (page - 1) * pageSize,
+            pageSize,
+        };
+
+        const string whereSql = """
+            FROM [Diets] d
+            WHERE d.[IsDeleted] = 0
+              AND (@includeInactive = 1 OR (d.[IsActive] = 1 AND d.[Status] IN (N'Published', N'Active')))
+              AND (@search IS NULL
+                   OR d.[Name] LIKE @like
+                   OR d.[Description] LIKE @like
+                   OR d.[MarketingDescription] LIKE @like)
+            """;
+
+        var totalCount = await db.ExecuteScalarAsync<int>(
+            $"SELECT COUNT(1) {whereSql};",
+            parameters);
+
+        var totalPages = totalCount == 0
+            ? 1
+            : (int)Math.Ceiling(totalCount / (double)pageSize);
+        page = Math.Min(page, totalPages);
+
+        parameters = new
+        {
+            includeInactive,
+            search,
+            like = $"%{search}%",
+            offset = (page - 1) * pageSize,
+            pageSize,
+        };
 
         var diets = (await db.QueryAsync<DietCatalogItemDto>(
-            """
+            $"""
             SELECT
                 d.[Id] AS [DietId],
                 d.[Name],
@@ -29,27 +68,20 @@ public sealed class DietCatalogAdapter : IDietCatalogProvider
                 d.[Status],
                 d.[IsActive],
                 d.[ThumbnailUrl]
-            FROM [Diets] d
-            WHERE d.[IsDeleted] = 0
-              AND (@includeInactive = 1 OR (d.[IsActive] = 1 AND d.[Status] IN (N'Published', N'Active')))
-              AND (@search IS NULL
-                   OR d.[Name] LIKE @like
-                   OR d.[Description] LIKE @like
-                   OR d.[MarketingDescription] LIKE @like)
-            ORDER BY d.[Name], d.[Id];
+            {whereSql}
+            ORDER BY d.[Name], d.[Id]
+            OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
             """,
-            new
-            {
-                includeInactive,
-                search,
-                like = $"%{search}%",
-            })).ToList();
+            parameters)).ToList();
 
         await AttachVariantsAsync(db, diets, includeInactive);
 
         return new DietCatalogDto
         {
             Diets = diets,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
         };
     }
 
