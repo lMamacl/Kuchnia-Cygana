@@ -38,6 +38,32 @@ public sealed class DriverVehicleAssignmentRepository : IDriverVehicleAssignment
             new { vehicleId });
     }
 
+    public async Task<IReadOnlyList<DriverVehicleAssignment>> GetActiveByVehicleIdsAsync(IReadOnlyCollection<int> vehicleIds)
+    {
+        var ids = vehicleIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+
+        if (ids.Length == 0)
+        {
+            return Array.Empty<DriverVehicleAssignment>();
+        }
+
+        using var db = _connectionFactory.CreateConnection();
+        var assignments = await db.QueryAsync<DriverVehicleAssignment>(
+            """
+            SELECT *
+            FROM [DriverVehicleAssignments]
+            WHERE [VehicleId] IN @Ids
+              AND [UnassignedAt] IS NULL
+            ORDER BY [VehicleId], [AssignedAt] DESC;
+            """,
+            new { Ids = ids });
+
+        return assignments.ToList();
+    }
+
     public async Task AssignAsync(int driverId, int vehicleId)
     {
         using var db = _connectionFactory.CreateConnection();

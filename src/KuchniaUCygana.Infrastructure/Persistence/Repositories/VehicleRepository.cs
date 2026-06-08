@@ -28,6 +28,32 @@ public sealed class VehicleRepository : BaseRepository<Vehicle>, IVehicleReposit
             new { registrationNumber });
         return vehicle;
     }
+
+    public async Task<IReadOnlyList<Vehicle>> GetByIdsAsync(IReadOnlyCollection<int> vehicleIds)
+    {
+        var ids = vehicleIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+
+        if (ids.Length == 0)
+        {
+            return Array.Empty<Vehicle>();
+        }
+
+        using var db = _connectionFactory.CreateConnection();
+        var vehicles = await db.QueryAsync<Vehicle>(
+            """
+            SELECT *
+            FROM [Vehicles]
+            WHERE [Id] IN @Ids
+              AND [IsDeleted] = 0
+            ORDER BY [RegistrationNumber], [Id];
+            """,
+            new { Ids = ids });
+
+        return vehicles.ToList();
+    }
 }
 
 

@@ -32,6 +32,32 @@ public sealed class DriverRepository : BaseRepository<Driver>, IDriverRepository
             "SELECT * FROM [Drivers] WHERE [LicenseNumber] = @licenseNumber AND [IsDeleted] = 0;",
             new { licenseNumber });
     }
+
+    public async Task<IReadOnlyList<Driver>> GetByIdsAsync(IReadOnlyCollection<int> driverIds)
+    {
+        var ids = driverIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+
+        if (ids.Length == 0)
+        {
+            return Array.Empty<Driver>();
+        }
+
+        using var db = Factory.CreateConnection();
+        var drivers = await db.QueryAsync<Driver>(
+            """
+            SELECT *
+            FROM [Drivers]
+            WHERE [Id] IN @Ids
+              AND [IsDeleted] = 0
+            ORDER BY [Id];
+            """,
+            new { Ids = ids });
+
+        return drivers.ToList();
+    }
 }
 
 

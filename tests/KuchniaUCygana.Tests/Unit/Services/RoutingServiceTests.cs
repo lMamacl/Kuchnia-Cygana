@@ -42,13 +42,17 @@ public sealed class RoutingServiceTests
         stopRepository
             .Setup(r => r.InsertAsync(It.IsAny<DeliveryRouteStop>()))
             .ReturnsAsync(() => insertedStopIds.Dequeue());
+        var vehicles = new List<Vehicle>
+        {
+            new() { Id = 1, RegistrationNumber = "BI1000A", MaxLoadKg = 10m, Status = VehicleStatus.Active },
+            new() { Id = 2, RegistrationNumber = "BI2000A", MaxLoadKg = 10m, Status = VehicleStatus.Active },
+        };
         vehicleRepository
             .Setup(r => r.GetAllAsync())
-            .ReturnsAsync(new List<Vehicle>
-            {
-                new() { Id = 1, RegistrationNumber = "BI1000A", MaxLoadKg = 10m, Status = VehicleStatus.Active },
-                new() { Id = 2, RegistrationNumber = "BI2000A", MaxLoadKg = 10m, Status = VehicleStatus.Active },
-            });
+            .ReturnsAsync(vehicles);
+        vehicleRepository
+            .Setup(r => r.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync((IReadOnlyCollection<int> ids) => vehicles.Where(vehicle => ids.Contains(vehicle.Id)).ToList());
         deliveryProvider
             .Setup(p => p.GetDeliveriesForDateAsync(date.Date, It.IsAny<decimal>()))
             .ReturnsAsync(deliveries);
@@ -62,6 +66,7 @@ public sealed class RoutingServiceTests
             stopRepository.Object,
             vehicleRepository.Object,
             new Mock<IDriverRepository>().Object,
+            EmptyAssignmentRepository().Object,
             new Mock<IUserRepository>().Object,
             deliveryProvider.Object,
             optimizer);
@@ -155,8 +160,10 @@ public sealed class RoutingServiceTests
         stopRepository.Setup(r => r.UpdateAsync(It.IsAny<DeliveryRouteStop>())).ReturnsAsync(true);
         vehicleRepository.Setup(r => r.GetByIdAsync(2)).ReturnsAsync(
             new Vehicle { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active });
-        vehicleRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(
-            new List<Vehicle> { new() { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active } });
+        vehicleRepository.Setup(r => r.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>())).ReturnsAsync(
+            (IReadOnlyCollection<int> ids) => new List<Vehicle> { new() { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active } }
+                .Where(vehicle => ids.Contains(vehicle.Id))
+                .ToList());
         deliveryProvider
             .Setup(p => p.GetDeliveriesByCalendarIdsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<decimal>()))
             .ReturnsAsync(new List<LogisticsDeliveryCandidate>
@@ -170,6 +177,7 @@ public sealed class RoutingServiceTests
             stopRepository.Object,
             vehicleRepository.Object,
             new Mock<IDriverRepository>().Object,
+            EmptyAssignmentRepository().Object,
             new Mock<IUserRepository>().Object,
             deliveryProvider.Object,
             new NearestNeighborRouteOptimizer());
@@ -219,14 +227,20 @@ public sealed class RoutingServiceTests
         stopRepository.Setup(r => r.UpdateAsync(It.IsAny<DeliveryRouteStop>())).ReturnsAsync(true);
         vehicleRepository.Setup(r => r.GetByIdAsync(2)).ReturnsAsync(
             new Vehicle { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active });
-        vehicleRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(
-            new List<Vehicle> { new() { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active } });
+        vehicleRepository.Setup(r => r.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>())).ReturnsAsync(
+            (IReadOnlyCollection<int> ids) => new List<Vehicle> { new() { Id = 2, RegistrationNumber = "BI2000A", Status = VehicleStatus.Active } }
+                .Where(vehicle => ids.Contains(vehicle.Id))
+                .ToList());
         driverRepository.Setup(r => r.GetByIdAsync(7)).ReturnsAsync(
             new Driver { Id = 7, UserId = 70, LicenseNumber = "M4-001", IsActive = true });
-        driverRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(
-            new List<Driver> { new() { Id = 7, UserId = 70, LicenseNumber = "M4-001", IsActive = true } });
-        userRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(
-            new List<User> { new() { Id = 70, FirstName = "Jan", LastName = "Kierowca" } });
+        driverRepository.Setup(r => r.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>())).ReturnsAsync(
+            (IReadOnlyCollection<int> ids) => new List<Driver> { new() { Id = 7, UserId = 70, LicenseNumber = "M4-001", IsActive = true } }
+                .Where(driver => ids.Contains(driver.Id))
+                .ToList());
+        userRepository.Setup(r => r.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>())).ReturnsAsync(
+            (IReadOnlyCollection<int> ids) => new List<User> { new() { Id = 70, FirstName = "Jan", LastName = "Kierowca" } }
+                .Where(user => ids.Contains(user.Id))
+                .ToList());
         deliveryProvider
             .Setup(p => p.GetDeliveriesByCalendarIdsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<decimal>()))
             .ReturnsAsync(new List<LogisticsDeliveryCandidate>
@@ -239,6 +253,7 @@ public sealed class RoutingServiceTests
             stopRepository.Object,
             vehicleRepository.Object,
             driverRepository.Object,
+            EmptyAssignmentRepository().Object,
             userRepository.Object,
             deliveryProvider.Object,
             new NearestNeighborRouteOptimizer());
@@ -284,6 +299,7 @@ public sealed class RoutingServiceTests
             new Mock<IDeliveryRouteStopRepository>().Object,
             vehicleRepository.Object,
             driverRepository.Object,
+            EmptyAssignmentRepository().Object,
             new Mock<IUserRepository>().Object,
             new Mock<ILogisticsDeliveryDataProvider>().Object,
             new NearestNeighborRouteOptimizer());
@@ -324,6 +340,7 @@ public sealed class RoutingServiceTests
             stopRepository.Object,
             new Mock<IVehicleRepository>().Object,
             new Mock<IDriverRepository>().Object,
+            EmptyAssignmentRepository().Object,
             new Mock<IUserRepository>().Object,
             new Mock<ILogisticsDeliveryDataProvider>().Object,
             new NearestNeighborRouteOptimizer());
@@ -334,6 +351,80 @@ public sealed class RoutingServiceTests
         stopRepository.Verify(r => r.DeleteAsync(101), Times.Once);
         stopRepository.Verify(r => r.DeleteAsync(102), Times.Once);
         routeRepository.Verify(r => r.DeleteAsync(10), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetRoutesForDateAsync_MapsDriverFromActiveVehicleAssignment()
+    {
+        var date = new DateTimeOffset(2026, 6, 8, 0, 0, 0, TimeSpan.Zero);
+        var route = new DeliveryRoute
+        {
+            Id = 10,
+            Name = "Trasa 1",
+            Status = RouteStatus.Assigned,
+            VehicleId = 3,
+            DriverId = null,
+            Stops =
+            {
+                new DeliveryRouteStop { Id = 101, RouteId = 10, DeliveryCalendarId = 1, SequenceNumber = 1 },
+            },
+        };
+        var routeRepository = new Mock<IDeliveryRouteRepository>();
+        var vehicleRepository = new Mock<IVehicleRepository>();
+        var driverRepository = new Mock<IDriverRepository>();
+        var assignmentRepository = new Mock<IDriverVehicleAssignmentRepository>();
+        var userRepository = new Mock<IUserRepository>();
+        var deliveryProvider = new Mock<ILogisticsDeliveryDataProvider>();
+
+        routeRepository
+            .Setup(repository => repository.GetRoutesWithStopsAsync(date))
+            .ReturnsAsync(new List<DeliveryRoute> { route });
+        vehicleRepository
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync((IReadOnlyCollection<int> ids) =>
+                new List<Vehicle> { new() { Id = 3, RegistrationNumber = "BI 3307E", Status = VehicleStatus.Active } }
+                    .Where(vehicle => ids.Contains(vehicle.Id))
+                    .ToList());
+        assignmentRepository
+            .Setup(repository => repository.GetActiveByVehicleIdsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync((IReadOnlyCollection<int> ids) =>
+                new List<DriverVehicleAssignment> { new() { DriverId = 3, VehicleId = 3, AssignedAt = date } }
+                    .Where(assignment => ids.Contains(assignment.VehicleId))
+                    .ToList());
+        driverRepository
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync((IReadOnlyCollection<int> ids) =>
+                new List<Driver> { new() { Id = 3, UserId = 30, LicenseNumber = "DRV-3", IsActive = true } }
+                    .Where(driver => ids.Contains(driver.Id))
+                    .ToList());
+        userRepository
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync((IReadOnlyCollection<int> ids) =>
+                new List<User> { new() { Id = 30, FirstName = "Ewa", LastName = "Wysocka" } }
+                    .Where(user => ids.Contains(user.Id))
+                    .ToList());
+        deliveryProvider
+            .Setup(provider => provider.GetDeliveriesByCalendarIdsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<decimal>()))
+            .ReturnsAsync(new List<LogisticsDeliveryCandidate>
+            {
+                Delivery(1, "ZAM/1", 53.1325, 23.1688, 1m),
+            });
+
+        var service = new RoutingService(
+            routeRepository.Object,
+            new Mock<IDeliveryRouteStopRepository>().Object,
+            vehicleRepository.Object,
+            driverRepository.Object,
+            assignmentRepository.Object,
+            userRepository.Object,
+            deliveryProvider.Object,
+            new NearestNeighborRouteOptimizer());
+
+        var routes = await service.GetRoutesForDateAsync(date);
+
+        routes.Should().ContainSingle();
+        routes.Single().DriverId.Should().Be(3);
+        routes.Single().DriverName.Should().Be("Ewa Wysocka");
     }
 
     private static LogisticsDeliveryCandidate Delivery(
@@ -375,6 +466,9 @@ public sealed class RoutingServiceTests
         vehicleRepository
             .Setup(repository => repository.GetAllAsync())
             .ReturnsAsync(vehicles);
+        vehicleRepository
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync((IReadOnlyCollection<int> ids) => vehicles.Where(vehicle => ids.Contains(vehicle.Id)).ToList());
         deliveryProvider
             .Setup(provider => provider.GetDeliveriesForDateAsync(It.IsAny<DateTime>(), It.IsAny<decimal>()))
             .ReturnsAsync(deliveries);
@@ -390,9 +484,19 @@ public sealed class RoutingServiceTests
             new Mock<IDeliveryRouteStopRepository>().Object,
             vehicleRepository.Object,
             new Mock<IDriverRepository>().Object,
+            EmptyAssignmentRepository().Object,
             new Mock<IUserRepository>().Object,
             deliveryProvider.Object,
             new NearestNeighborRouteOptimizer());
+    }
+
+    private static Mock<IDriverVehicleAssignmentRepository> EmptyAssignmentRepository()
+    {
+        var repository = new Mock<IDriverVehicleAssignmentRepository>();
+        repository
+            .Setup(r => r.GetActiveByVehicleIdsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(Array.Empty<DriverVehicleAssignment>());
+        return repository;
     }
 
     private static IReadOnlyList<Vehicle> TwoActiveVehicles()

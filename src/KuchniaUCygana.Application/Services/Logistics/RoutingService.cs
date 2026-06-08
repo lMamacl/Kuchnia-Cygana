@@ -17,6 +17,7 @@ public sealed class RoutingService : IDeliveryRouteService
     private readonly IDeliveryRouteStopRepository _routeStopRepository;
     private readonly IVehicleRepository _vehicleRepository;
     private readonly IDriverRepository _driverRepository;
+    private readonly IDriverVehicleAssignmentRepository _driverVehicleAssignmentRepository;
     private readonly IUserRepository _userRepository;
     private readonly ILogisticsDeliveryDataProvider _deliveryDataProvider;
     private readonly IRouteOptimizer _routeOptimizer;
@@ -26,6 +27,7 @@ public sealed class RoutingService : IDeliveryRouteService
         IDeliveryRouteStopRepository routeStopRepository,
         IVehicleRepository vehicleRepository,
         IDriverRepository driverRepository,
+        IDriverVehicleAssignmentRepository driverVehicleAssignmentRepository,
         IUserRepository userRepository,
         ILogisticsDeliveryDataProvider deliveryDataProvider,
         IRouteOptimizer routeOptimizer)
@@ -34,6 +36,7 @@ public sealed class RoutingService : IDeliveryRouteService
         _routeStopRepository = routeStopRepository;
         _vehicleRepository = vehicleRepository;
         _driverRepository = driverRepository;
+        _driverVehicleAssignmentRepository = driverVehicleAssignmentRepository;
         _userRepository = userRepository;
         _deliveryDataProvider = deliveryDataProvider;
         _routeOptimizer = routeOptimizer;
@@ -522,37 +525,55 @@ public sealed class RoutingService : IDeliveryRouteService
             : (await _deliveryDataProvider.GetDeliveriesByCalendarIdsAsync(deliveryCalendarIds))
                 .ToDictionary(d => d.DeliveryCalendarId);
 
-        var vehicles = (await _vehicleRepository.GetAllAsync()).ToDictionary(v => v.Id);
-        var driverIds = routeList
-            .Where(route => route.DriverId.HasValue)
-            .Select(route => route.DriverId!.Value)
+        var vehicleIds = routeList
+            .Where(route => route.VehicleId.HasValue)
+            .Select(route => route.VehicleId!.Value)
+            .Distinct()
+            .ToArray();
+        var vehicles = vehicleIds.Length == 0
+            ? new Dictionary<int, Vehicle>()
+            : (await _vehicleRepository.GetByIdsAsync(vehicleIds)).ToDictionary(vehicle => vehicle.Id);
+        var assignmentsByVehicle = vehicleIds.Length == 0
+            ? new Dictionary<int, DriverVehicleAssignment>()
+            : (await _driverVehicleAssignmentRepository.GetActiveByVehicleIdsAsync(vehicleIds))
+                .GroupBy(assignment => assignment.VehicleId)
+                .ToDictionary(group => group.Key, group => group.OrderByDescending(assignment => assignment.AssignedAt).First());
+        var effectiveDriverIds = routeList
+            .Select(route => GetEffectiveDriverId(route, assignmentsByVehicle))
+            .Where(driverId => driverId.HasValue)
+            .Select(driverId => driverId!.Value)
             .Distinct()
             .ToHashSet();
-        var drivers = driverIds.Count == 0
+        var drivers = effectiveDriverIds.Count == 0
             ? new Dictionary<int, DriverDisplay>()
-            : await BuildDriverDisplayLookupAsync(driverIds);
+            : await BuildDriverDisplayLookupAsync(effectiveDriverIds);
 
         return routeList
             .OrderBy(r => r.Name)
-            .Select(route => new DeliveryRouteDto
+            .Select(route =>
             {
-                Id = route.Id,
-                Name = route.Name,
-                RouteDate = route.RouteDate,
-                TotalDistanceKm = route.TotalDistanceKm,
-                Status = route.Status.ToString(),
-                DriverId = route.DriverId,
-                DriverName = route.DriverId.HasValue && drivers.TryGetValue(route.DriverId.Value, out var driver)
-                    ? driver.FullName
-                    : null,
-                VehicleId = route.VehicleId,
-                VehicleRegistration = route.VehicleId.HasValue && vehicles.TryGetValue(route.VehicleId.Value, out var vehicle)
-                    ? vehicle.RegistrationNumber
-                    : null,
-                Stops = route.Stops
-                    .OrderBy(s => s.SequenceNumber)
-                    .Select(stop => MapStop(stop, deliveries))
-                    .ToList(),
+                var effectiveDriverId = GetEffectiveDriverId(route, assignmentsByVehicle);
+
+                return new DeliveryRouteDto
+                {
+                    Id = route.Id,
+                    Name = route.Name,
+                    RouteDate = route.RouteDate,
+                    TotalDistanceKm = route.TotalDistanceKm,
+                    Status = route.Status.ToString(),
+                    DriverId = effectiveDriverId,
+                    DriverName = effectiveDriverId.HasValue && drivers.TryGetValue(effectiveDriverId.Value, out var driver)
+                        ? driver.FullName
+                        : null,
+                    VehicleId = route.VehicleId,
+                    VehicleRegistration = route.VehicleId.HasValue && vehicles.TryGetValue(route.VehicleId.Value, out var vehicle)
+                        ? vehicle.RegistrationNumber
+                        : null,
+                    Stops = route.Stops
+                        .OrderBy(s => s.SequenceNumber)
+                        .Select(stop => MapStop(stop, deliveries))
+                        .ToList(),
+                };
             })
             .ToList();
     }
@@ -575,10 +596,9 @@ public sealed class RoutingService : IDeliveryRouteService
 
     private async Task<Dictionary<int, DriverDisplay>> BuildDriverDisplayLookupAsync(IReadOnlySet<int> driverIds)
     {
-        var drivers = (await _driverRepository.GetAllAsync())
-            .Where(driver => driverIds.Contains(driver.Id))
+        var drivers = (await _driverRepository.GetByIdsAsync(driverIds.ToArray()))
             .ToDictionary(driver => driver.Id);
-        var users = (await _userRepository.GetAllAsync())
+        var users = (await _userRepository.GetByIdsAsync(drivers.Values.Select(driver => driver.UserId).ToArray()))
             .ToDictionary(user => user.Id);
 
         return drivers
@@ -594,6 +614,19 @@ public sealed class RoutingService : IDeliveryRouteService
                     new DriverDisplay(string.IsNullOrWhiteSpace(fullName) ? $"Kierowca #{pair.Key}" : fullName));
             })
             .ToDictionary(pair => pair.Key, pair => pair.Value);
+    }
+
+    private static int? GetEffectiveDriverId(
+        DeliveryRoute route,
+        IReadOnlyDictionary<int, DriverVehicleAssignment> assignmentsByVehicle)
+    {
+        if (route.VehicleId.HasValue &&
+            assignmentsByVehicle.TryGetValue(route.VehicleId.Value, out var assignment))
+        {
+            return assignment.DriverId;
+        }
+
+        return route.DriverId;
     }
 
     private async Task<double> CalculateRouteDistanceAsync(IEnumerable<DeliveryRouteStop> stops)

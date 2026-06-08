@@ -24,6 +24,30 @@ public sealed class UserRepository : BaseRepository<User>, IUserRepository
         return count > 0;
     }
 
+    public async Task<IReadOnlyList<User>> GetByIdsAsync(IReadOnlyCollection<int> userIds)
+    {
+        var ids = userIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+
+        if (ids.Length == 0)
+        {
+            return Array.Empty<User>();
+        }
+
+        using var db = Factory.CreateConnection();
+        const string sql = """
+            SELECT *
+            FROM [Users]
+            WHERE [Id] IN @Ids
+            ORDER BY [LastName], [FirstName], [Id];
+            """;
+
+        var users = await db.QueryAsync<User>(sql, new { Ids = ids });
+        return users.ToList();
+    }
+
     public async Task<IReadOnlyList<User>> GetByRolesAsync(IEnumerable<string> roles)
     {
         using var db = Factory.CreateConnection();
