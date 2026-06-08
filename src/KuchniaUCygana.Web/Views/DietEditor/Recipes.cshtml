@@ -15,13 +15,67 @@
     };
     var allergenOptions = new List<SelectListItem> { new("Wszystkie", "", !filter.AllergenId.HasValue) };
     allergenOptions.AddRange(allergens.Select(a => new SelectListItem(a.Name, a.Id.ToString(), filter.AllergenId == a.Id)));
+    var items = Model.Items;
+    var currentPageCount = items.Count;
+    var publishedCount = items.Count(component => string.Equals(component.LatestVersionStatus, "Published", StringComparison.OrdinalIgnoreCase));
+    var missingCount = items.Count(component => component.HasPublicationGaps || !component.LatestVersionId.HasValue);
+    var hasActiveFilters = !string.IsNullOrWhiteSpace(filter.Query)
+        || filter.CategoryId.HasValue
+        || !string.IsNullOrWhiteSpace(filter.VersionStatus)
+        || filter.AllergenId.HasValue
+        || filter.MissingPublicationData;
 }
 
 <div class="row row-cards">
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="subheader">Wyniki</div>
+                <div class="h1 mb-2 mt-1">@Model.TotalCount</div>
+                <div class="text-secondary small">Skladowe pasujace do filtrow</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="subheader">Na stronie</div>
+                <div class="h1 mb-2 mt-1">@currentPageCount</div>
+                <div class="text-secondary small">Widoczne rekordy listy</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="subheader">Opublikowane</div>
+                <div class="h1 mb-2 mt-1 text-success">@publishedCount</div>
+                <div class="text-secondary small">Na aktualnej stronie</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="subheader">Braki</div>
+                <div class="h1 mb-2 mt-1 text-warning">@missingCount</div>
+                <div class="text-secondary small">Braki publikacji lub wersji</div>
+            </div>
+        </div>
+    </div>
+
     <div class="col-12">
         <div class="card card-premium">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h3 class="card-title">Przepisy-skladowe</h3>
+                <button type="button"
+                        class="btn btn-outline-primary"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#newComponentForm"
+                        aria-expanded="false"
+                        aria-controls="newComponentForm">
+                    Nowa skladowa
+                </button>
             </div>
             <div class="card-body">
                 <form method="get" asp-controller="DietEditor" asp-action="Recipes" class="row g-3 align-items-end">
@@ -65,6 +119,39 @@
                     </div>
                 </form>
             </div>
+            <div id="newComponentForm" class="collapse">
+                <div class="card-body border-top">
+                    <form asp-controller="RecipeComponents" asp-action="Create" method="post" class="row g-2 align-items-end">
+                    @Html.AntiForgeryToken()
+                    <div class="col-md-4">
+                        <label class="form-label">Nazwa</label>
+                        <input name="Name" class="form-control" required maxlength="200" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Kategoria</label>
+                        <input id="newComponentCategorySearch" type="search" class="form-control mb-1" placeholder="Szukaj kategorii" autocomplete="off" />
+                        <select id="newComponentCategory" name="CategoryId" class="form-select" data-placeholder="Bez kategorii">
+                            <option value="">Bez kategorii</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Czas min</label>
+                        <input name="PreparationTimeMinutes" type="number" min="0" value="0" class="form-control" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Opis</label>
+                        <input name="Description" class="form-control" maxlength="2000" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Zdjecie URL</label>
+                        <input name="ImageUrl" class="form-control" maxlength="500" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Utworz</button>
+                    </div>
+                    </form>
+                </div>
+            </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
                     <thead>
@@ -79,15 +166,36 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @if (!Model.Items.Any())
+                        @if (!items.Any())
                         {
                             <tr>
-                                <td colspan="7" class="text-center text-secondary py-4">Brak skladowych dla wybranych filtrow.</td>
+                                <td colspan="7">
+                                    <div class="empty py-5">
+                                        <div class="empty-title">Brak skladowych dla wybranych filtrow.</div>
+                                        <p class="empty-subtitle text-secondary">
+                                            Zmien kryteria wyszukiwania albo dodaj pierwsza skladowa do katalogu.
+                                        </p>
+                                        <div class="empty-action btn-list justify-content-center">
+                                            @if (hasActiveFilters)
+                                            {
+                                                <a asp-controller="DietEditor" asp-action="Recipes" class="btn btn-outline-secondary">Wyczysc filtry</a>
+                                            }
+                                            <button type="button"
+                                                    class="btn btn-primary"
+                                                    data-bs-toggle="collapse"
+                                                    data-bs-target="#newComponentForm"
+                                                    aria-expanded="false"
+                                                    aria-controls="newComponentForm">
+                                                Dodaj skladowa
+                                            </button>
+                                        </div>
+                                    </div>
+                                </td>
                             </tr>
                         }
                         else
                         {
-                            foreach (var component in Model.Items)
+                            foreach (var component in items)
                             {
                                 <tr>
                                     <td>
@@ -155,45 +263,6 @@
                        asp-route-PageSize="@Model.PageSize"
                        class="btn btn-outline-secondary @(Model.Page >= Model.TotalPages ? "disabled" : string.Empty)">Nastepna</a>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12">
-        <div class="card card-premium">
-            <div class="card-header">
-                <h3 class="card-title">Nowa skladowa</h3>
-            </div>
-            <div class="card-body">
-                <form asp-controller="RecipeComponents" asp-action="Create" method="post" class="row g-3">
-                    @Html.AntiForgeryToken()
-                    <div class="col-md-4">
-                        <label class="form-label">Nazwa</label>
-                        <input name="Name" class="form-control" required maxlength="200" />
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Kategoria</label>
-                        <input id="newComponentCategorySearch" type="search" class="form-control mb-1" placeholder="Szukaj kategorii" autocomplete="off" />
-                        <select id="newComponentCategory" name="CategoryId" class="form-select" data-placeholder="Bez kategorii">
-                            <option value="">Bez kategorii</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Czas min</label>
-                        <input name="PreparationTimeMinutes" type="number" min="0" value="0" class="form-control" />
-                    </div>
-                    <div class="col-md-5">
-                        <label class="form-label">Opis</label>
-                        <input name="Description" class="form-control" maxlength="2000" />
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Zdjecie URL</label>
-                        <input name="ImageUrl" class="form-control" maxlength="500" />
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">Utworz</button>
-                    </div>
-                </form>
             </div>
         </div>
     </div>

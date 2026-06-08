@@ -1,6 +1,7 @@
 @{
     var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
     var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
+    var activeSection = StaffNavigationCatalog.FindSection(controller, action, User);
 
     string ActiveLink(StaffNavItem item)
     {
@@ -9,17 +10,17 @@
 
     string ActiveGroup(StaffNavSection section)
     {
-        return section.IsActive(controller) ? "active" : string.Empty;
+        return activeSection?.Key == section.Key ? "active" : string.Empty;
     }
 
     string OpenGroup(StaffNavSection section)
     {
-        return section.IsActive(controller) ? "show" : string.Empty;
+        return activeSection?.Key == section.Key ? "show" : string.Empty;
     }
 
     string Expanded(StaffNavSection section)
     {
-        return section.IsActive(controller) ? "true" : "false";
+        return activeSection?.Key == section.Key ? "true" : "false";
     }
 
     var visibleSections = StaffNavigationCatalog.VisibleSections(User);
@@ -32,7 +33,7 @@
         {
             var item = navSection.PrimaryItem;
             <li class="nav-item staff-nav-single @ActiveGroup(navSection)">
-                <a class="nav-link @(navSection.IsActive(controller) ? "active" : string.Empty)" asp-controller="@item.Controller" asp-action="@item.Action">
+                <a class="nav-link @ActiveLink(item)" asp-controller="@item.Controller" asp-action="@item.Action">
                     <span class="nav-link-icon d-md-none d-lg-inline-block staff-nav-icon">@Html.Raw(StaffIconCatalog.Get(item.Icon))</span>
                     <span class="nav-link-title">@navSection.Label</span>
                 </a>

@@ -152,10 +152,14 @@ public sealed class ProductionService : IProductionService
         return dashboard;
     }
 
-    public async Task<M2PlanOverviewDto> GetM2PlanOverviewAsync(DateOnly startDate, int days)
+    public async Task<ProductionM2PlanOverviewDto> GetM2PlanOverviewAsync(ProductionM2PlanFilterDto filter)
     {
+        var startDate = filter.StartDate == default
+            ? DateOnly.FromDateTime(DateTime.Today)
+            : filter.StartDate;
+        var days = filter.Days;
         var normalizedDays = Math.Clamp(days <= 0 ? 7 : days, 1, 31);
-        var overview = new M2PlanOverviewDto
+        var overview = new ProductionM2PlanOverviewDto
         {
             StartDate = startDate,
             TotalDays = normalizedDays,
@@ -170,7 +174,7 @@ public sealed class ProductionService : IProductionService
                 ? new List<ProductionPlanItem>()
                 : (await _planRepository.GetPlanItemsAsync(productionPlan.Id)).ToList();
 
-            var day = new M2PlanOverviewDayDto
+            var day = new ProductionM2PlanDayDto
             {
                 PlanDate = planDate,
                 DietMenuPlanId = snapshot?.DietMenuPlanId,
@@ -189,32 +193,55 @@ public sealed class ProductionService : IProductionService
                 foreach (var snapshotItem in snapshot.Items
                     .OrderBy(item => item.PlanDate)
                     .ThenBy(item => item.SortOrder)
-                    .ThenBy(item => item.DietMenuPlanItemId))
+                .ThenBy(item => item.DietMenuPlanItemId))
                 {
                     var productionItem = FindProductionItemForSnapshotItem(productionItems, snapshotItem);
                     var freshSnapshot = ProductionSnapshotPayloadFactory.Create(snapshotItem);
+                    var itemAlerts = day.Alerts
+                        .Where(alert => AlertMatchesSnapshotItem(alert, snapshotItem))
+                        .ToList();
+                    var missingDetails = BuildM2PlanMissingDetails(snapshotItem).ToList();
                     var hasProductionSnapshot = productionItem is not null
                         && !string.IsNullOrWhiteSpace(productionItem.M2SnapshotJson);
                     var isCurrent = hasProductionSnapshot
                         && string.Equals(productionItem!.M2SnapshotHash, freshSnapshot.Hash, StringComparison.OrdinalIgnoreCase);
-                    day.Items.Add(new M2PlanOverviewItemDto
+                    day.Items.Add(new ProductionM2PlanItemDto
                     {
                         DietMenuPlanItemId = snapshotItem.DietMenuPlanItemId,
                         MealId = snapshotItem.MealId,
                         MealVariantId = snapshotItem.MealVariantId,
                         MealVariantName = snapshotItem.MealVariantName,
                         MealName = snapshotItem.MealName,
+                        CategoryName = snapshotItem.CategoryName,
                         DietVariantId = snapshotItem.DietVariantId,
+                        DietName = snapshotItem.DietName,
+                        DietVariantName = snapshotItem.DietVariantName,
                         MealSlot = snapshotItem.MealSlot,
                         SortOrder = snapshotItem.SortOrder,
                         ServingMultiplier = snapshotItem.ServingMultiplier,
+                        RawWeightGrams = snapshotItem.RawWeightGrams,
+                        CookedWeightGrams = snapshotItem.CookedWeightGrams,
+                        FinalWeightGrams = snapshotItem.FinalWeightGrams,
+                        FinalWeightAfterMultiplierGrams = snapshotItem.FinalWeightAfterMultiplierGrams,
                         CompletenessStatus = snapshotItem.CompletenessStatus,
                         IsCompleteForProduction = snapshotItem.IsCompleteForProduction,
                         ComponentCount = snapshotItem.Components.Count,
+                        IngredientCount = snapshotItem.AggregateIngredients.Count > 0
+                            ? snapshotItem.AggregateIngredients.Count
+                            : snapshotItem.Components.Sum(component => component.Ingredients.Count),
                         PackagingRequirementCount = snapshotItem.PackagingRequirements.Count
                             + snapshotItem.Components.Sum(component => component.PackagingRequirements.Count),
                         ValidationWarningCount = snapshotItem.ValidationWarnings.Count,
+                        ComponentNames = snapshotItem.Components
+                            .OrderBy(component => component.SortOrder)
+                            .Select(component => $"{component.ComponentName} v{component.VersionNumber}")
+                            .Distinct()
+                            .ToList(),
+                        IngredientNames = BuildM2PlanIngredientNames(snapshotItem).ToList(),
+                        PackagingNames = BuildM2PlanPackagingNames(snapshotItem).ToList(),
                         ValidationWarnings = snapshotItem.ValidationWarnings.ToList(),
+                        MissingDetails = missingDetails,
+                        Alerts = itemAlerts,
                         HasProductionSnapshot = hasProductionSnapshot,
                         ProductionPlanItemId = productionItem?.Id,
                         PlannedQuantity = productionItem?.PlannedQuantity,
@@ -249,6 +276,13 @@ public sealed class ProductionService : IProductionService
 
         return overview;
     }
+
+    public async Task<M2PlanOverviewDto> GetM2PlanOverviewAsync(DateOnly startDate, int days)
+        => ToLegacyM2PlanOverview(await GetM2PlanOverviewAsync(new ProductionM2PlanFilterDto
+        {
+            StartDate = startDate,
+            Days = days,
+        }));
 
     public async Task<ProductionPlanRefreshResultDto> RefreshProductionPlanFromM2Async(
         DateOnly date,
@@ -922,6 +956,174 @@ public sealed class ProductionService : IProductionService
 
         return blockers.Distinct().ToList();
     }
+
+    private static IEnumerable<string> BuildM2PlanIngredientNames(PublishedDietPlanItemDto snapshotItem)
+    {
+        var ingredients = snapshotItem.AggregateIngredients.Count > 0
+            ? snapshotItem.AggregateIngredients.Select(FormatIngredient)
+            : snapshotItem.Components
+                .SelectMany(component => component.Ingredients)
+                .Select(ingredient => ingredient.IngredientName);
+
+        return ingredients
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value);
+    }
+
+    private static IEnumerable<string> BuildM2PlanPackagingNames(PublishedDietPlanItemDto snapshotItem)
+    {
+        return snapshotItem.PackagingRequirements
+            .Concat(snapshotItem.Components.SelectMany(component => component.PackagingRequirements))
+            .Select(FormatPackaging)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value);
+    }
+
+    private static IEnumerable<string> BuildM2PlanMissingDetails(PublishedDietPlanItemDto snapshotItem)
+    {
+        foreach (var warning in snapshotItem.ValidationWarnings)
+        {
+            yield return warning;
+        }
+
+        foreach (var warning in snapshotItem.Components.SelectMany(component => component.ValidationWarnings))
+        {
+            yield return warning;
+        }
+
+        if (snapshotItem.Components.Count == 0)
+        {
+            yield return "Brak skladowych receptury.";
+        }
+
+        if (snapshotItem.PackagingRequirements.Count == 0
+            && snapshotItem.Components.All(component => component.PackagingRequirements.Count == 0))
+        {
+            yield return "Brak opakowan.";
+        }
+
+        if (!snapshotItem.FinalWeightAfterMultiplierGrams.HasValue
+            && !snapshotItem.FinalWeightGrams.HasValue)
+        {
+            yield return "Brak gramatury.";
+        }
+    }
+
+    private static bool AlertMatchesSnapshotItem(PlanChangeAlertDto alert, PublishedDietPlanItemDto snapshotItem)
+    {
+        if (alert.DietMenuPlanItemId.HasValue)
+        {
+            return alert.DietMenuPlanItemId.Value == snapshotItem.DietMenuPlanItemId;
+        }
+
+        if (alert.MealId.HasValue)
+        {
+            return alert.MealId.Value == snapshotItem.MealId;
+        }
+
+        return false;
+    }
+
+    private static string FormatIngredient(AggregateIngredientDto ingredient)
+    {
+        var name = ingredient.IngredientName;
+        if (ingredient.NetWeightInGrams <= 0)
+        {
+            return name;
+        }
+
+        return $"{name} {ingredient.NetWeightInGrams:0.##} g";
+    }
+
+    private static string FormatPackaging(PackagingRequirementDto packaging)
+    {
+        var name = packaging.ResourceName;
+        if (packaging.Quantity <= 0)
+        {
+            return name;
+        }
+
+        return $"{name} x {packaging.Quantity:0.##} {packaging.Unit}".Trim();
+    }
+
+    private static M2PlanOverviewDto ToLegacyM2PlanOverview(ProductionM2PlanOverviewDto source)
+        => new()
+        {
+            StartDate = source.StartDate,
+            TotalDays = source.TotalDays,
+            PublishedDays = source.PublishedDays,
+            MissingPublishedDays = source.MissingPublishedDays,
+            TotalPlanItems = source.TotalPlanItems,
+            SnapshotItemCount = source.SnapshotItemCount,
+            MissingSnapshotItemCount = source.MissingSnapshotItemCount,
+            AlertCount = source.AlertCount,
+            UnacknowledgedAlertCount = source.UnacknowledgedAlertCount,
+            Days = source.Days.Select(ToLegacyM2PlanDay).ToList(),
+        };
+
+    private static M2PlanOverviewDayDto ToLegacyM2PlanDay(ProductionM2PlanDayDto source)
+        => new()
+        {
+            PlanDate = source.PlanDate,
+            DietMenuPlanId = source.DietMenuPlanId,
+            PlanStatus = source.PlanStatus,
+            IsPublished = source.IsPublished,
+            PublishedAt = source.PublishedAt,
+            PublishedBy = source.PublishedBy,
+            ProductionPlanId = source.ProductionPlanId,
+            TotalItems = source.TotalItems,
+            SnapshotItemCount = source.SnapshotItemCount,
+            MissingSnapshotItemCount = source.MissingSnapshotItemCount,
+            AlertCount = source.AlertCount,
+            UnacknowledgedAlertCount = source.UnacknowledgedAlertCount,
+            Alerts = source.Alerts.ToList(),
+            Items = source.Items.Select(ToLegacyM2PlanItem).ToList(),
+        };
+
+    private static M2PlanOverviewItemDto ToLegacyM2PlanItem(ProductionM2PlanItemDto source)
+        => new()
+        {
+            DietMenuPlanItemId = source.DietMenuPlanItemId,
+            MealId = source.MealId,
+            MealVariantId = source.MealVariantId,
+            MealVariantName = source.MealVariantName,
+            MealName = source.MealName,
+            CategoryName = source.CategoryName,
+            DietVariantId = source.DietVariantId,
+            DietName = source.DietName,
+            DietVariantName = source.DietVariantName,
+            MealSlot = source.MealSlot,
+            SortOrder = source.SortOrder,
+            ServingMultiplier = source.ServingMultiplier,
+            RawWeightGrams = source.RawWeightGrams,
+            CookedWeightGrams = source.CookedWeightGrams,
+            FinalWeightGrams = source.FinalWeightGrams,
+            FinalWeightAfterMultiplierGrams = source.FinalWeightAfterMultiplierGrams,
+            CompletenessStatus = source.CompletenessStatus,
+            IsCompleteForProduction = source.IsCompleteForProduction,
+            ComponentCount = source.ComponentCount,
+            IngredientCount = source.IngredientCount,
+            PackagingRequirementCount = source.PackagingRequirementCount,
+            ValidationWarningCount = source.ValidationWarningCount,
+            ComponentNames = source.ComponentNames.ToList(),
+            IngredientNames = source.IngredientNames.ToList(),
+            PackagingNames = source.PackagingNames.ToList(),
+            ValidationWarnings = source.ValidationWarnings.ToList(),
+            MissingDetails = source.MissingDetails.ToList(),
+            Alerts = source.Alerts.ToList(),
+            HasProductionSnapshot = source.HasProductionSnapshot,
+            ProductionPlanItemId = source.ProductionPlanItemId,
+            PlannedQuantity = source.PlannedQuantity,
+            ProductionStatus = source.ProductionStatus,
+            SnapshotHash = source.SnapshotHash,
+            FreshSnapshotHash = source.FreshSnapshotHash,
+            IsProductionSnapshotCurrent = source.IsProductionSnapshotCurrent,
+            NeedsRefresh = source.NeedsRefresh,
+            CanRefresh = source.CanRefresh,
+            RefreshBlockers = source.RefreshBlockers.ToList(),
+        };
 
     private static bool IsSameProductionSnapshotSet(
         IReadOnlyCollection<ProductionPlanItem> existingItems,

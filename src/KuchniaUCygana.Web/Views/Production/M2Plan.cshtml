@@ -1,4 +1,4 @@
-@model KuchniaUCygana.Application.DTOs.Production.M2PlanOverviewDto
+@model KuchniaUCygana.Application.DTOs.Production.ProductionM2PlanOverviewDto
 @{
     Layout = "_LayoutStaff";
     ViewData["Title"] = "Plan z M2";
@@ -29,6 +29,26 @@
             "Warning" => "warning",
             _ => "info"
         };
+
+    string WeightText(KuchniaUCygana.Application.DTOs.Production.ProductionM2PlanItemDto item)
+    {
+        var weight = item.FinalWeightAfterMultiplierGrams
+            ?? item.FinalWeightGrams
+            ?? item.CookedWeightGrams
+            ?? item.RawWeightGrams;
+
+        return weight.HasValue ? $"{weight.Value:0.##} g" : "-";
+    }
+
+    string PreviewList(IEnumerable<string> values, int limit = 3)
+    {
+        var list = values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Take(limit)
+            .ToList();
+
+        return list.Count == 0 ? "-" : string.Join(", ", list);
+    }
 }
 
 <div class="card card-premium mb-4">
@@ -154,7 +174,8 @@
                 <thead>
                     <tr>
                         <th>Slot</th>
-                        <th>Danie / wariant</th>
+                        <th>Wariant diety</th>
+                        <th>Danie / wariant dania</th>
                         <th>Kompletność</th>
                         <th class="text-end">Składowe</th>
                         <th class="text-end">Opakowania</th>
@@ -168,7 +189,7 @@
                     @if (day.Items.Count == 0)
                     {
                         <tr>
-                            <td colspan="9" class="text-center text-secondary py-4">Brak pozycji planu dla tego dnia.</td>
+                            <td colspan="10" class="text-center text-secondary py-4">Brak pozycji planu dla tego dnia.</td>
                         </tr>
                     }
                     @foreach (var item in day.Items)
@@ -176,7 +197,13 @@
                         <tr>
                             <td>@item.MealSlot</td>
                             <td>
+                                <div>@(string.IsNullOrWhiteSpace(item.DietVariantLabel) ? $"Wariant #{item.DietVariantId}" : item.DietVariantLabel)</div>
+                                <div class="small text-secondary">ID @item.DietVariantId</div>
+                            </td>
+                            <td>
                                 <div class="fw-bold">@item.MealName</div>
+                                <div class="small text-secondary">@item.CategoryName</div>
+                                <div class="small text-secondary">Gramatura: @WeightText(item)</div>
                                 <div class="small text-secondary">@(item.MealVariantName ?? "wariant domyślny") · x @item.ServingMultiplier.ToString("0.##")</div>
                             </td>
                             <td>
@@ -185,9 +212,23 @@
                                 {
                                     <div class="small text-warning">@string.Join(", ", item.ValidationWarnings.Take(2))</div>
                                 }
+                                @if (item.MissingDetails.Count > 0)
+                                {
+                                    <div class="small text-warning mt-1">@PreviewList(item.MissingDetails, 2)</div>
+                                }
+                                @if (item.Alerts.Count > 0)
+                                {
+                                    <div class="small text-danger mt-1">@item.Alerts.Count alertow: @PreviewList(item.Alerts.Select(alert => alert.Message), 2)</div>
+                                }
                             </td>
-                            <td class="text-end">@item.ComponentCount</td>
-                            <td class="text-end">@item.PackagingRequirementCount</td>
+                            <td>
+                                <div><span class="badge bg-blue-lt">@item.ComponentCount skl.</span> <span class="badge bg-secondary-lt">@item.IngredientCount poz.</span></div>
+                                <div class="small text-secondary mt-1">@PreviewList(item.IngredientNames)</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-purple-lt">@item.PackagingRequirementCount</span>
+                                <div class="small text-secondary mt-1">@PreviewList(item.PackagingNames)</div>
+                            </td>
                             <td>
                                 <span class="badge bg-@(item.HasProductionSnapshot ? "success" : "secondary")-lt">
                                     @(item.HasProductionSnapshot ? "odebrany" : "brak")

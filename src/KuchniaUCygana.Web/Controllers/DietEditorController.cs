@@ -84,16 +84,9 @@ public sealed class DietEditorController : Controller
 
     [HttpGet("recipe")]
     [HttpGet("recipe/{mealId:int}")]
-    public IActionResult Recipe(int? mealId, int? componentVersionId)
+    public IActionResult Recipe()
     {
-        ViewData["Title"] = "Edycja przepisu";
-        ViewData["Section"] = "Diety";
-        ViewData["Description"] = mealId.HasValue
-            ? componentVersionId.HasValue
-                ? $"Szkielet edycji przepisu dla posilku #{mealId.Value}, wersja skladowej #{componentVersionId.Value}."
-                : $"Szkielet edycji przepisu dla posilku #{mealId.Value}."
-            : "Wybierz posilek, aby przejsc do receptury.";
-        return View();
+        return RedirectToAction(nameof(Recipes));
     }
 
     [HttpGet("{id:int}")]

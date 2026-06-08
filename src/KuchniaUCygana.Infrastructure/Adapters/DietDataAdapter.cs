@@ -65,6 +65,8 @@ public sealed class DietDataAdapter : IDietDataProvider
                 m.[CategoryId],
                 c.[Name] AS [CategoryName],
                 i.[DietVariantId],
+                d.[Name] AS [DietName],
+                dv.[Name] AS [DietVariantName],
                 i.[MealVariantId],
                 mv.[Name] AS [MealVariantName],
                 mv.[VariantType] AS [MealVariantType],
@@ -92,6 +94,8 @@ public sealed class DietDataAdapter : IDietDataProvider
                 COALESCE(mv.[AllergensApproved], CAST(0 AS bit)) AS [VariantAllergensApproved]
             FROM [DietMenuPlans] p
             INNER JOIN [DietMenuPlanItems] i ON i.[DietMenuPlanId] = p.[Id]
+            INNER JOIN [DietVariants] dv ON dv.[Id] = i.[DietVariantId] AND dv.[IsDeleted] = 0
+            INNER JOIN [Diets] d ON d.[Id] = dv.[DietId] AND d.[IsDeleted] = 0
             INNER JOIN [Meals] m ON m.[Id] = i.[MealId]
             LEFT JOIN [MealVariants] mv ON mv.[Id] = i.[MealVariantId] AND mv.[IsDeleted] = 0
             LEFT JOIN [Categories] c ON c.[Id] = m.[CategoryId]
@@ -199,6 +203,8 @@ public sealed class DietDataAdapter : IDietDataProvider
                 CategoryId = row.CategoryId,
                 CategoryName = row.CategoryName,
                 DietVariantId = row.DietVariantId,
+                DietName = row.DietName,
+                DietVariantName = row.DietVariantName,
                 MealSlot = row.MealSlot,
                 SortOrder = row.SortOrder,
                 ServingMultiplier = row.ServingMultiplier,
@@ -1469,6 +1475,10 @@ public sealed class DietDataAdapter : IDietDataProvider
         public string? CategoryName { get; set; }
 
         public int DietVariantId { get; set; }
+
+        public string? DietName { get; set; }
+
+        public string? DietVariantName { get; set; }
 
         public string MealSlot { get; set; } = string.Empty;
 

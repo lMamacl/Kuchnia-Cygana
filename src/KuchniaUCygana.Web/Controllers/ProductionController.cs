@@ -58,7 +58,11 @@ public sealed class ProductionController : Controller
         }
 
         var dashboard = await productionService.GetKitchenDashboardAsync(filter);
-        var m2PlanOverview = await productionService.GetM2PlanOverviewAsync(filter.Date, 7);
+        var m2PlanOverview = await productionService.GetM2PlanOverviewAsync(new ProductionM2PlanFilterDto
+        {
+            StartDate = filter.Date,
+            Days = 7,
+        });
 
         var viewModel = new ProductionDashboardViewModel
         {
@@ -136,14 +140,14 @@ public sealed class ProductionController : Controller
     }
 
     [HttpGet("m2-plan")]
-    public async Task<IActionResult> M2Plan([FromQuery] M2PlanOverviewFilterDto filter)
+    public async Task<IActionResult> M2Plan([FromQuery] ProductionM2PlanFilterDto filter)
     {
         if (filter.StartDate == default)
         {
             filter.StartDate = DateOnly.FromDateTime(DateTime.Today);
         }
 
-        var overview = await productionService.GetM2PlanOverviewAsync(filter.StartDate, filter.Days);
+        var overview = await productionService.GetM2PlanOverviewAsync(filter);
         return View(overview);
     }
 

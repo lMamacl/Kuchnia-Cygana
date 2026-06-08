@@ -3,7 +3,7 @@
     var description = ViewData["Description"]?.ToString() ?? "Widok szkieletowy gotowy do podpiecia komponentow.";
     var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
     var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
-    var activeSection = StaffNavigationCatalog.FindSection(controller, User);
+    var activeSection = StaffNavigationCatalog.FindSection(controller, action, User);
 }
 
 <div class="row row-cards">

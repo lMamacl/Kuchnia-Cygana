@@ -39,6 +39,12 @@ public sealed class PublishedDietPlanItemDto
 
     public int DietVariantId { get; set; }
 
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? DietName { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? DietVariantName { get; set; }
+
     public string MealSlot { get; set; } = string.Empty;
 
     public int SortOrder { get; set; }

@@ -20,5 +20,5 @@ public sealed class ProductionDashboardViewModel
 
     public KitchenDashboardDto Dashboard { get; set; } = new();
 
-    public M2PlanOverviewDto? M2PlanOverview { get; set; }
+    public ProductionM2PlanOverviewDto? M2PlanOverview { get; set; }
 }

@@ -9,7 +9,8 @@ public sealed record StaffNavItem(
     string Action,
     string Icon,
     string Description,
-    string Keywords = "")
+    string Keywords = "",
+    string[]? AllowedRoles = null)
 {
     public bool Matches(string? controller, string? action)
     {
@@ -20,6 +21,12 @@ public sealed record StaffNavItem(
     public bool MatchesController(string? controller)
     {
         return string.Equals(this.Controller, controller, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public bool CanAccess(ClaimsPrincipal user, IReadOnlyCollection<string> sectionRoles)
+    {
+        var roles = this.AllowedRoles ?? sectionRoles;
+        return roles.Any(user.IsInRole);
     }
 }
 
@@ -36,6 +43,11 @@ public sealed record StaffNavSection(
     public bool IsActive(string? controller)
     {
         return this.Items.Any(item => item.MatchesController(controller));
+    }
+
+    public bool IsActive(string? controller, string? action)
+    {
+        return this.Items.Any(item => item.Matches(controller, action));
     }
 }
 
@@ -63,8 +75,7 @@ public static class StaffNavigationCatalog
                 new("Pulpit kuchni", "Production", "Index", "kitchen", "Zbiorczy ekran działu kuchni.", "produkcja kuchnia plan"),
                 new("Generuj plan", "Production", "Generate", "wand", "Przygotowanie dziennego planu produkcji.", "generowanie planu produkcji"),
                 new("Plan dnia", "Production", "Plan", "calendar", "Podgląd planu produkcyjnego.", "plan dnia produkcji"),
-                new("Plan M2 7 dni", "Production", "M2Plan", "calendar", "Podgląd opublikowanego planu M2 i aktualności snapshotów.", "plan m2 7 dni snapshot refresh"),
-                new("Zapotrzebowanie 7 dni", "Production", "WarehouseDemand", "report", "Agregacja składników i opakowań z planu M2 oraz zamówień M1.", "zapotrzebowanie magazyn 7 dni m2 m1"),
+                new("Plan z M2", "Production", "M2Plan", "calendar", "Podgląd opublikowanego planu M2 i aktualności snapshotów.", "plan m2 7 dni snapshot refresh", [UserRoles.Kitchen, UserRoles.KitchenManager, UserRoles.Admin]),
                 new("Karty gotowania", "Production", "CookingCards", "clipboard", "Lista kart gotowania do realizacji.", "karty gotowania receptury"),
                 new("Karta gotowania", "Production", "CookingCard", "clipboard-check", "Podgląd pojedynczej karty gotowania.", "karta gotowania szczegóły"),
                 new("Ponowne przygotowanie", "Production", "Rework", "alert", "Zadania kuchni z awarii kompletacji.", "ponowne przygotowanie awarie kompletacja"),
@@ -87,6 +98,8 @@ public static class StaffNavigationCatalog
                 new("Temperatury HACCP", "Warehouse", "Temperatures", "temperature", "Monitoring temperatur HACCP.", "temperatury haccp"),
                 new("Raport HACCP", "Warehouse", "HaccpReport", "report", "Raport kontrolny HACCP.", "raport haccp"),
                 new("Lokalizacje HACCP", "Warehouse", "HaccpLocations", "map", "Punkty pomiarowe HACCP i przypisane kategorie.", "lokalizacje haccp punkty pomiarowe"),
+                new("Plan z M2", "Production", "M2Plan", "calendar", "Podgląd opublikowanego planu M2 z perspektywy magazynu.", "plan m2 7 dni snapshot refresh", [UserRoles.Warehouse, UserRoles.WarehouseManager]),
+                new("Zapotrzebowanie 7 dni", "Production", "WarehouseDemand", "report", "Agregacja składników i opakowań z planu M2 oraz zamówień M1.", "zapotrzebowanie magazyn 7 dni m2 m1", [UserRoles.Warehouse, UserRoles.WarehouseManager, UserRoles.Admin]),
             ]),
         new(
             "ingredients",
@@ -236,7 +249,33 @@ public static class StaffNavigationCatalog
 
     public static IReadOnlyList<StaffNavSection> VisibleSections(ClaimsPrincipal user)
     {
-        return Sections.Where(section => CanAccess(user, section)).ToArray();
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            return [];
+        }
+
+        var visibleRouteKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visibleSections = new List<StaffNavSection>();
+
+        foreach (var section in Sections)
+        {
+            if (!CanAccess(user, section) || !SectionRoles.TryGetValue(section.Key, out var sectionRoles))
+            {
+                continue;
+            }
+
+            var visibleItems = section.Items
+                .Where(item => item.CanAccess(user, sectionRoles))
+                .Where(item => visibleRouteKeys.Add(GetRouteKey(item)))
+                .ToArray();
+
+            if (visibleItems.Length > 0)
+            {
+                visibleSections.Add(section with { Items = visibleItems });
+            }
+        }
+
+        return visibleSections;
     }
 
     public static bool CanAccess(ClaimsPrincipal user, StaffNavSection section)
@@ -257,7 +296,22 @@ public static class StaffNavigationCatalog
 
     public static StaffNavSection? FindSection(string? controller, ClaimsPrincipal user)
     {
-        return VisibleSections(user).FirstOrDefault(section => section.IsActive(controller));
+        return FindSection(controller, null, user);
+    }
+
+    public static StaffNavSection? FindSection(string? controller, string? action, ClaimsPrincipal user)
+    {
+        var sections = VisibleSections(user);
+        if (!string.IsNullOrWhiteSpace(action))
+        {
+            var exactSection = sections.FirstOrDefault(section => section.IsActive(controller, action));
+            if (exactSection is not null)
+            {
+                return exactSection;
+            }
+        }
+
+        return sections.FirstOrDefault(section => section.IsActive(controller));
     }
 
     public static StaffNavItem? FindItem(string? controller, string? action)
@@ -271,4 +325,7 @@ public static class StaffNavigationCatalog
             .SelectMany(section => section.Items)
             .FirstOrDefault(item => item.Matches(controller, action));
     }
+
+    private static string GetRouteKey(StaffNavItem item)
+        => $"{item.Controller}:{item.Action}";
 }

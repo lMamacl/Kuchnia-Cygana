@@ -3,6 +3,26 @@
 Data: 2026-06-07  
 Cel: rozdzielić prace, które możemy wdrażać od razu, od prac zależnych od domknięcia M2 przez Gabriela.
 
+## 0A. Aktualizacja 08.06.2026 — checklista stanu
+
+Na koniec obecnego etapu dokument traktujemy jako checklistę weryfikacyjną, a nie listę nowych dużych zadań. Zakres P0 został domknięty w najważniejszych miejscach:
+
+- [x] `/meals` działa jako katalog z server-side search, filtrami, paginacją i statusem kompletności.
+- [x] `/diet-editor/recipes` ma dopracowany widok V1: metryki, lepszy empty state i mniej dominujący formularz tworzenia składowej.
+- [x] M1 smoke potwierdza ścieżkę wybór diety -> koszyk -> checkout -> `OrderItems` z referencjami M2.
+- [x] `/production/m2-plan` istnieje jako 7-dniowy podgląd planu M2 dla produkcji.
+- [x] `WarehouseDemandService` V1 agreguje zapotrzebowanie z opłaconych zamówień i snapshotu M2.
+- [x] Etykiety foliowe korzystają ze snapshotu M2 jako źródła danych wariantu.
+- [ ] Weryfikacja końcowa flow M2 -> M1 -> M3 na lokalnym Dockerze po uruchomieniu bazy i aplikacji.
+
+Nie zaczynamy teraz ciężkich rzeczy z sekcji "Czekaj na domknięcie M2":
+
+- trwałych sesji gotowania składowych;
+- pełnego workflow alertów i potwierdzeń;
+- pełnych rezerwacji magazynowych oraz demand 7+ dni.
+
+Priorytet końcowy: weryfikacja, instrukcja smoke i upewnienie się, że przepływ M2 -> M1 -> M3 jest czytelny dla testów ręcznych.
+
 ## 0. Aktualizacja 07.06.2026 — etap 1 i etap 2
 
 Etap 1 został częściowo wykonany w kodzie M3:
@@ -70,10 +90,10 @@ Obecny kod M2/M3 daje wystarczający backbone do pracy operacyjnej V1:
 
 Te braki nie blokują wszystkiego, ale blokują pełny komfort i docelowy Sprint 8:
 
-- `/meals` nie ma jeszcze server-side search, paginacji i filtrów katalogowych.
-- `/diet-editor/meals` jest placeholderem albo wymaga przekierowania.
-- `/diet-editor/recipe` jest placeholderem albo wymaga przekierowania.
-- `/diet-editor/menu-plan/day` używa dużych selectów dla posiłków i wariantów.
+- [x] `/meals` ma już server-side search, paginację i filtry katalogowe.
+- [x] `/diet-editor/meals` przekierowuje na realny katalog.
+- [x] `/diet-editor/recipe` przekierowuje na `/diet-editor/recipes`.
+- [x] `/diet-editor/menu-plan/day` używa lookupów dla posiłków i dociągania wariantów wybranego dania zamiast pełnych selectów katalogu.
 - Widok posiłku pokazuje dane techniczne, ale nie jest jeszcze czytelnym ekranem dietetycznym agregatu.
 - Pełny UX publikacji planu dnia, wyboru wariantów i walidacji braków jest nadal do dopracowania po stronie M2.
 
@@ -95,6 +115,10 @@ M3 ma już fundament:
 To są zadania, które można robić od razu na obecnym stanie M2. Nie wymagają czekania na pełny redesign planu dnia Gabriela.
 
 ### 3.1 Widok posiłków M2/M3-ready
+
+Status 08.06.2026:
+
+- [x] Wykonane jako zakres P0.
 
 Powód:
 
@@ -133,6 +157,10 @@ Priorytet:
 
 ### 3.2 Widok przepisów-składowych
 
+Status 08.06.2026:
+
+- [x] Wykonane jako zakres V1.
+
 Powód:
 
 Przepisy-składowe są już technicznie dobrze zbudowane, ale widok `/diet-editor/recipes` powinien lepiej prowadzić przez braki i status publikacji.
@@ -160,6 +188,10 @@ Priorytet:
 - P0/P1 na jutro.
 
 ### 3.3 Etykiety foliowe M3 ze snapshotu
+
+Status 08.06.2026:
+
+- [x] Wykonane jako spięcie V1 ze snapshotem M2.
 
 Powód:
 
@@ -196,6 +228,11 @@ Priorytet:
 - P0 na jutro.
 
 ### 3.4 Seeder i smoke flow
+
+Status 08.06.2026:
+
+- [x] Dodany smoke M1 dla wyboru diety, koszyka, checkoutu i referencji M2 w `OrderItems`.
+- [ ] Do wykonania ręcznie po stronie lokalnego środowiska: pełny smoke Docker M2 -> M1 -> M3.
 
 Powód:
 
@@ -286,6 +323,10 @@ Można przygotować:
 
 ### 4.2 Pełne sesje gotowania składowych
 
+Status 08.06.2026:
+
+- [ ] Odroczone. Nie zaczynać przed stabilnym kontraktem M2.
+
 Czekamy na:
 
 - stabilny kontrakt składowych;
@@ -306,6 +347,10 @@ Można zrobić teraz:
 
 ### 4.3 Pełne alerty `PlanChangeAlerts`
 
+Status 08.06.2026:
+
+- [ ] Odroczone. Nie zaczynać pełnego workflow acknowledgement i blokad.
+
 Czekamy na:
 
 - realne generowanie alertów przez M2;
@@ -323,6 +368,11 @@ Można przygotować:
 - testy adaptera, jeśli alerty już są w snapshotcie.
 
 ### 4.4 `WarehouseDemandService` 7+ dni
+
+Status 08.06.2026:
+
+- [x] V1 wykonane dla obecnego zapotrzebowania ze snapshotu i opłaconych zamówień.
+- [ ] Pełne rezerwacje, eksport i demand 7+ dni odroczone.
 
 Czekamy na:
 
@@ -364,69 +414,83 @@ Wymóg już teraz:
   - `MealSlot`,
   - `DietVariantId`.
 
-## 5. Kolejność pracy na jutro
+## 5. Końcowa instrukcja weryfikacji flow M2 -> M1 -> M3
 
-### Krok 1: Dokument i scope
+Cel tej sekcji: potwierdzić ręcznie, że wykonane elementy spinają się operacyjnie. To nie jest lista nowych dużych funkcji.
 
-Cel:
+### Krok 1: Przygotowanie środowiska
 
-- Upewnić się, że zespół zgadza się na podział "implementuj teraz" vs "czekaj na M2".
+1. Uruchomić lokalne środowisko Docker z bazą i aplikacją.
+2. Upewnić się, że seed/demo zawiera:
+   - opublikowany plan M2 na minimum jeden dzień;
+   - aktywne dania i warianty dań;
+   - opakowania i składniki magazynowe;
+   - możliwość złożenia zamówienia M1.
+3. Jeśli środowisko było już uruchomione przed zmianą limitu pamięci SQL, odtworzyć kontenery zgodnie z lokalną instrukcją Docker.
 
-Koniec kroku:
+### Krok 2: Weryfikacja M2
 
-- Ten dokument zaakceptowany jako plan roboczy.
+1. Wejść w `/meals`.
+2. Sprawdzić wyszukiwanie, filtry, quick filters i paginację na większym katalogu.
+3. Wejść w `/diet-editor/recipes`.
+4. Sprawdzić metryki nad tabelą, empty state oraz formularz "Nowa składowa".
+5. Wejść w `/diet-editor/menu-plan/day/{date}`.
+6. Wybrać danie przez lookup, dociągnąć warianty tylko wybranego dania i sprawdzić status wariantu przed zapisem.
+7. Upewnić się, że plan dnia można opublikować albo że widoczne są konkretne braki publikacji.
 
-### Krok 2: `/meals` jako katalog produkcyjny
+### Krok 3: Weryfikacja M1
 
-Cel:
+1. Przejść ścieżkę klienta: wybór diety -> koszyk -> checkout.
+2. Upewnić się, że zamówienie jest opłacone lub oznaczone jako gotowe do produkcji zgodnie z obecnym flow.
+3. Sprawdzić w danych, że `OrderItems` mają:
+   - `DietMenuPlanItemId`;
+   - `MealId`;
+   - `MealVariantId`;
+   - `MealSlot`;
+   - `DietVariantId`.
+4. Jeżeli któryś identyfikator jest pusty, traktować to jako blokadę smoke M2 -> M1 -> M3.
 
-- Dodać search/paginację i filtry.
+### Krok 4: Weryfikacja M3
 
-Koniec kroku:
+1. Wejść w `/production/m2-plan`.
+2. Sprawdzić 7-dniowy widok: daty, status publikacji M2, konkretne dania, sloty, warianty diet, warianty dań, gramaturę, składniki, opakowania, alerty i braki.
+3. Wejść w `/production`.
+4. Wygenerować lub odświeżyć plan produkcji, jeżeli aktualny stan na to pozwala.
+5. Sprawdzić, czy pozycje produkcji mają `M2SnapshotJson` i `M2SnapshotHash`.
+6. Wejść w kartę gotowania dla pozycji produkcji.
+7. Potwierdzić, że karta pokazuje dane ze snapshotu: komponenty, składniki, opakowania i instrukcje.
+8. Przejść FEFO i zatwierdzenie gotowania.
+9. Upewnić się, że opakowania są zdejmowane idempotentnie po zatwierdzeniu gotowania.
 
-- `/meals` nadaje się do pracy na dużym katalogu.
-- Placeholder `/diet-editor/meals` nie wprowadza w błąd.
+### Krok 5: Weryfikacja foliowania i pakowania
 
-### Krok 3: `/diet-editor/recipes` UX V1
+1. Wejść w `/production/foil-printing`.
+2. Sprawdzić, czy pudełka do foliowania są widoczne po ugotowaniu i rozliczeniu opakowań.
+3. Wydrukować etykietę foliową.
+4. Upewnić się, że etykieta pokazuje dane wariantu ze snapshotu M2:
+   - nazwę dania;
+   - wariant dania;
+   - gramaturę;
+   - skład;
+   - alergeny;
+   - nutrition;
+   - QR pudełka.
+5. Sprawdzić podgląd ostatniej etykiety z `LabelDataJson`.
+6. Przejść do `/packing`.
+7. Potwierdzić, że pakowanie blokuje pudełko bez etykiety i pozwala spakować pudełko z etykietą.
 
-Cel:
+### Krok 6: Wynik smoke
 
-- Ułatwić pracę na przepisach-składowych bez przebudowy modelu.
+Smoke uznajemy za zaliczony, jeżeli:
 
-Koniec kroku:
+- M2 publikuje plan z konkretnymi daniami i wariantami.
+- M1 zapisuje opłacone zamówienie z referencjami M2.
+- M3 pokazuje `/production/m2-plan` oraz generuje produkcję ze snapshotem.
+- Karta gotowania i etykieta foliowa czytają dane ze snapshotu.
+- Magazyn V1 pokazuje zapotrzebowanie z opłaconych zamówień.
+- Pakowanie wymusza etykietę foliową.
 
-- Widać braki publikacji i statusy.
-- Empty state i szybkie filtry są czytelne.
-
-### Krok 4: Etykieta ze snapshotu
-
-Cel:
-
-- Domknąć najważniejsze spięcie M2 -> M3 w foliowaniu.
-
-Koniec kroku:
-
-- Etykieta drukuje dane wariantu ze snapshotu.
-- Podgląd etykiety odtwarza zapisane `LabelDataJson`.
-- Redruk dalej wymaga powodu.
-
-### Krok 5: Smoke
-
-Cel:
-
-- Potwierdzić, że dane demo i flow działają.
-
-Minimalny smoke:
-
-1. M2 ma opublikowany plan na datę.
-2. M1 ma opłacone zamówienie z referencjami M2.
-3. M3 generuje plan produkcji.
-4. Karta gotowania pokazuje snapshot.
-5. FEFO zdejmuje składniki.
-6. Zatwierdzenie gotowania zdejmuje opakowania.
-7. Foliowanie pokazuje pudełka.
-8. Etykieta drukuje dane ze snapshotu.
-9. Pakowanie blokuje pudełko bez etykiety i pozwala spakować pudełko z etykietą.
+Jeżeli smoke nie przejdzie, dopisujemy konkretny punkt awarii do dokumentu albo issue, ale nie rozszerzamy od razu zakresu o trwałe sesje gotowania, pełne alerty ani rezerwacje 7+ dni.
 
 ## 6. Kryteria akceptacji dokumentu
 
@@ -471,7 +535,7 @@ M3:
 - drukuje etykiety foliowe;
 - pakuje pudełka i torby.
 
-## 8. Minimalne komendy walidacyjne po późniejszej implementacji
+## 8. Minimalne komendy walidacyjne po obecnym etapie
 
 Po kodowym sprincie "implementuj teraz":
 
@@ -484,7 +548,7 @@ dotnet test --no-restore --filter "FullyQualifiedName!~Integration" -v:q
 Po Docker smoke:
 
 ```powershell
-docker compose up --build
+docker compose up -d --force-recreate sqlserver web
 ```
 
 Ręcznie sprawdzić:
@@ -493,6 +557,8 @@ Ręcznie sprawdzić:
 - `/meals`;
 - `/diet-editor/menu-plan`;
 - `/production`;
+- `/production/m2-plan`;
+- `/production/warehouse-demand`;
 - `/production/cooking-card/{id}`;
 - `/production/foil-printing`;
 - `/packing`;
@@ -500,19 +566,21 @@ Ręcznie sprawdzić:
 
 ## 9. Podsumowanie
 
-Nie musimy czekać z wszystkim na Gabriela. Możemy już zrobić:
+Nie musimy czekać z wszystkim na Gabriela. W obecnym etapie jest już zrobione:
 
 - katalog posiłków gotowy pod M3;
 - poprawiony widok przepisów-składowych;
+- 7-dniowy podgląd `/production/m2-plan`;
+- `WarehouseDemandService` V1;
 - etykiety foliowe ze snapshotu;
-- stabilny smoke M2 -> M1 -> M3.
+- smoke M1 potwierdzający krytyczne referencje M2 w `OrderItems`.
 
 Musimy natomiast poczekać z:
 
-- pełnym widokiem "Plan z M2";
+- docelowym workflow "Plan z M2" z pełnymi alertami, odbiorem i potwierdzeniami;
 - trwałymi sesjami gotowania składowych;
-- pełnym `WarehouseDemandService` 7+ dni;
+- pełnymi rezerwacjami magazynowymi i demand 7+ dni;
 - kompletnym workflow alertów;
 - zaawansowanymi wariantami klienta.
 
-To jest bezpieczny podział: jutro domykamy rzeczy, które już mają dane, a większą kuchnię budujemy dopiero na stabilnym planie M2.
+To jest bezpieczny podział: teraz domykamy weryfikację rzeczy, które już mają dane, a większą kuchnię budujemy dopiero na stabilnym planie M2.

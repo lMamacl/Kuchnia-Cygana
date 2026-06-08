@@ -15,6 +15,8 @@ public interface IProductionService
 
     Task<KitchenDashboardDto> GetKitchenDashboardAsync(KitchenDashboardFilterDto filter);
 
+    Task<ProductionM2PlanOverviewDto> GetM2PlanOverviewAsync(ProductionM2PlanFilterDto filter);
+
     Task<M2PlanOverviewDto> GetM2PlanOverviewAsync(DateOnly startDate, int days);
 
     Task AcknowledgePlanAlertAsync(int alertId, string acknowledgedBy);
