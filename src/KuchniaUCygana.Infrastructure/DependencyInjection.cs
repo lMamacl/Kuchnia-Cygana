@@ -7,6 +7,7 @@ using KuchniaUCygana.Domain.Entities.Auth;
 using KuchniaUCygana.Domain.Entities.Customers;
 using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Entities.Packing;
+using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
@@ -84,6 +85,8 @@ public static class DependencyInjection
         services.AddScoped<IRepository<PackingManifestIssue>>(sp => sp.GetRequiredService<IPackingManifestIssueRepository>());
         services.AddScoped<IPackingIncidentRepository, PackingIncidentRepository>();
         services.AddScoped<IBoxLabelRepository, BoxLabelRepository>();
+        services.AddScoped<IProductionAdjustmentApprovalRepository, ProductionAdjustmentApprovalRepository>();
+        services.AddScoped<IRepository<ProductionAdjustmentApproval>>(sp => sp.GetRequiredService<IProductionAdjustmentApprovalRepository>());
         services.AddScoped<ITemperatureLogRepository, TemperatureLogRepository>();
         services.AddScoped<IBatchExpiryChangeLogRepository, BatchExpiryChangeLogRepository>();
         services.AddScoped<IPackingStatusLogRepository, PackingStatusLogRepository>();

@@ -111,6 +111,82 @@ public sealed class CookingSessionServiceTests
     }
 
     [Fact]
+    public async Task ToggleStepAsync_ShouldRequireControlValue_WhenStepRequiresControl()
+    {
+        var harness = CreateHarness(new ProductionPlanItem
+        {
+            Id = 21,
+            ProductionPlanId = 5,
+            FefoDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotJson = CreateSnapshotJson(),
+        });
+        harness.SessionRepository
+            .Setup(repository => repository.GetLatestForComponentAsync(21, 501))
+            .ReturnsAsync(
+                new CookingSession
+            {
+                Id = 7,
+                ProductionPlanItemId = 21,
+                RecipeComponentVersionId = 501,
+                Status = "InProgress",
+            });
+
+        var act = () => harness.Service.ToggleStepAsync(new ToggleCookingStepRequest
+        {
+            ProductionPlanItemId = 21,
+            RecipeComponentVersionId = 501,
+            StepId = 711,
+            IsChecked = true,
+            OperatorName = "Chef",
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*wartosci kontroli*");
+        harness.StepCheckRepository.Verify(
+            repository => repository.InsertAsync(It.IsAny<CookingSessionStepCheck>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ToggleStepAsync_ShouldRejectCoreTemperatureBelowExpectedValue()
+    {
+        var harness = CreateHarness(new ProductionPlanItem
+        {
+            Id = 21,
+            ProductionPlanId = 5,
+            FefoDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotJson = CreateSnapshotJson(),
+        });
+        harness.SessionRepository
+            .Setup(repository => repository.GetLatestForComponentAsync(21, 501))
+            .ReturnsAsync(
+                new CookingSession
+            {
+                Id = 7,
+                ProductionPlanItemId = 21,
+                RecipeComponentVersionId = 501,
+                Status = "InProgress",
+            });
+
+        var act = () => harness.Service.ToggleStepAsync(new ToggleCookingStepRequest
+        {
+            ProductionPlanItemId = 21,
+            RecipeComponentVersionId = 501,
+            StepId = 711,
+            IsChecked = true,
+            OperatorName = "Chef",
+            ActualValue = 70m,
+            ActualUnit = "C",
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*ponizej wymaganego progu*");
+        harness.StepCheckRepository.Verify(
+            repository => repository.InsertAsync(It.IsAny<CookingSessionStepCheck>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task GetComponentSessionAsync_ShouldReturnCheckedSteps_AfterReload()
     {
         var harness = CreateHarness(new ProductionPlanItem

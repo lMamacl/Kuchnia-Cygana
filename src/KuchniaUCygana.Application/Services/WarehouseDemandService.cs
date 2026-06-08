@@ -1,7 +1,10 @@
+using System.Text.Json;
 using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Entities.Production;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.External;
+using KuchniaUCygana.Domain.Interfaces.Production;
 using KuchniaUCygana.Domain.Interfaces.Warehouse;
 
 namespace KuchniaUCygana.Application.Services;
@@ -11,15 +14,18 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
     private readonly IDietDataProvider _dietDataProvider;
     private readonly IOrderDataProvider _orderDataProvider;
     private readonly IBatchRepository _batchRepository;
+    private readonly IProductionPlanRepository? _productionPlanRepository;
 
     public WarehouseDemandService(
         IDietDataProvider dietDataProvider,
         IOrderDataProvider orderDataProvider,
-        IBatchRepository batchRepository)
+        IBatchRepository batchRepository,
+        IProductionPlanRepository? productionPlanRepository = null)
     {
         _dietDataProvider = dietDataProvider;
         _orderDataProvider = orderDataProvider;
         _batchRepository = batchRepository;
+        _productionPlanRepository = productionPlanRepository;
     }
 
     public Task<WarehouseDemandDto> GetDemandAsync(DateOnly startDate, int days)
@@ -46,6 +52,31 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
         for (var offset = 0; offset < normalized.Days; offset++)
         {
             var planDate = normalized.StartDate.AddDays(offset);
+            var productionDemandSource = await GetProductionDemandSourceAsync(planDate);
+            if (productionDemandSource is not null)
+            {
+                var productionDay = new WarehouseDemandDayDto
+                {
+                    PlanDate = planDate,
+                    Status = "ProductionSnapshot",
+                    DietMenuPlanId = productionDemandSource.SnapshotItems.FirstOrDefault()?.SnapshotItem.DietMenuPlanId,
+                    SnapshotItemCount = productionDemandSource.SnapshotItems.Count,
+                    OrderItemCount = productionDemandSource.SnapshotItems.Sum(item => item.PlannedQuantity),
+                    MatchedOrderItemCount = productionDemandSource.SnapshotItems.Sum(item => item.PlannedQuantity),
+                    MissingSnapshotMatches = productionDemandSource.MissingSnapshotCount,
+                    HasPublishedSnapshot = productionDemandSource.SnapshotItems.Count > 0,
+                };
+
+                foreach (var (snapshotItem, plannedQuantity) in productionDemandSource.SnapshotItems)
+                {
+                    AddIngredientDemand(rowsByKey, snapshotItem, plannedQuantity);
+                    AddPackagingDemand(rowsByKey, snapshotItem, plannedQuantity);
+                }
+
+                result.Days.Add(productionDay);
+                continue;
+            }
+
             var snapshot = await _dietDataProvider.GetPublishedPlanSnapshotAsync(planDate);
             var deliveries = (await _orderDataProvider.GetDeliveriesForDateAsync(planDate.ToDateTime(TimeOnly.MinValue)))
                 .ToList();
@@ -92,9 +123,15 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
             result.Days.Add(day);
         }
 
-        foreach (var row in rowsByKey.Values)
+        var stockItemBatches = new Dictionary<int, IReadOnlyList<Batch>>();
+        var warehouseCategoryBatches = new Dictionary<int, IReadOnlyList<Batch>>();
+        var reservedQuantityByBatchId = new Dictionary<int, decimal>();
+        foreach (var row in rowsByKey.Values
+            .OrderBy(GetDemandAllocationPriority)
+            .ThenBy(row => row.ResourceType)
+            .ThenBy(row => row.ResourceName))
         {
-            await EnrichAvailabilityAsync(row);
+            await EnrichAvailabilityAsync(row, stockItemBatches, warehouseCategoryBatches, reservedQuantityByBatchId);
         }
 
         var allRows = rowsByKey.Values
@@ -140,6 +177,54 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
         return result;
     }
 
+    private async Task<ProductionDemandSource?> GetProductionDemandSourceAsync(DateOnly planDate)
+    {
+        if (_productionPlanRepository is null)
+        {
+            return null;
+        }
+
+        var productionPlan = await _productionPlanRepository.GetByDateAsync(planDate);
+        if (productionPlan is null)
+        {
+            return null;
+        }
+
+        var planItems = (await _productionPlanRepository.GetPlanItemsAsync(productionPlan.Id)).ToList();
+        var snapshotItems = new List<ProductionDemandSnapshotItem>();
+        var missingSnapshotCount = 0;
+        foreach (var item in planItems.Where(item => item.PlannedQuantity > 0))
+        {
+            var snapshotItem = TryDeserializeSnapshotItem(item);
+            if (snapshotItem is null)
+            {
+                missingSnapshotCount += item.PlannedQuantity;
+                continue;
+            }
+
+            snapshotItems.Add(new ProductionDemandSnapshotItem(snapshotItem, item.PlannedQuantity));
+        }
+
+        return new ProductionDemandSource(snapshotItems, missingSnapshotCount);
+    }
+
+    private static PublishedDietPlanItemDto? TryDeserializeSnapshotItem(ProductionPlanItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.M2SnapshotJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<PublishedDietPlanItemDto>(item.M2SnapshotJson);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private static WarehouseDemandFilterDto NormalizeFilter(WarehouseDemandFilterDto filter)
         => new()
         {
@@ -183,6 +268,7 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
         return value?.Trim().ToLowerInvariant() switch
         {
             "shortage" or "brak" or "braki" => "Shortage",
+            "missingmapping" or "missing-mapping" or "brakmapowania" or "brak-mapowania" => "MissingMapping",
             "expired" or "przeterminowane" => "Expired",
             "expiryrisk" or "expiry-risk" or "risk" or "ryzyko" => "ExpiryRisk",
             "ok" => "Ok",
@@ -303,7 +389,8 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
 
     private static void AddIngredientDemand(
         Dictionary<string, WarehouseDemandRowDto> rowsByKey,
-        PublishedDietPlanItemDto snapshotItem)
+        PublishedDietPlanItemDto snapshotItem,
+        int quantityMultiplier = 1)
     {
         if (snapshotItem.AggregateIngredients.Count > 0)
         {
@@ -317,7 +404,7 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
                     stockItemId: ingredient.StockItemId,
                     warehouseCategoryId: ingredient.WarehouseCategoryId,
                     warehouseCategoryName: ingredient.WarehouseCategoryName,
-                    requiredQuantity: ingredient.NetWeightInGrams * snapshotItem.ServingMultiplier,
+                    requiredQuantity: ingredient.NetWeightInGrams * snapshotItem.ServingMultiplier * quantityMultiplier,
                     unit: "g",
                     mealName: snapshotItem.MealName,
                     dietMenuPlanItemId: snapshotItem.DietMenuPlanItemId);
@@ -340,7 +427,8 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
                     warehouseCategoryName: ingredient.WarehouseCategoryName,
                     requiredQuantity: ingredient.WeightInGrams
                         * component.QuantityPerServing
-                        * snapshotItem.ServingMultiplier,
+                        * snapshotItem.ServingMultiplier
+                        * quantityMultiplier,
                     unit: "g",
                     mealName: snapshotItem.MealName,
                     dietMenuPlanItemId: snapshotItem.DietMenuPlanItemId);
@@ -350,7 +438,8 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
 
     private static void AddPackagingDemand(
         Dictionary<string, WarehouseDemandRowDto> rowsByKey,
-        PublishedDietPlanItemDto snapshotItem)
+        PublishedDietPlanItemDto snapshotItem,
+        int quantityMultiplier = 1)
     {
         var hasAggregatePackaging = snapshotItem.PackagingRequirements.Any(packaging =>
             packaging.RecipeComponentVersionId.HasValue);
@@ -365,7 +454,7 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
                 stockItemId: packaging.StockItemId,
                 warehouseCategoryId: packaging.WarehouseCategoryId,
                 warehouseCategoryName: null,
-                requiredQuantity: GetPackagingQuantityPerServing(snapshotItem, packaging),
+                requiredQuantity: GetPackagingQuantityPerServing(snapshotItem, packaging) * quantityMultiplier,
                 unit: string.IsNullOrWhiteSpace(packaging.Unit) ? "pcs" : packaging.Unit,
                 mealName: snapshotItem.MealName,
                 dietMenuPlanItemId: snapshotItem.DietMenuPlanItemId);
@@ -390,7 +479,8 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
                     warehouseCategoryName: null,
                     requiredQuantity: packaging.Quantity
                         * component.QuantityPerServing
-                        * snapshotItem.ServingMultiplier,
+                        * snapshotItem.ServingMultiplier
+                        * quantityMultiplier,
                     unit: string.IsNullOrWhiteSpace(packaging.Unit) ? "pcs" : packaging.Unit,
                     mealName: snapshotItem.MealName,
                     dietMenuPlanItemId: snapshotItem.DietMenuPlanItemId);
@@ -411,14 +501,23 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
         string mealName,
         int dietMenuPlanItemId)
     {
-        if (requiredQuantity <= 0 || (!stockItemId.HasValue && !warehouseCategoryId.HasValue))
+        if (requiredQuantity <= 0)
         {
             return;
         }
 
-        var key = stockItemId.HasValue
-            ? $"{resourceType}:S:{stockItemId.Value}"
-            : $"{resourceType}:C:{warehouseCategoryId!.Value}:{resourceName}";
+        var selectionMode = stockItemId.HasValue
+            ? "StockItem"
+            : warehouseCategoryId.HasValue ? "WarehouseCategory" : "MissingMapping";
+        var missingMappingKey = ingredientId.HasValue
+            ? ingredientId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : resourceName.Trim().ToUpperInvariant();
+        var key = selectionMode switch
+        {
+            "StockItem" => $"{resourceType}:S:{stockItemId!.Value}",
+            "WarehouseCategory" => $"{resourceType}:C:{warehouseCategoryId!.Value}:{resourceName}",
+            _ => $"{resourceType}:M:{missingMappingKey}:{unit}",
+        };
 
         if (!rowsByKey.TryGetValue(key, out var row))
         {
@@ -430,13 +529,19 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
                 StockItemId = stockItemId,
                 WarehouseCategoryId = warehouseCategoryId,
                 WarehouseCategoryName = warehouseCategoryName,
-                SelectionMode = stockItemId.HasValue ? "StockItem" : "WarehouseCategory",
+                SelectionMode = selectionMode,
                 Unit = unit,
             };
             rowsByKey[key] = row;
         }
 
         row.RequiredQuantity += requiredQuantity;
+        if (row.SelectionMode == "MissingMapping")
+        {
+            row.AvailableQuantity = 0m;
+            row.ShortageQuantity = row.RequiredQuantity;
+            row.RiskLabel = "MissingMapping";
+        }
 
         if (!row.SourceMeals.Contains(mealName))
         {
@@ -449,11 +554,21 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
         }
     }
 
-    private async Task EnrichAvailabilityAsync(WarehouseDemandRowDto row)
+    private async Task EnrichAvailabilityAsync(
+        WarehouseDemandRowDto row,
+        Dictionary<int, IReadOnlyList<Batch>> stockItemBatches,
+        Dictionary<int, IReadOnlyList<Batch>> warehouseCategoryBatches,
+        Dictionary<int, decimal> reservedQuantityByBatchId)
     {
-        var batches = row.StockItemId.HasValue
-            ? await _batchRepository.GetActiveBatchesByStockItemAsync(row.StockItemId.Value)
-            : await _batchRepository.GetActiveBatchesByWarehouseCategoryAsync(row.WarehouseCategoryId!.Value);
+        if (row.SelectionMode == "MissingMapping")
+        {
+            row.AvailableQuantity = 0m;
+            row.ShortageQuantity = row.RequiredQuantity;
+            row.RiskLabel = "MissingMapping";
+            return;
+        }
+
+        var batches = await GetActiveBatchesForDemandRowAsync(row, stockItemBatches, warehouseCategoryBatches);
 
         var orderedBatches = batches
             .Where(batch => !batch.IsDepleted && batch.CurrentQuantity > 0)
@@ -461,13 +576,98 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
             .ThenBy(batch => batch.Id)
             .ToList();
 
-        row.AvailableQuantity = orderedBatches.Sum(batch => batch.CurrentQuantity);
+        var availableQuantity = 0m;
+        foreach (var batch in orderedBatches)
+        {
+            availableQuantity += GetRemainingBatchQuantity(batch, reservedQuantityByBatchId);
+        }
+
+        row.AvailableQuantity = availableQuantity;
         row.ShortageQuantity = Math.Max(0, row.RequiredQuantity - row.AvailableQuantity);
 
-        var earliestBatch = orderedBatches.FirstOrDefault();
+        var earliestBatch = orderedBatches.FirstOrDefault(batch =>
+            GetRemainingBatchQuantity(batch, reservedQuantityByBatchId) > 0);
         row.EarliestBatchId = earliestBatch?.Id;
         row.EarliestExpiryDate = earliestBatch?.ExpiryDate;
         row.RiskLabel = GetRiskLabel(row, earliestBatch);
+
+        ReservePreviewQuantity(row, orderedBatches, reservedQuantityByBatchId);
+    }
+
+    private static int GetDemandAllocationPriority(WarehouseDemandRowDto row)
+        => row.SelectionMode switch
+        {
+            "StockItem" => 0,
+            "WarehouseCategory" => 1,
+            _ => 2,
+        };
+
+    private static decimal GetRemainingBatchQuantity(
+        Batch batch,
+        IReadOnlyDictionary<int, decimal> reservedQuantityByBatchId)
+    {
+        reservedQuantityByBatchId.TryGetValue(batch.Id, out var reservedQuantity);
+        return Math.Max(0m, batch.CurrentQuantity - reservedQuantity);
+    }
+
+    private static void ReservePreviewQuantity(
+        WarehouseDemandRowDto row,
+        IReadOnlyList<Batch> orderedBatches,
+        Dictionary<int, decimal> reservedQuantityByBatchId)
+    {
+        var quantityToReserve = row.RequiredQuantity;
+        if (quantityToReserve <= 0m)
+        {
+            return;
+        }
+
+        foreach (var batch in orderedBatches)
+        {
+            var remainingQuantity = GetRemainingBatchQuantity(batch, reservedQuantityByBatchId);
+            if (remainingQuantity <= 0m)
+            {
+                continue;
+            }
+
+            var reservedQuantity = Math.Min(remainingQuantity, quantityToReserve);
+            if (!reservedQuantityByBatchId.TryAdd(batch.Id, reservedQuantity))
+            {
+                reservedQuantityByBatchId[batch.Id] += reservedQuantity;
+            }
+
+            quantityToReserve -= reservedQuantity;
+            if (quantityToReserve <= 0m)
+            {
+                return;
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<Batch>> GetActiveBatchesForDemandRowAsync(
+        WarehouseDemandRowDto row,
+        Dictionary<int, IReadOnlyList<Batch>> stockItemBatches,
+        Dictionary<int, IReadOnlyList<Batch>> warehouseCategoryBatches)
+    {
+        if (row.StockItemId.HasValue)
+        {
+            var stockItemId = row.StockItemId.Value;
+            if (!stockItemBatches.TryGetValue(stockItemId, out var cachedBatches))
+            {
+                cachedBatches = (await _batchRepository.GetActiveBatchesByStockItemAsync(stockItemId)).ToList();
+                stockItemBatches[stockItemId] = cachedBatches;
+            }
+
+            return cachedBatches;
+        }
+
+        var warehouseCategoryId = row.WarehouseCategoryId!.Value;
+        if (!warehouseCategoryBatches.TryGetValue(warehouseCategoryId, out var cachedCategoryBatches))
+        {
+            cachedCategoryBatches = (await _batchRepository.GetActiveBatchesByWarehouseCategoryAsync(warehouseCategoryId)).ToList();
+            warehouseCategoryBatches[warehouseCategoryId] = cachedCategoryBatches;
+        }
+
+        return cachedCategoryBatches;
     }
 
     private static string GetRiskLabel(WarehouseDemandRowDto row, Batch? earliestBatch)
@@ -498,4 +698,12 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
         => packaging.RecipeComponentVersionId.HasValue
             ? packaging.Quantity * snapshotItem.ServingMultiplier
             : packaging.Quantity;
+
+    private sealed record ProductionDemandSource(
+        IReadOnlyList<ProductionDemandSnapshotItem> SnapshotItems,
+        int MissingSnapshotCount);
+
+    private sealed record ProductionDemandSnapshotItem(
+        PublishedDietPlanItemDto SnapshotItem,
+        int PlannedQuantity);
 }

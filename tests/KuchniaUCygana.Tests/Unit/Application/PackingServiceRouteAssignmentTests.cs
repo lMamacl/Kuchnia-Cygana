@@ -13,6 +13,7 @@ using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces.Packing;
 using KuchniaUCygana.Domain.Interfaces.Production;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using System.Text.Json;
 
 namespace KuchniaUCygana.Tests.Unit.Application;
@@ -99,6 +100,67 @@ public sealed class PackingServiceRouteAssignmentTests
         stored.LabelDataJson.Should().NotContain("Klient 1");
         stored.LabelDataJson.Should().NotContain("ClientName");
         stored.PackingBagId.Should().Be(bag.Id);
+    }
+
+    [Fact]
+    public async Task GenerateTransportLabelsAsync_ShouldUseRouteScopedBagLookup_InsteadOfFullBoard()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var sessionRepository = new InMemoryPackingSessionRepository();
+        var bagRepository = new InMemoryPackingBagRepository();
+        var itemRepository = new InMemoryRepository<PackingItem>();
+        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var service = CreateService(
+            sessionRepository,
+            bagRepository,
+            new EmptyRouteManifestProvider(),
+            new ThrowingBoardOrderProvider(),
+            itemRepository,
+            labelRepository);
+        var (session, _, _) = await CreatePackedSessionAsync(date, sessionRepository, bagRepository, itemRepository);
+
+        var labels = (await service.GenerateTransportLabelsAsync(session.Id)).ToList();
+
+        labels.Should().ContainSingle();
+        labels.Single().RouteInfo.Should().Contain("Trasa testowa");
+    }
+
+    [Fact]
+    public async Task GetManifestControlAsync_ShouldUseRouteScopedBoardPage_InsteadOfFullBoard()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var route = CreateRouteForBoardPage(date);
+        var packingService = new Mock<IPackingService>(MockBehavior.Strict);
+        packingService
+            .Setup(service => service.GetPackingBoardAsync(It.IsAny<DateOnly>()))
+            .ThrowsAsync(new InvalidOperationException("Full packing board should not be loaded for route manifest control."));
+        packingService
+            .Setup(service => service.GetPackingBoardPageAsync(It.IsAny<PackingBoardQueryDto>()))
+            .ReturnsAsync((PackingBoardQueryDto query) => new PackingBoardPageDto
+            {
+                Board = new PackingBoardDto
+                {
+                    PackingDate = date,
+                    TotalBags = route.TotalBags,
+                    PackedBags = route.PackedBags,
+                    LoadedBags = route.LoadedBags,
+                    Routes = new List<PackingRouteDto> { route },
+                },
+                AllRoutes = new[] { CloneRouteSummary(route) },
+                TotalBags = route.TotalBags,
+                Page = query.Page,
+                PageSize = query.PageSize,
+            });
+        var loadingService = CreateLoadingService(packingService.Object);
+
+        var control = await loadingService.GetManifestControlAsync(date, route.RouteId);
+
+        control.Route.RouteId.Should().Be(route.RouteId);
+        control.Route.Bags.Should().ContainSingle();
+        packingService.Verify(service => service.GetPackingBoardAsync(It.IsAny<DateOnly>()), Times.Never);
+        packingService.Verify(service => service.GetPackingBoardPageAsync(
+            It.Is<PackingBoardQueryDto>(query => query.RouteId == route.RouteId && query.Page == 1)),
+            Times.Once);
     }
 
     [Fact]
@@ -1186,6 +1248,92 @@ public sealed class PackingServiceRouteAssignmentTests
             NullLogger<PackingService>.Instance);
     }
 
+    private static LoadingService CreateLoadingService(IPackingService packingService)
+    {
+        var mapperConfiguration = new MapperConfiguration(
+            cfg => cfg.AddProfile<ProductionProfile>(),
+            NullLoggerFactory.Instance);
+
+        return new LoadingService(
+            new InMemoryPackingSessionRepository(),
+            new InMemoryPackingBagRepository(),
+            new InMemoryRepository<PackingLabel>(),
+            new InMemoryRepository<PackingManifest>(),
+            new InMemoryPackingStatusLogRepository(),
+            packingService,
+            mapperConfiguration.CreateMapper(),
+            NullLogger<LoadingService>.Instance);
+    }
+
+    private static PackingRouteDto CreateRouteForBoardPage(DateOnly date)
+    {
+        _ = date;
+        return new PackingRouteDto
+        {
+            RouteId = 7,
+            RouteName = "Trasa testowa",
+            VehicleId = 3,
+            VehicleRegistration = "WA TEST",
+            TotalBags = 1,
+            PackedBags = 1,
+            LoadedBags = 0,
+            DispatchedBags = 0,
+            AllBagsPacked = true,
+            AllBagsLoaded = false,
+            CanGenerateManifest = false,
+            Bags = new List<PackingBagDto>
+            {
+                new()
+                {
+                    PackingBagId = 501,
+                    PackingSessionId = 1001,
+                    DeliveryCalendarId = 7001,
+                    BagNumber = 1,
+                    BagCode = "BAG-001001-01",
+                    OrderId = 9001,
+                    ClientName = "Klient testowy",
+                    ClientPublicId = "TEST9001",
+                    DietType = "Standard",
+                    Address = "Testowa 1",
+                    RouteId = 7,
+                    RouteName = "Trasa testowa",
+                    VehicleId = 3,
+                    VehicleRegistration = "WA TEST",
+                    StopNumber = 2,
+                    DeliveryWindow = "08:00-09:00",
+                    Status = nameof(PackingBagStatus.Labeled),
+                    StatusText = "Oznaczona",
+                    TotalBoxes = 2,
+                    PackedBoxes = 2,
+                    HasLabels = false,
+                    IsTransportLabelAttached = false,
+                },
+            },
+        };
+    }
+
+    private static PackingRouteDto CloneRouteSummary(PackingRouteDto route)
+    {
+        return new PackingRouteDto
+        {
+            RouteId = route.RouteId,
+            RouteName = route.RouteName,
+            VehicleId = route.VehicleId,
+            VehicleRegistration = route.VehicleRegistration,
+            TotalBags = route.TotalBags,
+            PackedBags = route.PackedBags,
+            LoadedBags = route.LoadedBags,
+            DispatchedBags = route.DispatchedBags,
+            MissingLabelBags = route.MissingLabelBags,
+            UnattachedLabelBags = route.UnattachedLabelBags,
+            AllBagsPacked = route.AllBagsPacked,
+            AllBagsLoaded = route.AllBagsLoaded,
+            CanGenerateManifest = route.CanGenerateManifest,
+            CanLoadBags = route.CanLoadBags,
+            CanDispatchDelivery = route.CanDispatchDelivery,
+        };
+    }
+
     private sealed class CalendarAwareOrderProvider : IOrderDataProvider
     {
         private readonly DateOnly _date;
@@ -1281,6 +1429,27 @@ public sealed class PackingServiceRouteAssignmentTests
         {
             return Task.FromResult<RouteEntry?>(null);
         }
+    }
+
+    private sealed class ThrowingBoardOrderProvider : IOrderDataProvider
+    {
+        public Task<IEnumerable<ActiveOrderEntry>> GetActiveOrdersAsync(DateOnly deliveryDate)
+            => throw new InvalidOperationException("Full packing board should not be loaded for route-scoped label generation.");
+
+        public Task<ActiveOrderEntry?> GetOrderByIdAsync(int orderId)
+            => Task.FromResult<ActiveOrderEntry?>(null);
+
+        public Task<IEnumerable<OrderDeliveryInfo>> GetDeliveriesForDateAsync(DateTime date)
+            => throw new InvalidOperationException("Full packing board should not be loaded for route-scoped label generation.");
+    }
+
+    private sealed class EmptyRouteManifestProvider : IDeliveryManifestProvider
+    {
+        public Task<IEnumerable<RouteEntry>> GetRoutesForDateAsync(DateOnly date)
+            => Task.FromResult<IEnumerable<RouteEntry>>(Array.Empty<RouteEntry>());
+
+        public Task<RouteEntry?> GetRouteByIdAsync(int routeId)
+            => Task.FromResult<RouteEntry?>(null);
     }
 
     private sealed class MissingDeliveryAddressOrderProvider : IOrderDataProvider
@@ -1890,6 +2059,8 @@ public sealed class PackingServiceRouteAssignmentTests
         {
             var bags = this.Entities
                 .Where(bag => !query.Status.HasValue || bag.Status == query.Status.Value)
+                .Where(bag => !query.RouteId.HasValue || query.RouteId.Value == 7)
+                .Where(bag => string.IsNullOrWhiteSpace(query.Search) || bag.BagCode.Contains(query.Search, StringComparison.OrdinalIgnoreCase))
                 .Skip((Math.Max(query.Page, 1) - 1) * Math.Clamp(query.PageSize, 1, 200))
                 .Take(Math.Clamp(query.PageSize, 1, 200))
                 .Select(bag => new PackingBagSearchRow
@@ -1900,13 +2071,36 @@ public sealed class PackingServiceRouteAssignmentTests
                     BagCode = bag.BagCode,
                     Status = bag.Status,
                     SessionStatus = PackingStatus.Pending,
+                    RouteId = 7,
+                    RouteName = "Trasa testowa",
+                    VehicleId = 5,
+                    VehicleRegistration = "WA TEST",
+                    StopNumber = 2,
+                    DeliveryWindow = "08:00-09:00",
+                    TotalBoxes = 1,
+                    PackedBoxes = 1,
                 })
                 .ToList();
 
             return Task.FromResult(new PackingBagSearchResult
             {
                 Bags = bags,
-                TotalCount = this.Entities.Count,
+                Routes = this.Entities.Count == 0
+                    ? Array.Empty<PackingRouteSearchSummary>()
+                    : new[]
+                    {
+                        new PackingRouteSearchSummary
+                        {
+                            RouteId = 7,
+                            RouteName = "Trasa testowa",
+                            VehicleId = 5,
+                            VehicleRegistration = "WA TEST",
+                            TotalBags = this.Entities.Count,
+                            PackedBags = this.Entities.Count(bag => bag.Status is PackingBagStatus.Packed or PackingBagStatus.Labeled or PackingBagStatus.Manifested or PackingBagStatus.Loaded or PackingBagStatus.Dispatched),
+                            LoadedBags = this.Entities.Count(bag => bag.Status is PackingBagStatus.Loaded or PackingBagStatus.Dispatched),
+                        },
+                    },
+                TotalCount = bags.Count,
                 TotalBags = this.Entities.Count,
                 PackedBags = this.Entities.Count(bag => bag.Status is PackingBagStatus.Packed or PackingBagStatus.Labeled or PackingBagStatus.Manifested or PackingBagStatus.Loaded or PackingBagStatus.Dispatched),
                 LoadedBags = this.Entities.Count(bag => bag.Status is PackingBagStatus.Loaded or PackingBagStatus.Dispatched),

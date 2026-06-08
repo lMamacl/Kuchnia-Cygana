@@ -54,6 +54,7 @@
             @foreach (var row in Model.Rows)
             {
                 var riskClass = row.RiskLabel == "Shortage" || row.RiskLabel == "Expired"
+                    || row.RiskLabel == "MissingMapping"
                     ? "danger"
                     : row.RiskLabel == "ExpiryRisk" ? "warning" : string.Empty;
                 <tr>
