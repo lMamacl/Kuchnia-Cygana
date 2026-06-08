@@ -94,17 +94,9 @@ public sealed class RecipeComponentsController : Controller
     [HttpGet("lookups/ingredients")]
     public async Task<IActionResult> IngredientLookup(string? term, int page = 1)
     {
-        var result = await this.ingredientService.SearchAsync(new IngredientSearchFilterDto
-        {
-            Search = term,
-            IsActive = true,
-            Page = page <= 0 ? 1 : page,
-            PageSize = 20,
-        });
+        var items = await this.ingredientService.SearchRecipeLookupAsync(term, page <= 0 ? 1 : page, 20);
 
-        return Json(result.Items
-            .Where(item => item.ResourceType is "Food" or "Spice")
-            .Select(item => new
+        return Json(items.Select(item => new
             {
                 id = item.Id,
                 text = item.Name,
@@ -113,6 +105,21 @@ public sealed class RecipeComponentsController : Controller
                 warehouseCategoryId = item.WarehouseCategoryId,
                 warehouseCategoryName = item.WarehouseCategoryName,
             }));
+    }
+
+    [HttpGet("lookups/published-versions")]
+    public async Task<IActionResult> PublishedVersionLookup(string? term)
+    {
+        var items = await this.recipeComponentService.SearchPublishedVersionOptionsAsync(term, 20);
+
+        return Json(items.Select(item => new
+        {
+            id = item.RecipeComponentVersionId,
+            text = $"{item.ComponentName} v{item.VersionNumber}",
+            componentId = item.RecipeComponentId,
+            componentName = item.ComponentName,
+            versionNumber = item.VersionNumber,
+        }));
     }
 
     [HttpGet("lookups/categories")]

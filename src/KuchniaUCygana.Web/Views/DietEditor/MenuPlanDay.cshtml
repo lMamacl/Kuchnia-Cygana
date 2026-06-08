@@ -353,6 +353,9 @@
                 return;
             }
 
+            let mealSearchController;
+            let mealSearchSequence = 0;
+
             const searchMeals = debounce(async function () {
                 const query = mealQuery.value.trim();
                 if (query.length < 2) {
@@ -361,15 +364,24 @@
                     return;
                 }
 
+                mealSearchController?.abort();
+                mealSearchController = new AbortController();
+                const requestSequence = ++mealSearchSequence;
+
                 try {
                     const response = await fetch(`${mealsLookupUrl}?query=${encodeURIComponent(query)}`, {
                         headers: { 'Accept': 'application/json' },
+                        signal: mealSearchController.signal,
                     });
                     if (!response.ok) {
                         throw new Error('Lookup dan zwrocil blad.');
                     }
 
                     const meals = asArray(await response.json());
+                    if (requestSequence !== mealSearchSequence) {
+                        return;
+                    }
+
                     renderMealResults(resultsBox, meals, function (mealId, mealName, meal) {
                         mealIdInput.value = mealId;
                         mealQuery.value = mealName;
@@ -379,7 +391,11 @@
                         variantSelect.dataset.loaded = 'false';
                         loadVariants(mealId, variantSelect, variantStatus, '');
                     });
-                } catch {
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        return;
+                    }
+
                     resultsBox.classList.add('d-none');
                     mealStatus.textContent = 'Blad pobierania dan.';
                 }
@@ -433,13 +449,16 @@
                 }
             });
 
-            document.addEventListener('click', function (event) {
-                if (!lookup.contains(event.target)) {
-                    resultsBox.classList.add('d-none');
-                }
-            });
         });
     };
+
+    document.addEventListener('click', function (event) {
+        document.querySelectorAll('.menu-plan-meal-lookup').forEach(function (lookup) {
+            if (!lookup.contains(event.target)) {
+                lookup.querySelector('.js-meal-results')?.classList.add('d-none');
+            }
+        });
+    });
 
     const loadDietVariant = async function (button) {
         if (!details || !button) {

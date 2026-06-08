@@ -161,6 +161,36 @@ public sealed class MealManagementServiceTests
     }
 
     [Fact]
+    public async Task SearchPlanningMealsAsync_UsesLightweightRepository_AndMarksLegacyFallback()
+    {
+        var mealRepository = new Mock<IMealRepository>();
+        mealRepository
+            .Setup(r => r.SearchPlanningAsync("kur", 50))
+            .ReturnsAsync(new[]
+            {
+                new MealListRow
+                {
+                    Id = 5,
+                    Name = "Kurczak",
+                    Status = "Published",
+                    IsActive = true,
+                    VariantCount = 1,
+                    ComponentCount = 1,
+                    LegacyRecipeCount = 1,
+                    RawWeightGrams = 220m,
+                    HasNutrition = true,
+                },
+            });
+        var service = CreateService(mealRepository: mealRepository);
+
+        var result = await service.SearchPlanningMealsAsync("  kur  ", 500);
+
+        mealRepository.Verify(r => r.SearchPlanningAsync("kur", 50), Times.Once);
+        result.Should().ContainSingle();
+        result[0].Warnings.Should().Contain(warning => warning.Contains("legacy", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task GetMealVariantResultsAsync_DeduplicatesKeys_AndUsesCacheOnNextRead()
     {
         var mealRepository = new Mock<IMealRepository>();
@@ -248,7 +278,7 @@ public sealed class MealManagementServiceTests
 
     private static void SetupCompleteVersion(Mock<IRecipeComponentRepository> componentRepository, int versionId)
     {
-        componentRepository.Setup(r => r.GetVersionIngredientsAsync(versionId)).ReturnsAsync(new[]
+        var ingredients = new[]
         {
             new RecipeComponentIngredientRow
             {
@@ -259,8 +289,8 @@ public sealed class MealManagementServiceTests
                 WeightInGrams = 220m,
                 YieldFactor = 1m,
             },
-        });
-        componentRepository.Setup(r => r.GetVersionPackagingAsync(versionId)).ReturnsAsync(new[]
+        };
+        var packaging = new[]
         {
             new PackagingRequirementRow
             {
@@ -271,18 +301,39 @@ public sealed class MealManagementServiceTests
                 Quantity = 1m,
                 Unit = "pcs",
             },
-        });
-        componentRepository.Setup(r => r.GetVersionAllergensAsync(versionId)).ReturnsAsync(new[]
+        };
+        var allergens = new[]
         {
             new RecipeComponentAllergenRow
             {
+                RecipeComponentVersionId = versionId,
                 AllergenId = 7,
                 Name = "Seler",
                 IsTrace = false,
                 SourceType = "Ingredient",
                 SourceName = "Kurczak",
             },
-        });
+        };
+        componentRepository.Setup(r => r.GetVersionIngredientsAsync(versionId)).ReturnsAsync(ingredients);
+        componentRepository.Setup(r => r.GetVersionPackagingAsync(versionId)).ReturnsAsync(packaging);
+        componentRepository.Setup(r => r.GetVersionAllergensAsync(versionId)).ReturnsAsync(allergens);
+        componentRepository
+            .Setup(r => r.GetVersionDetailsBulkAsync(It.Is<IEnumerable<int>>(ids => ids.Contains(versionId))))
+            .ReturnsAsync(new RecipeComponentVersionDetailsBulkRow
+            {
+                IngredientsByVersionId = new Dictionary<int, IReadOnlyList<RecipeComponentIngredientRow>>
+                {
+                    [versionId] = ingredients,
+                },
+                PackagingByVersionId = new Dictionary<int, IReadOnlyList<PackagingRequirementRow>>
+                {
+                    [versionId] = packaging,
+                },
+                AllergensByVersionId = new Dictionary<int, IReadOnlyList<RecipeComponentAllergenRow>>
+                {
+                    [versionId] = allergens,
+                },
+            });
     }
 
     private static MealVariantComponentRow CreateCompleteVariantComponent()

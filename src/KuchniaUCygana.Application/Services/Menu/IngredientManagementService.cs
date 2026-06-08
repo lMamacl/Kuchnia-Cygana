@@ -57,6 +57,17 @@ public sealed class IngredientManagementService : IIngredientManagementService
         };
     }
 
+    public async Task<IReadOnlyList<IngredientListItemDto>> SearchRecipeLookupAsync(
+        string? query,
+        int page = 1,
+        int pageSize = 20)
+    {
+        page = page <= 0 ? 1 : page;
+        pageSize = Math.Clamp(pageSize <= 0 ? 20 : pageSize, 1, 20);
+        var rows = await this.ingredientRepository.SearchRecipeLookupAsync(Normalize(query), page, pageSize);
+        return rows.Select(MapListItem).ToList();
+    }
+
     public async Task<IEnumerable<IngredientDto>> GetAllAsync()
     {
         var ingredients = await this.ingredientRepository.GetAllAsync();

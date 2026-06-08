@@ -10,20 +10,17 @@ namespace KuchniaUCygana.Web.Controllers;
 public sealed class DietEditorController : Controller
 {
     private readonly IDietManagementService _dietService;
-    private readonly IMealManagementService _mealService;
     private readonly IRecipeComponentManagementService _recipeComponentService;
     private readonly ICategoryService _categoryService;
     private readonly IAllergenManagementService _allergenService;
 
     public DietEditorController(
         IDietManagementService dietService,
-        IMealManagementService mealService,
         IRecipeComponentManagementService recipeComponentService,
         ICategoryService categoryService,
         IAllergenManagementService allergenService)
     {
         _dietService = dietService;
-        _mealService = mealService;
         _recipeComponentService = recipeComponentService;
         _categoryService = categoryService;
         _allergenService = allergenService;
@@ -97,7 +94,6 @@ public sealed class DietEditorController : Controller
         ViewData["Title"] = "Szczegóły diety";
         ViewData["Section"] = "Diety";
         ViewData["Description"] = $"Szczegóły diety #{id}.";
-        ViewBag.AvailableMeals = await _mealService.GetPublishedMealsAsync();
         return View(diet);
     }
 
@@ -155,7 +151,7 @@ public sealed class DietEditorController : Controller
     {
         try
         {
-            await _dietService.AssignMealToVariantAsync(variantId, mealId, multiplier, sortOrder);
+            await _dietService.AssignMealToVariantAsync(dietId, variantId, mealId, multiplier, sortOrder);
             TempData["Success"] = "Posiłek przypisany do wariantu.";
         }
         catch (Exception ex)

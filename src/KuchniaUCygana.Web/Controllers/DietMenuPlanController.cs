@@ -9,6 +9,9 @@ namespace KuchniaUCygana.Web.Controllers;
 [Route("diet-editor/menu-plan")]
 public sealed class DietMenuPlanController : Controller
 {
+    private const int MinDaysCount = 7;
+    private const int MaxDaysCount = 31;
+
     private static readonly string[] Slots = ["Breakfast", "Snack1", "Lunch", "Snack2", "Dinner"];
 
     private readonly IDietMenuPlanManagementService menuPlanService;
@@ -26,7 +29,8 @@ public sealed class DietMenuPlanController : Controller
     public async Task<IActionResult> Index(DateOnly? startDate, int days = 7)
     {
         var start = startDate ?? DateOnly.FromDateTime(DateTime.Today);
-        var model = await this.menuPlanService.GetWeekAsync(start, days);
+        var normalizedDays = NormalizeDaysCount(days);
+        var model = await this.menuPlanService.GetWeekAsync(start, normalizedDays);
         this.SetHeader("Plan menu", "Tygodniowy plan M2 do publikacji snapshotu.");
         return this.View("~/Views/DietEditor/MenuPlanWeek.cshtml", model);
     }
@@ -175,5 +179,10 @@ public sealed class DietMenuPlanController : Controller
         this.ViewData["Title"] = title;
         this.ViewData["Section"] = "Plan menu";
         this.ViewData["Description"] = description;
+    }
+
+    private static int NormalizeDaysCount(int days)
+    {
+        return Math.Clamp(days, MinDaysCount, MaxDaysCount);
     }
 }

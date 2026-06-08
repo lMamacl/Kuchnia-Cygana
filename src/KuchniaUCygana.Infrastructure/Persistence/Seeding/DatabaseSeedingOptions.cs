@@ -24,6 +24,7 @@ public enum DatabaseSeedingProfile
 {
     MinimalRealistic,
     DemoData,
+    VolumeDemo,
 }
 
 public enum SeedingTrigger

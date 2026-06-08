@@ -66,6 +66,31 @@ public sealed class IngredientManagementServiceTests
     }
 
     [Fact]
+    public async Task SearchRecipeLookupAsync_UsesDedicatedRepositoryAndClampsPageSize()
+    {
+        var repository = new Mock<IIngredientRepository>();
+        repository
+            .Setup(r => r.SearchRecipeLookupAsync("sel", 1, 20))
+            .ReturnsAsync(new[]
+            {
+                new IngredientListRow
+                {
+                    Id = 9,
+                    Name = "Seler",
+                    ResourceType = "Food",
+                    Unit = "g",
+                    IsActive = true,
+                },
+            });
+        var service = CreateService(repository);
+
+        var result = await service.SearchRecipeLookupAsync("  sel  ", 0, 200);
+
+        repository.Verify(r => r.SearchRecipeLookupAsync("sel", 1, 20), Times.Once);
+        result.Should().ContainSingle(item => item.Id == 9 && item.ResourceType == "Food");
+    }
+
+    [Fact]
     public async Task GetAsync_ReturnsNutritionAndIngredientAllergens()
     {
         var repository = new Mock<IIngredientRepository>();

@@ -62,6 +62,22 @@ public sealed class RecipeComponentManagementService : IRecipeComponentManagemen
         }).ToList();
     }
 
+    public async Task<IReadOnlyList<RecipeComponentVersionOptionDto>> SearchPublishedVersionOptionsAsync(
+        string? query,
+        int limit = 20)
+    {
+        var rows = await this.repository.SearchPublishedVersionOptionsAsync(
+            Normalize(query),
+            Math.Clamp(limit <= 0 ? 20 : limit, 1, 20));
+        return rows.Select(row => new RecipeComponentVersionOptionDto
+        {
+            RecipeComponentVersionId = row.RecipeComponentVersionId,
+            RecipeComponentId = row.RecipeComponentId,
+            ComponentName = row.ComponentName,
+            VersionNumber = row.VersionNumber,
+        }).ToList();
+    }
+
     public async Task<RecipeComponentDetailDto?> GetComponentAsync(int componentId)
     {
         var component = await this.repository.GetComponentAsync(componentId);

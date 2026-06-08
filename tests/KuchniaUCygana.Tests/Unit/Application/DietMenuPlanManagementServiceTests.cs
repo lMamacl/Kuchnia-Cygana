@@ -38,6 +38,25 @@ public sealed class DietMenuPlanManagementServiceTests
     }
 
     [Fact]
+    public async Task GetWeekAsync_ClampsRangeToThirtyOneDays()
+    {
+        var repository = new Mock<IDietMenuPlanRepository>();
+        DateOnly capturedEnd = default;
+        repository
+            .Setup(r => r.GetPlanSummariesAsync(It.IsAny<DateOnly>(), It.IsAny<DateOnly>()))
+            .Callback<DateOnly, DateOnly>((_, end) => capturedEnd = end)
+            .ReturnsAsync(Array.Empty<DietMenuPlanDaySummaryRow>());
+        var service = CreateService(repository);
+        var startDate = DateOnly.FromDateTime(DateTime.Today);
+
+        var result = await service.GetWeekAsync(startDate, 999);
+
+        result.DaysCount.Should().Be(31);
+        result.Days.Should().HaveCount(31);
+        capturedEnd.Should().Be(startDate.AddDays(30));
+    }
+
+    [Fact]
     public async Task PublishAsync_RejectsEmptyPlan()
     {
         var repository = new Mock<IDietMenuPlanRepository>();
@@ -49,7 +68,11 @@ public sealed class DietMenuPlanManagementServiceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*plan dnia nie ma pozycji*");
-        repository.Verify(r => r.PublishAsync(It.IsAny<int>(), It.IsAny<string?>()), Times.Never);
+        repository.Verify(r => r.PublishAsync(
+            It.IsAny<int>(),
+            It.IsAny<string?>(),
+            It.IsAny<IReadOnlyList<DietMenuPlanPublishedSnapshotRow>>(),
+            It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -139,7 +162,11 @@ public sealed class DietMenuPlanManagementServiceTests
 
         await service.PublishAsync(new PublishDietMenuPlanRequest { DietMenuPlanId = 10 });
 
-        repository.Verify(r => r.PublishAsync(10, "test-user"), Times.Once);
+        repository.Verify(r => r.PublishAsync(
+            10,
+            "test-user",
+            It.Is<IReadOnlyList<DietMenuPlanPublishedSnapshotRow>>(snapshots => snapshots.Count == 1),
+            It.Is<string>(hash => !string.IsNullOrWhiteSpace(hash))), Times.Once);
     }
 
     [Fact]
@@ -167,7 +194,11 @@ public sealed class DietMenuPlanManagementServiceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*brak opakowania produkcyjnego*brak kompletnego nutrition*");
-        repository.Verify(r => r.PublishAsync(It.IsAny<int>(), It.IsAny<string?>()), Times.Never);
+        repository.Verify(r => r.PublishAsync(
+            It.IsAny<int>(),
+            It.IsAny<string?>(),
+            It.IsAny<IReadOnlyList<DietMenuPlanPublishedSnapshotRow>>(),
+            It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -260,7 +291,11 @@ public sealed class DietMenuPlanManagementServiceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*D-3*");
-        repository.Verify(r => r.PublishAsync(It.IsAny<int>(), It.IsAny<string?>()), Times.Never);
+        repository.Verify(r => r.PublishAsync(
+            It.IsAny<int>(),
+            It.IsAny<string?>(),
+            It.IsAny<IReadOnlyList<DietMenuPlanPublishedSnapshotRow>>(),
+            It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]

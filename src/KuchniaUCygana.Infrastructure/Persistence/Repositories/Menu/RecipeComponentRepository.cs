@@ -267,6 +267,7 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
         var rows = await db.QueryAsync<RecipeComponentAllergenRow>(
             """
             SELECT
+                rci.[RecipeComponentVersionId],
                 a.[Id] AS [AllergenId],
                 a.[Name],
                 ia.[TraceAmount] AS [IsTrace],
@@ -313,6 +314,116 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
             new { versionId });
 
         return rows.ToList();
+    }
+
+    public async Task<RecipeComponentVersionDetailsBulkRow> GetVersionDetailsBulkAsync(IEnumerable<int> versionIds)
+    {
+        var ids = versionIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+
+        if (ids.Length == 0)
+        {
+            return RecipeComponentVersionDetailsBulkRow.Empty;
+        }
+
+        using var db = this.factory.CreateConnection();
+
+        var ingredients = (await db.QueryAsync<RecipeComponentIngredientRow>(
+            """
+            SELECT
+                rci.[Id],
+                rci.[RecipeComponentVersionId],
+                rci.[IngredientId],
+                i.[Name] AS [IngredientName],
+                COALESCE(rci.[StockItemId], i.[StockItemId]) AS [StockItemId],
+                COALESCE(rci.[WarehouseCategoryId], i.[WarehouseCategoryId]) AS [WarehouseCategoryId],
+                wc.[Name] AS [WarehouseCategoryName],
+                rci.[WeightInGrams],
+                rci.[YieldFactor],
+                nf.[CaloriesPer100g],
+                nf.[ProteinPer100g],
+                nf.[CarbohydratesPer100g],
+                nf.[FatPer100g],
+                nf.[FiberPer100g],
+                rci.[IsOptional],
+                rci.[Notes]
+            FROM [RecipeComponentIngredients] rci
+            INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+            LEFT JOIN [WarehouseCategories] wc ON wc.[Id] = COALESCE(rci.[WarehouseCategoryId], i.[WarehouseCategoryId])
+            OUTER APPLY (
+                SELECT TOP 1
+                    facts.[CaloriesPer100g],
+                    facts.[ProteinPer100g],
+                    facts.[CarbohydratesPer100g],
+                    facts.[FatPer100g],
+                    facts.[FiberPer100g]
+                FROM [NutritionFacts] facts
+                WHERE facts.[IngredientId] = i.[Id]
+                ORDER BY facts.[Id] DESC
+            ) nf
+            WHERE rci.[RecipeComponentVersionId] IN @versionIds
+              AND rci.[IsDeleted] = 0
+            ORDER BY rci.[RecipeComponentVersionId], rci.[Id];
+            """,
+            new { versionIds = ids })).ToList();
+
+        var packaging = (await db.QueryAsync<PackagingRequirementRow>(
+            """
+            SELECT
+                [Id],
+                [OwnerType],
+                [MealId],
+                [MealVariantId],
+                [RecipeComponentVersionId],
+                [StockItemId],
+                [WarehouseCategoryId],
+                [ResourceName],
+                [Quantity],
+                [Unit],
+                [ContainerRole],
+                [IsCustomerFacing]
+            FROM [PackagingRequirements]
+            WHERE [RecipeComponentVersionId] IN @versionIds
+              AND [IsDeleted] = 0
+            ORDER BY [RecipeComponentVersionId], [Id];
+            """,
+            new { versionIds = ids })).ToList();
+
+        var allergens = (await db.QueryAsync<RecipeComponentAllergenRow>(
+            """
+            SELECT
+                rci.[RecipeComponentVersionId],
+                a.[Id] AS [AllergenId],
+                a.[Name],
+                ia.[TraceAmount] AS [IsTrace],
+                N'Ingredient' AS [SourceType],
+                i.[Name] AS [SourceName]
+            FROM [RecipeComponentIngredients] rci
+            INNER JOIN [Ingredients] i ON i.[Id] = rci.[IngredientId]
+            INNER JOIN [IngredientAllergens] ia ON ia.[IngredientId] = i.[Id]
+            INNER JOIN [Allergens] a ON a.[Id] = ia.[AllergenId]
+            WHERE rci.[RecipeComponentVersionId] IN @versionIds
+              AND rci.[IsDeleted] = 0
+              AND i.[IsDeleted] = 0
+            ORDER BY rci.[RecipeComponentVersionId], a.[Name], i.[Name];
+            """,
+            new { versionIds = ids })).ToList();
+
+        return new RecipeComponentVersionDetailsBulkRow
+        {
+            IngredientsByVersionId = ingredients
+                .GroupBy(row => row.RecipeComponentVersionId)
+                .ToDictionary(group => group.Key, group => (IReadOnlyList<RecipeComponentIngredientRow>)group.ToList()),
+            PackagingByVersionId = packaging
+                .Where(row => row.RecipeComponentVersionId.HasValue)
+                .GroupBy(row => row.RecipeComponentVersionId!.Value)
+                .ToDictionary(group => group.Key, group => (IReadOnlyList<PackagingRequirementRow>)group.ToList()),
+            AllergensByVersionId = allergens
+                .GroupBy(row => row.RecipeComponentVersionId)
+                .ToDictionary(group => group.Key, group => (IReadOnlyList<RecipeComponentAllergenRow>)group.ToList()),
+        };
     }
 
     public async Task<IReadOnlyList<PackagingRequirementRow>> GetMealPackagingAsync(int mealId)
@@ -420,6 +531,38 @@ public sealed class RecipeComponentRepository : IRecipeComponentRepository
               AND rc.[IsActive] = 1
             ORDER BY rc.[Name], rcv.[VersionNumber] DESC;
             """);
+
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<RecipeComponentVersionOptionRow>> SearchPublishedVersionOptionsAsync(string? query, int limit)
+    {
+        var safeLimit = Math.Clamp(limit <= 0 ? 20 : limit, 1, 20);
+        var normalized = string.IsNullOrWhiteSpace(query) ? null : query.Trim();
+
+        using var db = this.factory.CreateConnection();
+
+        var rows = await db.QueryAsync<RecipeComponentVersionOptionRow>(
+            """
+            SELECT TOP (@Limit)
+                rcv.[Id] AS [RecipeComponentVersionId],
+                rc.[Id] AS [RecipeComponentId],
+                rc.[Name] AS [ComponentName],
+                rcv.[VersionNumber]
+            FROM [RecipeComponentVersions] rcv
+            INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+            WHERE rcv.[Status] = N'Published'
+              AND rcv.[IsDeleted] = 0
+              AND rc.[IsDeleted] = 0
+              AND rc.[IsActive] = 1
+              AND (@SearchPrefix IS NULL OR rc.[Name] LIKE @SearchPrefix)
+            ORDER BY rc.[Name], rcv.[VersionNumber] DESC;
+            """,
+            new
+            {
+                Limit = safeLimit,
+                SearchPrefix = normalized is null ? null : $"{normalized}%",
+            });
 
         return rows.ToList();
     }

@@ -109,6 +109,78 @@ public sealed class IngredientRepository : BaseRepository<Ingredient>, IIngredie
         };
     }
 
+    public async Task<IReadOnlyList<IngredientListRow>> SearchRecipeLookupAsync(string? query, int page, int pageSize)
+    {
+        page = page <= 0 ? 1 : page;
+        pageSize = Math.Clamp(pageSize <= 0 ? 20 : pageSize, 1, 20);
+        var offset = (page - 1) * pageSize;
+        var normalized = string.IsNullOrWhiteSpace(query) ? null : query.Trim();
+
+        using var db = this.Factory.CreateConnection();
+        var rows = await db.QueryAsync<IngredientListRow>(
+            """
+            SELECT
+                i.[Id],
+                i.[Name],
+                i.[ResourceType],
+                i.[FoodCategoryId],
+                fc.[Name] AS [FoodCategoryName],
+                i.[Unit],
+                i.[CostPerUnit],
+                i.[Notes],
+                COALESCE(i.[StockItemId], stockMapping.[StockItemId]) AS [StockItemId],
+                COALESCE(i.[WarehouseCategoryId], stockById.[WarehouseCategoryId], stockMapping.[WarehouseCategoryId]) AS [WarehouseCategoryId],
+                COALESCE(wc.[Name], stockMapping.[WarehouseCategoryName]) AS [WarehouseCategoryName],
+                CAST(0 AS bit) AS [MissingWarehouseMapping],
+                i.[IsActive],
+                nf.[CaloriesPer100g],
+                nf.[ProteinPer100g],
+                nf.[CarbohydratesPer100g],
+                nf.[FatPer100g],
+                nf.[FiberPer100g]
+            FROM [Ingredients] i
+            LEFT JOIN [Categories] fc ON fc.[Id] = i.[FoodCategoryId]
+            LEFT JOIN [StockItems] stockById ON stockById.[Id] = i.[StockItemId] AND stockById.[IsDeleted] = 0
+            LEFT JOIN [WarehouseCategories] wc ON wc.[Id] = COALESCE(i.[WarehouseCategoryId], stockById.[WarehouseCategoryId])
+            OUTER APPLY (
+                SELECT TOP 1
+                    si.[Id] AS [StockItemId],
+                    si.[WarehouseCategoryId],
+                    baseWc.[Name] AS [WarehouseCategoryName]
+                FROM [StockItems] si
+                LEFT JOIN [WarehouseCategories] baseWc ON baseWc.[Id] = si.[WarehouseCategoryId]
+                WHERE si.[BaseIngredientId] = i.[Id]
+                  AND si.[IsDeleted] = 0
+                ORDER BY si.[Id]
+            ) stockMapping
+            OUTER APPLY (
+                SELECT TOP 1
+                    facts.[CaloriesPer100g],
+                    facts.[ProteinPer100g],
+                    facts.[CarbohydratesPer100g],
+                    facts.[FatPer100g],
+                    facts.[FiberPer100g]
+                FROM [NutritionFacts] facts
+                WHERE facts.[IngredientId] = i.[Id]
+                ORDER BY facts.[Id] DESC
+            ) nf
+            WHERE i.[IsDeleted] = 0
+              AND i.[IsActive] = 1
+              AND i.[ResourceType] IN (N'Food', N'Spice')
+              AND (@SearchPrefix IS NULL OR i.[Name] LIKE @SearchPrefix)
+            ORDER BY i.[Name], i.[Id]
+            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+            """,
+            new
+            {
+                SearchPrefix = normalized is null ? null : $"{normalized}%",
+                Offset = offset,
+                PageSize = pageSize,
+            });
+
+        return rows.ToList();
+    }
+
     public async Task<IReadOnlyList<IngredientAllergenRow>> GetIngredientAllergensAsync(int ingredientId)
     {
         using var db = this.Factory.CreateConnection();

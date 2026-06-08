@@ -108,8 +108,13 @@ public sealed class DietManagementService : IDietManagementService
         variant.Id = await this.dietVariantRepository.InsertAsync(variant);
     }
 
-    public async Task AssignMealToVariantAsync(int variantId, int mealId, decimal multiplier, int sortOrder)
+    public async Task AssignMealToVariantAsync(int dietId, int variantId, int mealId, decimal multiplier, int sortOrder)
     {
+        if (dietId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(dietId), "Dieta jest wymagana.");
+        }
+
         if (variantId <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(variantId), "Wariant diety jest wymagany.");
@@ -123,6 +128,17 @@ public sealed class DietManagementService : IDietManagementService
         if (multiplier <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(multiplier), "Mnożnik porcji musi być większy od zera.");
+        }
+
+        var variant = await this.dietVariantRepository.GetByIdAsync(variantId);
+        if (variant is null)
+        {
+            throw new InvalidOperationException($"Wariant diety #{variantId} nie istnieje.");
+        }
+
+        if (variant.DietId != dietId)
+        {
+            throw new InvalidOperationException("Wariant diety nie nalezy do wskazanej diety.");
         }
 
         await this.dietVariantMealRepository.UpsertAsync(new DietVariantMeal

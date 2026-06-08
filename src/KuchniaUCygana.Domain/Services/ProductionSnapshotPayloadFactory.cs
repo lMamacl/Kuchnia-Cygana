@@ -21,6 +21,17 @@ public static class ProductionSnapshotPayloadFactory
         var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
         return new ProductionSnapshotPayload(json, hash);
     }
+
+    public static string CreatePlanHash(IEnumerable<string> itemHashes)
+    {
+        var payload = string.Join(
+            "\n",
+            itemHashes
+                .Where(hash => !string.IsNullOrWhiteSpace(hash))
+                .OrderBy(hash => hash, StringComparer.Ordinal));
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(hashBytes).ToLowerInvariant();
+    }
 }
 
 public sealed record ProductionSnapshotPayload(string Json, string Hash);

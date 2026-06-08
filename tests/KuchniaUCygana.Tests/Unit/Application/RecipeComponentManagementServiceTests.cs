@@ -62,6 +62,30 @@ public sealed class RecipeComponentManagementServiceTests
     }
 
     [Fact]
+    public async Task SearchPublishedVersionOptionsAsync_UsesRepositoryLookupWithLimit()
+    {
+        var repository = new Mock<IRecipeComponentRepository>();
+        repository
+            .Setup(r => r.SearchPublishedVersionOptionsAsync("sos", 20))
+            .ReturnsAsync(new[]
+            {
+                new RecipeComponentVersionOptionRow
+                {
+                    RecipeComponentId = 3,
+                    RecipeComponentVersionId = 10,
+                    ComponentName = "Sos",
+                    VersionNumber = 2,
+                },
+            });
+        var service = CreateService(repository);
+
+        var result = await service.SearchPublishedVersionOptionsAsync("  sos  ", 500);
+
+        repository.Verify(r => r.SearchPublishedVersionOptionsAsync("sos", 20), Times.Once);
+        result.Should().ContainSingle(item => item.RecipeComponentVersionId == 10 && item.ComponentName == "Sos");
+    }
+
+    [Fact]
     public async Task PublishVersionAsync_RejectsIncompleteDraft()
     {
         var repository = new Mock<IRecipeComponentRepository>();

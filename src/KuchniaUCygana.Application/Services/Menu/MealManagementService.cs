@@ -82,15 +82,9 @@ public sealed class MealManagementService : IMealManagementService
     public async Task<IReadOnlyList<MenuPlanMealLookupDto>> SearchPlanningMealsAsync(string? query, int limit = 20)
     {
         var pageSize = Math.Clamp(limit <= 0 ? 20 : limit, 1, 50);
-        var result = await this.mealRepository.SearchAsync(new MealSearchQuery
-        {
-            Search = Normalize(query),
-            PlanningEligibleOnly = true,
-            Page = 1,
-            PageSize = pageSize,
-        });
+        var rows = await this.mealRepository.SearchPlanningAsync(Normalize(query), pageSize);
 
-        return result.Items
+        return rows
             .Select(MapPlanningMealLookup)
             .ToList();
     }
@@ -146,6 +140,7 @@ public sealed class MealManagementService : IMealManagementService
             .ToList();
         var results = new Dictionary<MealVariantResultKey, MealVariantResultDto?>();
 
+        var freshKeys = new List<(MealVariantResultKey Key, string CacheKey)>();
         foreach (var key in normalizedKeys)
         {
             var cacheKey = MenuPlanningCacheKeys.MealResult(key);
@@ -159,11 +154,22 @@ public sealed class MealManagementService : IMealManagementService
                 }
             }
 
-            var fresh = await this.GetMealVariantResultFreshAsync(key.MealId, key.MealVariantId);
-            results[key] = fresh;
-            if (fresh is not null)
+            freshKeys.Add((key, cacheKey));
+        }
+
+        var freshResults = await Task.WhenAll(freshKeys.Select(async item => new
+        {
+            item.Key,
+            item.CacheKey,
+            Result = await this.GetMealVariantResultFreshAsync(item.Key.MealId, item.Key.MealVariantId),
+        }));
+
+        foreach (var item in freshResults)
+        {
+            results[item.Key] = item.Result;
+            if (item.Result is not null)
             {
-                await this.planningCache.SetAsync(cacheKey, fresh, TimeSpan.FromMinutes(10));
+                await this.planningCache.SetAsync(item.CacheKey, item.Result, TimeSpan.FromMinutes(10));
             }
         }
 
@@ -580,19 +586,21 @@ public sealed class MealManagementService : IMealManagementService
     private async Task<IReadOnlyList<MealVariantResultComponentInputDto>> BuildBaseComponentInputsAsync(int mealId)
     {
         var rows = (await this.recipeComponentRepository.GetMealComponentDetailsAsync(mealId)).ToList();
+        var bulk = await this.recipeComponentRepository.GetVersionDetailsBulkAsync(
+            rows.Select(row => row.RecipeComponentVersionId));
         var inputs = new List<MealVariantResultComponentInputDto>();
 
         foreach (var group in rows.GroupBy(row => row.RecipeComponentVersionId))
         {
             var first = group.First();
             var ingredients = first.RecipeComponentVersionId > 0
-                ? await this.recipeComponentRepository.GetVersionIngredientsAsync(first.RecipeComponentVersionId)
+                ? GetBulkIngredients(bulk, first.RecipeComponentVersionId)
                 : group.Where(row => row.IngredientId > 0).Select(MapLegacyIngredientRow).ToList();
             var packaging = first.RecipeComponentVersionId > 0
-                ? await this.recipeComponentRepository.GetVersionPackagingAsync(first.RecipeComponentVersionId)
+                ? GetBulkPackaging(bulk, first.RecipeComponentVersionId)
                 : Array.Empty<PackagingRequirementRow>();
             var allergens = first.RecipeComponentVersionId > 0
-                ? await this.recipeComponentRepository.GetVersionAllergensAsync(first.RecipeComponentVersionId)
+                ? GetBulkAllergens(bulk, first.RecipeComponentVersionId)
                 : Array.Empty<RecipeComponentAllergenRow>();
 
             inputs.Add(MapComponentInput(first, ingredients, packaging, allergens));
@@ -607,17 +615,46 @@ public sealed class MealManagementService : IMealManagementService
     private async Task<IReadOnlyList<MealVariantResultComponentInputDto>> BuildVariantComponentInputsAsync(int mealVariantId)
     {
         var components = await this.mealVariantRepository.GetComponentsAsync(mealVariantId);
+        var bulk = await this.recipeComponentRepository.GetVersionDetailsBulkAsync(
+            components.Select(component => component.RecipeComponentVersionId));
         var inputs = new List<MealVariantResultComponentInputDto>();
 
         foreach (var component in components)
         {
-            var ingredients = await this.recipeComponentRepository.GetVersionIngredientsAsync(component.RecipeComponentVersionId);
-            var packaging = await this.recipeComponentRepository.GetVersionPackagingAsync(component.RecipeComponentVersionId);
-            var allergens = await this.recipeComponentRepository.GetVersionAllergensAsync(component.RecipeComponentVersionId);
+            var ingredients = GetBulkIngredients(bulk, component.RecipeComponentVersionId);
+            var packaging = GetBulkPackaging(bulk, component.RecipeComponentVersionId);
+            var allergens = GetBulkAllergens(bulk, component.RecipeComponentVersionId);
             inputs.Add(MapComponentInput(component, ingredients, packaging, allergens));
         }
 
         return inputs;
+    }
+
+    private static IReadOnlyList<RecipeComponentIngredientRow> GetBulkIngredients(
+        RecipeComponentVersionDetailsBulkRow bulk,
+        int versionId)
+    {
+        return bulk.IngredientsByVersionId.TryGetValue(versionId, out var rows)
+            ? rows
+            : Array.Empty<RecipeComponentIngredientRow>();
+    }
+
+    private static IReadOnlyList<PackagingRequirementRow> GetBulkPackaging(
+        RecipeComponentVersionDetailsBulkRow bulk,
+        int versionId)
+    {
+        return bulk.PackagingByVersionId.TryGetValue(versionId, out var rows)
+            ? rows
+            : Array.Empty<PackagingRequirementRow>();
+    }
+
+    private static IReadOnlyList<RecipeComponentAllergenRow> GetBulkAllergens(
+        RecipeComponentVersionDetailsBulkRow bulk,
+        int versionId)
+    {
+        return bulk.AllergensByVersionId.TryGetValue(versionId, out var rows)
+            ? rows
+            : Array.Empty<RecipeComponentAllergenRow>();
     }
 
     private static MealVariantResultComponentInputDto MapComponentInput(
@@ -928,6 +965,11 @@ public sealed class MealManagementService : IMealManagementService
         if (row.ComponentCount <= 0)
         {
             warnings.Add("brak skladowych");
+        }
+
+        if (row.LegacyRecipeCount > 0)
+        {
+            warnings.Add("legacy Recipes - brak wersjonowanych skladowych");
         }
 
         if (row.VariantCount <= 0)
