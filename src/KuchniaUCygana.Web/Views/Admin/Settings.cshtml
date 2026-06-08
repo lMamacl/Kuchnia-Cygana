@@ -2,10 +2,10 @@
 @{
     Layout = "_LayoutStaff";
 
-    var users = Model.Users.ToArray();
-    var admins = users.Count(user => string.Equals(user.Role, "Admin", StringComparison.Ordinal));
-    var staff = users.Count(user => !string.Equals(user.Role, "Client", StringComparison.Ordinal));
-    var clients = users.Count(user => string.Equals(user.Role, "Client", StringComparison.Ordinal));
+    var userSummary = Model.UserSummary;
+    var admins = userSummary.AdminCount;
+    var staff = userSummary.StaffCount;
+    var clients = userSummary.ClientCount;
     var lastLog = Model.SystemLogs
         .OrderByDescending(log => log.Timestamp)
         .FirstOrDefault();
@@ -16,7 +16,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Konta</div>
-                <div class="h1 mb-0">@users.Length</div>
+                <div class="h1 mb-0">@userSummary.TotalCount</div>
             </div>
         </div>
     </div>
@@ -64,7 +64,7 @@
                         <tr>
                             <td>Konta i role</td>
                             <td><span class="badge bg-green-lt text-green">Aktywne</span></td>
-                            <td class="text-secondary">@users.Length kont, @Model.AvailableRoles.Count rol</td>
+                            <td class="text-secondary">@userSummary.TotalCount kont, @Model.AvailableRoles.Count rol</td>
                             <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Users">Otworz</a></td>
                         </tr>
                         <tr>

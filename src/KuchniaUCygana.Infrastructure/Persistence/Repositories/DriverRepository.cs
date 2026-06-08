@@ -16,6 +16,25 @@ public sealed class DriverRepository : BaseRepository<Driver>, IDriverRepository
     {
     }
 
+    public async Task<IReadOnlyList<Driver>> GetByIdsAsync(IEnumerable<int> ids)
+    {
+        using var db = Factory.CreateConnection();
+        var idList = ids
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+
+        if (idList.Length == 0)
+        {
+            return Array.Empty<Driver>();
+        }
+
+        var drivers = await db.QueryAsync<Driver>(
+            "SELECT * FROM [Drivers] WHERE [Id] IN @Ids AND [IsDeleted] = 0 ORDER BY [Id];",
+            new { Ids = idList });
+        return drivers.ToList();
+    }
+
     // Dodatkowe metody specyficzne dla kierowcĂłw, np.:
     public async Task<Driver?> GetByUserIdAsync(int userId)
     {

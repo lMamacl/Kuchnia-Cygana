@@ -1,24 +1,9 @@
 @model CustomerSupportDashboardViewModel
 @{
     Layout = "_LayoutStaff";
-    int PriorityRank(string priority) => priority switch
-    {
-        "Critical" => 4,
-        "High" => 3,
-        "Medium" => 2,
-        _ => 1,
-    };
-
-    var waitingTickets = Model.Tickets
-        .Where(x => x.Status is "New" or "Open" or "Pending")
-        .OrderByDescending(x => PriorityRank(x.Priority))
-        .ThenBy(x => x.CreatedAt)
-        .ToArray();
-    var unassignedTickets = waitingTickets.Where(x => !x.AssignedToUserId.HasValue).ToArray();
-    var criticalTickets = waitingTickets.Where(x => x.Priority is "High" or "Critical").ToArray();
-    var closedToday = Model.Tickets.Count(x =>
-        x.ClosedAt.HasValue &&
-        DateOnly.FromDateTime(x.ClosedAt.Value.LocalDateTime) == DateOnly.FromDateTime(DateTime.Today));
+    var summary = Model.Summary;
+    var waitingTickets = Model.Tickets.ToArray();
+    var unassignedTickets = Model.OpenTickets.ToArray();
 
     string PriorityClass(string priority) => priority switch
     {
@@ -34,7 +19,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Oczekujace</div>
-                <div class="h1 mb-0">@waitingTickets.Length</div>
+                <div class="h1 mb-0">@summary.WaitingCount</div>
             </div>
         </div>
     </div>
@@ -42,7 +27,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Nieprzypisane</div>
-                <div class="h1 mb-0">@unassignedTickets.Length</div>
+                <div class="h1 mb-0">@summary.UnassignedCount</div>
             </div>
         </div>
     </div>
@@ -50,7 +35,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Wysoki priorytet</div>
-                <div class="h1 mb-0">@criticalTickets.Length</div>
+                <div class="h1 mb-0">@summary.HighPriorityCount</div>
             </div>
         </div>
     </div>
@@ -58,7 +43,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Zamkniete dzisiaj</div>
-                <div class="h1 mb-0">@closedToday</div>
+                <div class="h1 mb-0">@summary.ClosedTodayCount</div>
             </div>
         </div>
     </div>
@@ -95,8 +80,8 @@
                                     }
                                 </td>
                                 <td>@(ticket.ClientFullName ?? $"#{ticket.ClientUserId}")</td>
-                                <td><span class="badge bg-blue-lt text-blue">@ticket.Status</span></td>
-                                <td><span class="badge @PriorityClass(ticket.Priority)">@ticket.Priority</span></td>
+                                <td><span class="badge bg-blue-lt text-blue">@EnumDisplayNames.TicketStatusName(ticket.Status)</span></td>
+                                <td><span class="badge @PriorityClass(ticket.Priority)">@EnumDisplayNames.TicketPriorityName(ticket.Priority)</span></td>
                                 <td>@(ticket.AssignedToFullName ?? "Nieprzypisane")</td>
                                 <td class="text-end">
                                     <a class="btn btn-sm btn-outline-primary" asp-controller="CustomerSupport" asp-action="Tickets">Obsluz</a>
@@ -126,7 +111,7 @@
                     <div class="list-group-item">
                         <div class="d-flex w-100 justify-content-between gap-3">
                             <div class="fw-semibold">@ticket.Title</div>
-                            <span class="badge @PriorityClass(ticket.Priority)">@ticket.Priority</span>
+                            <span class="badge @PriorityClass(ticket.Priority)">@EnumDisplayNames.TicketPriorityName(ticket.Priority)</span>
                         </div>
                         <div class="text-secondary small">
                             @(ticket.ClientFullName ?? $"Klient #{ticket.ClientUserId}") - @ticket.CreatedAt.ToLocalTime().ToString("dd.MM HH:mm")

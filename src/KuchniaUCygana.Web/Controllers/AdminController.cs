@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using KuchniaUCygana.Application.DTOs;
+using KuchniaUCygana.Application.DTOs.Admin;
 using KuchniaUCygana.Application.DTOs.Packing;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Constants;
@@ -48,7 +49,7 @@ public sealed class AdminController : Controller
         ViewData["Title"] = "Admin";
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Dashboard administracyjny systemu.";
-        return View(await BuildModelAsync());
+        return View(await BuildDashboardModelAsync());
     }
 
     [HttpGet("users")]
@@ -57,7 +58,7 @@ public sealed class AdminController : Controller
         ViewData["Title"] = "Uzytkownicy";
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Zarzadzanie uzytkownikami.";
-        return View(await BuildModelAsync(usersFilter: filter));
+        return View(await BuildUsersModelAsync(filter));
     }
 
     [HttpGet("users/new")]
@@ -66,7 +67,7 @@ public sealed class AdminController : Controller
         ViewData["Title"] = "Nowy uzytkownik";
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Tworzenie konta uzytkownika.";
-        return View(await BuildModelAsync());
+        return View(await BuildNewUserModelAsync());
     }
 
     [HttpGet("roles")]
@@ -75,7 +76,7 @@ public sealed class AdminController : Controller
         ViewData["Title"] = "Role";
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Zarzadzanie rolami i uprawnieniami.";
-        return View(await BuildModelAsync());
+        return View(await BuildRolesModelAsync());
     }
 
     [HttpGet("logs")]
@@ -84,7 +85,7 @@ public sealed class AdminController : Controller
         ViewData["Title"] = "Logi systemowe";
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Audyt zmian w systemie.";
-        return View(await BuildModelAsync(filter));
+        return View(await BuildLogsModelAsync(filter));
     }
 
     [HttpGet("packing-incidents")]
@@ -94,19 +95,22 @@ public sealed class AdminController : Controller
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Administrowanie zgloszeniami z kompletacji.";
 
-        var incidents = await packingIncidentService.SearchAsync(filter.ToSearchRequest());
-        var incidentsPage = PagedList<PackingIncidentDto>.Create(
-            FilterPackingIncidents(incidents, filter).OrderByDescending(incident => incident.ReportedAt),
-            filter.Page,
-            filter.PageSize);
+        var incidentsPage = await packingIncidentService.SearchPageAsync(filter.ToSearchRequest());
+        var incidentsPageModel = new PagedList<PackingIncidentDto>
+        {
+            Items = incidentsPage.Items,
+            Page = incidentsPage.Page,
+            PageSize = incidentsPage.PageSize,
+            TotalCount = incidentsPage.TotalCount,
+        };
         filter.Page = incidentsPage.Page;
         filter.PageSize = incidentsPage.PageSize;
 
         return View(new PackingIncidentListViewModel
         {
             Filter = filter,
-            IncidentsPage = incidentsPage,
-            Incidents = incidentsPage.Items,
+            IncidentsPage = incidentsPageModel,
+            Incidents = incidentsPageModel.Items,
         });
     }
 
@@ -116,7 +120,7 @@ public sealed class AdminController : Controller
         ViewData["Title"] = "Ustawienia";
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Ustawienia systemowe.";
-        return View(await BuildModelAsync());
+        return View(await BuildSettingsModelAsync());
     }
 
     [HttpPost("users")]
@@ -132,21 +136,21 @@ public sealed class AdminController : Controller
         {
             TempData["Error"] = "Podaj email oraz haslo dluzsze niz 5 znakow.";
             SetNewUserViewData();
-            return View("NewUser", await BuildModelAsync(newUser: request));
+            return View("NewUser", await BuildNewUserModelAsync(request));
         }
 
         if (!IsAllowedRole(role))
         {
             TempData["Error"] = "Wybrana rola nie jest dostepna.";
             SetNewUserViewData();
-            return View("NewUser", await BuildModelAsync(newUser: request));
+            return View("NewUser", await BuildNewUserModelAsync(request));
         }
 
         if (await userRepository.FindByEmailAsync(email) is not null)
         {
             TempData["Error"] = "Konto z takim adresem email juz istnieje.";
             SetNewUserViewData();
-            return View("NewUser", await BuildModelAsync(newUser: request));
+            return View("NewUser", await BuildNewUserModelAsync(request));
         }
 
         var user = new User
@@ -473,103 +477,105 @@ public sealed class AdminController : Controller
         return RedirectToAction(nameof(PackingIncidents));
     }
 
-    private async Task<AdminDashboardViewModel> BuildModelAsync(
-        AuditLogFilterViewModel? filter = null,
-        CreateAdminUserViewModel? newUser = null,
-        AdminUserListFilterViewModel? usersFilter = null)
+    private async Task<AdminDashboardViewModel> BuildDashboardModelAsync()
     {
-        var auditFilter = filter ?? new AuditLogFilterViewModel { Page = 1, PageSize = 10 };
-        auditFilter.From ??= DateTime.Today.AddDays(-30);
-        var auditPage = await auditLogService.SearchSystemLogsAsync(auditFilter.ToSearchRequest());
-        auditFilter.Page = auditPage.Page;
-        auditFilter.PageSize = auditPage.PageSize;
-
-        usersFilter ??= new AdminUserListFilterViewModel();
-        var users = (await userService.GetAllAsync())
-            .OrderBy(user => user.Role)
-            .ThenBy(user => user.FullName)
-            .ThenBy(user => user.Email)
-            .ToArray();
-        var usersPageModel = PagedList<UserDto>.Create(
-            FilterUsers(users, usersFilter),
-            usersFilter.Page,
-            usersFilter.PageSize);
-        usersFilter.Page = usersPageModel.Page;
-        usersFilter.PageSize = usersPageModel.PageSize;
+        var auditFilter = new AuditLogFilterViewModel { Page = 1, PageSize = 10 };
+        var auditPage = await LoadAuditPageAsync(auditFilter);
 
         return new AdminDashboardViewModel
         {
             SystemLogs = auditPage.Items,
-            Users = users,
             AvailableRoles = AvailableRoles,
-            UsersPage = usersPageModel,
-            UsersFilter = usersFilter,
+            UserSummary = await userService.GetDirectorySummaryAsync(),
             AuditPage = auditPage,
             AuditFilter = auditFilter,
-            NewUser = newUser ?? new CreateAdminUserViewModel(),
+            NewUser = new CreateAdminUserViewModel(),
         };
     }
 
-    private static IEnumerable<UserDto> FilterUsers(IEnumerable<UserDto> users, AdminUserListFilterViewModel filter)
+    private async Task<AdminDashboardViewModel> BuildRolesModelAsync()
+        => new()
+        {
+            AvailableRoles = AvailableRoles,
+            UserSummary = await userService.GetDirectorySummaryAsync(),
+            NewUser = new CreateAdminUserViewModel(),
+        };
+
+    private async Task<AdminDashboardViewModel> BuildSettingsModelAsync()
     {
-        var query = users;
-        if (!string.IsNullOrWhiteSpace(filter.Role))
-        {
-            query = query.Where(user => string.Equals(user.Role, filter.Role, StringComparison.OrdinalIgnoreCase));
-        }
+        var auditFilter = new AuditLogFilterViewModel { Page = 1, PageSize = 1 };
+        var auditPage = await LoadAuditPageAsync(auditFilter);
 
-        if (!string.IsNullOrWhiteSpace(filter.Search))
+        return new AdminDashboardViewModel
         {
-            query = query.Where(user => MatchesSearch(
-                filter.Search,
-                user.FullName,
-                user.Email,
-                user.FirstName,
-                user.LastName,
-                user.Role,
-                user.Id.ToString()));
-        }
-
-        return query;
+            SystemLogs = auditPage.Items,
+            AvailableRoles = AvailableRoles,
+            UserSummary = await userService.GetDirectorySummaryAsync(),
+            AuditPage = auditPage,
+            AuditFilter = auditFilter,
+            NewUser = new CreateAdminUserViewModel(),
+        };
     }
 
-    private static IEnumerable<PackingIncidentDto> FilterPackingIncidents(
-        IEnumerable<PackingIncidentDto> incidents,
-        PackingIncidentListFilterViewModel filter)
+    private async Task<AdminDashboardViewModel> BuildLogsModelAsync(AuditLogFilterViewModel? filter)
     {
-        var query = incidents;
-        if (!string.IsNullOrWhiteSpace(filter.Search))
-        {
-            query = query.Where(incident => MatchesSearch(
-                filter.Search,
-                incident.Id.ToString(),
-                incident.ClientPublicId,
-                incident.DeliveryCalendarId?.ToString(),
-                incident.MealName,
-                incident.BoxCode,
-                incident.BagCode,
-                incident.ReasonSummary,
-                incident.Description,
-                incident.AdminNotes,
-                incident.WarehouseWasteError,
-                incident.Type.ToString(),
-                incident.Status.ToString()));
-        }
+        var auditFilter = filter ?? new AuditLogFilterViewModel { Page = 1, PageSize = 25 };
+        var auditPage = await LoadAuditPageAsync(auditFilter);
 
-        return query;
+        return new AdminDashboardViewModel
+        {
+            SystemLogs = auditPage.Items,
+            AuditPage = auditPage,
+            AuditFilter = auditFilter,
+        };
     }
 
-    private static bool MatchesSearch(string? search, params string?[] values)
-    {
-        if (string.IsNullOrWhiteSpace(search))
+    private static AdminDashboardViewModel BuildNewUserModel(CreateAdminUserViewModel? newUser = null)
+        => new()
         {
-            return true;
-        }
+            AvailableRoles = AvailableRoles,
+            NewUser = newUser ?? new CreateAdminUserViewModel(),
+        };
 
-        var normalizedSearch = search.Trim();
-        return values.Any(value =>
-            !string.IsNullOrWhiteSpace(value) &&
-            value.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase));
+    private Task<AdminDashboardViewModel> BuildNewUserModelAsync(CreateAdminUserViewModel? newUser = null)
+        => Task.FromResult(BuildNewUserModel(newUser));
+
+    private async Task<SystemLogPageDto> LoadAuditPageAsync(AuditLogFilterViewModel auditFilter)
+    {
+        auditFilter.From ??= DateTime.Today.AddDays(-30);
+        var auditPage = await auditLogService.SearchSystemLogsAsync(auditFilter.ToSearchRequest());
+        auditFilter.Page = auditPage.Page;
+        auditFilter.PageSize = auditPage.PageSize;
+        return auditPage;
+    }
+
+    private async Task<AdminDashboardViewModel> BuildUsersModelAsync(AdminUserListFilterViewModel filter)
+    {
+        var usersPage = await userService.SearchAsync(
+            filter.Role,
+            filter.Search,
+            filter.Page,
+            filter.PageSize);
+        var users = usersPage.Items.ToArray();
+        var usersPageModel = new PagedList<UserDto>
+        {
+            Items = users,
+            Page = usersPage.Page,
+            PageSize = usersPage.PageSize,
+            TotalCount = usersPage.TotalCount,
+        };
+        filter.Page = usersPage.Page;
+        filter.PageSize = usersPage.PageSize;
+
+        return new AdminDashboardViewModel
+        {
+            Users = users,
+            AvailableRoles = AvailableRoles,
+            UserSummary = await userService.GetDirectorySummaryAsync(),
+            UsersPage = usersPageModel,
+            UsersFilter = filter,
+            NewUser = new CreateAdminUserViewModel(),
+        };
     }
 
     private void SetNewUserViewData()

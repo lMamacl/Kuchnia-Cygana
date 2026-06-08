@@ -19,8 +19,8 @@ public sealed class CustomerSupportService : ICustomerSupportService
     private const int DeliveryOptionLimit = 200;
 
     private readonly ITicketRepository ticketRepository;
-    private readonly IRepository<TicketAttachment> ticketAttachmentRepository;
-    private readonly IRepository<User> userRepository;
+    private readonly ITicketAttachmentRepository ticketAttachmentRepository;
+    private readonly IUserRepository userRepository;
     private readonly IOrderRepository orderRepository;
     private readonly IDeliveryCalendarRepository deliveryCalendarRepository;
     private readonly IAddressRepository addressRepository;
@@ -32,13 +32,13 @@ public sealed class CustomerSupportService : ICustomerSupportService
     private readonly IDeliveryRouteRepository deliveryRouteRepository;
     private readonly IDeliveryIssueRepository deliveryIssueRepository;
     private readonly IDriverRepository driverRepository;
-    private readonly IRepository<Vehicle> vehicleRepository;
+    private readonly IVehicleRepository vehicleRepository;
     private readonly IMapper mapper;
 
     public CustomerSupportService(
         ITicketRepository ticketRepository,
-        IRepository<TicketAttachment> ticketAttachmentRepository,
-        IRepository<User> userRepository,
+        ITicketAttachmentRepository ticketAttachmentRepository,
+        IUserRepository userRepository,
         IOrderRepository orderRepository,
         IDeliveryCalendarRepository deliveryCalendarRepository,
         IAddressRepository addressRepository,
@@ -50,7 +50,7 @@ public sealed class CustomerSupportService : ICustomerSupportService
         IDeliveryRouteRepository deliveryRouteRepository,
         IDeliveryIssueRepository deliveryIssueRepository,
         IDriverRepository driverRepository,
-        IRepository<Vehicle> vehicleRepository,
+        IVehicleRepository vehicleRepository,
         IMapper mapper)
     {
         this.ticketRepository = ticketRepository;
@@ -71,16 +71,42 @@ public sealed class CustomerSupportService : ICustomerSupportService
         this.mapper = mapper;
     }
 
-    public async Task<IEnumerable<TicketDto>> GetTicketsAsync()
+    public async Task<TicketPageDto> SearchTicketsAsync(TicketSearchRequest request)
     {
-        var tickets = await ticketRepository.GetAllAsync();
-        return await MapTicketsAsync(tickets);
+        var result = await ticketRepository.SearchAsync(new TicketSearchQuery(
+            request.Search,
+            request.Status,
+            request.Priority,
+            request.AssignedToUserId,
+            request.UnassignedOnly,
+            request.OpenOnly,
+            request.QueueOrder,
+            request.Page,
+            request.PageSize));
+
+        return new TicketPageDto
+        {
+            Items = result.Items.Select(MapTicketSearchRow).ToArray(),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount,
+        };
     }
 
-    public async Task<IEnumerable<TicketDto>> GetOpenTicketsAsync()
+    public async Task<TicketDashboardSummaryDto> GetTicketDashboardSummaryAsync()
     {
-        var tickets = await ticketRepository.GetOpenTicketsAsync();
-        return await MapTicketsAsync(tickets);
+        var today = DateTime.Today;
+        var summary = await ticketRepository.GetDashboardSummaryAsync(
+            new DateTimeOffset(today),
+            new DateTimeOffset(today.AddDays(1)));
+
+        return new TicketDashboardSummaryDto
+        {
+            WaitingCount = summary.WaitingCount,
+            UnassignedCount = summary.UnassignedCount,
+            HighPriorityCount = summary.HighPriorityCount,
+            ClosedTodayCount = summary.ClosedTodayCount,
+        };
     }
 
     public async Task<IEnumerable<TicketDto>> GetTicketsByClientIdAsync(int clientUserId)
@@ -113,10 +139,16 @@ public sealed class CustomerSupportService : ICustomerSupportService
             .Where(ticket => ticket.OrderId.HasValue || ticket.DeliveryCalendarId.HasValue)
             .ToArray();
 
+        if (linkedTickets.Length == 0)
+        {
+            return new Dictionary<int, TicketOperationalContextDto>();
+        }
+
+        var data = await LoadOperationalContextDataAsync(linkedTickets);
         var result = new Dictionary<int, TicketOperationalContextDto>();
         foreach (var ticket in linkedTickets)
         {
-            result[ticket.Id] = await BuildOperationalContextAsync(ticket);
+            result[ticket.Id] = await BuildOperationalContextAsync(ticket, data);
         }
 
         return result;
@@ -133,50 +165,24 @@ public sealed class CustomerSupportService : ICustomerSupportService
             toExclusive = from.AddDays(1);
         }
 
-        var deliveries = (await deliveryCalendarRepository.GetByDateRangeAsync(from, toExclusive))
-            .Take(DeliveryOptionLimit)
-            .ToArray();
+        var rows = await deliveryCalendarRepository.SearchTicketDeliveryOptionsAsync(
+            from,
+            toExclusive,
+            DeliveryOptionLimit);
 
-        if (deliveries.Length == 0)
-        {
-            return [];
-        }
-
-        var users = (await userRepository.GetAllAsync()).ToDictionary(user => user.Id);
-        var orderCache = new Dictionary<int, Order?>();
-        var addressCache = new Dictionary<int, Address?>();
-        var options = new List<TicketDeliveryOptionDto>();
-
-        foreach (var delivery in deliveries)
-        {
-            var order = await GetOrderWithItemsCachedAsync(delivery.OrderId, orderCache);
-            if (order is null)
+        return rows
+            .Select(row => new TicketDeliveryOptionDto
             {
-                continue;
-            }
-
-            var address = await GetAddressCachedAsync(delivery.AddressId, addressCache);
-            users.TryGetValue(order.CustomerId, out var customer);
-
-            options.Add(new TicketDeliveryOptionDto
-            {
-                DeliveryCalendarId = delivery.Id,
-                OrderId = order.Id,
-                CustomerId = order.CustomerId,
-                OrderNumber = order.OrderNumber,
-                CustomerFullName = customer is null
-                    ? $"Klient #{order.CustomerId}"
-                    : BuildUserFullName(customer),
-                DeliveryDate = delivery.DeliveryDate,
-                DeliveryStatus = delivery.Status.ToString(),
-                AddressFullLine = address?.FullAddress ?? $"Adres #{delivery.AddressId}",
-                DietSummary = BuildDietSummary(order.Items),
-            });
-        }
-
-        return options
-            .OrderByDescending(option => option.DeliveryDate)
-            .ThenBy(option => option.OrderNumber)
+                DeliveryCalendarId = row.DeliveryCalendarId,
+                OrderId = row.OrderId,
+                CustomerId = row.CustomerId,
+                OrderNumber = row.OrderNumber,
+                CustomerFullName = row.CustomerFullName,
+                DeliveryDate = row.DeliveryDate,
+                DeliveryStatus = row.DeliveryStatus.ToString(),
+                AddressFullLine = row.AddressFullLine,
+                DietSummary = row.DietSummary,
+            })
             .ToArray();
     }
 
@@ -258,10 +264,8 @@ public sealed class CustomerSupportService : ICustomerSupportService
 
     public async Task<IEnumerable<TicketAttachmentDto>> GetTicketAttachmentsAsync(int ticketId)
     {
-        var attachments = await ticketAttachmentRepository.GetAllAsync();
-        return await MapTicketAttachmentsAsync(attachments
-            .Where(attachment => attachment.TicketId == ticketId)
-            .OrderByDescending(attachment => attachment.UploadedAt));
+        var attachments = await ticketAttachmentRepository.GetByTicketIdAsync(ticketId);
+        return await MapTicketAttachmentsAsync(attachments);
     }
 
     public async Task<TicketAttachmentDto?> GetTicketAttachmentByIdAsync(int id)
@@ -292,7 +296,252 @@ public sealed class CustomerSupportService : ICustomerSupportService
         return await ticketAttachmentRepository.DeleteAsync(id);
     }
 
+    private async Task<TicketOperationalContextData> LoadOperationalContextDataAsync(
+        IReadOnlyCollection<TicketDto> tickets)
+    {
+        var explicitDeliveryIds = tickets
+            .Select(ticket => ticket.DeliveryCalendarId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToArray();
+        var explicitDeliveries = await deliveryCalendarRepository.GetByIdsAsync(explicitDeliveryIds);
+        var orderIds = tickets
+            .Select(ticket => ticket.OrderId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Concat(explicitDeliveries.Select(delivery => delivery.OrderId))
+            .Distinct()
+            .ToArray();
+        var ordersById = await orderRepository.GetWithItemsAndDeliveryByIdsAsync(orderIds);
+        var deliveriesById = explicitDeliveries
+            .Concat(ordersById.Values.SelectMany(order => order.DeliveryDays))
+            .GroupBy(delivery => delivery.Id)
+            .ToDictionary(group => group.Key, group => group.First());
+        var deliveries = deliveriesById.Values.ToArray();
+        var addresses = await addressRepository.GetByIdsAsync(deliveries.Select(delivery => delivery.AddressId));
+        var windows = await deliveryWindowRepository.GetByIdsAsync(
+            deliveries
+                .Select(delivery => delivery.DeliveryWindowId)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value));
+
+        return new TicketOperationalContextData
+        {
+            DeliveriesById = deliveriesById,
+            OrdersById = ordersById,
+            AddressesById = addresses.ToDictionary(address => address.Id),
+            DeliveryWindowsById = windows.ToDictionary(window => window.Id),
+            DeliveryInfosByDeliveryId = await LoadDeliveryInfosAsync(deliveries),
+            RoutesByDeliveryId = await LoadRouteContextsAsync(deliveries),
+            PackingBagsByDeliveryId = await LoadPackingBagsAsync(deliveries),
+            PackingIncidentsByDeliveryId = await LoadPackingIncidentsAsync(deliveries),
+        };
+    }
+
+    private async Task<IReadOnlyDictionary<int, OrderDeliveryInfo>> LoadDeliveryInfosAsync(
+        IReadOnlyCollection<DeliveryCalendar> deliveries)
+    {
+        var deliveryIds = deliveries.Select(delivery => delivery.Id).ToHashSet();
+        if (deliveryIds.Count == 0)
+        {
+            return new Dictionary<int, OrderDeliveryInfo>();
+        }
+
+        var result = new Dictionary<int, OrderDeliveryInfo>();
+        foreach (var deliveryDate in deliveries.Select(delivery => delivery.DeliveryDate.Date).Distinct())
+        {
+            try
+            {
+                var dayDeliveries = await orderDataProvider.GetDeliveriesForDateAsync(deliveryDate);
+                foreach (var deliveryInfo in dayDeliveries)
+                {
+                    if (deliveryIds.Contains(deliveryInfo.DeliveryCalendarId))
+                    {
+                        result[deliveryInfo.DeliveryCalendarId] = deliveryInfo;
+                    }
+                }
+            }
+            catch
+            {
+                // M1 is supportive context for BOK; ticket list must stay available if it is temporarily unavailable.
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<IReadOnlyDictionary<int, TicketRouteContextDto>> LoadRouteContextsAsync(
+        IReadOnlyCollection<DeliveryCalendar> deliveries)
+    {
+        var deliveryIds = deliveries.Select(delivery => delivery.Id).ToHashSet();
+        if (deliveryIds.Count == 0)
+        {
+            return new Dictionary<int, TicketRouteContextDto>();
+        }
+
+        var matches = new List<RouteStopMatch>();
+        foreach (var deliveryDate in deliveries.Select(delivery => delivery.DeliveryDate.Date).Distinct())
+        {
+            var routes = await deliveryRouteRepository.GetRoutesWithStopsAsync(
+                new DateTimeOffset(deliveryDate, TimeSpan.Zero));
+
+            matches.AddRange(routes
+                .SelectMany(route => route.Stops.Select(stop => new RouteStopMatch(route, stop)))
+                .Where(match => deliveryIds.Contains(match.Stop.DeliveryCalendarId)));
+        }
+
+        if (matches.Count == 0)
+        {
+            return new Dictionary<int, TicketRouteContextDto>();
+        }
+
+        var drivers = (await driverRepository.GetByIdsAsync(matches
+                .Select(match => match.Route.DriverId)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)))
+            .ToDictionary(driver => driver.Id);
+        var driverUsers = (await userRepository.GetByIdsAsync(drivers.Values.Select(driver => driver.UserId)))
+            .ToDictionary(user => user.Id);
+        var vehicles = (await vehicleRepository.GetByIdsAsync(matches
+                .Select(match => match.Route.VehicleId)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)))
+            .ToDictionary(vehicle => vehicle.Id);
+        var issuesByStopId = (await deliveryIssueRepository.GetByRouteStopIdsAsync(matches.Select(match => match.Stop.Id)))
+            .GroupBy(issue => issue.RouteStopId)
+            .ToDictionary(group => group.Key, group => group.ToArray());
+
+        var result = new Dictionary<int, TicketRouteContextDto>();
+        foreach (var match in matches.GroupBy(item => item.Stop.DeliveryCalendarId).Select(group => group.First()))
+        {
+            string? driverName = null;
+            if (match.Route.DriverId.HasValue &&
+                drivers.TryGetValue(match.Route.DriverId.Value, out var driver) &&
+                driverUsers.TryGetValue(driver.UserId, out var driverUser))
+            {
+                driverName = BuildUserFullName(driverUser);
+            }
+
+            var vehicle = match.Route.VehicleId.HasValue &&
+                vehicles.TryGetValue(match.Route.VehicleId.Value, out var matchedVehicle)
+                    ? matchedVehicle
+                    : null;
+            var latestIssue = issuesByStopId.TryGetValue(match.Stop.Id, out var issues)
+                ? issues.OrderByDescending(issue => issue.ReportedAt).FirstOrDefault()
+                : null;
+
+            result[match.Stop.DeliveryCalendarId] = new TicketRouteContextDto
+            {
+                RouteId = match.Route.Id,
+                RouteName = match.Route.Name,
+                StopId = match.Stop.Id,
+                SequenceNumber = match.Stop.SequenceNumber,
+                StopStatus = match.Stop.Status.ToString(),
+                PlannedArrivalTime = match.Stop.PlannedArrivalTime,
+                ActualArrivalTime = match.Stop.ActualArrivalTime,
+                DriverName = driverName,
+                VehicleRegistration = vehicle?.RegistrationNumber,
+                VehicleModel = vehicle?.Model,
+                LatestIssue = latestIssue is null
+                    ? null
+                    : new TicketDeliveryIssueContextDto
+                    {
+                        Reason = latestIssue.Reason,
+                        Notes = latestIssue.Notes,
+                        ReportedAt = latestIssue.ReportedAt,
+                    },
+            };
+        }
+
+        return result;
+    }
+
+    private async Task<IReadOnlyDictionary<int, IReadOnlyList<TicketPackingBagContextDto>>> LoadPackingBagsAsync(
+        IReadOnlyCollection<DeliveryCalendar> deliveries)
+    {
+        var deliveryIds = deliveries.Select(delivery => delivery.Id).ToHashSet();
+        var result = new Dictionary<int, List<TicketPackingBagContextDto>>();
+        if (deliveryIds.Count == 0)
+        {
+            return new Dictionary<int, IReadOnlyList<TicketPackingBagContextDto>>();
+        }
+
+        foreach (var deliveryDate in deliveries.Select(delivery => DateOnly.FromDateTime(delivery.DeliveryDate)).Distinct())
+        {
+            try
+            {
+                var board = await packingService.GetPackingBoardAsync(deliveryDate);
+                foreach (var group in board.Routes
+                    .SelectMany(route => route.Bags)
+                    .Where(bag => bag.DeliveryCalendarId.HasValue && deliveryIds.Contains(bag.DeliveryCalendarId.Value))
+                    .GroupBy(bag => bag.DeliveryCalendarId!.Value))
+                {
+                    if (!result.TryGetValue(group.Key, out var contexts))
+                    {
+                        contexts = new List<TicketPackingBagContextDto>();
+                        result[group.Key] = contexts;
+                    }
+
+                    contexts.AddRange(group
+                        .OrderBy(bag => bag.BagNumber)
+                        .Select(bag => new TicketPackingBagContextDto
+                        {
+                            PackingBagId = bag.PackingBagId,
+                            BagCode = bag.BagCode,
+                            BagNumber = bag.BagNumber,
+                            StatusText = string.IsNullOrWhiteSpace(bag.StatusText) ? bag.Status : bag.StatusText,
+                            TotalBoxes = bag.TotalBoxes,
+                            PackedBoxes = bag.PackedBoxes,
+                            HasLabels = bag.HasLabels,
+                            IsTransportLabelAttached = bag.IsTransportLabelAttached,
+                            TransportLabelAttachedAt = bag.TransportLabelAttachedAt,
+                        }));
+                }
+            }
+            catch
+            {
+                // Packing context is auxiliary; do not fail ticket listing when M5 data is incomplete.
+            }
+        }
+
+        return result.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<TicketPackingBagContextDto>)pair.Value
+                .OrderBy(bag => bag.BagNumber)
+                .ToArray());
+    }
+
+    private async Task<IReadOnlyDictionary<int, IReadOnlyList<TicketPackingIncidentContextDto>>> LoadPackingIncidentsAsync(
+        IReadOnlyCollection<DeliveryCalendar> deliveries)
+    {
+        var deliveryIds = deliveries.Select(delivery => delivery.Id).ToArray();
+        if (deliveryIds.Length == 0)
+        {
+            return new Dictionary<int, IReadOnlyList<TicketPackingIncidentContextDto>>();
+        }
+
+        var incidents = await packingIncidentService.SearchByDeliveryCalendarIdsAsync(deliveryIds);
+        return incidents
+            .Where(incident => incident.DeliveryCalendarId.HasValue)
+            .GroupBy(incident => incident.DeliveryCalendarId!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<TicketPackingIncidentContextDto>)group
+                    .OrderByDescending(incident => incident.ReportedAt)
+                    .Select(MapPackingIncidentContext)
+                    .ToArray());
+    }
+
     private async Task<TicketOperationalContextDto> BuildOperationalContextAsync(TicketDto ticket)
+    {
+        var data = await LoadOperationalContextDataAsync(new[] { ticket });
+        return await BuildOperationalContextAsync(ticket, data);
+    }
+
+    private async Task<TicketOperationalContextDto> BuildOperationalContextAsync(
+        TicketDto ticket,
+        TicketOperationalContextData data)
     {
         var hints = new List<string>();
         var context = new TicketOperationalContextDto
@@ -305,7 +554,7 @@ public sealed class CustomerSupportService : ICustomerSupportService
         DeliveryCalendar? delivery = null;
         if (ticket.DeliveryCalendarId.HasValue)
         {
-            delivery = await deliveryCalendarRepository.GetByIdAsync(ticket.DeliveryCalendarId.Value);
+            data.DeliveriesById.TryGetValue(ticket.DeliveryCalendarId.Value, out delivery);
             if (delivery is null)
             {
                 hints.Add($"Nie znaleziono dostawy #{ticket.DeliveryCalendarId.Value}.");
@@ -320,7 +569,7 @@ public sealed class CustomerSupportService : ICustomerSupportService
         Order? order = null;
         if (context.OrderId.HasValue)
         {
-            order = await orderRepository.GetWithItemsAndDeliveryAsync(context.OrderId.Value);
+            data.OrdersById.TryGetValue(context.OrderId.Value, out order);
             if (order is null)
             {
                 hints.Add($"Nie znaleziono zamowienia #{context.OrderId.Value}.");
@@ -333,7 +582,9 @@ public sealed class CustomerSupportService : ICustomerSupportService
             context.DeliveryCalendarId = delivery.Id;
         }
 
-        var deliveryInfo = await TryGetDeliveryInfoAsync(delivery);
+        var deliveryInfo = delivery is null
+            ? null
+            : data.DeliveryInfosByDeliveryId.GetValueOrDefault(delivery.Id);
 
         if (order is not null)
         {
@@ -352,10 +603,11 @@ public sealed class CustomerSupportService : ICustomerSupportService
 
         if (delivery is not null)
         {
-            var address = await addressRepository.GetByIdAsync(delivery.AddressId);
-            var window = delivery.DeliveryWindowId.HasValue
-                ? await deliveryWindowRepository.GetByIdAsync(delivery.DeliveryWindowId.Value)
-                : null;
+            data.AddressesById.TryGetValue(delivery.AddressId, out var address);
+            var window = delivery.DeliveryWindowId.HasValue &&
+                data.DeliveryWindowsById.TryGetValue(delivery.DeliveryWindowId.Value, out var matchedWindow)
+                    ? matchedWindow
+                    : null;
 
             context.DeliveryCalendarId = delivery.Id;
             context.DeliveryDate = delivery.DeliveryDate;
@@ -376,9 +628,9 @@ public sealed class CustomerSupportService : ICustomerSupportService
                 ?? address?.PostalCode;
             context.DeliveryNotes = address?.DeliveryNotes;
             context.ClientPublicId = deliveryInfo?.ClientPublicId;
-            context.Route = await BuildRouteContextAsync(delivery);
-            context.PackingBags = await BuildPackingBagsAsync(delivery);
-            context.PackingIncidents = await BuildPackingIncidentsAsync(delivery);
+            context.Route = data.RoutesByDeliveryId.GetValueOrDefault(delivery.Id);
+            context.PackingBags = data.PackingBagsByDeliveryId.GetValueOrDefault(delivery.Id) ?? [];
+            context.PackingIncidents = data.PackingIncidentsByDeliveryId.GetValueOrDefault(delivery.Id) ?? [];
         }
 
         var orderItems = BuildOrderItems(order, deliveryInfo).ToArray();
@@ -389,137 +641,6 @@ public sealed class CustomerSupportService : ICustomerSupportService
 
         context.AssessmentHints = BuildAssessmentHints(context, hints);
         return context;
-    }
-
-    private async Task<OrderDeliveryInfo?> TryGetDeliveryInfoAsync(DeliveryCalendar? delivery)
-    {
-        if (delivery is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            var deliveries = await orderDataProvider.GetDeliveriesForDateAsync(delivery.DeliveryDate.Date);
-            return deliveries.FirstOrDefault(item => item.DeliveryCalendarId == delivery.Id);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private async Task<TicketRouteContextDto?> BuildRouteContextAsync(DeliveryCalendar delivery)
-    {
-        var routes = await deliveryRouteRepository.GetRoutesWithStopsAsync(
-            new DateTimeOffset(delivery.DeliveryDate.Date, TimeSpan.Zero));
-
-        var match = routes
-            .SelectMany(route => route.Stops.Select(stop => new { Route = route, Stop = stop }))
-            .FirstOrDefault(item => item.Stop.DeliveryCalendarId == delivery.Id);
-
-        if (match is null)
-        {
-            return null;
-        }
-
-        string? driverName = null;
-        if (match.Route.DriverId.HasValue)
-        {
-            var driver = await driverRepository.GetByIdAsync(match.Route.DriverId.Value);
-            if (driver is not null)
-            {
-                var driverUser = await userRepository.GetByIdAsync(driver.UserId);
-                driverName = driverUser is null ? null : BuildUserFullName(driverUser);
-            }
-        }
-
-        Vehicle? vehicle = null;
-        if (match.Route.VehicleId.HasValue)
-        {
-            vehicle = await vehicleRepository.GetByIdAsync(match.Route.VehicleId.Value);
-        }
-
-        var issues = await deliveryIssueRepository.GetByRouteStopIdsAsync(new[] { match.Stop.Id });
-        var latestIssue = issues
-            .OrderByDescending(issue => issue.ReportedAt)
-            .FirstOrDefault();
-
-        return new TicketRouteContextDto
-        {
-            RouteId = match.Route.Id,
-            RouteName = match.Route.Name,
-            StopId = match.Stop.Id,
-            SequenceNumber = match.Stop.SequenceNumber,
-            StopStatus = match.Stop.Status.ToString(),
-            PlannedArrivalTime = match.Stop.PlannedArrivalTime,
-            ActualArrivalTime = match.Stop.ActualArrivalTime,
-            DriverName = driverName,
-            VehicleRegistration = vehicle?.RegistrationNumber,
-            VehicleModel = vehicle?.Model,
-            LatestIssue = latestIssue is null
-                ? null
-                : new TicketDeliveryIssueContextDto
-                {
-                    Reason = latestIssue.Reason,
-                    Notes = latestIssue.Notes,
-                    ReportedAt = latestIssue.ReportedAt,
-                },
-        };
-    }
-
-    private async Task<IReadOnlyList<TicketPackingBagContextDto>> BuildPackingBagsAsync(DeliveryCalendar delivery)
-    {
-        try
-        {
-            var board = await packingService.GetPackingBoardAsync(DateOnly.FromDateTime(delivery.DeliveryDate));
-            return board.Routes
-                .SelectMany(route => route.Bags)
-                .Where(bag => bag.DeliveryCalendarId == delivery.Id)
-                .OrderBy(bag => bag.BagNumber)
-                .Select(bag => new TicketPackingBagContextDto
-                {
-                    PackingBagId = bag.PackingBagId,
-                    BagCode = bag.BagCode,
-                    BagNumber = bag.BagNumber,
-                    StatusText = string.IsNullOrWhiteSpace(bag.StatusText) ? bag.Status : bag.StatusText,
-                    TotalBoxes = bag.TotalBoxes,
-                    PackedBoxes = bag.PackedBoxes,
-                    HasLabels = bag.HasLabels,
-                    IsTransportLabelAttached = bag.IsTransportLabelAttached,
-                    TransportLabelAttachedAt = bag.TransportLabelAttachedAt,
-                })
-                .ToArray();
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
-    private async Task<IReadOnlyList<TicketPackingIncidentContextDto>> BuildPackingIncidentsAsync(DeliveryCalendar delivery)
-    {
-        var incidents = await packingIncidentService.SearchAsync(new PackingIncidentFilterDto
-        {
-            DeliveryCalendarId = delivery.Id,
-        });
-
-        return incidents
-            .OrderByDescending(incident => incident.ReportedAt)
-            .Select(incident => new TicketPackingIncidentContextDto
-            {
-                Id = incident.Id,
-                Type = incident.Type.ToString(),
-                Status = incident.Status.ToString(),
-                ReasonSummary = incident.ReasonSummary,
-                Description = incident.Description,
-                MealName = incident.MealName,
-                BoxCode = incident.BoxCode,
-                BagCode = incident.BagCode,
-                ReportedAt = incident.ReportedAt,
-                ResolvedAt = incident.ResolvedAt,
-            })
-            .ToArray();
     }
 
     private async Task<IReadOnlyList<TicketMealContextDto>> BuildMealContextsAsync(
@@ -663,7 +784,15 @@ public sealed class CustomerSupportService : ICustomerSupportService
     private async Task<List<TicketDto>> MapTicketsAsync(IEnumerable<Ticket> tickets)
     {
         var list = mapper.Map<List<TicketDto>>(tickets);
-        var users = (await userRepository.GetAllAsync()).ToDictionary(user => user.Id);
+        var userIds = list
+            .Select(ticket => ticket.ClientUserId)
+            .Concat(list
+                .Select(ticket => ticket.AssignedToUserId)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value))
+            .Distinct()
+            .ToArray();
+        var users = (await userRepository.GetByIdsAsync(userIds)).ToDictionary(user => user.Id);
 
         foreach (var ticket in list)
         {
@@ -682,11 +811,31 @@ public sealed class CustomerSupportService : ICustomerSupportService
         return list;
     }
 
+    private static TicketDto MapTicketSearchRow(TicketSearchRow row)
+        => new()
+        {
+            Id = row.Id,
+            Title = row.Title,
+            Description = row.Description,
+            ClientUserId = row.ClientUserId,
+            ClientFullName = row.ClientFullName,
+            OrderId = row.OrderId,
+            DeliveryCalendarId = row.DeliveryCalendarId,
+            AssignedToUserId = row.AssignedToUserId,
+            AssignedToFullName = row.AssignedToFullName,
+            Status = row.Status.ToString(),
+            Priority = row.Priority.ToString(),
+            ClosedAt = row.ClosedAt,
+            CreatedAt = row.CreatedAt,
+            UpdatedAt = row.UpdatedAt,
+        };
+
     private async Task<List<TicketAttachmentDto>> MapTicketAttachmentsAsync(
         IEnumerable<TicketAttachment> attachments)
     {
         var list = mapper.Map<List<TicketAttachmentDto>>(attachments);
-        var users = (await userRepository.GetAllAsync()).ToDictionary(user => user.Id);
+        var users = (await userRepository.GetByIdsAsync(list.Select(attachment => attachment.UploadedByUserId)))
+            .ToDictionary(user => user.Id);
 
         foreach (var attachment in list)
         {
@@ -713,32 +862,6 @@ public sealed class CustomerSupportService : ICustomerSupportService
         {
             throw new InvalidOperationException($"Uzytkownik o ID {userId} nie istnieje.");
         }
-    }
-
-    private async Task<Order?> GetOrderWithItemsCachedAsync(
-        int orderId,
-        Dictionary<int, Order?> cache)
-    {
-        if (!cache.TryGetValue(orderId, out var order))
-        {
-            order = await orderRepository.GetWithItemsAndDeliveryAsync(orderId);
-            cache[orderId] = order;
-        }
-
-        return order;
-    }
-
-    private async Task<Address?> GetAddressCachedAsync(
-        int addressId,
-        Dictionary<int, Address?> cache)
-    {
-        if (!cache.TryGetValue(addressId, out var address))
-        {
-            address = await addressRepository.GetByIdAsync(addressId);
-            cache[addressId] = address;
-        }
-
-        return address;
     }
 
     private static IReadOnlyList<TicketOrderItemContextDto> BuildOrderItems(
@@ -918,23 +1041,20 @@ public sealed class CustomerSupportService : ICustomerSupportService
             .ToArray();
     }
 
-    private static string BuildDietSummary(IReadOnlyList<OrderItem> items)
-    {
-        if (items.Count == 0)
+    private static TicketPackingIncidentContextDto MapPackingIncidentContext(PackingIncidentDto incident)
+        => new()
         {
-            return string.Empty;
-        }
-
-        var labels = items
-            .Select(item => $"{item.DietName} {item.VariantName}".Trim())
-            .Where(label => !string.IsNullOrWhiteSpace(label))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(2)
-            .ToArray();
-
-        var suffix = items.Count > labels.Length ? $" +{items.Count - labels.Length}" : string.Empty;
-        return string.Join(", ", labels) + suffix;
-    }
+            Id = incident.Id,
+            Type = incident.Type.ToString(),
+            Status = incident.Status.ToString(),
+            ReasonSummary = incident.ReasonSummary,
+            Description = incident.Description,
+            MealName = incident.MealName,
+            BoxCode = incident.BoxCode,
+            BagCode = incident.BagCode,
+            ReportedAt = incident.ReportedAt,
+            ResolvedAt = incident.ResolvedAt,
+        };
 
     private static IReadOnlyList<string> MergeDistinct(
         IEnumerable<string> first,
@@ -984,5 +1104,34 @@ public sealed class CustomerSupportService : ICustomerSupportService
     {
         var fullName = $"{user.FirstName} {user.LastName}".Trim();
         return string.IsNullOrWhiteSpace(fullName) ? user.Email : fullName;
+    }
+
+    private sealed record RouteStopMatch(DeliveryRoute Route, DeliveryRouteStop Stop);
+
+    private sealed class TicketOperationalContextData
+    {
+        public IReadOnlyDictionary<int, DeliveryCalendar> DeliveriesById { get; init; }
+            = new Dictionary<int, DeliveryCalendar>();
+
+        public IReadOnlyDictionary<int, Order> OrdersById { get; init; }
+            = new Dictionary<int, Order>();
+
+        public IReadOnlyDictionary<int, Address> AddressesById { get; init; }
+            = new Dictionary<int, Address>();
+
+        public IReadOnlyDictionary<int, DeliveryWindow> DeliveryWindowsById { get; init; }
+            = new Dictionary<int, DeliveryWindow>();
+
+        public IReadOnlyDictionary<int, OrderDeliveryInfo> DeliveryInfosByDeliveryId { get; init; }
+            = new Dictionary<int, OrderDeliveryInfo>();
+
+        public IReadOnlyDictionary<int, TicketRouteContextDto> RoutesByDeliveryId { get; init; }
+            = new Dictionary<int, TicketRouteContextDto>();
+
+        public IReadOnlyDictionary<int, IReadOnlyList<TicketPackingBagContextDto>> PackingBagsByDeliveryId { get; init; }
+            = new Dictionary<int, IReadOnlyList<TicketPackingBagContextDto>>();
+
+        public IReadOnlyDictionary<int, IReadOnlyList<TicketPackingIncidentContextDto>> PackingIncidentsByDeliveryId { get; init; }
+            = new Dictionary<int, IReadOnlyList<TicketPackingIncidentContextDto>>();
     }
 }

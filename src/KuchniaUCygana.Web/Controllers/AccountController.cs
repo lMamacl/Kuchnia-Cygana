@@ -289,8 +289,7 @@ public sealed class AccountController : Controller
             return null;
         }
 
-        return (await humanResourcesService.GetEmployeesAsync())
-            .FirstOrDefault(employee => employee.UserId == userId);
+        return await humanResourcesService.GetEmployeeByUserIdAsync(userId);
     }
 
     private int GetCurrentUserId()

@@ -4,7 +4,11 @@ namespace KuchniaUCygana.Application.Interfaces;
 
 public interface IHumanResourcesService
 {
-    Task<IEnumerable<DepartmentDto>> GetDepartmentsAsync();
+    Task<HumanResourcesSummaryDto> GetSummaryAsync(DateOnly today);
+
+    Task<IReadOnlyList<DepartmentStaffSummaryDto>> GetDepartmentStaffSummariesAsync(string? search = null);
+
+    Task<DepartmentPageDto> SearchDepartmentsAsync(DepartmentSearchRequest request);
 
     Task<DepartmentDto?> GetDepartmentByIdAsync(int id);
 
@@ -14,9 +18,11 @@ public interface IHumanResourcesService
 
     Task<bool> DeleteDepartmentAsync(int id);
 
-    Task<IEnumerable<EmployeeDto>> GetEmployeesAsync();
+    Task<EmployeePageDto> SearchEmployeesAsync(EmployeeSearchRequest request);
 
-    Task<IEnumerable<EmployeeDto>> GetEmployeesByDepartmentAsync(int departmentId);
+    Task<IReadOnlyList<EmployeeDto>> GetEmployeeOptionsAsync(bool activeOnly, int limit = 500);
+
+    Task<EmployeeDto?> GetEmployeeByUserIdAsync(int userId);
 
     Task<EmployeeDto?> GetEmployeeByIdAsync(int id);
 
@@ -30,7 +36,7 @@ public interface IHumanResourcesService
 
     Task<bool> DeleteEmployeeAsync(int id);
 
-    Task<IEnumerable<LeaveRequestDto>> GetLeaveRequestsAsync();
+    Task<LeaveRequestPageDto> SearchLeaveRequestsAsync(LeaveRequestSearchRequest request);
 
     Task<IEnumerable<LeaveRequestDto>> GetLeaveRequestsByEmployeeAsync(int employeeId);
 
@@ -44,7 +50,7 @@ public interface IHumanResourcesService
 
     Task<bool> DeleteLeaveRequestAsync(int id);
 
-    Task<IEnumerable<WorkScheduleDto>> GetWorkSchedulesAsync();
+    Task<WorkSchedulePageDto> SearchWorkSchedulesAsync(WorkScheduleSearchRequest request);
 
     Task<IEnumerable<WorkScheduleDto>> GetWorkSchedulesByUserAsync(int userId);
 
