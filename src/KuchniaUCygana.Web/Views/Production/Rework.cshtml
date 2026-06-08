@@ -5,6 +5,9 @@
     ViewData["Title"] = "Ponowne przygotowanie";
     ViewData["Section"] = "Kuchnia";
     ViewData["Description"] = "Zamienniki pudełek zgłoszone przez kompletację.";
+
+    var filter = Model.Filter;
+    var page = Model.Page;
 }
 
 @functions {
@@ -17,6 +20,28 @@
         PackingIncidentStatus.Resolved => "Zamknięte",
         _ => status.ToString()
     };
+
+    IDictionary<string, string> RouteValues(int page)
+    {
+        var values = new Dictionary<string, string>
+        {
+            ["date"] = Model.SelectedDate.ToString("yyyy-MM-dd"),
+            ["page"] = page.ToString(),
+            ["pageSize"] = Model.Filter.PageSize.ToString(),
+        };
+
+        Add(values, "search", Model.Filter.Search);
+        Add(values, "status", Model.Filter.Status);
+        return values;
+    }
+
+    void Add(IDictionary<string, string> values, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            values[key] = value;
+        }
+    }
 }
 
 <div class="row row-cards">
@@ -27,10 +52,51 @@
                     <h3 class="card-title mb-1">Ponowne przygotowanie</h3>
                     <div class="text-secondary small">Zamienniki pudełek po zgłoszeniach z kompletacji.</div>
                 </div>
-                <form method="get" class="d-flex gap-2">
-                    <input type="date" class="form-control" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
-                    <button type="submit" class="btn btn-indigo">Pokaż</button>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" class="row align-items-end g-3">
+                    <input type="hidden" name="page" value="1" />
+                    <div class="col-sm-6 col-lg-2">
+                        <label class="form-label fw-bold">Data</label>
+                        <input type="date" class="form-control" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label fw-bold">Szukaj</label>
+                        <input type="search" class="form-control" name="search" value="@filter.Search" placeholder="Danie, klient, pudełko, powód" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label fw-bold">Status</label>
+                        <select name="status" class="form-select">
+                            <option value="">Wszystkie</option>
+                            <option value="New" selected="@(filter.Status == "New")">Nowe</option>
+                            <option value="InProgress" selected="@(filter.Status == "InProgress")">W przygotowaniu</option>
+                            <option value="KitchenReworkRequested" selected="@(filter.Status == "KitchenReworkRequested")">Do ponownego przygotowania</option>
+                            <option value="WarehouseActionRequired" selected="@(filter.Status == "WarehouseActionRequired")">Czeka też na magazyn</option>
+                            <option value="Resolved" selected="@(filter.Status == "Resolved")">Zamknięte</option>
+                        </select>
+                    </div>
+                    <div class="col-sm-6 col-lg-1">
+                        <label class="form-label fw-bold">Strona</label>
+                        <select name="pageSize" class="form-select">
+                            <option value="10" selected="@(filter.PageSize == 10)">10</option>
+                            <option value="25" selected="@(filter.PageSize == 25)">25</option>
+                            <option value="50" selected="@(filter.PageSize == 50)">50</option>
+                            <option value="100" selected="@(filter.PageSize == 100)">100</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-lg-auto">
+                        <button type="submit" class="btn btn-indigo">Pokaż</button>
+                        <a asp-action="Rework" asp-route-date="@Model.SelectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wyczyść</a>
+                    </div>
                 </form>
+            </div>
+            <div class="card-header">
+                <div>
+                    <h3 class="card-title mb-0">Zgłoszenia do ponownego przygotowania</h3>
+                    <div class="text-secondary small">
+                        Wyniki @((page.TotalCount == 0 ? 0 : ((page.Page - 1) * page.PageSize) + 1)) - @Math.Min(page.Page * page.PageSize, page.TotalCount) z @(page.TotalCount)
+                    </div>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table table-premium">
@@ -45,13 +111,13 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @if (!Model.Incidents.Any())
+                        @if (!page.Items.Any())
                         {
                             <tr>
-                                <td colspan="6" class="text-secondary">Brak zamienników do przygotowania.</td>
+                                <td colspan="6" class="text-center text-secondary py-4">Brak zamienników dla wybranych filtrów.</td>
                             </tr>
                         }
-                        @foreach (var incident in Model.Incidents)
+                        @foreach (var incident in page.Items)
                         {
                             <tr>
                                 <td>
@@ -131,6 +197,30 @@
                     </tbody>
                 </table>
             </div>
+            @if (page.TotalPages > 1)
+            {
+                <div class="card-footer d-flex align-items-center">
+                    <div class="text-secondary small">Strona @(page.Page) z @(page.TotalPages)</div>
+                    <ul class="pagination m-0 ms-auto">
+                        <li class="page-item @(page.Page <= 1 ? "disabled" : "")">
+                            <a class="page-link" asp-action="Rework" asp-all-route-data="@RouteValues(Math.Max(1, page.Page - 1))">Poprzednia</a>
+                        </li>
+                        @{
+                            var firstPage = Math.Max(1, page.Page - 2);
+                            var lastPage = Math.Min(page.TotalPages, page.Page + 2);
+                        }
+                        @for (var pageNumber = firstPage; pageNumber <= lastPage; pageNumber++)
+                        {
+                            <li class="page-item @(pageNumber == page.Page ? "active" : "")">
+                                <a class="page-link" asp-action="Rework" asp-all-route-data="@RouteValues(pageNumber)">@pageNumber</a>
+                            </li>
+                        }
+                        <li class="page-item @(page.Page >= page.TotalPages ? "disabled" : "")">
+                            <a class="page-link" asp-action="Rework" asp-all-route-data="@RouteValues(Math.Min(page.TotalPages, page.Page + 1))">Następna</a>
+                        </li>
+                    </ul>
+                </div>
+            }
         </div>
     </div>
 </div>

@@ -1,11 +1,16 @@
-@model KuchniaUCygana.Application.DTOs.Production.ProductionPlanDto
+@model KuchniaUCygana.Application.DTOs.Production.ProductionPlanDetailDto
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Szczegóły Planu Produkcji";
+    ViewData["Title"] = "Szczegóły planu produkcji";
     ViewData["Section"] = "Kuchnia";
-    var hasItems = Model.Items.Count > 0;
-    var hasPendingFefo = Model.Items.Any(item => !item.FefoDeductedAt.HasValue);
-    var canRunFefo = hasPendingFefo && Model.Status is not ("Completed" or "Cancelled");
+
+    var plan = Model.Plan;
+    var filter = Model.Filter;
+    var itemsPage = Model.Items;
+    var hasItems = Model.Summary.TotalItems > 0;
+    var hasPendingFefo = Model.Summary.PendingFefoItems > 0;
+    var canRunFefo = hasPendingFefo && plan.Status is not ("Completed" or "Cancelled");
+
     ViewData["Description"] = "Bieżące monitorowanie stanu przygotowania potraw, receptur oraz zatwierdzanie ugotowanych porcji.";
 }
 
@@ -13,9 +18,12 @@
     string GetMealCategory(string mealName)
     {
         if (mealName.Contains("zup", StringComparison.OrdinalIgnoreCase)) return "Zupa";
-        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase) || mealName.Contains("deser", StringComparison.OrdinalIgnoreCase) || mealName.Contains("ciast", StringComparison.OrdinalIgnoreCase)) return "Deser";
-        if (mealName.Contains("śniadan", StringComparison.OrdinalIgnoreCase) || mealName.Contains("owsian", StringComparison.OrdinalIgnoreCase)) return "Śniadanie";
-        return "Danie Główne";
+        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase)
+            || mealName.Contains("deser", StringComparison.OrdinalIgnoreCase)
+            || mealName.Contains("ciast", StringComparison.OrdinalIgnoreCase)) return "Deser";
+        if (mealName.Contains("śniadan", StringComparison.OrdinalIgnoreCase)
+            || mealName.Contains("owsian", StringComparison.OrdinalIgnoreCase)) return "Śniadanie";
+        return "Danie główne";
     }
 
     string GetStatusColor(string status)
@@ -24,7 +32,8 @@
         {
             "Cooked" => "success",
             "Cooking" => "warning",
-            "Pending" => "secondary",
+            "Failed" => "danger",
+            "Pending" or "Planned" => "secondary",
             _ => "secondary"
         };
     }
@@ -33,9 +42,10 @@
     {
         return status switch
         {
-            "Cooked" => "Zakończone",
+            "Cooked" => "Ugotowane",
             "Cooking" => "W toku",
-            "Pending" => "Oczekuje",
+            "Failed" => "Problem",
+            "Pending" or "Planned" => "Zaplanowane",
             _ => status
         };
     }
@@ -65,40 +75,68 @@
             _ => "secondary"
         };
     }
+
+    IDictionary<string, string> RouteValues(int page)
+    {
+        var values = new Dictionary<string, string>
+        {
+            ["planId"] = Model.Plan.Id.ToString(),
+            ["date"] = Model.Filter.Date.ToString("yyyy-MM-dd"),
+            ["page"] = page.ToString(),
+            ["pageSize"] = Model.Filter.PageSize.ToString(),
+        };
+
+        Add(values, "search", Model.Filter.Search);
+        Add(values, "status", Model.Filter.Status);
+        Add(values, "productionGroup", Model.Filter.ProductionGroup?.ToString());
+        Add(values, "fefo", Model.Filter.Fefo);
+        Add(values, "packaging", Model.Filter.Packaging);
+        Add(values, "snapshot", Model.Filter.Snapshot);
+        Add(values, "sortBy", Model.Filter.SortBy);
+        Add(values, "sortDirection", Model.Filter.SortDirection);
+        return values;
+    }
+
+    void Add(IDictionary<string, string> values, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            values[key] = value;
+        }
+    }
 }
 
 <div class="row row-cards">
-    <!-- Informacje o Planie -->
     <div class="col-12">
         <div class="card card-premium">
             <div class="card-body py-4">
                 <div class="row align-items-center g-3">
                     <div class="col">
-                        <div class="text-uppercase text-secondary small fw-bold">Plan produkcji #@Model.Id</div>
-                        <h2 class="h1 mb-1 text-dark">Dzień produkcji: @Model.ProductionDate.ToString("dd.MM.yyyy")</h2>
+                        <div class="text-uppercase text-secondary small fw-bold">Plan produkcji #@plan.Id</div>
+                        <h2 class="h1 mb-1 text-dark">Dzień produkcji: @plan.ProductionDate.ToString("dd.MM.yyyy")</h2>
                         <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
-                            <span class="badge bg-@GetPlanStatusColor(Model.Status)-lt text-@GetPlanStatusColor(Model.Status) fw-bold d-inline-flex align-items-center gap-1">
-                                <span class="status-dot bg-@GetPlanStatusColor(Model.Status) @(Model.Status == "InProgress" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
-                                Plan: @TranslatePlanStatus(Model.Status)
+                            <span class="badge bg-@GetPlanStatusColor(plan.Status)-lt text-@GetPlanStatusColor(plan.Status) fw-bold d-inline-flex align-items-center gap-1">
+                                <span class="status-dot bg-@GetPlanStatusColor(plan.Status) @(plan.Status == "InProgress" ? "status-dot-pulse" : "")" style="width: 6px; height: 6px;"></span>
+                                Plan: @TranslatePlanStatus(plan.Status)
                             </span>
-                            @if (Model.IsSharedWithLogistics)
+                            @if (plan.IsSharedWithLogistics)
                             {
                                 <span class="badge bg-green-lt text-green fw-bold">Udostępniony logistyce</span>
                             }
-                            @if (!string.IsNullOrEmpty(Model.Notes))
+                            @if (!string.IsNullOrEmpty(plan.Notes))
                             {
-                                <span class="text-secondary small">Uwagi: @Model.Notes</span>
+                                <span class="text-secondary small">Uwagi: @plan.Notes</span>
                             }
                         </div>
                     </div>
                     <div class="col-auto">
                         @if (canRunFefo)
                         {
-                            <form asp-action="ProduceSemiFinished" asp-route-planId="@Model.Id" method="post" class="d-inline">
+                            <form asp-action="ProduceSemiFinished" asp-route-planId="@plan.Id" method="post" class="d-inline">
                                 @Html.AntiForgeryToken()
                                 <button type="submit" class="btn btn-success me-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 10l5 -6l5 6v10a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1z" /><path d="M21 10l-2 8" /><path d="M3 10l2 8" /></svg>
-                                    Zdejmij Składniki (FEFO)
+                                    Zdejmij składniki (FEFO)
                                 </button>
                             </form>
                         }
@@ -106,37 +144,96 @@
                         {
                             <button type="button" class="btn btn-success me-2" disabled>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 10l5 -6l5 6v10a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1z" /><path d="M21 10l-2 8" /><path d="M3 10l2 8" /></svg>
-                                Składniki Zdjęte
+                                Składniki zdjęte
                             </button>
                         }
-                        <a asp-action="Index" asp-route-date="@Model.ProductionDate" class="btn btn-outline-secondary">Wróć do Pulpitu</a>
+                        <a asp-action="Index" asp-route-date="@plan.ProductionDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wróć do pulpitu</a>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Tabela Potraw w Planie -->
     <div class="col-12">
         <div class="card card-premium">
+            <div class="card-body border-bottom">
+                <form method="get" class="row align-items-end g-3">
+                    <input type="hidden" name="planId" value="@plan.Id" />
+                    <input type="hidden" name="page" value="1" />
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label fw-bold">Szukaj</label>
+                        <input type="search" name="search" class="form-control" value="@filter.Search" placeholder="Danie, ID, hash snapshotu" />
+                    </div>
+                    <div class="col-sm-6 col-lg-2">
+                        <label class="form-label fw-bold">Status</label>
+                        <select name="status" class="form-select">
+                            <option value="">Wszystkie</option>
+                            <option value="Planned" selected="@(filter.Status == "Planned")">Zaplanowane</option>
+                            <option value="Cooking" selected="@(filter.Status == "Cooking")">W gotowaniu</option>
+                            <option value="Cooked" selected="@(filter.Status == "Cooked")">Ugotowane</option>
+                            <option value="Failed" selected="@(filter.Status == "Failed")">Problem</option>
+                        </select>
+                    </div>
+                    <div class="col-sm-6 col-lg-2">
+                        <label class="form-label fw-bold">FEFO</label>
+                        <select name="fefo" class="form-select">
+                            <option value="">Wszystkie</option>
+                            <option value="pending" selected="@(filter.Fefo == "pending")">Do zdjęcia</option>
+                            <option value="done" selected="@(filter.Fefo == "done")">Wykonane</option>
+                        </select>
+                    </div>
+                    <div class="col-sm-6 col-lg-2">
+                        <label class="form-label fw-bold">Snapshot</label>
+                        <select name="snapshot" class="form-select">
+                            <option value="">Wszystkie</option>
+                            <option value="present" selected="@(filter.Snapshot == "present")">Odebrany</option>
+                            <option value="missing" selected="@(filter.Snapshot == "missing")">Brak</option>
+                        </select>
+                    </div>
+                    <div class="col-sm-6 col-lg-1">
+                        <label class="form-label fw-bold">Strona</label>
+                        <select name="pageSize" class="form-select">
+                            <option value="10" selected="@(filter.PageSize == 10)">10</option>
+                            <option value="25" selected="@(filter.PageSize == 25)">25</option>
+                            <option value="50" selected="@(filter.PageSize == 50)">50</option>
+                            <option value="100" selected="@(filter.PageSize == 100)">100</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-lg-auto">
+                        <button type="submit" class="btn btn-primary">Filtruj</button>
+                        <a asp-action="Plan" asp-route-planId="@plan.Id" class="btn btn-outline-secondary">Wyczyść</a>
+                    </div>
+                </form>
+            </div>
             <div class="card-header">
-                <h3 class="card-title">Pozycje Planu Produkcyjnego</h3>
+                <div>
+                    <h3 class="card-title mb-0">Pozycje planu produkcyjnego</h3>
+                    <div class="text-secondary small">
+                        Wyniki @((itemsPage.TotalCount == 0 ? 0 : ((itemsPage.Page - 1) * itemsPage.PageSize) + 1)) - @Math.Min(itemsPage.Page * itemsPage.PageSize, itemsPage.TotalCount) z @itemsPage.TotalCount
+                    </div>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table table-premium">
                     <thead>
                         <tr>
                             <th class="w-1">ID</th>
-                            <th>Nazwa Dania / Potrawy</th>
+                            <th>Nazwa dania / potrawy</th>
                             <th>Kategoria</th>
-                            <th class="text-center">Zaplanowane Porcje</th>
+                            <th class="text-center">Zaplanowane porcje</th>
                             <th>FEFO</th>
                             <th>Status realizacji</th>
                             <th class="w-1 text-center">Operacje</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var item in Model.Items)
+                        @if (itemsPage.TotalCount == 0)
+                        {
+                            <tr>
+                                <td colspan="7" class="text-center text-secondary py-4">Brak pozycji dla wybranych filtrów.</td>
+                            </tr>
+                        }
+                        @foreach (var item in itemsPage.Items)
                         {
                             <tr>
                                 <td class="text-secondary font-weight-medium">#@item.Id</td>
@@ -152,7 +249,7 @@
                                 <td>
                                     @if (item.FefoDeductedAt.HasValue)
                                     {
-                                        <span class="badge bg-success-lt text-success">zdjete</span>
+                                        <span class="badge bg-success-lt text-success">zdjęte</span>
                                     }
                                     else
                                     {
@@ -177,6 +274,30 @@
                     </tbody>
                 </table>
             </div>
+            @if (itemsPage.TotalPages > 1)
+            {
+                <div class="card-footer d-flex align-items-center">
+                    <div class="text-secondary small">Strona @itemsPage.Page z @itemsPage.TotalPages</div>
+                    <ul class="pagination m-0 ms-auto">
+                        <li class="page-item @(itemsPage.Page <= 1 ? "disabled" : "")">
+                            <a class="page-link" asp-action="Plan" asp-all-route-data="@RouteValues(Math.Max(1, itemsPage.Page - 1))">Poprzednia</a>
+                        </li>
+                        @{
+                            var firstPage = Math.Max(1, itemsPage.Page - 2);
+                            var lastPage = Math.Min(itemsPage.TotalPages, itemsPage.Page + 2);
+                        }
+                        @for (var pageNumber = firstPage; pageNumber <= lastPage; pageNumber++)
+                        {
+                            <li class="page-item @(pageNumber == itemsPage.Page ? "active" : "")">
+                                <a class="page-link" asp-action="Plan" asp-all-route-data="@RouteValues(pageNumber)">@pageNumber</a>
+                            </li>
+                        }
+                        <li class="page-item @(itemsPage.Page >= itemsPage.TotalPages ? "disabled" : "")">
+                            <a class="page-link" asp-action="Plan" asp-all-route-data="@RouteValues(Math.Min(itemsPage.TotalPages, itemsPage.Page + 1))">Następna</a>
+                        </li>
+                    </ul>
+                </div>
+            }
         </div>
     </div>
 </div>

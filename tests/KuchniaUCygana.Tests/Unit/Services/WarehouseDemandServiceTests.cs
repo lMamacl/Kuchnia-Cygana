@@ -1,4 +1,5 @@
 using FluentAssertions;
+using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Services;
 using KuchniaUCygana.Domain.Entities.Warehouse;
 using KuchniaUCygana.Domain.Interfaces.External;
@@ -116,6 +117,70 @@ public sealed class WarehouseDemandServiceTests
             row.AvailableQuantity == 90m &&
             row.ShortageQuantity == 60m &&
             row.RiskLabel == "Shortage");
+    }
+
+    [Fact]
+    public async Task GetDemandAsync_ShouldReturnAllFilteredRows_WhenExportAllIsRequested()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var snapshot = CreateSnapshot(date);
+        snapshot.Items.Single().AggregateIngredients = Enumerable.Range(1, 12)
+            .Select(index => new AggregateIngredientDto
+            {
+                IngredientId = 100 + index,
+                IngredientName = $"Skladnik {index:00}",
+                StockItemId = 7000 + index,
+                WarehouseCategoryId = 70,
+                WarehouseCategoryName = "Demo",
+                NetWeightInGrams = 10m,
+            })
+            .ToArray();
+        snapshot.Items.Single().PackagingRequirements = Array.Empty<PackagingRequirementDto>();
+
+        var dietProvider = new Mock<IDietDataProvider>();
+        var orderProvider = new Mock<IOrderDataProvider>();
+        var batchRepository = new Mock<IBatchRepository>();
+
+        dietProvider
+            .Setup(provider => provider.GetPublishedPlanSnapshotAsync(date))
+            .ReturnsAsync(snapshot);
+        orderProvider
+            .Setup(provider => provider.GetDeliveriesForDateAsync(date.ToDateTime(TimeOnly.MinValue)))
+            .ReturnsAsync(new[]
+            {
+                CreateDelivery(date, 1, new OrderItemInfo(1, "Standard", 10, "2000", 2000, 501, 901, 1001, "Lunch")),
+            });
+
+        foreach (var ingredient in snapshot.Items.Single().AggregateIngredients)
+        {
+            batchRepository
+                .Setup(repository => repository.GetActiveBatchesByStockItemAsync(ingredient.StockItemId!.Value))
+                .ReturnsAsync(new[]
+                {
+                    new Batch
+                    {
+                        Id = ingredient.StockItemId.Value,
+                        StockItemId = ingredient.StockItemId.Value,
+                        CurrentQuantity = 100m,
+                        ExpiryDate = date.ToDateTime(TimeOnly.MinValue).AddDays(5),
+                    },
+                });
+        }
+
+        var service = new WarehouseDemandService(dietProvider.Object, orderProvider.Object, batchRepository.Object);
+
+        var demand = await service.GetDemandAsync(new WarehouseDemandFilterDto
+        {
+            StartDate = date,
+            Days = 1,
+            Page = 1,
+            PageSize = 10,
+            ExportAll = true,
+        });
+
+        demand.FilteredRows.Should().Be(12);
+        demand.Rows.Should().HaveCount(12);
+        demand.PageSize.Should().Be(12);
     }
 
     private static PublishedDietPlanSnapshotDto CreateSnapshot(DateOnly date)

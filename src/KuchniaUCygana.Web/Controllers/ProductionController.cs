@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using KuchniaUCygana.Application.DTOs.Production;
 using KuchniaUCygana.Application.DTOs.Packing;
 using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -116,7 +118,7 @@ public sealed class ProductionController : Controller
     /// </summary>
     [HttpGet("plan")]
     [HttpGet("plan/{planId:int}")]
-    public async Task<IActionResult> Plan(int planId = 0)
+    public async Task<IActionResult> Plan(int planId = 0, [FromQuery] KitchenDashboardFilterDto? filter = null)
     {
         if (planId == 0)
         {
@@ -129,14 +131,14 @@ public sealed class ProductionController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var planDto = await productionService.GetPlanByIdAsync(planId);
-        if (planDto == null)
+        var detail = await productionService.GetPlanDetailAsync(planId, filter ?? new KitchenDashboardFilterDto());
+        if (detail == null)
         {
             TempData["Error"] = $"Nie znaleziono planu o ID #{planId}.";
             return RedirectToAction(nameof(Index));
         }
 
-        return View(planDto);
+        return View(detail);
     }
 
     [HttpGet("m2-plan")]
@@ -224,16 +226,41 @@ public sealed class ProductionController : Controller
             filter.StartDate = DateOnly.FromDateTime(DateTime.Today);
         }
 
-        var demand = await warehouseDemandService.GetDemandAsync(filter.StartDate, filter.Days);
+        var demand = await warehouseDemandService.GetDemandAsync(filter);
         return View(demand);
     }
 
+    [HttpGet("warehouse-demand.csv")]
+    public async Task<IActionResult> WarehouseDemandCsv([FromQuery] WarehouseDemandFilterDto filter)
+    {
+        filter.ExportAll = true;
+        var demand = await warehouseDemandService.GetDemandAsync(filter);
+        var csv = BuildWarehouseDemandCsv(demand);
+        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
+        var fileName = $"warehouse-demand-{demand.StartDate:yyyyMMdd}-{demand.StartDate.AddDays(demand.RangeDays - 1):yyyyMMdd}.csv";
+        return File(bytes, "text/csv; charset=utf-8", fileName);
+    }
+
+    [HttpGet("warehouse-demand/print")]
+    public async Task<IActionResult> WarehouseDemandPrint([FromQuery] WarehouseDemandFilterDto filter)
+    {
+        filter.ExportAll = true;
+        var demand = await warehouseDemandService.GetDemandAsync(filter);
+        return View("WarehouseDemandPrint", demand);
+    }
+
     [HttpGet("cooking-cards")]
-    public async Task<IActionResult> CookingCards(DateOnly? date)
+    public IActionResult CookingCards(DateOnly? date, string? search, string? status, int page = 1, int pageSize = 25)
     {
         var targetDate = date ?? DateOnly.FromDateTime(DateTime.Today);
-        var plan = await productionService.GetDailyPlanByDateAsync(targetDate);
-        return View(plan);
+        return RedirectToAction(nameof(Index), new
+        {
+            date = targetDate.ToString("yyyy-MM-dd"),
+            search,
+            status,
+            page,
+            pageSize,
+        });
     }
 
     // ── Karta gotowania ──────────────────────────────────────
@@ -372,6 +399,59 @@ public sealed class ProductionController : Controller
         return RedirectToAction(nameof(CookingCard), new { planItemId });
     }
 
+    [HttpPost("adjustments/request")]
+    [Authorize(Roles = "Kitchen,KitchenManager,Admin")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RequestAdjustmentApproval(
+        int planItemId,
+        string adjustmentType,
+        decimal requestedValue,
+        string reason)
+    {
+        try
+        {
+            var approval = await productionService.RequestProductionAdjustmentApprovalAsync(new ProductionAdjustmentApprovalRequestDto
+            {
+                ProductionPlanItemId = planItemId,
+                AdjustmentType = adjustmentType,
+                RequestedValue = requestedValue,
+                Reason = reason,
+                RequestedBy = GetOperatorName(),
+            });
+            TempData["Success"] = $"Zgłoszono korektę #{approval.Id} do akceptacji managera.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(CookingCard), new { planItemId });
+    }
+
+    [HttpPost("adjustments/{approvalId:int}/approve")]
+    [Authorize(Roles = "KitchenManager,Admin")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApproveAdjustment(int approvalId, int planItemId, string? approvalNote)
+    {
+        try
+        {
+            var approval = await productionService.ApproveProductionAdjustmentAsync(new ProductionAdjustmentApprovalDecisionDto
+            {
+                ApprovalId = approvalId,
+                ApprovedBy = GetOperatorName(),
+                ApprovalNote = approvalNote,
+            });
+            TempData["Success"] =
+                $"Zaakceptowano korektę #{approval.Id}: {approval.PlannedValue:0.##} -> {approval.RequestedValue:0.##} {approval.Unit}.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(CookingCard), new { planItemId });
+    }
+
     // ── Produkcja półproduktów ────────────────────────────────
 
     /// <summary>
@@ -431,13 +511,44 @@ public sealed class ProductionController : Controller
     }
 
     [HttpGet("rework")]
-    public async Task<IActionResult> Rework(DateOnly? date)
+    public async Task<IActionResult> Rework([FromQuery] KitchenReworkFilterViewModel filter)
     {
-        var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        var selectedDate = filter.Date == default
+            ? DateOnly.FromDateTime(DateTime.Today)
+            : filter.Date;
+        filter.Date = selectedDate;
+        filter.Search = NormalizeReworkSearch(filter.Search);
+        filter.Status = NormalizeReworkStatus(filter.Status);
+        filter.Page = Math.Max(filter.Page, 1);
+        filter.PageSize = Math.Clamp(filter.PageSize <= 0 ? 25 : filter.PageSize, 10, 100);
+
+        var allIncidents = (await packingIncidentService.GetKitchenReworkAsync(selectedDate)).ToList();
+        var filteredIncidents = allIncidents
+            .Where(incident => MatchesReworkFilter(incident, filter))
+            .OrderByDescending(incident => incident.ReportedAt)
+            .ThenByDescending(incident => incident.Id)
+            .ToList();
+
+        var totalPages = filteredIncidents.Count == 0
+            ? 0
+            : (int)Math.Ceiling((double)filteredIncidents.Count / filter.PageSize);
+        filter.Page = totalPages == 0 ? 1 : Math.Min(filter.Page, totalPages);
+
         return View(new KitchenReworkViewModel
         {
+            Filter = filter,
             SelectedDate = selectedDate,
-            Incidents = await packingIncidentService.GetKitchenReworkAsync(selectedDate),
+            Incidents = filteredIncidents,
+            Page = new PagedResultDto<PackingIncidentDto>
+            {
+                Items = filteredIncidents
+                    .Skip((filter.Page - 1) * filter.PageSize)
+                    .Take(filter.PageSize)
+                    .ToList(),
+                Page = filter.Page,
+                PageSize = filter.PageSize,
+                TotalCount = filteredIncidents.Count,
+            },
         });
     }
 
@@ -554,6 +665,93 @@ public sealed class ProductionController : Controller
 
         ViewBag.Errors = errors;
         return View(labels);
+    }
+
+    private static string? NormalizeReworkSearch(string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return null;
+        }
+
+        var trimmed = search.Trim();
+        return trimmed.Length > 120 ? trimmed[..120] : trimmed;
+    }
+
+    private static string? NormalizeReworkStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status) || status.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return Enum.TryParse<PackingIncidentStatus>(status.Trim(), ignoreCase: true, out var parsed)
+            ? parsed.ToString()
+            : null;
+    }
+
+    private static bool MatchesReworkFilter(PackingIncidentDto incident, KitchenReworkFilterViewModel filter)
+    {
+        if (!string.IsNullOrWhiteSpace(filter.Status)
+            && !string.Equals(incident.Status.ToString(), filter.Status, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Search)
+            && !ReworkSearchText(incident).Contains(filter.Search, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string ReworkSearchText(PackingIncidentDto incident)
+        => string.Join(" ", new[]
+        {
+            incident.Id.ToString(),
+            incident.ClientPublicId,
+            incident.DeliveryCalendarId?.ToString(),
+            incident.PackingSessionId.ToString(),
+            incident.MealName,
+            incident.BoxCode,
+            incident.ReplacementPackingItemId?.ToString(),
+            incident.ReasonSummary,
+            incident.Description,
+            incident.Status.ToString(),
+            incident.ReplacementPackingItemStatus?.ToString(),
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private static string BuildWarehouseDemandCsv(WarehouseDemandDto demand)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Typ;Zasob;Wymagane;Jednostka;Dostepne;Brak;Ryzyko;Tryb FEFO;StockItemId;WarehouseCategoryId;Zrodla");
+        foreach (var row in demand.Rows)
+        {
+            builder.AppendLine(string.Join(";",
+            [
+                Csv(row.ResourceType),
+                Csv(row.ResourceName),
+                Csv(row.RequiredQuantity.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)),
+                Csv(row.Unit),
+                Csv(row.AvailableQuantity.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)),
+                Csv(row.ShortageQuantity.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)),
+                Csv(row.RiskLabel),
+                Csv(row.SelectionMode),
+                Csv(row.StockItemId?.ToString() ?? string.Empty),
+                Csv(row.WarehouseCategoryId?.ToString() ?? string.Empty),
+                Csv(string.Join(", ", row.SourceMeals)),
+            ]));
+        }
+
+        return builder.ToString();
+    }
+
+    private static string Csv(string? value)
+    {
+        value ??= string.Empty;
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
     private string GetOperatorName()

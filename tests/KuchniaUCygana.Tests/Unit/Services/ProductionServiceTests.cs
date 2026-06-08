@@ -292,7 +292,10 @@ public sealed class ProductionServiceTests
             component.TotalStepCount == 2 &&
             component.CheckedStepCount == 1 &&
             component.RequiredStepCount == 1 &&
-            component.RequiredCheckedStepCount == 1);
+            component.RequiredCheckedStepCount == 1 &&
+            component.StatusLabel == "w toku" &&
+            component.ProgressPercent == 50 &&
+            component.ControlMessage == "Kontrole temperatury i kroki krytyczne są odznaczone.");
     }
 
     [Fact]
@@ -608,11 +611,148 @@ public sealed class ProductionServiceTests
             alert.AcknowledgedBy == "kitchen-manager")), Times.Once);
     }
 
+    [Fact]
+    public async Task ApproveCookingAsync_ShouldRequireManagerApproval_WhenCookedQuantityDiffersFromPlan()
+    {
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.GetByIdAsync(21))
+            .ReturnsAsync(new ProductionPlanItem
+            {
+                Id = 21,
+                ProductionPlanId = 5,
+                MealId = 10,
+                MealName = "Makaron standard",
+                DietVariantId = 1,
+                PlannedQuantity = 10,
+                PackagingDeductedAt = DateTimeOffset.UtcNow,
+                M2SnapshotJson = JsonSerializer.Serialize(CreateSnapshotItem(
+                    new DateOnly(2026, 6, 5),
+                    1001,
+                    101,
+                    "Makaron standard",
+                    501,
+                    9001,
+                    100m,
+                    1m)),
+            });
+        var adjustmentRepository = new Mock<IRepository<ProductionAdjustmentApproval>>();
+        adjustmentRepository
+            .Setup(repository => repository.GetAllAsync())
+            .ReturnsAsync(Array.Empty<ProductionAdjustmentApproval>());
+        var service = CreateService(
+            itemRepository: itemRepository,
+            adjustmentRepository: adjustmentRepository);
+
+        var act = () => service.ApproveCookingAsync(21, 8m);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*akceptacji managera*");
+        itemRepository.Verify(repository => repository.UpdateAsync(It.IsAny<ProductionPlanItem>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ApproveCookingAsync_ShouldApplyApprovedAdjustment_AndMarkItApplied()
+    {
+        var item = new ProductionPlanItem
+        {
+            Id = 21,
+            ProductionPlanId = 5,
+            MealId = 10,
+            MealName = "Makaron standard",
+            DietVariantId = 1,
+            PlannedQuantity = 10,
+            PackagingDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotJson = JsonSerializer.Serialize(CreateSnapshotItem(
+                new DateOnly(2026, 6, 5),
+                1001,
+                101,
+                "Makaron standard",
+                501,
+                9001,
+                100m,
+                1m)),
+        };
+        var approval = new ProductionAdjustmentApproval
+        {
+            Id = 90,
+            ProductionPlanItemId = 21,
+            AdjustmentType = "CookedQuantity",
+            Status = "Approved",
+            PlannedValue = 10m,
+            RequestedValue = 8m,
+            Unit = "portion",
+            Reason = "Niedobor po gotowaniu",
+            RequestedBy = "Chef",
+            RequestedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            ApprovedBy = "Manager",
+            ApprovedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+        };
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.GetByIdAsync(21))
+            .ReturnsAsync(item);
+        var adjustmentRepository = new Mock<IRepository<ProductionAdjustmentApproval>>();
+        adjustmentRepository
+            .Setup(repository => repository.GetAllAsync())
+            .ReturnsAsync(new[] { approval });
+        var service = CreateService(
+            itemRepository: itemRepository,
+            adjustmentRepository: adjustmentRepository);
+
+        await service.ApproveCookingAsync(21, 8m);
+
+        item.CookedQuantity.Should().Be(8);
+        approval.Status.Should().Be("Applied");
+        approval.AppliedAt.Should().NotBeNull();
+        adjustmentRepository.Verify(repository => repository.UpdateAsync(approval), Times.Once);
+    }
+
+    [Fact]
+    public async Task RequestProductionAdjustmentApprovalAsync_ShouldPersistPendingAuditEntry()
+    {
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.GetByIdAsync(21))
+            .ReturnsAsync(new ProductionPlanItem
+            {
+                Id = 21,
+                ProductionPlanId = 5,
+                PlannedQuantity = 10,
+            });
+        ProductionAdjustmentApproval? inserted = null;
+        var adjustmentRepository = new Mock<IRepository<ProductionAdjustmentApproval>>();
+        adjustmentRepository
+            .Setup(repository => repository.InsertAsync(It.IsAny<ProductionAdjustmentApproval>()))
+            .Callback<ProductionAdjustmentApproval>(approval => inserted = approval)
+            .ReturnsAsync(90);
+        var service = CreateService(
+            itemRepository: itemRepository,
+            adjustmentRepository: adjustmentRepository);
+
+        var result = await service.RequestProductionAdjustmentApprovalAsync(new ProductionAdjustmentApprovalRequestDto
+        {
+            ProductionPlanItemId = 21,
+            AdjustmentType = "CookedQuantity",
+            RequestedValue = 8m,
+            Reason = "Niedobor po gotowaniu",
+            RequestedBy = "Chef",
+        });
+
+        result.Id.Should().Be(90);
+        result.Status.Should().Be("Pending");
+        inserted.Should().NotBeNull();
+        inserted!.PlannedValue.Should().Be(10m);
+        inserted.RequestedValue.Should().Be(8m);
+        inserted.Reason.Should().Be("Niedobor po gotowaniu");
+    }
+
     private static ProductionService CreateService(
         Mock<IProductionPlanRepository>? planRepository = null,
         Mock<IRepository<ProductionPlanItem>>? itemRepository = null,
         Mock<IDietDataProvider>? dietProvider = null,
         Mock<IRepository<PlanChangeAlert>>? alertRepository = null,
+        Mock<IRepository<ProductionAdjustmentApproval>>? adjustmentRepository = null,
         Mock<ICookingSessionService>? cookingSessionService = null,
         Mock<IOrderDataProvider>? orderProvider = null,
         ProductionPlanGenerator? planGenerator = null)
@@ -621,6 +761,7 @@ public sealed class ProductionServiceTests
         itemRepository ??= new Mock<IRepository<ProductionPlanItem>>();
         dietProvider ??= new Mock<IDietDataProvider>();
         alertRepository ??= new Mock<IRepository<PlanChangeAlert>>();
+        adjustmentRepository ??= new Mock<IRepository<ProductionAdjustmentApproval>>();
         cookingSessionService ??= new Mock<ICookingSessionService>();
 
         orderProvider ??= new Mock<IOrderDataProvider>();
@@ -641,6 +782,7 @@ public sealed class ProductionServiceTests
             Mock.Of<IPackingService>(),
             fefoService,
             alertRepository.Object,
+            adjustmentRepository.Object,
             cookingSessionService.Object,
             Mock.Of<IMapper>(),
             Mock.Of<ILogger<ProductionService>>());

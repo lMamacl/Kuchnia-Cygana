@@ -1,6 +1,7 @@
 using FluentAssertions;
 using KuchniaUCygana.Application.DTOs.Packing;
 using KuchniaUCygana.Application.DTOs.Production;
+using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Web.Controllers;
 using KuchniaUCygana.Web.Models;
@@ -242,6 +243,159 @@ public sealed class ProductionControllerTests
         redirect.ActionName.Should().Be(nameof(ProductionController.CookingComponent));
         redirect.RouteValues.Should().ContainKey("planItemId").WhoseValue.Should().Be(PlanItemId);
         redirect.RouteValues.Should().ContainKey("recipeComponentVersionId").WhoseValue.Should().Be(RecipeComponentVersionId);
+    }
+
+    [Fact]
+    public async Task WarehouseDemandCsv_ShouldReturnCsvFile_WithAllFilteredRows()
+    {
+        var filter = new WarehouseDemandFilterDto
+        {
+            StartDate = new DateOnly(2026, 6, 8),
+            Days = 7,
+            Search = "kurczak",
+            Page = 2,
+            PageSize = 10,
+        };
+        var warehouseDemandService = new Mock<IWarehouseDemandService>();
+        warehouseDemandService
+            .Setup(service => service.GetDemandAsync(It.Is<WarehouseDemandFilterDto>(f =>
+                f.StartDate == filter.StartDate &&
+                f.Days == filter.Days &&
+                f.Search == filter.Search &&
+                f.ExportAll)))
+            .ReturnsAsync(new WarehouseDemandDto
+            {
+                StartDate = filter.StartDate,
+                RangeDays = filter.Days,
+                Rows =
+                [
+                    new WarehouseDemandRowDto
+                    {
+                        ResourceType = "Ingredient",
+                        ResourceName = "Kurczak",
+                        RequiredQuantity = 120m,
+                        AvailableQuantity = 100m,
+                        ShortageQuantity = 20m,
+                        Unit = "g",
+                        RiskLabel = "Shortage",
+                    },
+                ],
+            });
+        var controller = CreateController(
+            new Mock<IProductionService>(),
+            warehouseDemandService: warehouseDemandService);
+
+        var result = await controller.WarehouseDemandCsv(filter);
+
+        var file = result.Should().BeOfType<FileContentResult>().Subject;
+        file.ContentType.Should().Contain("text/csv");
+        file.FileDownloadName.Should().Contain("warehouse-demand");
+        var csv = System.Text.Encoding.UTF8.GetString(file.FileContents);
+        csv.Should().Contain("Kurczak");
+        csv.Should().Contain("Shortage");
+    }
+
+    [Fact]
+    public async Task WarehouseDemandPrint_ShouldRenderPrintView_WithAllFilteredRows()
+    {
+        var filter = new WarehouseDemandFilterDto
+        {
+            StartDate = new DateOnly(2026, 6, 8),
+            Days = 7,
+            PageSize = 10,
+        };
+        var demand = new WarehouseDemandDto
+        {
+            StartDate = filter.StartDate,
+            RangeDays = filter.Days,
+            Rows =
+            [
+                new WarehouseDemandRowDto
+                {
+                    ResourceType = "Packaging",
+                    ResourceName = "Pudelko",
+                    RequiredQuantity = 10m,
+                    Unit = "pcs",
+                },
+            ],
+        };
+        var warehouseDemandService = new Mock<IWarehouseDemandService>();
+        warehouseDemandService
+            .Setup(service => service.GetDemandAsync(It.Is<WarehouseDemandFilterDto>(f => f.ExportAll)))
+            .ReturnsAsync(demand);
+        var controller = CreateController(
+            new Mock<IProductionService>(),
+            warehouseDemandService: warehouseDemandService);
+
+        var result = await controller.WarehouseDemandPrint(filter);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        view.ViewName.Should().Be("WarehouseDemandPrint");
+        view.Model.Should().BeSameAs(demand);
+    }
+
+    [Fact]
+    public async Task RequestAdjustmentApproval_ShouldCreatePendingApprovalAndRedirectToCookingCard()
+    {
+        const int PlanItemId = 42;
+        var productionService = new Mock<IProductionService>();
+        productionService
+            .Setup(service => service.RequestProductionAdjustmentApprovalAsync(It.IsAny<ProductionAdjustmentApprovalRequestDto>()))
+            .ReturnsAsync(new ProductionAdjustmentApprovalDto
+            {
+                Id = 90,
+                ProductionPlanItemId = PlanItemId,
+                Status = "Pending",
+            });
+        var controller = CreateController(productionService);
+
+        var result = await controller.RequestAdjustmentApproval(
+            PlanItemId,
+            "CookedQuantity",
+            8m,
+            "Niedobor po gotowaniu");
+
+        productionService.Verify(service => service.RequestProductionAdjustmentApprovalAsync(
+            It.Is<ProductionAdjustmentApprovalRequestDto>(request =>
+                request.ProductionPlanItemId == PlanItemId &&
+                request.AdjustmentType == "CookedQuantity" &&
+                request.RequestedValue == 8m &&
+                request.Reason == "Niedobor po gotowaniu")),
+            Times.Once);
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ProductionController.CookingCard));
+        redirect.RouteValues.Should().ContainKey("planItemId").WhoseValue.Should().Be(PlanItemId);
+    }
+
+    [Fact]
+    public async Task ApproveAdjustment_ShouldPersistManagerDecisionAndRedirectToCookingCard()
+    {
+        const int PlanItemId = 42;
+        const int ApprovalId = 90;
+        var productionService = new Mock<IProductionService>();
+        productionService
+            .Setup(service => service.ApproveProductionAdjustmentAsync(It.IsAny<ProductionAdjustmentApprovalDecisionDto>()))
+            .ReturnsAsync(new ProductionAdjustmentApprovalDto
+            {
+                Id = ApprovalId,
+                ProductionPlanItemId = PlanItemId,
+                PlannedValue = 10m,
+                RequestedValue = 8m,
+                Unit = "portion",
+                Status = "Approved",
+            });
+        var controller = CreateController(productionService);
+
+        var result = await controller.ApproveAdjustment(ApprovalId, PlanItemId, "OK");
+
+        productionService.Verify(service => service.ApproveProductionAdjustmentAsync(
+            It.Is<ProductionAdjustmentApprovalDecisionDto>(decision =>
+                decision.ApprovalId == ApprovalId &&
+                decision.ApprovalNote == "OK")),
+            Times.Once);
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ProductionController.CookingCard));
+        redirect.RouteValues.Should().ContainKey("planItemId").WhoseValue.Should().Be(PlanItemId);
     }
 
     private static ProductionController CreateController(

@@ -1,4 +1,5 @@
 using KuchniaUCygana.Application.DTOs.Packing;
+using KuchniaUCygana.Application.DTOs.Warehouse;
 using KuchniaUCygana.Domain.Enums;
 
 namespace KuchniaUCygana.Web.Models;
@@ -67,9 +68,26 @@ public sealed class PackingIncidentListViewModel
 
 public sealed class KitchenReworkViewModel
 {
+    public KitchenReworkFilterViewModel Filter { get; set; } = new();
+
     public DateOnly SelectedDate { get; set; }
 
     public IReadOnlyList<PackingIncidentDto> Incidents { get; set; } = Array.Empty<PackingIncidentDto>();
+
+    public PagedResultDto<PackingIncidentDto> Page { get; set; } = new();
+}
+
+public sealed class KitchenReworkFilterViewModel
+{
+    public DateOnly Date { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+
+    public string? Search { get; set; }
+
+    public string? Status { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 25;
 }
 
 public sealed class TransportLabelReprintFormViewModel

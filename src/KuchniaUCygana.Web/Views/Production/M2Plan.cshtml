@@ -49,16 +49,42 @@
 
         return list.Count == 0 ? "-" : string.Join(", ", list);
     }
+
+    IDictionary<string, string> RouteValues(int page)
+    {
+        var values = new Dictionary<string, string>
+        {
+            ["startDate"] = Model.StartDate.ToString("yyyy-MM-dd"),
+            ["days"] = Model.TotalDays.ToString(),
+            ["page"] = page.ToString(),
+            ["pageSize"] = Model.PageSize.ToString(),
+        };
+
+        Add(values, "search", Model.Filter.Search);
+        Add(values, "snapshot", Model.Filter.Snapshot);
+        Add(values, "refresh", Model.Filter.Refresh);
+        Add(values, "completeness", Model.Filter.Completeness);
+        return values;
+    }
+
+    void Add(IDictionary<string, string> values, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            values[key] = value;
+        }
+    }
 }
 
 <div class="card card-premium mb-4">
     <div class="card-body">
         <form method="get" class="row align-items-end g-3">
+            <input type="hidden" name="page" value="1" />
             <div class="col-sm-6 col-lg-3">
                 <label class="form-label fw-bold">Początek zakresu</label>
                 <input type="date" name="startDate" class="form-control" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
             </div>
-            <div class="col-sm-6 col-lg-2">
+            <div class="col-sm-6 col-lg-1">
                 <label class="form-label fw-bold">Dni</label>
                 <select name="days" class="form-select">
                     <option value="7" selected="@(Model.TotalDays == 7)">7</option>
@@ -67,8 +93,49 @@
                     <option value="31" selected="@(Model.TotalDays == 31)">31</option>
                 </select>
             </div>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label fw-bold">Szukaj</label>
+                <input type="search" name="search" class="form-control" value="@Model.Filter.Search" placeholder="Danie, wariant, składnik, opakowanie" />
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Snapshot</label>
+                <select name="snapshot" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="missing" selected="@(Model.Filter.Snapshot == "missing")">Brak</option>
+                    <option value="present" selected="@(Model.Filter.Snapshot == "present")">Odebrany</option>
+                    <option value="current" selected="@(Model.Filter.Snapshot == "current")">Aktualny</option>
+                    <option value="stale" selected="@(Model.Filter.Snapshot == "stale")">Nieaktualny</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Refresh</label>
+                <select name="refresh" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="needs" selected="@(Model.Filter.Refresh == "needs")">Do odświeżenia</option>
+                    <option value="can" selected="@(Model.Filter.Refresh == "can")">Można odświeżyć</option>
+                    <option value="blocked" selected="@(Model.Filter.Refresh == "blocked")">Zablokowane</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Kompletność</label>
+                <select name="completeness" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="complete" selected="@(Model.Filter.Completeness == "complete")">Kompletne</option>
+                    <option value="incomplete" selected="@(Model.Filter.Completeness == "incomplete")">Z brakami</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-1">
+                <label class="form-label fw-bold">Strona</label>
+                <select name="pageSize" class="form-select">
+                    <option value="10" selected="@(Model.PageSize == 10)">10</option>
+                    <option value="25" selected="@(Model.PageSize == 25)">25</option>
+                    <option value="50" selected="@(Model.PageSize == 50)">50</option>
+                    <option value="100" selected="@(Model.PageSize == 100)">100</option>
+                </select>
+            </div>
             <div class="col-12 col-lg-auto">
                 <button type="submit" class="btn btn-primary">Odśwież</button>
+                <a asp-action="M2Plan" asp-route-startDate="@Model.StartDate.ToString("yyyy-MM-dd")" asp-route-days="@Model.TotalDays" class="btn btn-outline-secondary">Wyczyść</a>
                 <a asp-action="Index" asp-route-date="@Model.StartDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wróć do kuchni</a>
                 <a asp-action="WarehouseDemand" asp-route-startDate="@Model.StartDate.ToString("yyyy-MM-dd")" asp-route-days="@Model.TotalDays" class="btn btn-outline-primary">Zapotrzebowanie</a>
             </div>
@@ -121,6 +188,15 @@
                 <div class="text-secondary small">Wszystkie: @Model.AlertCount</div>
             </div>
         </div>
+    </div>
+</div>
+
+<div class="card card-premium mb-4">
+    <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+        <span class="text-secondary small">
+            Wyniki: @((Model.FilteredItemCount == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1)) - @Math.Min(Model.Page * Model.PageSize, Model.FilteredItemCount) z @Model.FilteredItemCount filtrowanych pozycji.
+        </span>
+        <span class="text-secondary small">Cały zakres: @Model.TotalPlanItems pozycji.</span>
     </div>
 </div>
 
@@ -293,5 +369,32 @@
                 </form>
             </div>
         }
+    </div>
+}
+
+@if (Model.TotalPages > 1)
+{
+    <div class="card card-premium">
+        <div class="card-body d-flex align-items-center">
+            <div class="text-secondary small">Strona @Model.Page z @Model.TotalPages</div>
+            <ul class="pagination m-0 ms-auto">
+                <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+                    <a class="page-link" asp-action="M2Plan" asp-all-route-data="@RouteValues(Math.Max(1, Model.Page - 1))">Poprzednia</a>
+                </li>
+                @{
+                    var firstPage = Math.Max(1, Model.Page - 2);
+                    var lastPage = Math.Min(Model.TotalPages, Model.Page + 2);
+                }
+                @for (var pageNumber = firstPage; pageNumber <= lastPage; pageNumber++)
+                {
+                    <li class="page-item @(pageNumber == Model.Page ? "active" : "")">
+                        <a class="page-link" asp-action="M2Plan" asp-all-route-data="@RouteValues(pageNumber)">@pageNumber</a>
+                    </li>
+                }
+                <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                    <a class="page-link" asp-action="M2Plan" asp-all-route-data="@RouteValues(Math.Min(Model.TotalPages, Model.Page + 1))">Następna</a>
+                </li>
+            </ul>
+        </div>
     </div>
 }

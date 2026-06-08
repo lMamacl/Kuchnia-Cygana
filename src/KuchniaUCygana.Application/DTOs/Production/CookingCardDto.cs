@@ -60,6 +60,8 @@ public sealed class CookingCardDto
     public List<CookingCardComponentDto> Components { get; set; } = new();
 
     public List<CookingCardPackagingDto> PackagingRequirements { get; set; } = new();
+
+    public List<ProductionAdjustmentApprovalDto> AdjustmentApprovals { get; set; } = new();
 }
 
 /// <summary>
@@ -144,6 +146,50 @@ public sealed class CookingCardComponentDto
     public int RequiredCheckedStepCount { get; set; }
 
     public bool IsSessionCompleted => string.Equals(SessionStatus, "Completed", StringComparison.OrdinalIgnoreCase);
+
+    public int ProgressPercent => TotalStepCount <= 0
+        ? 0
+        : Math.Min(100, CheckedStepCount * 100 / TotalStepCount);
+
+    public bool RequiresAttention => RequiredStepCount > RequiredCheckedStepCount
+        && (CheckedStepCount > 0 || string.Equals(SessionStatus, "InProgress", StringComparison.OrdinalIgnoreCase));
+
+    public string StatusLabel
+    {
+        get
+        {
+            if (IsSessionCompleted)
+            {
+                return "ukończona";
+            }
+
+            if (RequiresAttention)
+            {
+                return "wymaga kontroli";
+            }
+
+            if (CheckedStepCount > 0 || string.Equals(SessionStatus, "InProgress", StringComparison.OrdinalIgnoreCase))
+            {
+                return "w toku";
+            }
+
+            return "nie rozpoczęta";
+        }
+    }
+
+    public string StatusColor => StatusLabel switch
+    {
+        "ukończona" => "success",
+        "wymaga kontroli" => "warning",
+        "w toku" => "blue",
+        _ => "secondary",
+    };
+
+    public string? ControlMessage => RequiredStepCount <= 0
+        ? null
+        : RequiredCheckedStepCount >= RequiredStepCount
+            ? "Kontrole temperatury i kroki krytyczne są odznaczone."
+            : $"Do odznaczenia: {RequiredStepCount - RequiredCheckedStepCount} kontrola/krok krytyczny.";
 }
 
 public sealed class CookingComponentCardDto

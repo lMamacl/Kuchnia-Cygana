@@ -4,15 +4,30 @@ public sealed class WarehouseDemandFilterDto
 {
     public DateOnly StartDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
     public int Days { get; set; } = 7;
+    public string? Search { get; set; }
+    public string? ResourceType { get; set; }
+    public string? Risk { get; set; }
+    public string? SortBy { get; set; }
+    public string? SortDirection { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 25;
+    public bool ExportAll { get; set; }
 }
 
 public sealed class WarehouseDemandDto
 {
+    public WarehouseDemandFilterDto Filter { get; set; } = new();
     public DateOnly StartDate { get; set; }
     public int RangeDays { get; set; }
     public int TotalOrderItems { get; set; }
     public int TotalRows { get; set; }
+    public int FilteredRows { get; set; }
     public int ShortageRows { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 25;
+    public int TotalPages => PageSize <= 0
+        ? 0
+        : (int)Math.Ceiling((double)FilteredRows / PageSize);
     public List<WarehouseDemandDayDto> Days { get; set; } = new();
     public List<WarehouseDemandRowDto> Rows { get; set; } = new();
 }

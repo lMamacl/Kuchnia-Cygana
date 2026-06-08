@@ -22,20 +22,30 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
         _batchRepository = batchRepository;
     }
 
-    public async Task<WarehouseDemandDto> GetDemandAsync(DateOnly startDate, int days)
-    {
-        var normalizedDays = Math.Clamp(days <= 0 ? 7 : days, 1, 31);
-        var result = new WarehouseDemandDto
+    public Task<WarehouseDemandDto> GetDemandAsync(DateOnly startDate, int days)
+        => GetDemandAsync(new WarehouseDemandFilterDto
         {
             StartDate = startDate,
-            RangeDays = normalizedDays,
+            Days = days,
+        });
+
+    public async Task<WarehouseDemandDto> GetDemandAsync(WarehouseDemandFilterDto filter)
+    {
+        var normalized = NormalizeFilter(filter);
+        var result = new WarehouseDemandDto
+        {
+            Filter = normalized,
+            StartDate = normalized.StartDate,
+            RangeDays = normalized.Days,
+            Page = normalized.Page,
+            PageSize = normalized.PageSize,
         };
 
         var rowsByKey = new Dictionary<string, WarehouseDemandRowDto>();
 
-        for (var offset = 0; offset < normalizedDays; offset++)
+        for (var offset = 0; offset < normalized.Days; offset++)
         {
-            var planDate = startDate.AddDays(offset);
+            var planDate = normalized.StartDate.AddDays(offset);
             var snapshot = await _dietDataProvider.GetPublishedPlanSnapshotAsync(planDate);
             var deliveries = (await _orderDataProvider.GetDeliveriesForDateAsync(planDate.ToDateTime(TimeOnly.MinValue)))
                 .ToList();
@@ -87,16 +97,172 @@ public sealed class WarehouseDemandService : IWarehouseDemandService
             await EnrichAvailabilityAsync(row);
         }
 
-        result.Rows = rowsByKey.Values
+        var allRows = rowsByKey.Values
             .OrderByDescending(row => row.ShortageQuantity)
             .ThenBy(row => row.ResourceType)
             .ThenBy(row => row.ResourceName)
             .ToList();
         result.TotalOrderItems = result.Days.Sum(day => day.OrderItemCount);
-        result.TotalRows = result.Rows.Count;
-        result.ShortageRows = result.Rows.Count(row => row.ShortageQuantity > 0);
+        result.TotalRows = allRows.Count;
+        result.ShortageRows = allRows.Count(row => row.ShortageQuantity > 0);
+
+        var filteredRows = allRows
+            .Where(row => MatchesFilter(row, normalized))
+            .ToList();
+
+        result.FilteredRows = filteredRows.Count;
+        var sortedRows = SortRows(filteredRows, normalized).ToList();
+        var totalPages = filteredRows.Count == 0
+            ? 0
+            : (int)Math.Ceiling((double)filteredRows.Count / normalized.PageSize);
+        var page = totalPages == 0 ? 1 : Math.Min(normalized.Page, totalPages);
+
+        if (normalized.ExportAll)
+        {
+            normalized.Page = 1;
+            normalized.PageSize = Math.Max(1, sortedRows.Count);
+            result.Rows = sortedRows;
+            result.Filter = normalized;
+            result.Page = normalized.Page;
+            result.PageSize = normalized.PageSize;
+            return result;
+        }
+
+        result.Rows = sortedRows
+            .Skip((page - 1) * normalized.PageSize)
+            .Take(normalized.PageSize)
+            .ToList();
+        normalized.Page = page;
+        result.Filter = normalized;
+        result.Page = page;
+        result.PageSize = normalized.PageSize;
 
         return result;
+    }
+
+    private static WarehouseDemandFilterDto NormalizeFilter(WarehouseDemandFilterDto filter)
+        => new()
+        {
+            StartDate = filter.StartDate == default ? DateOnly.FromDateTime(DateTime.Today) : filter.StartDate,
+            Days = Math.Clamp(filter.Days <= 0 ? 7 : filter.Days, 1, 31),
+            Search = NormalizeSearch(filter.Search),
+            ResourceType = NormalizeResourceType(filter.ResourceType),
+            Risk = NormalizeRisk(filter.Risk),
+            SortBy = NormalizeSortBy(filter.SortBy),
+            SortDirection = string.Equals(filter.SortDirection, "desc", StringComparison.OrdinalIgnoreCase)
+                ? "desc"
+                : "asc",
+            Page = Math.Max(filter.Page, 1),
+            PageSize = Math.Clamp(filter.PageSize <= 0 ? 25 : filter.PageSize, 10, 100),
+            ExportAll = filter.ExportAll,
+        };
+
+    private static string? NormalizeSearch(string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return null;
+        }
+
+        var trimmed = search.Trim();
+        return trimmed.Length > 120 ? trimmed[..120] : trimmed;
+    }
+
+    private static string? NormalizeResourceType(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "ingredient" or "ingredients" or "skladnik" or "składnik" => "Ingredient",
+            "packaging" or "package" or "opakowanie" => "Packaging",
+            _ => null,
+        };
+    }
+
+    private static string? NormalizeRisk(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "shortage" or "brak" or "braki" => "Shortage",
+            "expired" or "przeterminowane" => "Expired",
+            "expiryrisk" or "expiry-risk" or "risk" or "ryzyko" => "ExpiryRisk",
+            "ok" => "Ok",
+            _ => null,
+        };
+    }
+
+    private static string NormalizeSortBy(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "required" or "requiredquantity" or "potrzeba" => "required",
+            "available" or "availablequantity" or "dostepne" or "dostępne" => "available",
+            "shortage" or "brak" => "shortage",
+            "type" or "resourcetype" => "type",
+            "risk" or "ryzyko" => "risk",
+            _ => "name",
+        };
+    }
+
+    private static bool MatchesFilter(WarehouseDemandRowDto row, WarehouseDemandFilterDto filter)
+    {
+        if (!string.IsNullOrWhiteSpace(filter.ResourceType)
+            && !string.Equals(row.ResourceType, filter.ResourceType, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Risk)
+            && !string.Equals(row.RiskLabel, filter.Risk, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Search)
+            && !WarehouseDemandSearchText(row).Contains(filter.Search, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string WarehouseDemandSearchText(WarehouseDemandRowDto row)
+        => string.Join(" ", new[]
+            {
+                row.ResourceName,
+                row.ResourceType,
+                row.WarehouseCategoryName,
+                row.WarehouseCategoryId?.ToString(),
+                row.StockItemId?.ToString(),
+                row.IngredientId?.ToString(),
+                row.SelectionMode,
+                row.RiskLabel,
+            }
+            .Concat(row.SourceMeals)
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private static IEnumerable<WarehouseDemandRowDto> SortRows(
+        IReadOnlyList<WarehouseDemandRowDto> rows,
+        WarehouseDemandFilterDto filter)
+    {
+        var descending = string.Equals(filter.SortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        return (filter.SortBy, descending) switch
+        {
+            ("required", true) => rows.OrderByDescending(row => row.RequiredQuantity).ThenBy(row => row.ResourceName),
+            ("required", false) => rows.OrderBy(row => row.RequiredQuantity).ThenBy(row => row.ResourceName),
+            ("available", true) => rows.OrderByDescending(row => row.AvailableQuantity).ThenBy(row => row.ResourceName),
+            ("available", false) => rows.OrderBy(row => row.AvailableQuantity).ThenBy(row => row.ResourceName),
+            ("shortage", false) => rows.OrderBy(row => row.ShortageQuantity).ThenBy(row => row.ResourceName),
+            ("type", true) => rows.OrderByDescending(row => row.ResourceType).ThenBy(row => row.ResourceName),
+            ("type", false) => rows.OrderBy(row => row.ResourceType).ThenBy(row => row.ResourceName),
+            ("risk", true) => rows.OrderByDescending(row => row.RiskLabel).ThenBy(row => row.ResourceName),
+            ("risk", false) => rows.OrderBy(row => row.RiskLabel).ThenBy(row => row.ResourceName),
+            ("name", true) => rows.OrderByDescending(row => row.ResourceName),
+            ("name", false) => rows.OrderBy(row => row.ResourceName),
+            _ => rows.OrderByDescending(row => row.ShortageQuantity)
+                .ThenBy(row => row.ResourceType)
+                .ThenBy(row => row.ResourceName),
+        };
     }
 
     private static IEnumerable<PublishedDietPlanItemDto> FindSnapshotItems(

@@ -5,4 +5,6 @@ namespace KuchniaUCygana.Application.Interfaces;
 public interface IWarehouseDemandService
 {
     Task<WarehouseDemandDto> GetDemandAsync(DateOnly startDate, int days);
+
+    Task<WarehouseDemandDto> GetDemandAsync(WarehouseDemandFilterDto filter);
 }

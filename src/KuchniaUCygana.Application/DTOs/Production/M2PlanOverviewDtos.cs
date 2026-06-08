@@ -7,10 +7,24 @@ public sealed class ProductionM2PlanFilterDto
     public DateOnly StartDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
 
     public int Days { get; set; } = 7;
+
+    public string? Search { get; set; }
+
+    public string? Snapshot { get; set; }
+
+    public string? Refresh { get; set; }
+
+    public string? Completeness { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 25;
 }
 
 public sealed class ProductionM2PlanOverviewDto
 {
+    public ProductionM2PlanFilterDto Filter { get; set; } = new();
+
     public DateOnly StartDate { get; set; }
 
     public int TotalDays { get; set; }
@@ -28,6 +42,16 @@ public sealed class ProductionM2PlanOverviewDto
     public int AlertCount { get; set; }
 
     public int UnacknowledgedAlertCount { get; set; }
+
+    public int FilteredItemCount { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 25;
+
+    public int TotalPages => PageSize <= 0
+        ? 0
+        : (int)Math.Ceiling((double)FilteredItemCount / PageSize);
 
     public List<ProductionM2PlanDayDto> Days { get; set; } = new();
 }

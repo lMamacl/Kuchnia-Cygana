@@ -1,0 +1,85 @@
+@model KuchniaUCygana.Application.DTOs.Warehouse.WarehouseDemandDto
+@{
+    Layout = null;
+}
+<!doctype html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <title>Zapotrzebowanie magazynu @Model.StartDate.ToString("dd.MM.yyyy")</title>
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 11px; color: #111827; margin: 16px; }
+        h1 { font-size: 18px; margin: 0 0 4px; }
+        .meta { color: #4b5563; margin-bottom: 12px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #d1d5db; padding: 5px 6px; vertical-align: top; }
+        th { background: #f3f4f6; text-align: left; }
+        .num { text-align: right; white-space: nowrap; }
+        .danger { color: #b91c1c; font-weight: 700; }
+        .warning { color: #92400e; font-weight: 700; }
+        @@media print {
+            body { margin: 8mm; }
+            .no-print { display: none; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="margin-bottom: 12px;">
+        <button onclick="window.print()">Drukuj</button>
+        <button onclick="window.close()">Zamknij</button>
+    </div>
+    <h1>Zapotrzebowanie magazynu</h1>
+    <div class="meta">
+        Zakres: @Model.StartDate.ToString("dd.MM.yyyy") - @Model.StartDate.AddDays(Model.RangeDays - 1).ToString("dd.MM.yyyy")
+        · Zamówienia: @Model.TotalOrderItems
+        · Wiersze: @Model.FilteredRows
+        · Braki: @Model.ShortageRows
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Typ</th>
+                <th>Zasób</th>
+                <th>FEFO</th>
+                <th class="num">Wymagane</th>
+                <th class="num">Dostępne</th>
+                <th class="num">Brak</th>
+                <th>Ryzyko</th>
+                <th>Źródła</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in Model.Rows)
+            {
+                var riskClass = row.RiskLabel == "Shortage" || row.RiskLabel == "Expired"
+                    ? "danger"
+                    : row.RiskLabel == "ExpiryRisk" ? "warning" : string.Empty;
+                <tr>
+                    <td>@(row.ResourceType == "Packaging" ? "Opakowanie" : "Składnik")</td>
+                    <td>
+                        <strong>@row.ResourceName</strong>
+                        @if (!string.IsNullOrWhiteSpace(row.WarehouseCategoryName))
+                        {
+                            <div>@row.WarehouseCategoryName</div>
+                        }
+                    </td>
+                    <td>
+                        @row.SelectionMode
+                        @if (row.EarliestBatchId.HasValue)
+                        {
+                            <div>Partia #@row.EarliestBatchId</div>
+                        }
+                    </td>
+                    <td class="num">@row.RequiredQuantity.ToString("0.###") @row.Unit</td>
+                    <td class="num">@row.AvailableQuantity.ToString("0.###") @row.Unit</td>
+                    <td class="num @(row.ShortageQuantity > 0 ? "danger" : "")">@row.ShortageQuantity.ToString("0.###") @row.Unit</td>
+                    <td class="@riskClass">@row.RiskLabel</td>
+                    <td>@string.Join(", ", row.SourceMeals)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</body>
+</html>

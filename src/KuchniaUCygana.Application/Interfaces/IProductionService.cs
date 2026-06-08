@@ -13,6 +13,8 @@ public interface IProductionService
 
     Task<ProductionPlanDto?> GetPlanByIdAsync(int planId);
 
+    Task<ProductionPlanDetailDto?> GetPlanDetailAsync(int planId, KitchenDashboardFilterDto filter);
+
     Task<KitchenDashboardDto> GetKitchenDashboardAsync(KitchenDashboardFilterDto filter);
 
     Task<ProductionM2PlanOverviewDto> GetM2PlanOverviewAsync(ProductionM2PlanFilterDto filter);
@@ -28,6 +30,12 @@ public interface IProductionService
     Task<CookingCardDto> GetCookingCardAsync(int planItemId);
 
     Task<CookingComponentCardDto> GetCookingComponentCardAsync(int planItemId, int recipeComponentVersionId);
+
+    Task<IReadOnlyList<ProductionAdjustmentApprovalDto>> GetProductionAdjustmentApprovalsAsync(int planItemId);
+
+    Task<ProductionAdjustmentApprovalDto> RequestProductionAdjustmentApprovalAsync(ProductionAdjustmentApprovalRequestDto request);
+
+    Task<ProductionAdjustmentApprovalDto> ApproveProductionAdjustmentAsync(ProductionAdjustmentApprovalDecisionDto decision);
 
     Task ApproveCookingAsync(int planItemId, decimal actualQuantity);
 

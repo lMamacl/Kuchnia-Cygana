@@ -23,6 +23,7 @@ public sealed class ProductionService : IProductionService
     private readonly IPackingService _packingService;
     private readonly FefoService _fefoService;
     private readonly IRepository<PlanChangeAlert> _planAlertRepository;
+    private readonly IRepository<ProductionAdjustmentApproval> _adjustmentApprovalRepository;
     private readonly ICookingSessionService _cookingSessionService;
     private readonly IMapper _mapper;
     private readonly ILogger<ProductionService> _logger;
@@ -35,6 +36,7 @@ public sealed class ProductionService : IProductionService
         IPackingService packingService,
         FefoService fefoService,
         IRepository<PlanChangeAlert> planAlertRepository,
+        IRepository<ProductionAdjustmentApproval> adjustmentApprovalRepository,
         ICookingSessionService cookingSessionService,
         IMapper mapper,
         ILogger<ProductionService> logger)
@@ -46,6 +48,7 @@ public sealed class ProductionService : IProductionService
         _packingService = packingService;
         _fefoService = fefoService;
         _planAlertRepository = planAlertRepository;
+        _adjustmentApprovalRepository = adjustmentApprovalRepository;
         _cookingSessionService = cookingSessionService;
         _mapper = mapper;
         _logger = logger;
@@ -97,6 +100,62 @@ public sealed class ProductionService : IProductionService
         dto.Items = _mapper.Map<List<ProductionPlanItemDto>>(items);
 
         return dto;
+    }
+
+    public async Task<ProductionPlanDetailDto?> GetPlanDetailAsync(int planId, KitchenDashboardFilterDto filter)
+    {
+        var plan = await _planRepository.GetByIdAsync(planId);
+        if (plan is null || plan.IsDeleted)
+        {
+            return null;
+        }
+
+        var normalized = NormalizeKitchenDashboardFilter(new KitchenDashboardFilterDto
+        {
+            Date = plan.ProductionDate,
+            Search = filter.Search,
+            Status = filter.Status,
+            ProductionGroup = filter.ProductionGroup,
+            Fefo = filter.Fefo,
+            Packaging = filter.Packaging,
+            Snapshot = filter.Snapshot,
+            SortBy = filter.SortBy,
+            SortDirection = filter.SortDirection,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+        });
+
+        var itemQuery = new ProductionPlanItemQuery
+        {
+            PlanId = plan.Id,
+            Search = normalized.Search,
+            Status = ParseProductionStatus(normalized.Status),
+            ProductionGroup = normalized.ProductionGroup,
+            FefoDeducted = ParseStateFilter(normalized.Fefo),
+            PackagingDeducted = ParseStateFilter(normalized.Packaging),
+            HasSnapshot = ParseSnapshotFilter(normalized.Snapshot),
+            Page = normalized.Page,
+            PageSize = normalized.PageSize,
+            SortBy = normalized.SortBy,
+            SortDescending = string.Equals(normalized.SortDirection, "desc", StringComparison.OrdinalIgnoreCase),
+        };
+
+        var (items, totalCount) = await _planRepository.SearchPlanItemsAsync(itemQuery);
+        var summary = await _planRepository.GetPlanItemSummaryAsync(plan.Id);
+
+        return new ProductionPlanDetailDto
+        {
+            Plan = _mapper.Map<ProductionPlanDto>(plan),
+            Filter = normalized,
+            Items = new PagedResultDto<ProductionPlanItemDto>
+            {
+                Items = _mapper.Map<List<ProductionPlanItemDto>>(items),
+                Page = normalized.Page,
+                PageSize = normalized.PageSize,
+                TotalCount = totalCount,
+            },
+            Summary = MapKitchenSummary(summary),
+        };
     }
 
     public async Task<KitchenDashboardDto> GetKitchenDashboardAsync(KitchenDashboardFilterDto filter)
@@ -154,15 +213,16 @@ public sealed class ProductionService : IProductionService
 
     public async Task<ProductionM2PlanOverviewDto> GetM2PlanOverviewAsync(ProductionM2PlanFilterDto filter)
     {
-        var startDate = filter.StartDate == default
-            ? DateOnly.FromDateTime(DateTime.Today)
-            : filter.StartDate;
-        var days = filter.Days;
-        var normalizedDays = Math.Clamp(days <= 0 ? 7 : days, 1, 31);
+        var normalizedFilter = NormalizeProductionM2PlanFilter(filter);
+        var startDate = normalizedFilter.StartDate;
+        var normalizedDays = normalizedFilter.Days;
         var overview = new ProductionM2PlanOverviewDto
         {
+            Filter = normalizedFilter,
             StartDate = startDate,
             TotalDays = normalizedDays,
+            Page = normalizedFilter.Page,
+            PageSize = normalizedFilter.PageSize,
         };
 
         for (var offset = 0; offset < normalizedDays; offset++)
@@ -274,7 +334,7 @@ public sealed class ProductionService : IProductionService
         overview.AlertCount = overview.Days.Sum(day => day.AlertCount);
         overview.UnacknowledgedAlertCount = overview.Days.Sum(day => day.UnacknowledgedAlertCount);
 
-        return overview;
+        return ApplyM2PlanFilters(overview, normalizedFilter);
     }
 
     public async Task<M2PlanOverviewDto> GetM2PlanOverviewAsync(DateOnly startDate, int days)
@@ -388,6 +448,80 @@ public sealed class ProductionService : IProductionService
         await _planAlertRepository.UpdateAsync(alert);
     }
 
+    public async Task<IReadOnlyList<ProductionAdjustmentApprovalDto>> GetProductionAdjustmentApprovalsAsync(int planItemId)
+    {
+        var approvals = (await _adjustmentApprovalRepository.GetAllAsync())
+            .Where(approval => approval.ProductionPlanItemId == planItemId)
+            .OrderByDescending(approval => approval.RequestedAt)
+            .ThenByDescending(approval => approval.Id)
+            .Select(MapAdjustmentApproval)
+            .ToList();
+
+        return approvals;
+    }
+
+    public async Task<ProductionAdjustmentApprovalDto> RequestProductionAdjustmentApprovalAsync(
+        ProductionAdjustmentApprovalRequestDto request)
+    {
+        var item = await _itemRepository.GetByIdAsync(request.ProductionPlanItemId)
+            ?? throw new InvalidOperationException($"Pozycja planu {request.ProductionPlanItemId} nie istnieje.");
+        var adjustmentType = NormalizeAdjustmentType(request.AdjustmentType);
+        var reason = NormalizeRequiredText(request.Reason, "Powód korekty jest wymagany.");
+        var requestedBy = NormalizeActor(request.RequestedBy);
+        var plannedValue = GetPlannedAdjustmentValue(item, adjustmentType);
+
+        if (requestedBy.Length == 0)
+        {
+            requestedBy = "Kuchnia";
+        }
+
+        if (request.RequestedValue < 0)
+        {
+            throw new InvalidOperationException("Wartość korekty nie może być ujemna.");
+        }
+
+        if (request.RequestedValue == plannedValue)
+        {
+            throw new InvalidOperationException("Korekta nie jest wymagana, bo wartość faktyczna jest zgodna z planem.");
+        }
+
+        var approval = new ProductionAdjustmentApproval
+        {
+            ProductionPlanItemId = item.Id,
+            AdjustmentType = adjustmentType,
+            Status = "Pending",
+            PlannedValue = plannedValue,
+            RequestedValue = request.RequestedValue,
+            Unit = GetAdjustmentUnit(adjustmentType),
+            Reason = reason,
+            RequestedBy = requestedBy,
+            RequestedAt = DateTimeOffset.UtcNow,
+        };
+
+        approval.Id = await _adjustmentApprovalRepository.InsertAsync(approval);
+        return MapAdjustmentApproval(approval);
+    }
+
+    public async Task<ProductionAdjustmentApprovalDto> ApproveProductionAdjustmentAsync(
+        ProductionAdjustmentApprovalDecisionDto decision)
+    {
+        var approval = await _adjustmentApprovalRepository.GetByIdAsync(decision.ApprovalId)
+            ?? throw new InvalidOperationException($"Korekta produkcyjna #{decision.ApprovalId} nie istnieje.");
+
+        if (!string.Equals(approval.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Tylko korekta oczekująca może zostać zaakceptowana.");
+        }
+
+        approval.Status = "Approved";
+        approval.ApprovedAt = DateTimeOffset.UtcNow;
+        approval.ApprovedBy = NormalizeActor(decision.ApprovedBy);
+        approval.ApprovalNote = NormalizeOptionalText(decision.ApprovalNote);
+
+        await _adjustmentApprovalRepository.UpdateAsync(approval);
+        return MapAdjustmentApproval(approval);
+    }
+
     public async Task<CookingCardDto> GetCookingCardAsync(int planItemId)
     {
         var item = await _itemRepository.GetByIdAsync(planItemId)
@@ -398,6 +532,7 @@ public sealed class ProductionService : IProductionService
         {
             var snapshotCard = BuildCookingCardFromSnapshot(item, storedSnapshot, null);
             await EnrichComponentSessionProgressAsync(snapshotCard);
+            snapshotCard.AdjustmentApprovals = (await GetProductionAdjustmentApprovalsAsync(planItemId)).ToList();
             return snapshotCard;
         }
 
@@ -467,6 +602,7 @@ public sealed class ProductionService : IProductionService
             });
         }
 
+        card.AdjustmentApprovals = (await GetProductionAdjustmentApprovalsAsync(planItemId)).ToList();
         return card;
     }
 
@@ -556,6 +692,7 @@ public sealed class ProductionService : IProductionService
     {
         var item = await _itemRepository.GetByIdAsync(planItemId)
             ?? throw new InvalidOperationException($"Pozycja planu {planItemId} nie istnieje.");
+        var approvedAdjustment = await RequireApprovedAdjustmentIfNeededAsync(item, actualQuantity, "CookedQuantity");
 
         await DeductPackagingIfNeededAsync(item, actualQuantity);
 
@@ -564,6 +701,12 @@ public sealed class ProductionService : IProductionService
         item.ActualReadyTime = TimeOnly.FromDateTime(DateTime.Now);
 
         await _itemRepository.UpdateAsync(item);
+        if (approvedAdjustment is not null)
+        {
+            approvedAdjustment.Status = "Applied";
+            approvedAdjustment.AppliedAt = DateTimeOffset.UtcNow;
+            await _adjustmentApprovalRepository.UpdateAsync(approvedAdjustment);
+        }
 
         var plan = await _planRepository.GetByIdAsync(item.ProductionPlanId);
         if (plan is not null)
@@ -1623,6 +1766,174 @@ public sealed class ProductionService : IProductionService
             ? $"S:{requirement.StockItemId.Value}"
             : $"C:{requirement.WarehouseCategoryId!.Value}";
 
+    private static ProductionM2PlanOverviewDto ApplyM2PlanFilters(
+        ProductionM2PlanOverviewDto overview,
+        ProductionM2PlanFilterDto filter)
+    {
+        var entries = overview.Days
+            .SelectMany(day => day.Items.Select(item => new M2PlanItemEntry(day.PlanDate, item)))
+            .Where(entry => MatchesM2PlanFilter(entry.Item, filter))
+            .ToList();
+
+        var filteredCount = entries.Count;
+        var totalPages = filteredCount == 0
+            ? 0
+            : (int)Math.Ceiling((double)filteredCount / filter.PageSize);
+        var page = totalPages == 0
+            ? 1
+            : Math.Min(filter.Page, totalPages);
+
+        var pageEntries = entries
+            .Skip((page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToList();
+
+        var pageItemsByDate = pageEntries
+            .GroupBy(entry => entry.PlanDate)
+            .ToDictionary(group => group.Key, group => group.Select(entry => entry.Item).ToList());
+
+        foreach (var day in overview.Days)
+        {
+            day.Items = pageItemsByDate.TryGetValue(day.PlanDate, out var items)
+                ? items
+                : new List<ProductionM2PlanItemDto>();
+        }
+
+        filter.Page = page;
+        overview.Filter = filter;
+        overview.FilteredItemCount = filteredCount;
+        overview.Page = page;
+        overview.PageSize = filter.PageSize;
+        return overview;
+    }
+
+    private static bool MatchesM2PlanFilter(ProductionM2PlanItemDto item, ProductionM2PlanFilterDto filter)
+    {
+        if (!string.IsNullOrWhiteSpace(filter.Search) && !M2PlanSearchText(item).Contains(filter.Search, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (filter.Snapshot is "missing" && item.HasProductionSnapshot)
+        {
+            return false;
+        }
+
+        if (filter.Snapshot is "present" && !item.HasProductionSnapshot)
+        {
+            return false;
+        }
+
+        if (filter.Snapshot is "current" && !item.IsProductionSnapshotCurrent)
+        {
+            return false;
+        }
+
+        if (filter.Snapshot is "stale" && (!item.HasProductionSnapshot || item.IsProductionSnapshotCurrent))
+        {
+            return false;
+        }
+
+        if (filter.Refresh is "needs" && !item.NeedsRefresh)
+        {
+            return false;
+        }
+
+        if (filter.Refresh is "can" && !item.CanRefresh)
+        {
+            return false;
+        }
+
+        if (filter.Refresh is "blocked" && item.CanRefresh)
+        {
+            return false;
+        }
+
+        if (filter.Completeness is "complete" && !item.IsCompleteForProduction)
+        {
+            return false;
+        }
+
+        if (filter.Completeness is "incomplete"
+            && item.IsCompleteForProduction
+            && item.ValidationWarningCount == 0
+            && item.MissingDetails.Count == 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string M2PlanSearchText(ProductionM2PlanItemDto item)
+        => string.Join(" ", new[]
+            {
+                item.DietMenuPlanItemId.ToString(),
+                item.ProductionPlanItemId?.ToString(),
+                item.MealId.ToString(),
+                item.MealVariantId?.ToString(),
+                item.MealName,
+                item.MealVariantName,
+                item.CategoryName,
+                item.DietName,
+                item.DietVariantName,
+                item.MealSlot,
+                item.SnapshotHash,
+                item.FreshSnapshotHash,
+            }
+            .Concat(item.ComponentNames)
+            .Concat(item.IngredientNames)
+            .Concat(item.PackagingNames)
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private static ProductionM2PlanFilterDto NormalizeProductionM2PlanFilter(ProductionM2PlanFilterDto filter)
+        => new()
+        {
+            StartDate = filter.StartDate == default ? DateOnly.FromDateTime(DateTime.Today) : filter.StartDate,
+            Days = Math.Clamp(filter.Days <= 0 ? 7 : filter.Days, 1, 31),
+            Search = NormalizeSearch(filter.Search),
+            Snapshot = NormalizeM2SnapshotFilter(filter.Snapshot),
+            Refresh = NormalizeM2RefreshFilter(filter.Refresh),
+            Completeness = NormalizeM2CompletenessFilter(filter.Completeness),
+            Page = Math.Max(filter.Page, 1),
+            PageSize = Math.Clamp(filter.PageSize <= 0 ? 25 : filter.PageSize, 10, 100),
+        };
+
+    private static string? NormalizeM2SnapshotFilter(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "missing" or "brak" => "missing",
+            "present" or "has" or "odebrany" => "present",
+            "current" or "actual" or "aktualny" => "current",
+            "stale" or "outdated" or "nieaktualny" => "stale",
+            _ => null,
+        };
+    }
+
+    private static string? NormalizeM2RefreshFilter(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "needs" or "refresh" or "needed" or "do-odswiezenia" => "needs",
+            "can" or "allowed" or "mozna" => "can",
+            "blocked" or "zablokowane" => "blocked",
+            _ => null,
+        };
+    }
+
+    private static string? NormalizeM2CompletenessFilter(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "complete" or "ok" or "kompletne" => "complete",
+            "incomplete" or "missing" or "braki" => "incomplete",
+            _ => null,
+        };
+    }
+
+    private sealed record M2PlanItemEntry(DateOnly PlanDate, ProductionM2PlanItemDto Item);
+
     private static KitchenDashboardFilterDto NormalizeKitchenDashboardFilter(KitchenDashboardFilterDto filter)
     {
         var normalized = new KitchenDashboardFilterDto
@@ -1838,6 +2149,125 @@ public sealed class ProductionService : IProductionService
             : recipeComponentVersionIds
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Length;
+
+    private async Task<ProductionAdjustmentApproval?> RequireApprovedAdjustmentIfNeededAsync(
+        ProductionPlanItem item,
+        decimal actualValue,
+        string adjustmentType)
+    {
+        var plannedValue = GetPlannedAdjustmentValue(item, adjustmentType);
+        if (actualValue == plannedValue)
+        {
+            return null;
+        }
+
+        var allowedTypes = adjustmentType == "CookedQuantity"
+            ? new[] { "CookedQuantity", "PackagingQuantity", "LabelQuantity" }
+            : new[] { adjustmentType };
+
+        var approvedAdjustment = (await _adjustmentApprovalRepository.GetAllAsync())
+            .Where(approval =>
+                approval.ProductionPlanItemId == item.Id &&
+                allowedTypes.Any(type => string.Equals(approval.AdjustmentType, type, StringComparison.OrdinalIgnoreCase)) &&
+                string.Equals(approval.Status, "Approved", StringComparison.OrdinalIgnoreCase) &&
+                approval.RequestedValue == actualValue)
+            .OrderByDescending(approval => approval.ApprovedAt ?? approval.RequestedAt)
+            .FirstOrDefault();
+
+        if (approvedAdjustment is null)
+        {
+            throw new InvalidOperationException(
+                "Zmiana faktycznej ilości, liczby pudełek albo etykiet wymaga akceptacji managera/admina przed zatwierdzeniem.");
+        }
+
+        return approvedAdjustment;
+    }
+
+    private static ProductionAdjustmentApprovalDto MapAdjustmentApproval(ProductionAdjustmentApproval approval)
+        => new()
+        {
+            Id = approval.Id,
+            ProductionPlanItemId = approval.ProductionPlanItemId,
+            AdjustmentType = approval.AdjustmentType,
+            Status = approval.Status,
+            PlannedValue = approval.PlannedValue,
+            RequestedValue = approval.RequestedValue,
+            Unit = approval.Unit,
+            Reason = approval.Reason,
+            RequestedBy = approval.RequestedBy,
+            RequestedAt = approval.RequestedAt,
+            ApprovedBy = approval.ApprovedBy,
+            ApprovedAt = approval.ApprovedAt,
+            ApprovalNote = approval.ApprovalNote,
+            AppliedAt = approval.AppliedAt,
+        };
+
+    private static string NormalizeAdjustmentType(string? value)
+    {
+        var normalized = value?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return "CookedQuantity";
+        }
+
+        return normalized.ToLowerInvariant() switch
+        {
+            "cooked" or "cookedquantity" or "quantity" or "ilosc" or "ilość" => "CookedQuantity",
+            "packaging" or "packagingquantity" or "boxes" or "pudelka" or "pudełka" => "PackagingQuantity",
+            "labels" or "labelquantity" or "etykiety" => "LabelQuantity",
+            _ => throw new InvalidOperationException("Nieobsługiwany typ korekty produkcyjnej."),
+        };
+    }
+
+    private static decimal GetPlannedAdjustmentValue(ProductionPlanItem item, string adjustmentType)
+        => adjustmentType switch
+        {
+            "CookedQuantity" => item.PlannedQuantity,
+            "PackagingQuantity" => item.PlannedQuantity,
+            "LabelQuantity" => item.PlannedQuantity,
+            _ => item.PlannedQuantity,
+        };
+
+    private static string GetAdjustmentUnit(string adjustmentType)
+        => adjustmentType switch
+        {
+            "PackagingQuantity" => "container",
+            "LabelQuantity" => "label",
+            _ => "portion",
+        };
+
+    private static string NormalizeRequiredText(string? value, string errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException(errorMessage);
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length > 500 ? trimmed[..500] : trimmed;
+    }
+
+    private static string NormalizeActor(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length > 120 ? trimmed[..120] : trimmed;
+    }
+
+    private static string? NormalizeOptionalText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length > 500 ? trimmed[..500] : trimmed;
+    }
 
     private sealed record SnapshotIngredientRequirement(
         int? RecipeComponentVersionId,

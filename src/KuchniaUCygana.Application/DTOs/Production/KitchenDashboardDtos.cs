@@ -38,6 +38,17 @@ public sealed class KitchenDashboardDto
     public KitchenDashboardSummaryDto Summary { get; set; } = new();
 }
 
+public sealed class ProductionPlanDetailDto
+{
+    public ProductionPlanDto Plan { get; set; } = new();
+
+    public KitchenDashboardFilterDto Filter { get; set; } = new();
+
+    public PagedResultDto<ProductionPlanItemDto> Items { get; set; } = new();
+
+    public KitchenDashboardSummaryDto Summary { get; set; } = new();
+}
+
 public sealed class KitchenDashboardSummaryDto
 {
     public int TotalItems { get; set; }
