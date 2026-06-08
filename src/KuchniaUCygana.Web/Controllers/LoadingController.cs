@@ -1,4 +1,5 @@
 ﻿using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Application.DTOs.Packing;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,17 +31,32 @@ public sealed class LoadingController : Controller
     public async Task<IActionResult> Index(DateOnly? date)
     {
         var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
-        var board = await _packingService.GetPackingBoardAsync(selectedDate);
+        var boardPage = await _packingService.GetPackingBoardPageAsync(new PackingBoardQueryDto
+        {
+            Date = selectedDate,
+            Page = 1,
+            PageSize = 10,
+            Mode = "loading",
+        });
+        var board = boardPage.Board;
+        board.Routes = boardPage.AllRoutes.ToList();
         ViewBag.SelectedDate = selectedDate;
         return View(board);
     }
 
     [HttpGet("{routeId:int}")]
-    public async Task<IActionResult> Route(int routeId, DateOnly? date)
+    public async Task<IActionResult> Route(int routeId, DateOnly? date, int page = 1, int pageSize = 50)
     {
         var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
-        var board = await _packingService.GetPackingBoardAsync(selectedDate);
-        var route = board.Routes.FirstOrDefault(r => r.RouteId == routeId);
+        var boardPage = await _packingService.GetPackingBoardPageAsync(new PackingBoardQueryDto
+        {
+            Date = selectedDate,
+            RouteId = routeId,
+            Page = page,
+            PageSize = pageSize,
+            Mode = "loading",
+        });
+        var route = boardPage.AllRoutes.FirstOrDefault(r => r.RouteId == routeId);
 
         if (route is null)
         {
@@ -48,11 +64,16 @@ public sealed class LoadingController : Controller
             return RedirectToAction(nameof(Index), new { date = selectedDate });
         }
 
+        route.Bags = boardPage.Board.Routes.FirstOrDefault(r => r.RouteId == routeId)?.Bags ?? new List<PackingBagDto>();
+
         return View(new PackingDeliveryViewModel
         {
             SelectedDate = selectedDate,
             Route = route,
             Manifest = await _manifestService.GetManifestAsync(selectedDate, routeId),
+            Page = boardPage.Page,
+            PageSize = boardPage.PageSize,
+            TotalBags = boardPage.TotalBags,
         });
     }
 

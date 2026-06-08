@@ -13,6 +13,38 @@ public sealed class PackingBoardDto
     public List<PackingRouteDto> Routes { get; set; } = new();
 }
 
+public sealed class PackingBoardQueryDto
+{
+    public DateOnly Date { get; set; }
+
+    public string? Search { get; set; }
+
+    public int? RouteId { get; set; }
+
+    public string? LabelStatus { get; set; }
+
+    public string? BagStatus { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 20;
+
+    public string? Mode { get; set; }
+}
+
+public sealed class PackingBoardPageDto
+{
+    public PackingBoardDto Board { get; set; } = new();
+
+    public IReadOnlyList<PackingRouteDto> AllRoutes { get; set; } = Array.Empty<PackingRouteDto>();
+
+    public int TotalBags { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 20;
+}
+
 public sealed class PackingRouteDto
 {
     public int RouteId { get; set; }
@@ -30,6 +62,10 @@ public sealed class PackingRouteDto
     public int LoadedBags { get; set; }
 
     public int DispatchedBags { get; set; }
+
+    public int MissingLabelBags { get; set; }
+
+    public int UnattachedLabelBags { get; set; }
 
     public bool AllBagsPacked { get; set; }
 

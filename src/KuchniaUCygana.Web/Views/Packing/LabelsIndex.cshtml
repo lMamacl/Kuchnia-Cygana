@@ -167,8 +167,8 @@
                 @foreach (var route in Model.Board.Routes)
                 {
                     var routeSummary = Model.AllRoutes.FirstOrDefault(item => item.RouteId == route.RouteId) ?? route;
-                    var missingLabels = routeSummary.Bags.Count(bag => !bag.HasLabels);
-                    var unattachedLabels = routeSummary.Bags.Count(bag => bag.HasLabels && !bag.IsTransportLabelAttached);
+                    var missingLabels = routeSummary.MissingLabelBags;
+                    var unattachedLabels = routeSummary.UnattachedLabelBags;
 
                     <div class="border-top">
                         <div class="px-3 py-3 d-flex flex-wrap justify-content-between align-items-center gap-3 bg-light">

@@ -54,16 +54,25 @@ public sealed class PackingController : Controller
         }
 
         var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
-        var board = await packingService.GetPackingBoardAsync(selectedDate);
+        var boardPage = await packingService.GetPackingBoardPageAsync(new PackingBoardQueryDto
+        {
+            Date = selectedDate,
+            Search = search,
+            RouteId = routeId,
+            LabelStatus = "all",
+            BagStatus = bagStatus,
+            Page = page,
+            PageSize = pageSize,
+            Mode = "packing",
+        });
+
         return View(BuildPackingIndexViewModel(
-            board,
+            boardPage,
             selectedDate,
             search,
             routeId,
             "all",
             bagStatus,
-            page,
-            pageSize,
             "packing"));
     }
 
@@ -410,16 +419,25 @@ public sealed class PackingController : Controller
         int pageSize = 20)
     {
         var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
-        var board = await packingService.GetPackingBoardAsync(selectedDate);
+        var boardPage = await packingService.GetPackingBoardPageAsync(new PackingBoardQueryDto
+        {
+            Date = selectedDate,
+            Search = search,
+            RouteId = routeId,
+            LabelStatus = labelStatus,
+            BagStatus = bagStatus,
+            Page = page,
+            PageSize = pageSize,
+            Mode = "labels",
+        });
+
         return View("LabelsIndex", BuildPackingIndexViewModel(
-            board,
+            boardPage,
             selectedDate,
             search,
             routeId,
             labelStatus,
             bagStatus,
-            page,
-            pageSize,
             "labels"));
     }
 
@@ -686,60 +704,28 @@ public sealed class PackingController : Controller
         return RedirectToLoadingRoute(routeId, date);
     }
 
-    private PackingIndexViewModel BuildPackingIndexViewModel(
-        PackingBoardDto board,
+    private static PackingIndexViewModel BuildPackingIndexViewModel(
+        PackingBoardPageDto boardPage,
         DateOnly selectedDate,
         string? search,
         int? routeId,
         string? labelStatus,
         string? bagStatus,
-        int page,
-        int pageSize,
         string? mode)
     {
-        var safePageSize = Math.Clamp(pageSize, 10, 100);
-        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(boardPage.PageSize, 10, 100);
         var normalizedMode = string.Equals(mode, "labels", StringComparison.OrdinalIgnoreCase) ? "labels" : "packing";
         var normalizedLabelStatus = NormalizeFilterValue(labelStatus);
         var normalizedBagStatus = NormalizeFilterValue(bagStatus);
         var normalizedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
-
-        var rows = board.Routes
-            .SelectMany(route => route.Bags.Select(bag => new PackingRouteBagRow(route, bag)))
-            .Where(row => !routeId.HasValue || row.Route.RouteId == routeId.Value)
-            .Where(row => MatchesSearch(row, normalizedSearch))
-            .Where(row => MatchesBagStatus(row.Bag, normalizedBagStatus))
-            .Where(row => normalizedMode != "labels" || MatchesLabelStatus(row.Bag, normalizedLabelStatus))
-            .OrderBy(row => row.Route.RouteName)
-            .ThenBy(row => row.Bag.StopNumber)
-            .ThenBy(row => row.Bag.OrderId)
-            .ToList();
-
-        var totalBags = rows.Count;
-        var totalPages = totalBags == 0 ? 1 : (int)Math.Ceiling(totalBags / (double)safePageSize);
-        safePage = Math.Min(safePage, totalPages);
-        var pageRows = rows
-            .Skip((safePage - 1) * safePageSize)
-            .Take(safePageSize)
-            .ToList();
-
-        var filteredBoard = new PackingBoardDto
-        {
-            PackingDate = board.PackingDate,
-            TotalBags = board.TotalBags,
-            PackedBags = board.PackedBags,
-            LoadedBags = board.LoadedBags,
-            Routes = pageRows
-                .GroupBy(row => row.Route.RouteId)
-                .Select(group => CreateRoutePage(group.First().Route, group.Select(row => row.Bag).ToList()))
-                .ToList(),
-        };
+        var totalPages = boardPage.TotalBags == 0 ? 1 : (int)Math.Ceiling(boardPage.TotalBags / (double)safePageSize);
+        var safePage = Math.Min(Math.Max(boardPage.Page, 1), totalPages);
 
         return new PackingIndexViewModel
         {
             SelectedDate = selectedDate,
-            Board = filteredBoard,
-            AllRoutes = board.Routes.Where(route => route.TotalBags > 0).ToList(),
+            Board = boardPage.Board,
+            AllRoutes = boardPage.AllRoutes,
             Mode = normalizedMode,
             Search = normalizedSearch,
             RouteId = routeId,
@@ -747,7 +733,7 @@ public sealed class PackingController : Controller
             BagStatus = normalizedBagStatus,
             Page = safePage,
             PageSize = safePageSize,
-            TotalBags = totalBags,
+            TotalBags = boardPage.TotalBags,
         };
     }
 

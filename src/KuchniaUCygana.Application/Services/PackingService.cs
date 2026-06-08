@@ -205,6 +205,74 @@ public sealed class PackingService : IPackingService
         return board;
     }
 
+    public async Task<PackingBoardPageDto> GetPackingBoardPageAsync(PackingBoardQueryDto query)
+    {
+        var normalized = NormalizePackingBoardQuery(query);
+        var searchResult = await bagRepository.SearchBoardBagsAsync(new PackingBagQuery
+        {
+            PackingDate = normalized.Date,
+            Search = normalized.Search,
+            RouteId = normalized.RouteId,
+            Status = ParsePackingBagStatus(normalized.BagStatus),
+            LabelState = string.Equals(normalized.Mode, "labels", StringComparison.OrdinalIgnoreCase)
+                ? NormalizeTransportLabelState(normalized.LabelStatus)
+                : null,
+            Page = normalized.Page,
+            PageSize = normalized.PageSize,
+        });
+
+        var routeSummaries = searchResult.Routes
+            .Select(MapRouteSummary)
+            .OrderBy(route => route.RouteName)
+            .ThenBy(route => route.RouteId)
+            .ToList();
+        var routeIds = routeSummaries.Select(route => route.RouteId)
+            .Concat(searchResult.Bags.Select(bag => bag.RouteId))
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+        var manifestsByRoute = await GetLatestManifestsByRouteAsync(normalized.Date, routeIds);
+
+        foreach (var route in routeSummaries)
+        {
+            ApplyManifestState(route, manifestsByRoute.GetValueOrDefault(route.RouteId));
+        }
+
+        var routeSummaryById = routeSummaries.ToDictionary(route => route.RouteId);
+        var pageRoutes = searchResult.Bags
+            .GroupBy(row => row.RouteId)
+            .Select(group =>
+            {
+                var source = routeSummaryById.TryGetValue(group.Key, out var summary)
+                    ? summary
+                    : MapRouteSummary(group.First());
+                var route = CloneRouteWithoutBags(source);
+                route.Bags = group.Select(MapBoardBagRow).ToList();
+                return route;
+            })
+            .OrderBy(route => route.RouteName)
+            .ThenBy(route => route.RouteId)
+            .ToList();
+
+        var board = new PackingBoardDto
+        {
+            PackingDate = normalized.Date,
+            TotalBags = searchResult.TotalBags,
+            PackedBags = searchResult.PackedBags,
+            LoadedBags = searchResult.LoadedBags,
+            Routes = pageRoutes,
+        };
+
+        return new PackingBoardPageDto
+        {
+            Board = board,
+            AllRoutes = routeSummaries.Where(route => route.TotalBags > 0).ToList(),
+            TotalBags = searchResult.TotalCount,
+            Page = normalized.Page,
+            PageSize = normalized.PageSize,
+        };
+    }
+
     public async Task<PackingSessionDto> StartPackingSessionAsync(DateOnly date, string packedBy)
     {
         await GetPackingBoardAsync(date);
@@ -943,6 +1011,210 @@ public sealed class PackingService : IPackingService
             ?? throw new InvalidOperationException("Ostatnia etykieta produktowa nie ma zapisanego snapshotu danych.");
 
         return MapFoilLabelDto(label, item, payload);
+    }
+
+    private static PackingBoardQueryDto NormalizePackingBoardQuery(PackingBoardQueryDto query)
+    {
+        var pageSize = query.PageSize <= 0 ? 20 : query.PageSize;
+        return new PackingBoardQueryDto
+        {
+            Date = query.Date == default ? DateOnly.FromDateTime(DateTime.Today) : query.Date,
+            Search = NormalizeFoilSearch(query.Search),
+            RouteId = query.RouteId,
+            LabelStatus = NormalizeTransportLabelState(query.LabelStatus) ?? "all",
+            BagStatus = ParsePackingBagStatus(query.BagStatus)?.ToString() ?? "all",
+            Page = Math.Max(query.Page, 1),
+            PageSize = Math.Clamp(pageSize, 10, 100),
+            Mode = string.Equals(query.Mode, "labels", StringComparison.OrdinalIgnoreCase) ? "labels" : "packing",
+        };
+    }
+
+    private static PackingBagStatus? ParsePackingBagStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status) || status.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return Enum.TryParse<PackingBagStatus>(status.Trim(), ignoreCase: true, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    private static string? NormalizeTransportLabelState(string? labelState)
+    {
+        if (string.IsNullOrWhiteSpace(labelState) || labelState.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return labelState.Trim().ToLowerInvariant() switch
+        {
+            "missing" => "missing",
+            "generated" => "generated",
+            "attached" => "attached",
+            "not-attached" => "not-attached",
+            _ => null,
+        };
+    }
+
+    private static PackingRouteDto MapRouteSummary(PackingRouteSearchSummary summary)
+    {
+        var route = new PackingRouteDto
+        {
+            RouteId = summary.RouteId,
+            RouteName = summary.RouteName,
+            VehicleId = summary.VehicleId,
+            VehicleRegistration = summary.VehicleRegistration,
+            TotalBags = summary.TotalBags,
+            PackedBags = summary.PackedBags,
+            LoadedBags = summary.LoadedBags,
+            DispatchedBags = summary.DispatchedBags,
+            MissingLabelBags = summary.MissingLabelBags,
+            UnattachedLabelBags = summary.UnattachedLabelBags,
+            AllBagsPacked = summary.TotalBags > 0 && summary.PackedBags == summary.TotalBags,
+            AllBagsLoaded = summary.TotalBags > 0 && summary.LoadedBags == summary.TotalBags,
+        };
+
+        ApplyRouteActionFlags(route);
+        return route;
+    }
+
+    private static PackingRouteDto MapRouteSummary(PackingBagSearchRow row)
+    {
+        var route = new PackingRouteDto
+        {
+            RouteId = row.RouteId,
+            RouteName = row.RouteName,
+            VehicleId = row.VehicleId,
+            VehicleRegistration = row.VehicleRegistration,
+        };
+
+        ApplyRouteActionFlags(route);
+        return route;
+    }
+
+    private static PackingRouteDto CloneRouteWithoutBags(PackingRouteDto source)
+        => new()
+        {
+            RouteId = source.RouteId,
+            RouteName = source.RouteName,
+            VehicleId = source.VehicleId,
+            VehicleRegistration = source.VehicleRegistration,
+            TotalBags = source.TotalBags,
+            PackedBags = source.PackedBags,
+            LoadedBags = source.LoadedBags,
+            DispatchedBags = source.DispatchedBags,
+            MissingLabelBags = source.MissingLabelBags,
+            UnattachedLabelBags = source.UnattachedLabelBags,
+            AllBagsPacked = source.AllBagsPacked,
+            AllBagsLoaded = source.AllBagsLoaded,
+            HasManifest = source.HasManifest,
+            IsManifestVerified = source.IsManifestVerified,
+            ManifestId = source.ManifestId,
+            ManifestNumber = source.ManifestNumber,
+            ManifestGeneratedAt = source.ManifestGeneratedAt,
+            ManifestVerifiedAt = source.ManifestVerifiedAt,
+            ManifestWorkerApprovedAt = source.ManifestWorkerApprovedAt,
+            ManifestSentToLogisticsAt = source.ManifestSentToLogisticsAt,
+            ManifestRequiresRegeneration = source.ManifestRequiresRegeneration,
+            ManifestRequiresRegenerationReason = source.ManifestRequiresRegenerationReason,
+            CanGenerateManifest = source.CanGenerateManifest,
+            CanVerifyManifest = source.CanVerifyManifest,
+            CanWorkerApproveManifest = source.CanWorkerApproveManifest,
+            CanSupervisorApproveManifest = source.CanSupervisorApproveManifest,
+            CanLoadBags = source.CanLoadBags,
+            CanDispatchDelivery = source.CanDispatchDelivery,
+        };
+
+    private static void ApplyManifestState(PackingRouteDto route, PackingManifest? manifest)
+    {
+        if (manifest is not null)
+        {
+            route.HasManifest = true;
+            route.ManifestId = manifest.Id;
+            route.ManifestNumber = manifest.ManifestNumber;
+            route.ManifestGeneratedAt = manifest.GeneratedAt;
+            route.IsManifestVerified = manifest.IsVerified;
+            route.ManifestVerifiedAt = manifest.VerifiedAt;
+            route.ManifestWorkerApprovedAt = manifest.WorkerApprovedAt;
+            route.ManifestSentToLogisticsAt = manifest.SentToLogisticsAt;
+            route.ManifestRequiresRegeneration = manifest.RequiresRegeneration;
+            route.ManifestRequiresRegenerationReason = manifest.RequiresRegenerationReason;
+        }
+
+        ApplyRouteActionFlags(route);
+    }
+
+    private static void ApplyRouteActionFlags(PackingRouteDto route)
+    {
+        var allBagsReadyForManifest = route.TotalBags > 0 &&
+            route.MissingLabelBags == 0 &&
+            route.UnattachedLabelBags == 0;
+
+        route.CanGenerateManifest = route.RouteId > 0 && route.AllBagsPacked && allBagsReadyForManifest;
+        route.CanWorkerApproveManifest = route.HasManifest &&
+            !route.IsManifestVerified &&
+            !route.ManifestWorkerApprovedAt.HasValue &&
+            !route.ManifestRequiresRegeneration &&
+            route.AllBagsPacked &&
+            allBagsReadyForManifest;
+        route.CanSupervisorApproveManifest = route.HasManifest &&
+            !route.IsManifestVerified &&
+            !route.ManifestRequiresRegeneration &&
+            route.ManifestWorkerApprovedAt.HasValue &&
+            route.AllBagsLoaded &&
+            allBagsReadyForManifest;
+        route.CanVerifyManifest = route.CanSupervisorApproveManifest;
+        route.CanLoadBags = route.HasManifest &&
+            !route.ManifestRequiresRegeneration &&
+            (route.ManifestWorkerApprovedAt.HasValue || route.IsManifestVerified) &&
+            allBagsReadyForManifest;
+        route.CanDispatchDelivery = route.IsManifestVerified && route.AllBagsLoaded;
+    }
+
+    private static PackingBagDto MapBoardBagRow(PackingBagSearchRow row)
+    {
+        return new PackingBagDto
+        {
+            PackingBagId = row.PackingBagId,
+            PackingSessionId = row.PackingSessionId,
+            DeliveryCalendarId = row.DeliveryCalendarId,
+            BagNumber = row.BagNumber,
+            BagCode = row.BagCode,
+            OrderId = row.OrderId,
+            ClientName = row.ClientName,
+            ClientPublicId = row.ClientPublicId,
+            DietType = GetDietType(row.DietVariantId),
+            Address = row.Address,
+            RouteId = row.RouteId,
+            RouteName = row.RouteName,
+            VehicleId = row.VehicleId,
+            VehicleRegistration = row.VehicleRegistration,
+            StopNumber = row.StopNumber == 2147483647 ? 0 : row.StopNumber,
+            DeliveryWindow = row.DeliveryWindow,
+            Status = row.Status.ToString(),
+            StatusText = GetStatusText(row.Status, row.TotalBoxes, row.PackedBoxes),
+            StatusColor = GetStatusColor(row.Status),
+            TotalBoxes = row.TotalBoxes,
+            PackedBoxes = row.PackedBoxes,
+            HasLabels = row.TransportLabelId.HasValue,
+            TransportLabelId = row.TransportLabelId,
+            TransportLabelPrintNumber = row.TransportLabelPrintNumber,
+            IsTransportLabelAttached = row.TransportLabelAttachedAt.HasValue,
+            TransportLabelAttachedAt = row.TransportLabelAttachedAt,
+            TransportLabelAttachedBy = row.TransportLabelAttachedBy,
+            CanPackBag = row.TotalBoxes > 0 &&
+                row.PackedBoxes == row.TotalBoxes &&
+                row.SessionStatus == PackingStatus.Pending &&
+                row.Status == PackingBagStatus.Pending,
+            CanLoad = row.Status is PackingBagStatus.Labeled or PackingBagStatus.Manifested,
+            CanGenerateTransportLabel = row.RouteId > 0 &&
+                (row.Status is PackingBagStatus.Packed or PackingBagStatus.Labeled or PackingBagStatus.Manifested or PackingBagStatus.Loaded or PackingBagStatus.Dispatched),
+            CanConfirmTransportLabelAttached = row.TransportLabelId.HasValue &&
+                !row.TransportLabelAttachedAt.HasValue &&
+                row.Status is PackingBagStatus.Labeled or PackingBagStatus.Packed,
+        };
     }
 
     public async Task PackBoxByCodeAsync(int sessionId, string barcode, string packedBy)

@@ -9,6 +9,8 @@ public interface IPackingService
 {
     Task<PackingBoardDto> GetPackingBoardAsync(DateOnly date);
 
+    Task<PackingBoardPageDto> GetPackingBoardPageAsync(PackingBoardQueryDto query);
+
     Task<PackingSessionDto> StartPackingSessionAsync(DateOnly date, string packedBy);
 
     Task<IEnumerable<PackingItemDto>> PrepareOrderBoxesAsync(int packingSessionId);

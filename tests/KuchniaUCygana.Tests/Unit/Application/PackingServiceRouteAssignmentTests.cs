@@ -1487,6 +1487,11 @@ public sealed class PackingServiceRouteAssignmentTests
             throw new NotSupportedException();
         }
 
+        public Task<PackingBoardPageDto> GetPackingBoardPageAsync(PackingBoardQueryDto query)
+        {
+            throw new NotSupportedException();
+        }
+
         public Task<PackingSessionDto> StartPackingSessionAsync(DateOnly date, string packedBy)
         {
             throw new NotSupportedException();
@@ -1879,6 +1884,33 @@ public sealed class PackingServiceRouteAssignmentTests
             return Task.FromResult(this.Entities
                 .OrderBy(b => b.BagNumber)
                 .FirstOrDefault(b => b.PackingSessionId == packingSessionId && b.Status != PackingBagStatus.Damaged));
+        }
+
+        public Task<PackingBagSearchResult> SearchBoardBagsAsync(PackingBagQuery query)
+        {
+            var bags = this.Entities
+                .Where(bag => !query.Status.HasValue || bag.Status == query.Status.Value)
+                .Skip((Math.Max(query.Page, 1) - 1) * Math.Clamp(query.PageSize, 1, 200))
+                .Take(Math.Clamp(query.PageSize, 1, 200))
+                .Select(bag => new PackingBagSearchRow
+                {
+                    PackingBagId = bag.Id,
+                    PackingSessionId = bag.PackingSessionId,
+                    BagNumber = bag.BagNumber,
+                    BagCode = bag.BagCode,
+                    Status = bag.Status,
+                    SessionStatus = PackingStatus.Pending,
+                })
+                .ToList();
+
+            return Task.FromResult(new PackingBagSearchResult
+            {
+                Bags = bags,
+                TotalCount = this.Entities.Count,
+                TotalBags = this.Entities.Count,
+                PackedBags = this.Entities.Count(bag => bag.Status is PackingBagStatus.Packed or PackingBagStatus.Labeled or PackingBagStatus.Manifested or PackingBagStatus.Loaded or PackingBagStatus.Dispatched),
+                LoadedBags = this.Entities.Count(bag => bag.Status is PackingBagStatus.Loaded or PackingBagStatus.Dispatched),
+            });
         }
     }
 
