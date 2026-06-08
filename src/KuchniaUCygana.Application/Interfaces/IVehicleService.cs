@@ -5,6 +5,7 @@ namespace KuchniaUCygana.Application.Interfaces;
 public interface IVehicleService
 {
     Task<IEnumerable<VehicleDto>> GetAllAsync();
+    Task<VehiclePageDto> SearchAsync(VehicleSearchRequest request);
     Task<VehicleDto?> GetByIdAsync(int id);
     Task<VehicleDto> CreateAsync(CreateVehicleRequest request);
     Task<VehicleDto?> UpdateAsync(int id, UpdateVehicleRequest request);

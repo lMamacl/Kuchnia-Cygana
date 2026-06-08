@@ -244,13 +244,23 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet("vehicles")]
-    public async Task<IActionResult> Vehicles()
+    public async Task<IActionResult> Vehicles([FromQuery] VehicleListFilterViewModel filter)
     {
         ViewData["Title"] = "Flota";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = "Zarządzanie flotą pojazdów dostawczych i ich gotowością operacyjną.";
-        var vehicles = await _vehicleService.GetAllAsync();
-        return View(vehicles);
+        var page = await _vehicleService.SearchAsync(new VehicleSearchRequest
+        {
+            Search = filter.Search,
+            Status = filter.Status,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+        });
+        return View(new VehicleListViewModel
+        {
+            Filter = filter,
+            Page = page,
+        });
     }
 
     [HttpGet("vehicles/create")]
@@ -334,12 +344,24 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet("drivers")]
-    public async Task<IActionResult> Drivers()
+    public async Task<IActionResult> Drivers([FromQuery] DriverListFilterViewModel filter)
     {
         ViewData["Title"] = "Kierowcy";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = "Profile kierowców uprawnionych do realizacji dostaw.";
-        return View(await _driverService.GetAllAsync());
+        var page = await _driverService.SearchAsync(new DriverSearchRequest
+        {
+            Search = filter.Search,
+            IsActive = filter.IsActive,
+            HasVehicleAssignment = filter.HasVehicleAssignment,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+        });
+        return View(new DriverListViewModel
+        {
+            Filter = filter,
+            Page = page,
+        });
     }
 
     [HttpGet("drivers/create")]
