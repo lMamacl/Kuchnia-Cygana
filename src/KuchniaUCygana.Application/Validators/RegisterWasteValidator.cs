@@ -26,5 +26,7 @@ public sealed class RegisterWasteValidator : AbstractValidator<RegisterWasteRequ
         RuleFor(x => x.BatchId).GreaterThan(0)
             .When(x => x.BatchId.HasValue)
             .WithMessage("ID partii musi być prawidłowe.");
+        RuleFor(x => x.OperationKey)
+            .MaximumLength(50);
     }
 }

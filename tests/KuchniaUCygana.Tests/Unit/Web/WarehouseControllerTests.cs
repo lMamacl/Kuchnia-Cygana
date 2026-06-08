@@ -138,6 +138,42 @@ public sealed class WarehouseControllerTests
     }
 
     [Fact]
+    public void Receive_ShouldCreateOperationKey()
+    {
+        var controller = CreateController();
+
+        var result = controller.Receive();
+
+        var model = result.Should().BeOfType<ViewResult>().Subject.Model.Should().BeOfType<ReceiveDeliveryRequest>().Subject;
+        model.OperationKey.Should().StartWith("WH-RCV-");
+        model.OperationKey.Should().HaveLength(39);
+    }
+
+    [Fact]
+    public void Issue_ShouldCreateOperationKey()
+    {
+        var controller = CreateController();
+
+        var result = controller.Issue();
+
+        var model = result.Should().BeOfType<ViewResult>().Subject.Model.Should().BeOfType<ManualIssueRequest>().Subject;
+        model.OperationKey.Should().StartWith("WH-ISS-");
+        model.OperationKey.Should().HaveLength(39);
+    }
+
+    [Fact]
+    public void Waste_ShouldCreateOperationKey()
+    {
+        var controller = CreateController();
+
+        var result = controller.Waste();
+
+        var model = result.Should().BeOfType<ViewResult>().Subject.Model.Should().BeOfType<RegisterWasteRequest>().Subject;
+        model.OperationKey.Should().StartWith("WH-WST-");
+        model.OperationKey.Should().HaveLength(39);
+    }
+
+    [Fact]
     public async Task FefoReport_ShouldReturnPartial_WhenRequestComesFromHtmx()
     {
         var warehouseService = new Mock<IWarehouseService>();

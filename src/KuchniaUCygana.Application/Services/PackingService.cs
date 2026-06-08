@@ -770,13 +770,7 @@ public sealed class PackingService : IPackingService
     {
         var session = await sessionRepository.GetWithItemsAsync(sessionId)
             ?? throw new InvalidOperationException($"Torba pakowania {sessionId} nie istnieje.");
-        var labels = packingLabelRepository is not null
-            ? await packingLabelRepository.GetShippingForSessionAsync(sessionId)
-            : (await labelRepository.GetAllAsync())
-                .Where(label => label.LabelType == LabelType.Shipping && label.PackingSessionId == sessionId)
-                .OrderByDescending(label => label.PrintNumber)
-                .ThenByDescending(label => label.Id)
-                .ToList();
+        var labels = await RequirePackingLabelRepository().GetShippingForSessionAsync(sessionId);
 
         var result = new List<PackingLabelDto>();
         foreach (var label in labels)
@@ -791,14 +785,7 @@ public sealed class PackingService : IPackingService
     {
         var route = await GetRouteForPackingActionsAsync(date, routeId);
         var bagIds = route.Bags.Select(bag => bag.PackingBagId).ToArray();
-        var labels = packingLabelRepository is not null
-            ? await packingLabelRepository.GetShippingForBagsAsync(bagIds)
-            : (await labelRepository.GetAllAsync())
-                .Where(label => label.LabelType == LabelType.Shipping && label.PackingBagId.HasValue && bagIds.Contains(label.PackingBagId.Value))
-                .OrderBy(label => label.PackingBagId)
-                .ThenByDescending(label => label.PrintNumber)
-                .ThenByDescending(label => label.Id)
-                .ToList();
+        var labels = await RequirePackingLabelRepository().GetShippingForBagsAsync(bagIds);
 
         var latestByBag = labels
             .Where(label => label.PackingBagId.HasValue)
@@ -2176,37 +2163,46 @@ public sealed class PackingService : IPackingService
 
     private async Task<PackingLabel?> GetLatestShippingLabelAsync(int sessionId, int? packingBagId)
     {
-        if (packingBagId.HasValue && packingLabelRepository is not null)
+        var labels = RequirePackingLabelRepository();
+        if (packingBagId.HasValue)
         {
-            return await packingLabelRepository.GetLatestShippingForBagAsync(packingBagId.Value);
+            var label = await labels.GetLatestShippingForBagAsync(packingBagId.Value);
+            if (label is not null)
+            {
+                return label;
+            }
         }
 
-        var labels = await labelRepository.GetAllAsync();
-        return labels
-            .Where(label => label.LabelType == LabelType.Shipping)
+        var sessionLabels = await labels.GetShippingForSessionAsync(sessionId);
+        return sessionLabels
             .Where(label => packingBagId.HasValue
                 ? label.PackingBagId == packingBagId.Value
                 : label.PackingSessionId == sessionId)
-            .OrderByDescending(label => label.PrintNumber)
-            .ThenByDescending(label => label.Id)
             .FirstOrDefault();
     }
 
     private async Task<PackingLabel?> GetLatestShippingLabelForLabelAsync(PackingLabel label)
     {
-        if (label.PackingBagId.HasValue && packingLabelRepository is not null)
+        var labels = RequirePackingLabelRepository();
+        if (label.PackingBagId.HasValue)
         {
-            return await packingLabelRepository.GetLatestShippingForBagAsync(label.PackingBagId.Value);
+            var latestForBag = await labels.GetLatestShippingForBagAsync(label.PackingBagId.Value);
+            if (latestForBag is not null)
+            {
+                return latestForBag;
+            }
         }
 
-        var labels = await labelRepository.GetAllAsync();
-        return labels
-            .Where(candidate => candidate.LabelType == LabelType.Shipping)
+        if (!label.PackingSessionId.HasValue)
+        {
+            return null;
+        }
+
+        var sessionLabels = await labels.GetShippingForSessionAsync(label.PackingSessionId.Value);
+        return sessionLabels
             .Where(candidate => label.PackingBagId.HasValue
                 ? candidate.PackingBagId == label.PackingBagId.Value
                 : candidate.PackingSessionId == label.PackingSessionId)
-            .OrderByDescending(candidate => candidate.PrintNumber)
-            .ThenByDescending(candidate => candidate.Id)
             .FirstOrDefault();
     }
 
@@ -2313,15 +2309,7 @@ public sealed class PackingService : IPackingService
 
     private async Task<int> GetShippingLabelPrintCountAsync(int sessionId, int packingBagId)
     {
-        if (packingLabelRepository is not null)
-        {
-            return await packingLabelRepository.GetShippingPrintCountAsync(sessionId, packingBagId);
-        }
-
-        var labels = await labelRepository.GetAllAsync();
-        return labels.Count(label =>
-            label.LabelType == LabelType.Shipping &&
-            (label.PackingBagId == packingBagId || label.PackingSessionId == sessionId));
+        return await RequirePackingLabelRepository().GetShippingPrintCountAsync(sessionId, packingBagId);
     }
 
     private async Task<IReadOnlyDictionary<int, PackingLabel>> GetLatestShippingLabelsByBagAsync(IEnumerable<int> packingBagIds)
@@ -2332,18 +2320,7 @@ public sealed class PackingService : IPackingService
             return new Dictionary<int, PackingLabel>();
         }
 
-        if (packingLabelRepository is not null)
-        {
-            return await packingLabelRepository.GetLatestShippingForBagsAsync(ids);
-        }
-
-        var labels = await labelRepository.GetAllAsync();
-        return labels
-            .Where(label => label.LabelType == LabelType.Shipping && label.PackingBagId.HasValue && ids.Contains(label.PackingBagId.Value))
-            .GroupBy(label => label.PackingBagId!.Value)
-            .ToDictionary(
-                group => group.Key,
-                group => group.OrderByDescending(label => label.PrintNumber).ThenByDescending(label => label.Id).First());
+        return await RequirePackingLabelRepository().GetLatestShippingForBagsAsync(ids);
     }
 
     private async Task<IReadOnlyDictionary<int, PackingManifest>> GetLatestManifestsByRouteAsync(DateOnly date, IEnumerable<int> routeIds)
@@ -2354,18 +2331,21 @@ public sealed class PackingService : IPackingService
             return new Dictionary<int, PackingManifest>();
         }
 
-        if (packingManifestQueryRepository is not null)
-        {
-            return await packingManifestQueryRepository.GetLatestByRoutesAsync(date, ids);
-        }
+        return await RequirePackingManifestRepository().GetLatestByRoutesAsync(date, ids);
+    }
 
-        var manifests = await packingManifestRepository.GetAllAsync();
-        return manifests
-            .Where(m => m.PackingDate == date && m.RouteId.HasValue && ids.Contains(m.RouteId.Value) && !m.IsSuperseded)
-            .GroupBy(m => m.RouteId!.Value)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(m => m.GeneratedAt).ThenByDescending(m => m.Id).First());
+    private IPackingLabelRepository RequirePackingLabelRepository()
+    {
+        return packingLabelRepository
+            ?? labelRepository as IPackingLabelRepository
+            ?? throw new InvalidOperationException("Brak query repozytorium etykiet transportowych. Kompletacja nie moze uzywac pelnego skanu etykiet przy danych wolumenowych.");
+    }
+
+    private IPackingManifestRepository RequirePackingManifestRepository()
+    {
+        return packingManifestQueryRepository
+            ?? packingManifestRepository as IPackingManifestRepository
+            ?? throw new InvalidOperationException("Brak query repozytorium manifestow. Kompletacja nie moze uzywac pelnego skanu manifestow przy danych wolumenowych.");
     }
 
     private string BuildTransportQrCode(string bagCode)

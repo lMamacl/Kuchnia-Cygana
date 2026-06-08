@@ -81,7 +81,7 @@ public sealed class PackingServiceRouteAssignmentTests
         var sessionRepository = new InMemoryPackingSessionRepository();
         var bagRepository = new InMemoryPackingBagRepository();
         var itemRepository = new InMemoryRepository<PackingItem>();
-        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var labelRepository = new InMemoryPackingLabelRepository();
         var service = CreateService(
             sessionRepository,
             bagRepository,
@@ -109,7 +109,7 @@ public sealed class PackingServiceRouteAssignmentTests
         var sessionRepository = new InMemoryPackingSessionRepository();
         var bagRepository = new InMemoryPackingBagRepository();
         var itemRepository = new InMemoryRepository<PackingItem>();
-        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var labelRepository = new InMemoryPackingLabelRepository();
         var service = CreateService(
             sessionRepository,
             bagRepository,
@@ -160,6 +160,43 @@ public sealed class PackingServiceRouteAssignmentTests
         packingService.Verify(service => service.GetPackingBoardAsync(It.IsAny<DateOnly>()), Times.Never);
         packingService.Verify(service => service.GetPackingBoardPageAsync(
             It.Is<PackingBoardQueryDto>(query => query.RouteId == route.RouteId && query.Page == 1)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ResetLoadingAsync_WithoutRoute_ShouldUsePagedBoard_InsteadOfFullBoard()
+    {
+        var date = new DateOnly(2035, 6, 1);
+        var route = CreateRouteForBoardPage(date);
+        var packingService = new Mock<IPackingService>(MockBehavior.Strict);
+        packingService
+            .Setup(service => service.GetPackingBoardAsync(It.IsAny<DateOnly>()))
+            .ThrowsAsync(new InvalidOperationException("Full packing board should not be loaded for reset loading."));
+        packingService
+            .Setup(service => service.GetPackingBoardPageAsync(It.IsAny<PackingBoardQueryDto>()))
+            .ReturnsAsync((PackingBoardQueryDto query) => new PackingBoardPageDto
+            {
+                Board = new PackingBoardDto
+                {
+                    PackingDate = date,
+                    TotalBags = route.TotalBags,
+                    PackedBags = route.PackedBags,
+                    LoadedBags = route.LoadedBags,
+                    Routes = new List<PackingRouteDto> { route },
+                },
+                AllRoutes = new[] { CloneRouteSummary(route) },
+                TotalBags = route.TotalBags,
+                Page = query.Page,
+                PageSize = query.PageSize,
+            });
+        var loadingService = CreateLoadingService(packingService.Object);
+
+        var resetCount = await loadingService.ResetLoadingAsync(date);
+
+        resetCount.Should().Be(0);
+        packingService.Verify(service => service.GetPackingBoardAsync(It.IsAny<DateOnly>()), Times.Never);
+        packingService.Verify(service => service.GetPackingBoardPageAsync(
+            It.Is<PackingBoardQueryDto>(query => query.RouteId == null && query.Page == 1)),
             Times.Once);
     }
 
@@ -691,7 +728,7 @@ public sealed class PackingServiceRouteAssignmentTests
         var sessionRepository = new InMemoryPackingSessionRepository();
         var bagRepository = new InMemoryPackingBagRepository();
         var itemRepository = new InMemoryRepository<PackingItem>();
-        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var labelRepository = new InMemoryPackingLabelRepository();
         var service = CreateService(
             sessionRepository,
             bagRepository,
@@ -738,7 +775,7 @@ public sealed class PackingServiceRouteAssignmentTests
         var sessionRepository = new InMemoryPackingSessionRepository();
         var bagRepository = new InMemoryPackingBagRepository();
         var itemRepository = new InMemoryRepository<PackingItem>();
-        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var labelRepository = new InMemoryPackingLabelRepository();
         var service = CreateService(
             sessionRepository,
             bagRepository,
@@ -784,7 +821,7 @@ public sealed class PackingServiceRouteAssignmentTests
         var sessionRepository = new InMemoryPackingSessionRepository();
         var bagRepository = new InMemoryPackingBagRepository();
         var itemRepository = new InMemoryRepository<PackingItem>();
-        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var labelRepository = new InMemoryPackingLabelRepository();
         var service = CreateService(
             sessionRepository,
             bagRepository,
@@ -820,7 +857,7 @@ public sealed class PackingServiceRouteAssignmentTests
         var sessionRepository = new InMemoryPackingSessionRepository();
         var bagRepository = new InMemoryPackingBagRepository();
         var itemRepository = new InMemoryRepository<PackingItem>();
-        var labelRepository = new InMemoryRepository<PackingLabel>();
+        var labelRepository = new InMemoryPackingLabelRepository();
         var service = CreateService(
             sessionRepository,
             bagRepository,
@@ -919,7 +956,7 @@ public sealed class PackingServiceRouteAssignmentTests
         var sessionRepository = new InMemoryPackingSessionRepository();
         var bagRepository = new InMemoryPackingBagRepository();
         var itemRepository = new InMemoryRepository<PackingItem>();
-        var manifestRepository = new InMemoryRepository<PackingManifest>();
+        var manifestRepository = new InMemoryPackingManifestRepository();
         var packingService = new RouteRefreshPackingService(sessionRepository, itemRepository);
         var service = new PackingSynchronizationService(
             sessionRepository,
@@ -1228,12 +1265,14 @@ public sealed class PackingServiceRouteAssignmentTests
         var mapperConfiguration = new MapperConfiguration(
             cfg => cfg.AddProfile<ProductionProfile>(),
             NullLoggerFactory.Instance);
+        var labels = labelRepository ?? new InMemoryPackingLabelRepository();
+        var manifests = manifestRepository ?? new InMemoryPackingManifestRepository();
 
         return new PackingService(
             sessionRepository,
             itemRepository ?? new InMemoryRepository<PackingItem>(),
-            labelRepository ?? new InMemoryRepository<PackingLabel>(),
-            manifestRepository ?? new InMemoryRepository<PackingManifest>(),
+            labels,
+            manifests,
             bagRepository,
             boxLabelRepository ?? new InMemoryBoxLabelRepository(),
             new InMemoryPackingStatusLogRepository(),
@@ -1245,7 +1284,9 @@ public sealed class PackingServiceRouteAssignmentTests
             productionPlanRepository ?? new InMemoryProductionPlanRepository(),
             productionPlanItemRepository ?? new InMemoryRepository<ProductionPlanItem>(),
             mapperConfiguration.CreateMapper(),
-            NullLogger<PackingService>.Instance);
+            NullLogger<PackingService>.Instance,
+            packingLabelRepository: labels as IPackingLabelRepository,
+            packingManifestQueryRepository: manifests as IPackingManifestRepository);
     }
 
     private static LoadingService CreateLoadingService(IPackingService packingService)
@@ -1253,16 +1294,20 @@ public sealed class PackingServiceRouteAssignmentTests
         var mapperConfiguration = new MapperConfiguration(
             cfg => cfg.AddProfile<ProductionProfile>(),
             NullLoggerFactory.Instance);
+        var labels = new InMemoryPackingLabelRepository();
+        var manifests = new InMemoryPackingManifestRepository();
 
         return new LoadingService(
             new InMemoryPackingSessionRepository(),
             new InMemoryPackingBagRepository(),
-            new InMemoryRepository<PackingLabel>(),
-            new InMemoryRepository<PackingManifest>(),
+            labels,
+            manifests,
             new InMemoryPackingStatusLogRepository(),
             packingService,
             mapperConfiguration.CreateMapper(),
-            NullLogger<LoadingService>.Instance);
+            NullLogger<LoadingService>.Instance,
+            packingLabelRepository: labels,
+            packingManifestQueryRepository: manifests);
     }
 
     private static PackingRouteDto CreateRouteForBoardPage(DateOnly date)
@@ -2123,6 +2168,118 @@ public sealed class PackingServiceRouteAssignmentTests
         public Task<int> GetPrintCountAsync(int packingItemId)
         {
             return Task.FromResult(this.Entities.Count(l => l.PackingItemId == packingItemId));
+        }
+    }
+
+    private sealed class InMemoryPackingLabelRepository : InMemoryRepository<PackingLabel>, IPackingLabelRepository
+    {
+        public Task<PackingLabel?> GetLatestShippingForBagAsync(int packingBagId)
+        {
+            return Task.FromResult(this.Entities
+                .Where(label => label.LabelType == LabelType.Shipping && label.PackingBagId == packingBagId)
+                .OrderByDescending(label => label.PrintNumber)
+                .ThenByDescending(label => label.Id)
+                .FirstOrDefault());
+        }
+
+        public Task<IReadOnlyDictionary<int, PackingLabel>> GetLatestShippingForBagsAsync(IEnumerable<int> packingBagIds)
+        {
+            var ids = packingBagIds.Where(id => id > 0).ToHashSet();
+            var labels = this.Entities
+                .Where(label => label.LabelType == LabelType.Shipping && label.PackingBagId.HasValue && ids.Contains(label.PackingBagId.Value))
+                .GroupBy(label => label.PackingBagId!.Value)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.OrderByDescending(label => label.PrintNumber).ThenByDescending(label => label.Id).First());
+
+            return Task.FromResult<IReadOnlyDictionary<int, PackingLabel>>(labels);
+        }
+
+        public Task<IReadOnlyList<PackingLabel>> GetShippingForBagsAsync(IEnumerable<int> packingBagIds)
+        {
+            var ids = packingBagIds.Where(id => id > 0).ToHashSet();
+            var labels = this.Entities
+                .Where(label => label.LabelType == LabelType.Shipping && label.PackingBagId.HasValue && ids.Contains(label.PackingBagId.Value))
+                .OrderBy(label => label.PackingBagId)
+                .ThenByDescending(label => label.PrintNumber)
+                .ThenByDescending(label => label.Id)
+                .ToList();
+
+            return Task.FromResult<IReadOnlyList<PackingLabel>>(labels);
+        }
+
+        public Task<IReadOnlyList<PackingLabel>> GetShippingForSessionAsync(int packingSessionId)
+        {
+            var labels = this.Entities
+                .Where(label => label.LabelType == LabelType.Shipping && label.PackingSessionId == packingSessionId)
+                .OrderByDescending(label => label.PrintNumber)
+                .ThenByDescending(label => label.Id)
+                .ToList();
+
+            return Task.FromResult<IReadOnlyList<PackingLabel>>(labels);
+        }
+
+        public Task<PackingLabel?> GetShippingByQrCodeAsync(string qrCode)
+        {
+            return Task.FromResult(this.Entities
+                .Where(label => label.LabelType == LabelType.Shipping)
+                .OrderByDescending(label => label.PrintNumber)
+                .ThenByDescending(label => label.Id)
+                .FirstOrDefault(label => string.Equals(label.QrCode, qrCode, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        public Task<int> GetShippingPrintCountAsync(int packingSessionId, int packingBagId)
+        {
+            var count = this.Entities.Count(label =>
+                label.LabelType == LabelType.Shipping &&
+                (label.PackingBagId == packingBagId || label.PackingSessionId == packingSessionId));
+
+            return Task.FromResult(count);
+        }
+    }
+
+    private sealed class InMemoryPackingManifestRepository : InMemoryRepository<PackingManifest>, IPackingManifestRepository
+    {
+        public Task<PackingManifest?> GetLatestAsync(DateOnly date, int routeId)
+        {
+            return Task.FromResult(this.Entities
+                .Where(manifest => manifest.PackingDate == date && manifest.RouteId == routeId && !manifest.IsSuperseded)
+                .OrderByDescending(manifest => manifest.GeneratedAt)
+                .ThenByDescending(manifest => manifest.Id)
+                .FirstOrDefault());
+        }
+
+        public Task<IReadOnlyDictionary<int, PackingManifest>> GetLatestByRoutesAsync(DateOnly date, IEnumerable<int> routeIds)
+        {
+            var ids = routeIds.Where(id => id > 0).ToHashSet();
+            var manifests = this.Entities
+                .Where(manifest => manifest.PackingDate == date && manifest.RouteId.HasValue && ids.Contains(manifest.RouteId.Value) && !manifest.IsSuperseded)
+                .GroupBy(manifest => manifest.RouteId!.Value)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.OrderByDescending(manifest => manifest.GeneratedAt).ThenByDescending(manifest => manifest.Id).First());
+
+            return Task.FromResult<IReadOnlyDictionary<int, PackingManifest>>(manifests);
+        }
+
+        public Task<int> SupersedeActiveByRoutesAsync(DateOnly date, IEnumerable<int> routeIds, string changeReason)
+        {
+            var ids = routeIds.Where(id => id > 0).ToHashSet();
+            var count = 0;
+            foreach (var manifest in this.Entities.Where(manifest =>
+                manifest.PackingDate == date &&
+                manifest.RouteId.HasValue &&
+                ids.Contains(manifest.RouteId.Value) &&
+                !manifest.IsSuperseded))
+            {
+                manifest.IsSuperseded = true;
+                manifest.RequiresRegeneration = false;
+                manifest.RequiresRegenerationReason = null;
+                manifest.ChangeReason = changeReason;
+                count++;
+            }
+
+            return Task.FromResult(count);
         }
     }
 

@@ -67,6 +67,7 @@ public sealed class WarehouseService : IWarehouseService
             ?? throw new InvalidOperationException($"Składnik magazynowy o ID {request.StockItemId} nie istnieje.");
 
         var performedBy = _currentUserService.GetUserName() ?? "Warehouse";
+        var operationKey = NormalizeOperationKey(request.OperationKey);
 
         var batch = new Batch
         {
@@ -85,11 +86,14 @@ public sealed class WarehouseService : IWarehouseService
             TransactionType = InventoryTransactionType.Receipt,
             QuantityChanged = request.Quantity,
             Reason = $"Przyjęcie dostawy: {request.SupplierBatchNumber}. Uwagi: {request.Notes}",
-            ReferenceDocument = request.InvoiceNumber,
+            ReferenceDocument = operationKey ?? request.InvoiceNumber,
             CreatedBy = performedBy,
         };
 
-        batch = await _warehouseCommandRepository.ReceiveDeliveryAsync(batch, transaction);
+        batch = await _warehouseCommandRepository.ReceiveDeliveryAsync(
+            batch,
+            transaction,
+            skipIfReferenceDocumentExists: operationKey is not null);
 
         _logger.LogInformation(
             "Przyjęto dostawę: {BatchNumber}, składnik: {StockItem}, ilość: {Qty}",
@@ -107,6 +111,7 @@ public sealed class WarehouseService : IWarehouseService
             ? $"Odpad: Inny - {request.Notes}"
             : $"Odpad: {request.Reason}";
         var performedBy = _currentUserService.GetUserName() ?? "Warehouse";
+        var operationKey = NormalizeOperationKey(request.OperationKey);
 
         await _warehouseCommandRepository.DeductStockAsync(new WarehouseDeductionCommand(
             request.StockItemId,
@@ -115,11 +120,12 @@ public sealed class WarehouseService : IWarehouseService
             request.BatchId.HasValue && request.BatchId.Value > 0
                 ? $"Odpad (wskazana partia): {wasteReason}"
                 : wasteReason,
-            request.Reason == "Inny" ? request.Notes : "WASTE",
+            operationKey ?? (request.Reason == "Inny" ? request.Notes : "WASTE"),
             request.BatchId is > 0 ? request.BatchId : null,
             ExcludeExpired: false,
             RequireFullQuantity: true,
-            PerformedBy: performedBy));
+            PerformedBy: performedBy,
+            SkipIfReferenceDocumentExists: operationKey is not null));
 
         _logger.LogInformation(
             "Zarejestrowano odpad: składnik {StockItemId}, ilość: {Qty}, powód: {Reason}",
@@ -234,16 +240,18 @@ public sealed class WarehouseService : IWarehouseService
     public async Task IssueManualAsync(ManualIssueRequest request)
     {
         var performedBy = _currentUserService.GetUserName() ?? "Warehouse";
+        var operationKey = NormalizeOperationKey(request.OperationKey);
         await _warehouseCommandRepository.DeductStockAsync(new WarehouseDeductionCommand(
             request.StockItemId,
             request.Quantity,
             InventoryTransactionType.ManualIssue,
             request.Reason,
-            request.IssuedTo,
+            operationKey ?? request.IssuedTo,
             BatchId: null,
             ExcludeExpired: true,
             RequireFullQuantity: true,
-            PerformedBy: performedBy));
+            PerformedBy: performedBy,
+            SkipIfReferenceDocumentExists: operationKey is not null));
 
         _logger.LogInformation(
             "Wydano ręcznie składnik {StockItemId}, ilość: {Qty}, powód: {Reason}, dla: {IssuedTo}",
@@ -606,6 +614,17 @@ public sealed class WarehouseService : IWarehouseService
     {
         var batches = await _batchRepository.GetActiveBatchesByStockItemAsync(stockItemId);
         return _mapper.Map<List<BatchDto>>(batches);
+    }
+
+    private static string? NormalizeOperationKey(string? operationKey)
+    {
+        if (string.IsNullOrWhiteSpace(operationKey))
+        {
+            return null;
+        }
+
+        var normalized = operationKey.Trim();
+        return normalized.Length <= 50 ? normalized : normalized[..50];
     }
 }
 

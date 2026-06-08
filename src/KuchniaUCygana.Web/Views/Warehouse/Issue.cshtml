@@ -21,6 +21,7 @@
             <div class="card-body">
                 <form asp-action="Issue" method="post" autocomplete="off">
                     @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="OperationKey" />
                     
                     @if (!ViewData.ModelState.IsValid)
                     {

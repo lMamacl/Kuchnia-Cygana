@@ -67,6 +67,38 @@ public sealed class PackingManifestRepository : BaseRepository<PackingManifest>,
             .Where(manifest => manifest.RouteId.HasValue)
             .ToDictionary(manifest => manifest.RouteId!.Value, manifest => manifest);
     }
+
+    public async Task<int> SupersedeActiveByRoutesAsync(DateOnly date, IEnumerable<int> routeIds, string changeReason)
+    {
+        var ids = routeIds.Where(id => id > 0).Distinct().ToArray();
+        if (ids.Length == 0)
+        {
+            return 0;
+        }
+
+        using var db = Factory.CreateConnection();
+        return await db.ExecuteAsync(
+            """
+            UPDATE PackingManifests
+            SET IsSuperseded = 1,
+                RequiresRegeneration = 0,
+                RequiresRegenerationReason = NULL,
+                ChangeReason = @changeReason,
+                UpdatedAt = @updatedAt,
+                UpdatedBy = @updatedBy
+            WHERE PackingDate = @date
+              AND RouteId IN @ids
+              AND IsSuperseded = 0;
+            """,
+            new
+            {
+                date = date.ToDateTime(TimeOnly.MinValue),
+                ids,
+                changeReason,
+                updatedAt = DateTimeOffset.UtcNow,
+                updatedBy = (string?)null,
+            });
+    }
 }
 
 

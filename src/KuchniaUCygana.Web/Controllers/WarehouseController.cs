@@ -98,7 +98,7 @@ public sealed class WarehouseController : Controller
     [HttpGet("receive")]
     public IActionResult Receive()
     {
-        return View(new ReceiveDeliveryRequest());
+        return View(new ReceiveDeliveryRequest { OperationKey = CreateWarehouseOperationKey("RCV") });
     }
 
     /// <summary>
@@ -111,6 +111,7 @@ public sealed class WarehouseController : Controller
     {
         if (!ModelState.IsValid)
         {
+            EnsureOperationKey(request, "RCV");
             await PopulateSelectedStockItemAsync(request.StockItemId);
             return View(request);
         }
@@ -135,7 +136,7 @@ public sealed class WarehouseController : Controller
     [HttpGet("issue")]
     public IActionResult Issue()
     {
-        return View(new ManualIssueRequest());
+        return View(new ManualIssueRequest { OperationKey = CreateWarehouseOperationKey("ISS") });
     }
 
     /// <summary>
@@ -148,6 +149,7 @@ public sealed class WarehouseController : Controller
     {
         if (!ModelState.IsValid)
         {
+            EnsureOperationKey(request, "ISS");
             await PopulateSelectedStockItemAsync(request.StockItemId);
             return View(request);
         }
@@ -161,6 +163,7 @@ public sealed class WarehouseController : Controller
         catch (Exception ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
+            EnsureOperationKey(request, "ISS");
             await PopulateSelectedStockItemAsync(request.StockItemId);
             return View(request);
         }
@@ -175,7 +178,7 @@ public sealed class WarehouseController : Controller
     [HttpGet("waste")]
     public IActionResult Waste()
     {
-        return View(new RegisterWasteRequest());
+        return View(new RegisterWasteRequest { OperationKey = CreateWarehouseOperationKey("WST") });
     }
 
     /// <summary>
@@ -188,6 +191,7 @@ public sealed class WarehouseController : Controller
     {
         if (!ModelState.IsValid)
         {
+            EnsureOperationKey(request, "WST");
             await PopulateWasteSelectionAsync(request);
             return View(request);
         }
@@ -201,6 +205,7 @@ public sealed class WarehouseController : Controller
         catch (Exception ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
+            EnsureOperationKey(request, "WST");
             await PopulateWasteSelectionAsync(request);
             return View(request);
         }
@@ -693,5 +698,34 @@ public sealed class WarehouseController : Controller
             ViewBag.SelectedBatches = await warehouseService.GetActiveBatchesForStockItemAsync(request.StockItemId);
             ViewBag.SelectedBatchId = request.BatchId;
         }
+    }
+
+    private static void EnsureOperationKey(ReceiveDeliveryRequest request, string scope)
+    {
+        if (string.IsNullOrWhiteSpace(request.OperationKey))
+        {
+            request.OperationKey = CreateWarehouseOperationKey(scope);
+        }
+    }
+
+    private static void EnsureOperationKey(ManualIssueRequest request, string scope)
+    {
+        if (string.IsNullOrWhiteSpace(request.OperationKey))
+        {
+            request.OperationKey = CreateWarehouseOperationKey(scope);
+        }
+    }
+
+    private static void EnsureOperationKey(RegisterWasteRequest request, string scope)
+    {
+        if (string.IsNullOrWhiteSpace(request.OperationKey))
+        {
+            request.OperationKey = CreateWarehouseOperationKey(scope);
+        }
+    }
+
+    private static string CreateWarehouseOperationKey(string scope)
+    {
+        return $"WH-{scope}-{Guid.NewGuid():N}";
     }
 }

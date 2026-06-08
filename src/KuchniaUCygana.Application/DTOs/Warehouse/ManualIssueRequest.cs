@@ -9,4 +9,5 @@ public sealed class ManualIssueRequest
     public string Reason { get; set; } = string.Empty;
 
     public string IssuedTo { get; set; } = string.Empty;
+    public string? OperationKey { get; set; }
 }
