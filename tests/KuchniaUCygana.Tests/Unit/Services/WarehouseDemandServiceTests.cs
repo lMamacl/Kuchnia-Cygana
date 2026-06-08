@@ -179,6 +179,227 @@ public sealed class WarehouseDemandServiceTests
     }
 
     [Fact]
+    public async Task GetDemandAsync_ShouldUseBatchAvailabilityLookup_InsteadOfPerResourceQueries()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var snapshot = CreateSnapshot(date);
+        snapshot.Items.Single().AggregateIngredients = new[]
+        {
+            new AggregateIngredientDto
+            {
+                IngredientId = 12,
+                IngredientName = "Kurczak",
+                StockItemId = 7001,
+                WarehouseCategoryId = 70,
+                WarehouseCategoryName = "Mieso",
+                NetWeightInGrams = 100m,
+            },
+            new AggregateIngredientDto
+            {
+                IngredientId = 13,
+                IngredientName = "Warzywa mix",
+                WarehouseCategoryId = 77,
+                WarehouseCategoryName = "Warzywa rownowazne",
+                NetWeightInGrams = 60m,
+            },
+        };
+
+        var dietProvider = new Mock<IDietDataProvider>();
+        var orderProvider = new Mock<IOrderDataProvider>();
+        var batchRepository = new Mock<IBatchRepository>();
+
+        dietProvider
+            .Setup(provider => provider.GetPublishedPlanSnapshotAsync(date))
+            .ReturnsAsync(snapshot);
+        orderProvider
+            .Setup(provider => provider.GetDeliveriesForDateAsync(date.ToDateTime(TimeOnly.MinValue)))
+            .ReturnsAsync(new[]
+            {
+                CreateDelivery(date, 1, new OrderItemInfo(1, "Standard", 10, "2000", 2000, 501, 901, 1001, "Lunch")),
+            });
+        batchRepository
+            .Setup(repository => repository.GetActiveBatchAvailabilityByStockItemsAsync(
+                It.Is<IEnumerable<int>>(ids => ids.ToHashSet().SetEquals(new[] { 7001, 8001 }))))
+            .ReturnsAsync(new Dictionary<int, IReadOnlyList<BatchAvailabilityRow>>
+            {
+                [7001] =
+                [
+                    new BatchAvailabilityRow { Id = 1, StockItemId = 7001, CurrentQuantity = 500m, UnitSymbol = "g" },
+                ],
+                [8001] =
+                [
+                    new BatchAvailabilityRow { Id = 2, StockItemId = 8001, CurrentQuantity = 20m, UnitSymbol = "pcs" },
+                ],
+            });
+        batchRepository
+            .Setup(repository => repository.GetActiveBatchAvailabilityByWarehouseCategoriesAsync(
+                It.Is<IEnumerable<int>>(ids => ids.ToHashSet().SetEquals(new[] { 77 }))))
+            .ReturnsAsync(new Dictionary<int, IReadOnlyList<BatchAvailabilityRow>>
+            {
+                [77] =
+                [
+                    new BatchAvailabilityRow { Id = 3, StockItemId = 7007, CurrentQuantity = 500m, UnitSymbol = "g" },
+                ],
+            });
+
+        var service = new WarehouseDemandService(dietProvider.Object, orderProvider.Object, batchRepository.Object);
+
+        var demand = await service.GetDemandAsync(date, 1);
+
+        demand.Rows.Should().HaveCount(3);
+        batchRepository.Verify(
+            repository => repository.GetActiveBatchAvailabilityByStockItemsAsync(It.IsAny<IEnumerable<int>>()),
+            Times.Once);
+        batchRepository.Verify(
+            repository => repository.GetActiveBatchAvailabilityByWarehouseCategoriesAsync(It.IsAny<IEnumerable<int>>()),
+            Times.Once);
+        batchRepository.Verify(
+            repository => repository.GetActiveBatchesByStockItemAsync(It.IsAny<int>()),
+            Times.Never);
+        batchRepository.Verify(
+            repository => repository.GetActiveBatchesByWarehouseCategoryAsync(It.IsAny<int>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetDemandAsync_ShouldConvertBatchQuantityToDemandUnit_ForFefoPreview()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var snapshot = CreateSnapshot(date);
+        snapshot.Items.Single().AggregateIngredients = new[]
+        {
+            new AggregateIngredientDto
+            {
+                IngredientId = 12,
+                IngredientName = "Maka pszenna",
+                StockItemId = 7001,
+                WarehouseCategoryId = 70,
+                WarehouseCategoryName = "Produkty sypkie",
+                NetWeightInGrams = 800m,
+            },
+        };
+        snapshot.Items.Single().PackagingRequirements = Array.Empty<PackagingRequirementDto>();
+
+        var dietProvider = new Mock<IDietDataProvider>();
+        var orderProvider = new Mock<IOrderDataProvider>();
+        var batchRepository = new Mock<IBatchRepository>();
+
+        dietProvider
+            .Setup(provider => provider.GetPublishedPlanSnapshotAsync(date))
+            .ReturnsAsync(snapshot);
+        orderProvider
+            .Setup(provider => provider.GetDeliveriesForDateAsync(date.ToDateTime(TimeOnly.MinValue)))
+            .ReturnsAsync(new[]
+            {
+                CreateDelivery(date, 1, new OrderItemInfo(1, "Standard", 10, "2000", 2000, 501, 901, 1001, "Lunch")),
+            });
+        batchRepository
+            .Setup(repository => repository.GetActiveBatchAvailabilityByStockItemsAsync(
+                It.Is<IEnumerable<int>>(ids => ids.ToHashSet().SetEquals(new[] { 7001 }))))
+            .ReturnsAsync(new Dictionary<int, IReadOnlyList<BatchAvailabilityRow>>
+            {
+                [7001] =
+                [
+                    new BatchAvailabilityRow
+                    {
+                        Id = 1,
+                        StockItemId = 7001,
+                        CurrentQuantity = 1m,
+                        UnitSymbol = "kg",
+                    },
+                ],
+            });
+
+        var service = new WarehouseDemandService(dietProvider.Object, orderProvider.Object, batchRepository.Object);
+
+        var demand = await service.GetDemandAsync(date, 1);
+
+        demand.Rows.Should().ContainSingle(row =>
+            row.ResourceName == "Maka pszenna" &&
+            row.RequiredQuantity == 800m &&
+            row.Unit == "g" &&
+            row.AvailableQuantity == 1000m &&
+            row.ShortageQuantity == 0m &&
+            row.RiskLabel == "Ok");
+    }
+
+    [Fact]
+    public async Task GetDemandAsync_ShouldExposeFefoBatchAllocations_ForPreview()
+    {
+        var date = new DateOnly(2026, 6, 8);
+        var snapshot = CreateSnapshot(date);
+        snapshot.Items.Single().AggregateIngredients = new[]
+        {
+            new AggregateIngredientDto
+            {
+                IngredientId = 12,
+                IngredientName = "Ryż basmati",
+                StockItemId = 7001,
+                WarehouseCategoryId = 70,
+                WarehouseCategoryName = "Produkty sypkie",
+                NetWeightInGrams = 900m,
+            },
+        };
+        snapshot.Items.Single().PackagingRequirements = Array.Empty<PackagingRequirementDto>();
+
+        var dietProvider = new Mock<IDietDataProvider>();
+        var orderProvider = new Mock<IOrderDataProvider>();
+        var batchRepository = new Mock<IBatchRepository>();
+
+        dietProvider
+            .Setup(provider => provider.GetPublishedPlanSnapshotAsync(date))
+            .ReturnsAsync(snapshot);
+        orderProvider
+            .Setup(provider => provider.GetDeliveriesForDateAsync(date.ToDateTime(TimeOnly.MinValue)))
+            .ReturnsAsync(new[]
+            {
+                CreateDelivery(date, 1, new OrderItemInfo(1, "Standard", 10, "2000", 2000, 501, 901, 1001, "Lunch")),
+            });
+        batchRepository
+            .Setup(repository => repository.GetActiveBatchAvailabilityByStockItemsAsync(
+                It.Is<IEnumerable<int>>(ids => ids.ToHashSet().SetEquals(new[] { 7001 }))))
+            .ReturnsAsync(new Dictionary<int, IReadOnlyList<BatchAvailabilityRow>>
+            {
+                [7001] =
+                [
+                    new BatchAvailabilityRow
+                    {
+                        Id = 1,
+                        StockItemId = 7001,
+                        SupplierBatchNumber = "RICE-A",
+                        CurrentQuantity = 0.5m,
+                        UnitSymbol = "kg",
+                        ExpiryDate = date.ToDateTime(TimeOnly.MinValue).AddDays(1),
+                    },
+                    new BatchAvailabilityRow
+                    {
+                        Id = 2,
+                        StockItemId = 7001,
+                        SupplierBatchNumber = "RICE-B",
+                        CurrentQuantity = 1m,
+                        UnitSymbol = "kg",
+                        ExpiryDate = date.ToDateTime(TimeOnly.MinValue).AddDays(4),
+                    },
+                ],
+            });
+
+        var service = new WarehouseDemandService(dietProvider.Object, orderProvider.Object, batchRepository.Object);
+
+        var demand = await service.GetDemandAsync(date, 1);
+
+        var row = demand.Rows.Should().ContainSingle(row => row.ResourceName == "Ryż basmati").Subject;
+        row.FefoAllocations.Should().HaveCount(2);
+        row.FefoAllocations[0].BatchId.Should().Be(1);
+        row.FefoAllocations[0].SupplierBatchNumber.Should().Be("RICE-A");
+        row.FefoAllocations[0].AllocatedQuantity.Should().Be(500m);
+        row.FefoAllocations[0].AvailableQuantity.Should().Be(500m);
+        row.FefoAllocations[0].Unit.Should().Be("g");
+        row.FefoAllocations[1].BatchId.Should().Be(2);
+        row.FefoAllocations[1].AllocatedQuantity.Should().Be(400m);
+        row.FefoAllocations[1].AvailableQuantity.Should().Be(1000m);
+    }
+
+    [Fact]
     public async Task GetDemandAsync_ShouldNotDoubleCountSameBatchBetweenStockItemAndCategoryPreview()
     {
         var date = new DateOnly(2026, 6, 8);

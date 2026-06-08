@@ -55,6 +55,7 @@
             {
                 var riskClass = row.RiskLabel == "Shortage" || row.RiskLabel == "Expired"
                     || row.RiskLabel == "MissingMapping"
+                    || row.RiskLabel == "UnitMismatch"
                     ? "danger"
                     : row.RiskLabel == "ExpiryRisk" ? "warning" : string.Empty;
                 <tr>
@@ -71,6 +72,24 @@
                         @if (row.EarliestBatchId.HasValue)
                         {
                             <div>Partia #@row.EarliestBatchId</div>
+                        }
+                        @if (row.FefoAllocations.Count > 0)
+                        {
+                            <div>
+                                @foreach (var allocation in row.FefoAllocations.Take(4))
+                                {
+                                    <span>
+                                        #@allocation.BatchId:
+                                        @allocation.AllocatedQuantity.ToString("0.###")
+                                        / @allocation.AvailableQuantity.ToString("0.###") @allocation.Unit
+                                    </span>
+                                    <br />
+                                }
+                                @if (row.FefoAllocations.Count > 4)
+                                {
+                                    <span>+@(row.FefoAllocations.Count - 4) kolejnych</span>
+                                }
+                            </div>
                         }
                     </td>
                     <td class="num">@row.RequiredQuantity.ToString("0.###") @row.Unit</td>

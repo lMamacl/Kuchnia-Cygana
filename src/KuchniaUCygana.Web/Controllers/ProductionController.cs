@@ -726,9 +726,11 @@ public sealed class ProductionController : Controller
     private static string BuildWarehouseDemandCsv(WarehouseDemandDto demand)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("Typ;Zasob;Wymagane;Jednostka;Dostepne;Brak;Ryzyko;Tryb FEFO;StockItemId;WarehouseCategoryId;Zrodla");
+        builder.AppendLine("Typ;Zasob;Wymagane;Jednostka;Dostepne;Brak;Ryzyko;Tryb FEFO;StockItemId;WarehouseCategoryId;Alokacja FEFO;Zrodla");
         foreach (var row in demand.Rows)
         {
+            var allocations = string.Join(" | ", row.FefoAllocations.Select(allocation =>
+                $"#{allocation.BatchId} {allocation.AllocatedQuantity:0.###}/{allocation.AvailableQuantity:0.###} {allocation.Unit}"));
             builder.AppendLine(string.Join(";",
             [
                 Csv(row.ResourceType),
@@ -741,6 +743,7 @@ public sealed class ProductionController : Controller
                 Csv(row.SelectionMode),
                 Csv(row.StockItemId?.ToString() ?? string.Empty),
                 Csv(row.WarehouseCategoryId?.ToString() ?? string.Empty),
+                Csv(allocations),
                 Csv(string.Join(", ", row.SourceMeals)),
             ]));
         }

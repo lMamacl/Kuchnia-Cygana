@@ -15,6 +15,18 @@ public interface IBatchRepository : IRepository<Batch>
 
     Task<IEnumerable<Batch>> GetActiveBatchesByWarehouseCategoryAsync(int warehouseCategoryId);
 
+    Task<IReadOnlyDictionary<int, IReadOnlyList<Batch>>> GetActiveBatchesByStockItemsAsync(
+        IEnumerable<int> stockItemIds);
+
+    Task<IReadOnlyDictionary<int, IReadOnlyList<Batch>>> GetActiveBatchesByWarehouseCategoriesAsync(
+        IEnumerable<int> warehouseCategoryIds);
+
+    Task<IReadOnlyDictionary<int, IReadOnlyList<BatchAvailabilityRow>>> GetActiveBatchAvailabilityByStockItemsAsync(
+        IEnumerable<int> stockItemIds);
+
+    Task<IReadOnlyDictionary<int, IReadOnlyList<BatchAvailabilityRow>>> GetActiveBatchAvailabilityByWarehouseCategoriesAsync(
+        IEnumerable<int> warehouseCategoryIds);
+
     Task<IEnumerable<Batch>> GetBatchesByStockItemAsync(int stockItemId);
 
     /// <summary>
@@ -85,4 +97,48 @@ public sealed class BatchInventoryRow
     public DateTimeOffset? ExpiryDate { get; set; }
 
     public DateTimeOffset ReceivedDate { get; set; }
+}
+
+public sealed class BatchAvailabilityRow
+{
+    public int Id { get; set; }
+
+    public int StockItemId { get; set; }
+
+    public string SupplierBatchNumber { get; set; } = string.Empty;
+
+    public decimal CurrentQuantity { get; set; }
+
+    public DateTimeOffset? ExpiryDate { get; set; }
+
+    public DateTimeOffset ReceivedDate { get; set; }
+
+    public bool IsDepleted { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset? UpdatedAt { get; set; }
+
+    public bool IsDeleted { get; set; }
+
+    public int? WarehouseCategoryId { get; set; }
+
+    public string UnitSymbol { get; set; } = string.Empty;
+
+    public Batch ToBatch()
+    {
+        return new Batch
+        {
+            Id = Id,
+            StockItemId = StockItemId,
+            SupplierBatchNumber = SupplierBatchNumber,
+            CurrentQuantity = CurrentQuantity,
+            ExpiryDate = ExpiryDate,
+            ReceivedDate = ReceivedDate,
+            IsDepleted = IsDepleted,
+            CreatedAt = CreatedAt,
+            UpdatedAt = UpdatedAt,
+            IsDeleted = IsDeleted,
+        };
+    }
 }
