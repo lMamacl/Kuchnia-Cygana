@@ -73,9 +73,7 @@ public sealed class AccountController : Controller
     [HttpGet]
     public IActionResult Index()
     {
-        ViewData["Title"] = "Konto";
-        ViewData["Description"] = "Centrum konta uzytkownika.";
-        return View();
+        return RedirectToRoleHome(GetPrimaryRole(User), returnUrl: null);
     }
 
     [Authorize]
@@ -346,7 +344,7 @@ public sealed class AccountController : Controller
             UserRoles.Dietitian => RedirectToAction("Index", "DietEditor"),
             UserRoles.Logistics or UserRoles.LogisticsManager => RedirectToAction("Index", "Logistics"),
             UserRoles.Driver or UserRoles.DriverManager => RedirectToAction("Index", "DriverMobile"),
-            UserRoles.Client => RedirectToAction("Index", "Account"),
+            UserRoles.Client => RedirectToAction("Index", "Home"),
             _ => RedirectToAction("Index", "Home"),
         };
     }
