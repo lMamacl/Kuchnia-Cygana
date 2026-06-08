@@ -5,6 +5,7 @@
     var roles = Model.AvailableRoles.OrderBy(role => role).ToArray();
     var usersPage = Model.UsersPage;
     var users = usersPage.Items;
+    var filter = Model.UsersFilter;
 
     string NameOrEmail(KuchniaUCygana.Application.DTOs.UserDto user)
     {
@@ -17,10 +18,41 @@
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Uzytkownicy</h3>
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="text-secondary small">Pokazuje @usersPage.FirstItem-@usersPage.LastItem z @usersPage.TotalCount</span>
-                    <a class="btn btn-primary btn-sm" asp-controller="Admin" asp-action="NewUser">Nowy uzytkownik</a>
-                </div>
+                <a class="btn btn-primary btn-sm" asp-controller="Admin" asp-action="NewUser">Nowy uzytkownik</a>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" asp-controller="Admin" asp-action="Users">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-5">
+                            <label class="form-label" for="Search">Szukaj</label>
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Imie, nazwisko, email..." />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="Role">Rola</label>
+                            <select class="form-select" id="Role" name="Role">
+                                <option value="">Wszystkie</option>
+                                @foreach (var role in roles)
+                                {
+                                    <option value="@role" selected="@(string.Equals(filter.Role, role, StringComparison.OrdinalIgnoreCase))">@role</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="PageSize">Na stronie</label>
+                            <select class="form-select" id="PageSize" name="PageSize">
+                                @foreach (var size in new[] { 10, 25, 50, 100 })
+                                {
+                                    <option value="@size" selected="@(filter.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex justify-content-md-end gap-2">
+                            <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Users">Wyczysc</a>
+                            <button class="btn btn-primary" type="submit">Filtruj</button>
+                        </div>
+                    </div>
+                </form>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -91,31 +123,20 @@
                         {
                             <tr>
                                 <td colspan="5" class="text-secondary text-center py-4">
-                                    Brak kont uzytkownikow. Seeder tworzy podstawowe konta dla HR, BOK, Admin i pozostalych rol.
+                                    @(filter.HasActiveCriteria
+                                        ? "Brak kont uzytkownikow dla wybranych filtrow."
+                                        : "Brak kont uzytkownikow. Seeder tworzy podstawowe konta dla HR, BOK, Admin i pozostalych rol.")
                                 </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
-            @if (usersPage.TotalCount > 0)
-            {
-                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <span class="text-secondary small">Strona @usersPage.Page / @usersPage.TotalPages, po @usersPage.PageSize rekordow</span>
-                    <div class="btn-list">
-                        <a class="btn btn-outline-secondary @(usersPage.HasPrevious ? string.Empty : "disabled")"
-                           asp-controller="Admin"
-                           asp-action="Users"
-                           asp-route-page="@usersPage.PreviousPage"
-                           asp-route-pageSize="@usersPage.PageSize">Poprzednia</a>
-                        <a class="btn btn-outline-secondary @(usersPage.HasNext ? string.Empty : "disabled")"
-                           asp-controller="Admin"
-                           asp-action="Users"
-                           asp-route-page="@usersPage.NextPage"
-                           asp-route-pageSize="@usersPage.PageSize">Nastepna</a>
-                    </div>
-                </div>
-            }
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                usersPage,
+                "Admin",
+                "Users",
+                filter.ToRouteValues()))
         </div>
     </div>
 </div>

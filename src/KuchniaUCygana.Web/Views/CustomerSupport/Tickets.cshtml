@@ -2,6 +2,7 @@
 @{
     Layout = "_LayoutStaff";
     var ticketsPage = Model.TicketsPage;
+    var filter = Model.TicketsFilter;
     var supportUsers = Model.Users
         .Where(user => user.Role is "BOK" or "BOKManager" or "Admin")
         .OrderBy(user => user.FullName)
@@ -33,7 +34,62 @@
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Zgloszenia</h3>
-                <span class="text-secondary small">Pokazuje @ticketsPage.FirstItem-@ticketsPage.LastItem z @ticketsPage.TotalCount</span>
+                <a class="btn btn-primary btn-sm" asp-controller="CustomerSupport" asp-action="NewTicket">Nowe zgloszenie</a>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" asp-controller="CustomerSupport" asp-action="Tickets">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label" for="Search">Szukaj</label>
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Tytul, klient, numer..." />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="Status">Status</label>
+                            <select class="form-select" id="Status" name="Status">
+                                <option value="">Wszystkie</option>
+                                @foreach (var status in Enum.GetValues<TicketStatus>())
+                                {
+                                    <option value="@status" selected="@(string.Equals(filter.Status, status.ToString(), StringComparison.OrdinalIgnoreCase))">@status</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="Priority">Priorytet</label>
+                            <select class="form-select" id="Priority" name="Priority">
+                                <option value="">Wszystkie</option>
+                                @foreach (var priority in Enum.GetValues<TicketPriority>())
+                                {
+                                    <option value="@priority" selected="@(string.Equals(filter.Priority, priority.ToString(), StringComparison.OrdinalIgnoreCase))">@priority</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="AssignedToUserId">Przypisanie</label>
+                            <select class="form-select" id="AssignedToUserId" name="AssignedToUserId">
+                                <option value="">Wszystkie</option>
+                                <option value="-1" selected="@(filter.AssignedToUserId == -1)">Nieprzypisane</option>
+                                @foreach (var user in supportUsers)
+                                {
+                                    <option value="@user.Id" selected="@(filter.AssignedToUserId == user.Id)">@user.FullName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label" for="PageSize">Na stronie</label>
+                            <select class="form-select" id="PageSize" name="PageSize">
+                                @foreach (var size in new[] { 10, 25, 50, 100 })
+                                {
+                                    <option value="@size" selected="@(filter.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex justify-content-md-end gap-2">
+                            <a class="btn btn-outline-secondary" asp-controller="CustomerSupport" asp-action="Tickets">Wyczysc</a>
+                            <button class="btn btn-primary" type="submit">Filtruj</button>
+                        </div>
+                    </div>
+                </form>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -266,31 +322,20 @@
                         {
                             <tr>
                                 <td colspan="6" class="text-secondary text-center py-4">
-                                    Brak zgloszen w bazie. Seeder dodaje startowa kolejke BOK dla kont klienckich.
+                                    @(filter.HasActiveCriteria
+                                        ? "Brak zgloszen dla wybranych filtrow."
+                                        : "Brak zgloszen w bazie. Seeder dodaje startowa kolejke BOK dla kont klienckich.")
                                 </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
-            @if (ticketsPage.TotalCount > 0)
-            {
-                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <span class="text-secondary small">Strona @ticketsPage.Page / @ticketsPage.TotalPages, po @ticketsPage.PageSize rekordow</span>
-                    <div class="btn-list">
-                        <a class="btn btn-outline-secondary @(ticketsPage.HasPrevious ? string.Empty : "disabled")"
-                           asp-controller="CustomerSupport"
-                           asp-action="Tickets"
-                           asp-route-page="@ticketsPage.PreviousPage"
-                           asp-route-pageSize="@ticketsPage.PageSize">Poprzednia</a>
-                        <a class="btn btn-outline-secondary @(ticketsPage.HasNext ? string.Empty : "disabled")"
-                           asp-controller="CustomerSupport"
-                           asp-action="Tickets"
-                           asp-route-page="@ticketsPage.NextPage"
-                           asp-route-pageSize="@ticketsPage.PageSize">Nastepna</a>
-                    </div>
-                </div>
-            }
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                ticketsPage,
+                "CustomerSupport",
+                "Tickets",
+                filter.ToRouteValues()))
         </div>
     </div>
 </div>

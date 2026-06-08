@@ -2,10 +2,17 @@
 @{
     Layout = "_LayoutStaff";
     var workSchedulesPage = Model.WorkSchedulesPage;
+    var filter = Model.WorkSchedulesFilter;
     var usersById = Model.Users.ToDictionary(user => user.Id);
     var staffUsers = Model.Users
         .Where(user => !string.Equals(user.Role, "Client", StringComparison.Ordinal))
         .OrderBy(user => user.FullName)
+        .ToArray();
+    var roles = staffUsers
+        .Select(user => user.Role)
+        .Where(role => !string.IsNullOrWhiteSpace(role))
+        .Distinct(StringComparer.Ordinal)
+        .OrderBy(role => role)
         .ToArray();
 }
 
@@ -14,10 +21,59 @@
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Grafik</h3>
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="text-secondary small">Pokazuje @workSchedulesPage.FirstItem-@workSchedulesPage.LastItem z @workSchedulesPage.TotalCount</span>
-                    <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewWorkSchedule">Nowa zmiana</a>
-                </div>
+                <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewWorkSchedule">Nowa zmiana</a>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" asp-controller="HumanResources" asp-action="Schedules">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label" for="Search">Szukaj</label>
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Pracownik, rola, konto..." />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="From">Od</label>
+                            <input class="form-control" id="From" name="From" type="date" value="@filter.From?.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="To">Do</label>
+                            <input class="form-control" id="To" name="To" type="date" value="@filter.To?.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="Shift">Zmiana</label>
+                            <select class="form-select" id="Shift" name="Shift">
+                                <option value="">Wszystkie</option>
+                                @foreach (var shift in Enum.GetValues<WorkShift>())
+                                {
+                                    <option value="@shift" selected="@(string.Equals(filter.Shift, shift.ToString(), StringComparison.OrdinalIgnoreCase))">@shift</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="Role">Rola konta</label>
+                            <select class="form-select" id="Role" name="Role">
+                                <option value="">Wszystkie</option>
+                                @foreach (var role in roles)
+                                {
+                                    <option value="@role" selected="@(string.Equals(filter.Role, role, StringComparison.OrdinalIgnoreCase))">@role</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label" for="PageSize">Na stronie</label>
+                            <select class="form-select" id="PageSize" name="PageSize">
+                                @foreach (var size in new[] { 10, 25, 50, 100 })
+                                {
+                                    <option value="@size" selected="@(filter.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12 d-flex justify-content-end gap-2">
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Schedules">Wyczysc</a>
+                            <button class="btn btn-primary" type="submit">Filtruj</button>
+                        </div>
+                    </div>
+                </form>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -94,31 +150,20 @@
                         {
                             <tr>
                                 <td colspan="7" class="text-secondary text-center py-4">
-                                    Brak zmian w grafiku. Seeder dodaje startowy grafik dla podstawowych rol.
+                                    @(filter.HasActiveCriteria
+                                        ? "Brak zmian w grafiku dla wybranych filtrow."
+                                        : "Brak zmian w grafiku. Seeder dodaje startowy grafik dla podstawowych rol.")
                                 </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
-            @if (workSchedulesPage.TotalCount > 0)
-            {
-                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <span class="text-secondary small">Strona @workSchedulesPage.Page / @workSchedulesPage.TotalPages, po @workSchedulesPage.PageSize rekordow</span>
-                    <div class="btn-list">
-                        <a class="btn btn-outline-secondary @(workSchedulesPage.HasPrevious ? string.Empty : "disabled")"
-                           asp-controller="HumanResources"
-                           asp-action="Schedules"
-                           asp-route-page="@workSchedulesPage.PreviousPage"
-                           asp-route-pageSize="@workSchedulesPage.PageSize">Poprzednia</a>
-                        <a class="btn btn-outline-secondary @(workSchedulesPage.HasNext ? string.Empty : "disabled")"
-                           asp-controller="HumanResources"
-                           asp-action="Schedules"
-                           asp-route-page="@workSchedulesPage.NextPage"
-                           asp-route-pageSize="@workSchedulesPage.PageSize">Nastepna</a>
-                    </div>
-                </div>
-            }
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                workSchedulesPage,
+                "HumanResources",
+                "Schedules",
+                filter.ToRouteValues()))
         </div>
     </div>
 </div>

@@ -23,23 +23,23 @@ public sealed class AdminController : Controller
         .ToArray();
 
     private readonly IAuditLogService auditLogService;
+    private readonly IPackingIncidentService packingIncidentService;
     private readonly IStaffActivityService staffActivityService;
     private readonly IUserRepository userRepository;
     private readonly IUserService userService;
-    private readonly IPackingIncidentService packingIncidentService;
 
     public AdminController(
         IAuditLogService auditLogService,
+        IPackingIncidentService packingIncidentService,
         IStaffActivityService staffActivityService,
         IUserRepository userRepository,
-        IUserService userService,
-        IPackingIncidentService packingIncidentService)
+        IUserService userService)
     {
         this.auditLogService = auditLogService;
+        this.packingIncidentService = packingIncidentService;
         this.staffActivityService = staffActivityService;
         this.userRepository = userRepository;
         this.userService = userService;
-        this.packingIncidentService = packingIncidentService;
     }
 
     [HttpGet("")]
@@ -52,12 +52,12 @@ public sealed class AdminController : Controller
     }
 
     [HttpGet("users")]
-    public async Task<IActionResult> Users(int page = 1, int pageSize = 10)
+    public async Task<IActionResult> Users([FromQuery] AdminUserListFilterViewModel filter)
     {
         ViewData["Title"] = "Uzytkownicy";
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Zarzadzanie uzytkownikami.";
-        return View(await BuildModelAsync(usersPage: page, usersPageSize: pageSize));
+        return View(await BuildModelAsync(usersFilter: filter));
     }
 
     [HttpGet("users/new")]
@@ -87,6 +87,29 @@ public sealed class AdminController : Controller
         return View(await BuildModelAsync(filter));
     }
 
+    [HttpGet("packing-incidents")]
+    public async Task<IActionResult> PackingIncidents([FromQuery] PackingIncidentListFilterViewModel filter)
+    {
+        ViewData["Title"] = "Awarie kompletacji";
+        ViewData["Section"] = "Administracja";
+        ViewData["Description"] = "Administrowanie zgloszeniami z kompletacji.";
+
+        var incidents = await packingIncidentService.SearchAsync(filter.ToSearchRequest());
+        var incidentsPage = PagedList<PackingIncidentDto>.Create(
+            FilterPackingIncidents(incidents, filter).OrderByDescending(incident => incident.ReportedAt),
+            filter.Page,
+            filter.PageSize);
+        filter.Page = incidentsPage.Page;
+        filter.PageSize = incidentsPage.PageSize;
+
+        return View(new PackingIncidentListViewModel
+        {
+            Filter = filter,
+            IncidentsPage = incidentsPage,
+            Incidents = incidentsPage.Items,
+        });
+    }
+
     [HttpGet("settings")]
     public async Task<IActionResult> Settings()
     {
@@ -94,97 +117,6 @@ public sealed class AdminController : Controller
         ViewData["Section"] = "Administracja";
         ViewData["Description"] = "Ustawienia systemowe.";
         return View(await BuildModelAsync());
-    }
-
-    [HttpGet("packing-incidents")]
-    public async Task<IActionResult> PackingIncidents(PackingIncidentFilterDto filter)
-    {
-        ViewData["Title"] = "Awarie kompletacji";
-        ViewData["Section"] = "Administracja";
-        ViewData["Description"] = "Obsluga zgloszen z kompletacji pudelek i toreb.";
-
-        return View(new PackingIncidentListViewModel
-        {
-            Filter = filter,
-            Incidents = await packingIncidentService.SearchAsync(filter),
-        });
-    }
-
-    [HttpPost("packing-incidents/{incidentId:int}/assign")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AssignPackingIncident(int incidentId)
-    {
-        await packingIncidentService.AssignToCurrentUserAsync(incidentId);
-        TempData["Success"] = $"Przypisano zgloszenie #{incidentId}.";
-        return RedirectToAction(nameof(PackingIncidents));
-    }
-
-    [HttpPost("packing-incidents/{incidentId:int}/note")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddPackingIncidentNote(int incidentId, string? notes)
-    {
-        await packingIncidentService.AddAdminNoteAsync(new HandlePackingIncidentRequest
-        {
-            IncidentId = incidentId,
-            Notes = notes,
-        });
-        TempData["Success"] = $"Dodano notatke do zgloszenia #{incidentId}.";
-        return RedirectToAction(nameof(PackingIncidents));
-    }
-
-    [HttpPost("packing-incidents/{incidentId:int}/waste")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RegisterPackingIncidentWaste(int incidentId, string? notes)
-    {
-        try
-        {
-            await packingIncidentService.RegisterWasteAsync(new RegisterIncidentWasteRequest
-            {
-                IncidentId = incidentId,
-                Notes = notes,
-            });
-            TempData["Success"] = $"Zarejestrowano rozchod magazynowy dla zgloszenia #{incidentId}.";
-        }
-        catch (InvalidOperationException ex)
-        {
-            TempData["Error"] = ex.Message;
-        }
-
-        return RedirectToAction(nameof(PackingIncidents));
-    }
-
-    [HttpPost("packing-incidents/{incidentId:int}/rework")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RequestPackingIncidentRework(int incidentId, string? notes)
-    {
-        try
-        {
-            await packingIncidentService.RequestKitchenReworkAsync(new HandlePackingIncidentRequest
-            {
-                IncidentId = incidentId,
-                Notes = notes,
-            });
-            TempData["Success"] = $"Ponowiono zadanie kuchni dla zgloszenia #{incidentId}.";
-        }
-        catch (InvalidOperationException ex)
-        {
-            TempData["Error"] = ex.Message;
-        }
-
-        return RedirectToAction(nameof(PackingIncidents));
-    }
-
-    [HttpPost("packing-incidents/{incidentId:int}/resolve")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ResolvePackingIncident(int incidentId, string? resolutionNotes)
-    {
-        await packingIncidentService.ResolveAsync(new ResolvePackingIncidentRequest
-        {
-            IncidentId = incidentId,
-            ResolutionNotes = resolutionNotes,
-        });
-        TempData["Success"] = $"Zamknieto zgloszenie #{incidentId}.";
-        return RedirectToAction(nameof(PackingIncidents));
     }
 
     [HttpPost("users")]
@@ -440,31 +372,204 @@ public sealed class AdminController : Controller
         return RedirectToAction(nameof(Users));
     }
 
+    [HttpPost("packing-incidents/{incidentId:int}/assign")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AssignPackingIncident(int incidentId)
+    {
+        try
+        {
+            await packingIncidentService.AssignToCurrentUserAsync(incidentId);
+            TempData["Success"] = "Awaria kompletacji zostala przypisana.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(PackingIncidents));
+    }
+
+    [HttpPost("packing-incidents/{incidentId:int}/note")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddPackingIncidentNote(int incidentId, string? notes)
+    {
+        try
+        {
+            await packingIncidentService.AddAdminNoteAsync(new HandlePackingIncidentRequest
+            {
+                IncidentId = incidentId,
+                Notes = notes,
+            });
+            TempData["Success"] = "Notatka zostala dodana.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(PackingIncidents));
+    }
+
+    [HttpPost("packing-incidents/{incidentId:int}/waste")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RegisterPackingIncidentWaste(int incidentId, string? notes)
+    {
+        try
+        {
+            await packingIncidentService.RegisterWasteAsync(new RegisterIncidentWasteRequest
+            {
+                IncidentId = incidentId,
+                Notes = notes,
+            });
+            TempData["Success"] = "Rozchod magazynowy zostal zarejestrowany.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(PackingIncidents));
+    }
+
+    [HttpPost("packing-incidents/{incidentId:int}/rework")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RequestPackingIncidentRework(int incidentId, string? notes)
+    {
+        try
+        {
+            await packingIncidentService.RequestKitchenReworkAsync(new HandlePackingIncidentRequest
+            {
+                IncidentId = incidentId,
+                Notes = notes,
+            });
+            TempData["Success"] = "Zadanie kuchni zostalo ponowione.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(PackingIncidents));
+    }
+
+    [HttpPost("packing-incidents/{incidentId:int}/resolve")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResolvePackingIncident(int incidentId, string? resolutionNotes)
+    {
+        try
+        {
+            await packingIncidentService.ResolveAsync(new ResolvePackingIncidentRequest
+            {
+                IncidentId = incidentId,
+                ResolutionNotes = resolutionNotes,
+            });
+            TempData["Success"] = "Awaria kompletacji zostala zamknieta.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(PackingIncidents));
+    }
+
     private async Task<AdminDashboardViewModel> BuildModelAsync(
         AuditLogFilterViewModel? filter = null,
         CreateAdminUserViewModel? newUser = null,
-        int usersPage = 1,
-        int usersPageSize = 10)
+        AdminUserListFilterViewModel? usersFilter = null)
     {
         var auditFilter = filter ?? new AuditLogFilterViewModel { Page = 1, PageSize = 10 };
         auditFilter.From ??= DateTime.Today.AddDays(-30);
         var auditPage = await auditLogService.SearchSystemLogsAsync(auditFilter.ToSearchRequest());
+        auditFilter.Page = auditPage.Page;
+        auditFilter.PageSize = auditPage.PageSize;
+
+        usersFilter ??= new AdminUserListFilterViewModel();
         var users = (await userService.GetAllAsync())
             .OrderBy(user => user.Role)
             .ThenBy(user => user.FullName)
             .ThenBy(user => user.Email)
             .ToArray();
+        var usersPageModel = PagedList<UserDto>.Create(
+            FilterUsers(users, usersFilter),
+            usersFilter.Page,
+            usersFilter.PageSize);
+        usersFilter.Page = usersPageModel.Page;
+        usersFilter.PageSize = usersPageModel.PageSize;
 
         return new AdminDashboardViewModel
         {
             SystemLogs = auditPage.Items,
             Users = users,
             AvailableRoles = AvailableRoles,
-            UsersPage = PagedList<UserDto>.Create(users, usersPage, usersPageSize),
+            UsersPage = usersPageModel,
+            UsersFilter = usersFilter,
             AuditPage = auditPage,
             AuditFilter = auditFilter,
             NewUser = newUser ?? new CreateAdminUserViewModel(),
         };
+    }
+
+    private static IEnumerable<UserDto> FilterUsers(IEnumerable<UserDto> users, AdminUserListFilterViewModel filter)
+    {
+        var query = users;
+        if (!string.IsNullOrWhiteSpace(filter.Role))
+        {
+            query = query.Where(user => string.Equals(user.Role, filter.Role, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            query = query.Where(user => MatchesSearch(
+                filter.Search,
+                user.FullName,
+                user.Email,
+                user.FirstName,
+                user.LastName,
+                user.Role,
+                user.Id.ToString()));
+        }
+
+        return query;
+    }
+
+    private static IEnumerable<PackingIncidentDto> FilterPackingIncidents(
+        IEnumerable<PackingIncidentDto> incidents,
+        PackingIncidentListFilterViewModel filter)
+    {
+        var query = incidents;
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            query = query.Where(incident => MatchesSearch(
+                filter.Search,
+                incident.Id.ToString(),
+                incident.ClientPublicId,
+                incident.DeliveryCalendarId?.ToString(),
+                incident.MealName,
+                incident.BoxCode,
+                incident.BagCode,
+                incident.ReasonSummary,
+                incident.Description,
+                incident.AdminNotes,
+                incident.WarehouseWasteError,
+                incident.Type.ToString(),
+                incident.Status.ToString()));
+        }
+
+        return query;
+    }
+
+    private static bool MatchesSearch(string? search, params string?[] values)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return true;
+        }
+
+        var normalizedSearch = search.Trim();
+        return values.Any(value =>
+            !string.IsNullOrWhiteSpace(value) &&
+            value.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase));
     }
 
     private void SetNewUserViewData()

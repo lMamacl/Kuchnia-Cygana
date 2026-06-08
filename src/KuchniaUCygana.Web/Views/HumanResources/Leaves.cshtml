@@ -2,6 +2,7 @@
 @{
     Layout = "_LayoutStaff";
     var leaveRequestsPage = Model.LeaveRequestsPage;
+    var filter = Model.LeaveRequestsFilter;
 
     string LeaveTypeName(int value) => value switch
     {
@@ -32,10 +33,51 @@
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Wnioski urlopowe</h3>
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="text-secondary small">Pokazuje @leaveRequestsPage.FirstItem-@leaveRequestsPage.LastItem z @leaveRequestsPage.TotalCount</span>
-                    <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewLeaveRequest">Nowy wniosek</a>
-                </div>
+                <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewLeaveRequest">Nowy wniosek</a>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" asp-controller="HumanResources" asp-action="Leaves">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label" for="Search">Szukaj</label>
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Pracownik, decyzja, powod..." />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="Status">Status</label>
+                            <select class="form-select" id="Status" name="Status">
+                                <option value="">Wszystkie</option>
+                                @foreach (var status in new[] { 0, 1, 2 })
+                                {
+                                    <option value="@status" selected="@(filter.Status == status)">@LeaveStatusName(status)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="LeaveType">Typ</label>
+                            <select class="form-select" id="LeaveType" name="LeaveType">
+                                <option value="">Wszystkie</option>
+                                @foreach (var leaveType in new[] { 0, 1, 2 })
+                                {
+                                    <option value="@leaveType" selected="@(filter.LeaveType == leaveType)">@LeaveTypeName(leaveType)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="PageSize">Na stronie</label>
+                            <select class="form-select" id="PageSize" name="PageSize">
+                                @foreach (var size in new[] { 10, 25, 50, 100 })
+                                {
+                                    <option value="@size" selected="@(filter.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex justify-content-md-end gap-2">
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Leaves">Wyczysc</a>
+                            <button class="btn btn-primary" type="submit">Filtruj</button>
+                        </div>
+                    </div>
+                </form>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -94,31 +136,20 @@
                         {
                             <tr>
                                 <td colspan="6" class="text-secondary text-center py-4">
-                                    Brak wnioskow urlopowych. Seeder dodaje przykladowe pozycje, gdy baza jest pusta.
+                                    @(filter.HasActiveCriteria
+                                        ? "Brak wnioskow urlopowych dla wybranych filtrow."
+                                        : "Brak wnioskow urlopowych. Seeder dodaje przykladowe pozycje, gdy baza jest pusta.")
                                 </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
-            @if (leaveRequestsPage.TotalCount > 0)
-            {
-                <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <span class="text-secondary small">Strona @leaveRequestsPage.Page / @leaveRequestsPage.TotalPages, po @leaveRequestsPage.PageSize rekordow</span>
-                    <div class="btn-list">
-                        <a class="btn btn-outline-secondary @(leaveRequestsPage.HasPrevious ? string.Empty : "disabled")"
-                           asp-controller="HumanResources"
-                           asp-action="Leaves"
-                           asp-route-page="@leaveRequestsPage.PreviousPage"
-                           asp-route-pageSize="@leaveRequestsPage.PageSize">Poprzednia</a>
-                        <a class="btn btn-outline-secondary @(leaveRequestsPage.HasNext ? string.Empty : "disabled")"
-                           asp-controller="HumanResources"
-                           asp-action="Leaves"
-                           asp-route-page="@leaveRequestsPage.NextPage"
-                           asp-route-pageSize="@leaveRequestsPage.PageSize">Nastepna</a>
-                    </div>
-                </div>
-            }
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                leaveRequestsPage,
+                "HumanResources",
+                "Leaves",
+                filter.ToRouteValues()))
         </div>
     </div>
 </div>
