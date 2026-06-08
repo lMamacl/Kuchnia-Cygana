@@ -37,7 +37,7 @@
                         <select id="schedule-shift" class="form-select" name="Shift" required>
                             @foreach (var shift in Enum.GetValues<WorkShift>())
                             {
-                                <option value="@shift" selected="@(Model.NewWorkSchedule.Shift == shift)">@shift</option>
+                                <option value="@shift" selected="@(Model.NewWorkSchedule.Shift == shift)">@EnumDisplayNames.DisplayName(shift)</option>
                             }
                         </select>
                     </div>

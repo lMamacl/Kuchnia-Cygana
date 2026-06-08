@@ -29,4 +29,5 @@ public sealed class RegisterWasteRequest
     /// Dodatkowe uwagi (wymagane, jeśli powód to "Inny").
     /// </summary>
     public string? Notes { get; set; }
+    public string? OperationKey { get; set; }
 }

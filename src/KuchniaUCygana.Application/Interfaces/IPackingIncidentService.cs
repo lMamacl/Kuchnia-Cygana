@@ -10,6 +10,10 @@ public interface IPackingIncidentService
 
     Task<IReadOnlyList<PackingIncidentDto>> SearchAsync(PackingIncidentFilterDto filter);
 
+    Task<PackingIncidentPageDto> SearchPageAsync(PackingIncidentFilterDto filter);
+
+    Task<IReadOnlyList<PackingIncidentDto>> SearchByDeliveryCalendarIdsAsync(IEnumerable<int> deliveryCalendarIds);
+
     Task<IReadOnlyList<PackingIncidentDto>> GetKitchenReworkAsync(DateOnly? date);
 
     Task AssignToCurrentUserAsync(int incidentId);

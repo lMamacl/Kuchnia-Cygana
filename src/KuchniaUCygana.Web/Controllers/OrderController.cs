@@ -1,4 +1,6 @@
-﻿using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Application.DTOs.Orders;
+using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,11 +26,34 @@ public sealed class OrderController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index(
+        int page = 1,
+        int pageSize = 10,
+        OrderStatus? status = null,
+        DateTime? dateFrom = null,
+        DateTime? dateTo = null,
+        string? orderNumber = null)
     {
         var userId = GetCurrentUserId();
-        var orders = await orderService.GetByCustomerIdAsync(userId);
-        return View(orders);
+        var result = await orderService.SearchByCustomerAsync(userId, new OrderHistoryQueryDto
+        {
+            Page = page,
+            PageSize = pageSize,
+            Status = status,
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            OrderNumber = orderNumber,
+        });
+
+        return View(new OrderHistoryViewModel
+        {
+            Page = result,
+            Status = status,
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            OrderNumber = orderNumber,
+            PageSize = result.PageSize,
+        });
     }
 
     [HttpGet]
@@ -46,9 +71,9 @@ public sealed class OrderController : Controller
     {
         var success = await orderService.CancelOrderAsync(orderId, GetCurrentUserId());
         if (success)
-            TempData["Success"] = "Zamówienie zostało pomyślnie anulowane.";
+            TempData["Success"] = "Zamowienie zostalo pomyslnie anulowane.";
         else
-            TempData["Error"] = "Nie można anulować tego zamówienia.";
+            TempData["Error"] = "Nie mozna anulowac tego zamowienia.";
 
         return RedirectToAction(nameof(Details), new { orderId });
     }
@@ -88,11 +113,11 @@ public sealed class OrderController : Controller
 
         if (success)
         {
-            TempData["Success"] = "Dostawa została przełożona.";
+            TempData["Success"] = "Dostawa zostala przelozona.";
             return RedirectToAction(nameof(Index));
         }
 
-        ModelState.AddModelError("", "Nie można zmienić dostawy (być może minął czas edycji).");
+        ModelState.AddModelError("", "Nie mozna zmienic dostawy (byc moze minal czas edycji).");
         model.Addresses = await addressService.GetByUserIdAsync(GetCurrentUserId());
         return View(model);
     }
@@ -103,11 +128,11 @@ public sealed class OrderController : Controller
         var success = await deliveryCalendarService.SkipDeliveryAsync(
             deliveryCalendarId,
             GetCurrentUserId(),
-            reason ?? "Pominięte przez panel");
+            reason ?? "Pominiete przez panel");
 
         if (!success)
         {
-            return BadRequest("Zbyt późno na anulowanie tej dostawy.");
+            return BadRequest("Zbyt pozno na anulowanie tej dostawy.");
         }
 
         var updatedEntry = await deliveryCalendarService.GetByIdAsync(deliveryCalendarId);
@@ -125,7 +150,7 @@ public sealed class OrderController : Controller
     private int GetCurrentUserId()
     {
         var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? throw new UnauthorizedAccessException("Brak identyfikatora użytkownika w tokenie.");
+            ?? throw new UnauthorizedAccessException("Brak identyfikatora uzytkownika w tokenie.");
         return int.Parse(value);
     }
 }

@@ -52,6 +52,126 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
             new { warehouseCategoryId });
     }
 
+    public async Task<IReadOnlyDictionary<int, IReadOnlyList<Batch>>> GetActiveBatchesByStockItemsAsync(
+        IEnumerable<int> stockItemIds)
+    {
+        var availability = await GetActiveBatchAvailabilityByStockItemsAsync(stockItemIds);
+        return availability.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<Batch>)pair.Value.Select(row => row.ToBatch()).ToList());
+    }
+
+    public async Task<IReadOnlyDictionary<int, IReadOnlyList<Batch>>> GetActiveBatchesByWarehouseCategoriesAsync(
+        IEnumerable<int> warehouseCategoryIds)
+    {
+        var availability = await GetActiveBatchAvailabilityByWarehouseCategoriesAsync(warehouseCategoryIds);
+        return availability.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<Batch>)pair.Value.Select(row => row.ToBatch()).ToList());
+    }
+
+    public async Task<IReadOnlyDictionary<int, IReadOnlyList<BatchAvailabilityRow>>> GetActiveBatchAvailabilityByStockItemsAsync(
+        IEnumerable<int> stockItemIds)
+    {
+        var ids = stockItemIds.Distinct().ToArray();
+        if (ids.Length == 0)
+        {
+            return new Dictionary<int, IReadOnlyList<BatchAvailabilityRow>>();
+        }
+
+        using var db = Factory.CreateConnection();
+        var rows = (await db.QueryAsync<BatchAvailabilityRow>(
+            """
+            SELECT
+                b.[Id],
+                b.[StockItemId],
+                b.[SupplierBatchNumber],
+                b.[CurrentQuantity],
+                b.[ExpiryDate],
+                b.[ReceivedDate],
+                b.[IsDepleted],
+                b.[CreatedAt],
+                b.[UpdatedAt],
+                b.[IsDeleted],
+                si.[WarehouseCategoryId],
+                uom.[Symbol] AS [UnitSymbol]
+            FROM [Batches] b
+            INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId]
+            INNER JOIN [UnitsOfMeasure] uom ON uom.[Id] = si.[DefaultUnitOfMeasureId]
+            WHERE b.[StockItemId] IN @ids
+              AND si.[IsDeleted] = 0
+              AND b.[IsDepleted] = 0
+              AND b.[IsDeleted] = 0
+            ORDER BY
+              b.[StockItemId],
+              CASE WHEN b.[ExpiryDate] IS NULL THEN 1 ELSE 0 END,
+              b.[ExpiryDate],
+              b.[Id];
+            """,
+            new { ids })).ToList();
+
+        var batchesByStockItem = rows
+            .GroupBy(row => row.StockItemId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<BatchAvailabilityRow>)group.ToList());
+
+        return ids.ToDictionary(
+            id => id,
+            id => batchesByStockItem.GetValueOrDefault(id) ?? Array.Empty<BatchAvailabilityRow>());
+    }
+
+    public async Task<IReadOnlyDictionary<int, IReadOnlyList<BatchAvailabilityRow>>> GetActiveBatchAvailabilityByWarehouseCategoriesAsync(
+        IEnumerable<int> warehouseCategoryIds)
+    {
+        var ids = warehouseCategoryIds.Distinct().ToArray();
+        if (ids.Length == 0)
+        {
+            return new Dictionary<int, IReadOnlyList<BatchAvailabilityRow>>();
+        }
+
+        using var db = Factory.CreateConnection();
+        var rows = (await db.QueryAsync<BatchAvailabilityRow>(
+            """
+            SELECT
+                b.[Id],
+                b.[StockItemId],
+                b.[SupplierBatchNumber],
+                b.[CurrentQuantity],
+                b.[ExpiryDate],
+                b.[ReceivedDate],
+                b.[IsDepleted],
+                b.[CreatedAt],
+                b.[UpdatedAt],
+                b.[IsDeleted],
+                si.[WarehouseCategoryId],
+                uom.[Symbol] AS [UnitSymbol]
+            FROM [Batches] b
+            INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId]
+            INNER JOIN [UnitsOfMeasure] uom ON uom.[Id] = si.[DefaultUnitOfMeasureId]
+            WHERE si.[WarehouseCategoryId] IN @ids
+              AND si.[IsDeleted] = 0
+              AND b.[IsDepleted] = 0
+              AND b.[IsDeleted] = 0
+            ORDER BY
+              si.[WarehouseCategoryId],
+              CASE WHEN b.[ExpiryDate] IS NULL THEN 1 ELSE 0 END,
+              b.[ExpiryDate],
+              b.[Id];
+            """,
+            new { ids })).ToList();
+
+        var batchesByCategory = rows
+            .GroupBy(row => row.WarehouseCategoryId)
+            .ToDictionary(
+                group => group.Key!.Value,
+                group => (IReadOnlyList<BatchAvailabilityRow>)group.ToList());
+
+        return ids.ToDictionary(
+            id => id,
+            id => batchesByCategory.GetValueOrDefault(id) ?? Array.Empty<BatchAvailabilityRow>());
+    }
+
     public async Task<IEnumerable<Batch>> GetBatchesByStockItemAsync(int stockItemId)
     {
         using var db = Factory.CreateConnection();
@@ -367,6 +487,7 @@ public class BatchRepository : BaseRepository<Batch>, IBatchRepository
         string? Prefix,
         string? Contains,
         bool UseContains);
+
 }
 
 

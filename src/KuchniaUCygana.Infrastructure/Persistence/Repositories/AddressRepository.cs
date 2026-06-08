@@ -11,6 +11,31 @@ public sealed class AddressRepository : BaseRepository<Address>, IAddressReposit
 {
     public AddressRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
+    public async Task<IReadOnlyList<Address>> GetByIdsAsync(IEnumerable<int> ids)
+    {
+        using var db = Factory.CreateConnection();
+        var idList = ids
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+
+        if (idList.Length == 0)
+        {
+            return Array.Empty<Address>();
+        }
+
+        const string sql = """
+            SELECT *
+            FROM [Addresses]
+            WHERE [Id] IN @Ids
+              AND [IsDeleted] = 0
+            ORDER BY [Id];
+            """;
+
+        var addresses = await db.QueryAsync<Address>(sql, new { Ids = idList });
+        return addresses.ToList();
+    }
+
     public async Task<IEnumerable<Address>> GetByUserIdAsync(int userId)
 {
         using var db = Factory.CreateConnection();

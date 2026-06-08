@@ -42,30 +42,33 @@ public sealed class M1CheckoutSmokeTests
         };
 
         var orderRepository = new Mock<IOrderRepository>();
-        var orderItemRepository = new Mock<IOrderItemRepository>();
         var deliveryCalendarRepository = new Mock<IDeliveryCalendarRepository>();
+        var addressRepository = CreateAddressRepository();
         var dietDataProvider = new Mock<IDietDataProvider>();
         var insertedItems = new List<OrderItem>();
 
-        orderRepository.Setup(repo => repo.GenerateOrderNumberAsync()).ReturnsAsync("ORD-20260608-1");
-        orderRepository.Setup(repo => repo.InsertAsync(It.IsAny<Order>())).ReturnsAsync(123);
-        orderRepository.Setup(repo => repo.UpdateAsync(It.IsAny<Order>())).ReturnsAsync(true);
-        orderItemRepository
-            .Setup(repo => repo.InsertAsync(It.IsAny<OrderItem>()))
-            .Callback<OrderItem>(insertedItems.Add)
-            .ReturnsAsync(0);
-        deliveryCalendarRepository.Setup(repo => repo.InsertAsync(It.IsAny<DeliveryCalendar>())).ReturnsAsync(0);
+        orderRepository
+            .Setup(repo => repo.InsertCheckoutAsync(
+                It.IsAny<Order>(),
+                It.IsAny<IReadOnlyCollection<OrderItem>>(),
+                It.IsAny<IReadOnlyCollection<DeliveryCalendar>>()))
+            .Callback<Order, IReadOnlyCollection<OrderItem>, IReadOnlyCollection<DeliveryCalendar>>((_, items, _) =>
+            {
+                insertedItems = items.ToList();
+                foreach (var item in insertedItems) item.OrderId = 123;
+            })
+            .ReturnsAsync(123);
         dietDataProvider
             .Setup(provider => provider.GetPublishedPlanSnapshotAsync(new DateOnly(2026, 6, 8)))
             .ReturnsAsync(CreatePublishedSnapshot());
 
         var orderService = new OrderService(
             orderRepository.Object,
-            orderItemRepository.Object,
             deliveryCalendarRepository.Object,
-            Mock.Of<IAddressRepository>(),
+            addressRepository.Object,
             Mock.Of<IMapper>(),
-            dietDataProvider.Object);
+            dietDataProvider.Object,
+            dietOrderingService);
 
         var orderId = await orderService.CreateOrderAsync(checkoutRequest, customerId: 44);
 
@@ -93,10 +96,13 @@ public sealed class M1CheckoutSmokeTests
         insertedItems[1].MealVariantId.Should().Be(902);
         insertedItems[1].MealSlot.Should().Be("Lunch");
 
-        catalogProvider.Verify(provider => provider.GetVariantAsync(selectedDietVariantId), Times.Once);
-        catalogProvider.Verify(provider => provider.GetDietAsync(5), Times.Once);
+        catalogProvider.Verify(provider => provider.GetVariantAsync(selectedDietVariantId), Times.Exactly(2));
+        catalogProvider.Verify(provider => provider.GetDietAsync(5), Times.Exactly(2));
         dietDataProvider.Verify(provider => provider.GetPublishedPlanSnapshotAsync(new DateOnly(2026, 6, 8)), Times.Once);
-        orderItemRepository.Verify(repo => repo.InsertAsync(It.IsAny<OrderItem>()), Times.Exactly(2));
+        orderRepository.Verify(repo => repo.InsertCheckoutAsync(
+            It.IsAny<Order>(),
+            It.IsAny<IReadOnlyCollection<OrderItem>>(),
+            It.IsAny<IReadOnlyCollection<DeliveryCalendar>>()), Times.Once);
     }
 
     private static Mock<IDietCatalogProvider> CreateCatalogProvider(int selectedDietVariantId)
@@ -133,6 +139,23 @@ public sealed class M1CheckoutSmokeTests
         });
 
         return provider;
+    }
+
+    private static Mock<IAddressRepository> CreateAddressRepository()
+    {
+        var repository = new Mock<IAddressRepository>();
+        repository.Setup(repo => repo.GetByIdAsync(7)).ReturnsAsync(new Address
+        {
+            Id = 7,
+            UserId = 44,
+            Label = "Dom",
+            Street = "Testowa",
+            BuildingNumber = "1",
+            City = "Warszawa",
+            PostalCode = "00-001",
+        });
+
+        return repository;
     }
 
     private static PublishedDietPlanSnapshotDto CreatePublishedSnapshot()

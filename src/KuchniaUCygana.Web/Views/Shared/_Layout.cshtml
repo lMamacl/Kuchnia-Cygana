@@ -47,6 +47,12 @@
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-controller="Order" asp-action="Index">Zamowienia</a>
                         </li>
+                        @if (isAuthenticated)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="Address" asp-action="Index">Adresy</a>
+                            </li>
+                        }
                     </ul>
                     <div class="navbar-nav ms-auto align-items-sm-center gap-2">
                         @if (isAuthenticated)

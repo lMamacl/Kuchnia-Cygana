@@ -179,10 +179,13 @@
                 <div class="section-kicker text-success mb-1">Panel klienta</div>
                 <h2 class="h3 fw-bold mb-0">Witaj, @(string.IsNullOrWhiteSpace(userName) ? "kliencie" : userName)</h2>
             </div>
-            <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-outline-danger">Wyloguj</button>
-            </form>
+            <div class="d-flex flex-wrap gap-2">
+                <a asp-controller="Address" asp-action="Index" class="btn btn-outline-success">Adresy dostawy</a>
+                <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-danger">Wyloguj</button>
+                </form>
+            </div>
         </div>
     }
 

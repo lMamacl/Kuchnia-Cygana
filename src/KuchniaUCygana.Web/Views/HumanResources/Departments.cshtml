@@ -3,6 +3,7 @@
     Layout = "_LayoutStaff";
     var departmentsPage = Model.DepartmentsPage;
     var filter = Model.DepartmentsFilter;
+    var summariesByDepartmentId = Model.DepartmentSummaries.ToDictionary(summary => summary.DepartmentId);
 }
 
 <div class="row row-cards">
@@ -82,27 +83,26 @@
                     <tbody>
                         @foreach (var department in departmentsPage.Items)
                         {
-                            var departmentEmployees = Model.Employees
-                                .Where(employee => employee.DepartmentId == department.Id)
-                                .OrderBy(employee => employee.FullName)
-                                .ToArray();
+                            summariesByDepartmentId.TryGetValue(department.Id, out var departmentSummary);
+                            var totalEmployees = departmentSummary?.TotalEmployeeCount ?? 0;
+                            var sampleEmployeeNames = departmentSummary?.SampleEmployeeNames ?? string.Empty;
                             <tr>
                                 <td class="fw-semibold">@department.Name</td>
                                 <td class="text-secondary">@department.Description</td>
                                 <td>@(department.HeadEmployeeFullName ?? "-")</td>
                                 <td>
-                                    <div class="fw-semibold">@departmentEmployees.Length</div>
+                                    <div class="fw-semibold">@totalEmployees</div>
                                     <div class="text-secondary small">
-                                        @if (departmentEmployees.Length == 0)
+                                        @if (string.IsNullOrWhiteSpace(sampleEmployeeNames))
                                         {
                                             <span>Brak przypisanych osob</span>
                                         }
                                         else
                                         {
-                                            @string.Join(", ", departmentEmployees.Take(3).Select(employee => employee.FullName))
-                                            @if (departmentEmployees.Length > 3)
+                                            @sampleEmployeeNames
+                                            @if (totalEmployees > 3)
                                             {
-                                                <span> +@(departmentEmployees.Length - 3)</span>
+                                                <span> +@(totalEmployees - 3)</span>
                                             }
                                         }
                                     </div>

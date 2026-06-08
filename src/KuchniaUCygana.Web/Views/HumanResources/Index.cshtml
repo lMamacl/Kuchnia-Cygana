@@ -1,11 +1,9 @@
 @model HumanResourcesDashboardViewModel
 @{
     Layout = "_LayoutStaff";
-    var today = DateOnly.FromDateTime(DateTime.Today);
-    var pendingLeaves = Model.LeaveRequests.Where(x => x.Status == 0).OrderBy(x => x.StartDate).ToArray();
-    var todaySchedules = Model.WorkSchedules.Where(x => x.ShiftDate == today).OrderBy(x => x.Shift).ToArray();
-    var activeEmployees = Model.Employees.Count(x => x.IsActive);
-    var inactiveEmployees = Model.Employees.Count(x => !x.IsActive);
+    var pendingLeaves = Model.LeaveRequests.ToArray();
+    var todaySchedules = Model.WorkSchedules.ToArray();
+    var summary = Model.Summary;
 
     string LeaveTypeName(int value) => value switch
     {
@@ -21,7 +19,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Wnioski do decyzji</div>
-                <div class="h1 mb-0">@pendingLeaves.Length</div>
+                <div class="h1 mb-0">@summary.PendingLeaveCount</div>
             </div>
         </div>
     </div>
@@ -29,7 +27,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Aktywni pracownicy</div>
-                <div class="h1 mb-0">@activeEmployees</div>
+                <div class="h1 mb-0">@summary.ActiveEmployeeCount</div>
             </div>
         </div>
     </div>
@@ -37,7 +35,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Dzisiejsze zmiany</div>
-                <div class="h1 mb-0">@todaySchedules.Length</div>
+                <div class="h1 mb-0">@summary.TodayScheduleCount</div>
             </div>
         </div>
     </div>
@@ -45,7 +43,7 @@
         <div class="card staff-metric-card">
             <div class="card-body">
                 <div class="text-secondary">Nieaktywni</div>
-                <div class="h1 mb-0">@inactiveEmployees</div>
+                <div class="h1 mb-0">@summary.InactiveEmployeeCount</div>
             </div>
         </div>
     </div>
@@ -107,7 +105,7 @@
                         @foreach (var schedule in todaySchedules.Take(8))
                         {
                             <tr>
-                                <td>@schedule.Shift</td>
+                                <td>@EnumDisplayNames.WorkShiftName(schedule.Shift)</td>
                                 <td>@(schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}")</td>
                                 <td>@(schedule.RoleAtShift ?? "-")</td>
                             </tr>
@@ -128,7 +126,7 @@
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <h3 class="card-title">Pracownicy wedlug dzialow</h3>
-                <span class="text-secondary small">@Model.Employees.Count pracownikow w @Model.Departments.Count dzialach</span>
+                <span class="text-secondary small">@Model.DepartmentSummaries.Sum(x => x.TotalEmployeeCount) pracownikow w @Model.DepartmentSummaries.Count dzialach</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -142,31 +140,30 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var department in Model.Departments.OrderBy(x => x.Name))
+                        @foreach (var department in Model.DepartmentSummaries.OrderBy(x => x.DepartmentName))
                         {
-                            var employees = Model.Employees.Where(x => x.DepartmentId == department.Id).ToArray();
                             <tr>
-                                <td class="fw-semibold">@department.Name</td>
-                                <td class="text-end">@employees.Count(x => x.IsActive)</td>
-                                <td class="text-end">@employees.Length</td>
+                                <td class="fw-semibold">@department.DepartmentName</td>
+                                <td class="text-end">@department.ActiveEmployeeCount</td>
+                                <td class="text-end">@department.TotalEmployeeCount</td>
                                 <td>@(department.HeadEmployeeFullName ?? "-")</td>
                                 <td class="text-secondary">
-                                    @if (employees.Length == 0)
+                                    @if (string.IsNullOrWhiteSpace(department.SampleEmployeeNames))
                                     {
                                         <span>Brak przypisanych osob</span>
                                     }
                                     else
                                     {
-                                        @string.Join(", ", employees.OrderBy(x => x.FullName).Take(4).Select(x => x.FullName))
-                                        @if (employees.Length > 4)
+                                        @department.SampleEmployeeNames
+                                        @if (department.TotalEmployeeCount > 4)
                                         {
-                                            <span> +@(employees.Length - 4)</span>
+                                            <span> +@(department.TotalEmployeeCount - 4)</span>
                                         }
                                     }
                                 </td>
                             </tr>
                         }
-                        @if (Model.Departments.Count == 0)
+                        @if (Model.DepartmentSummaries.Count == 0)
                         {
                             <tr>
                                 <td colspan="5" class="text-secondary text-center py-4">Brak dzialow. Seeder powinien utworzyc podstawowa strukture HR.</td>

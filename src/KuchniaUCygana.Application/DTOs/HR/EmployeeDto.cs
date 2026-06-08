@@ -28,6 +28,8 @@ public sealed class EmployeeDto
 
     public bool IsActive { get; set; }
 
+    public string? UserRole { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? UpdatedAt { get; set; }

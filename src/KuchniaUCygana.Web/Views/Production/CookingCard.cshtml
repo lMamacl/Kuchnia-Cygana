@@ -122,6 +122,19 @@
                     </div>
                 }
 
+                @if (!Model.CanApproveCooking)
+                {
+                    <div class="alert alert-warning">
+                        <div class="fw-bold mb-1">Nie mozna jeszcze zatwierdzic gotowania</div>
+                        <ul class="mb-0 ps-3">
+                            @foreach (var blocker in Model.ApprovalBlockers)
+                            {
+                                <li>@blocker</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
                 <form asp-action="ApproveCooking" method="post">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="planItemId" value="@Model.PlanItemId" />
@@ -132,7 +145,7 @@
                         <small class="form-hint text-center">Wpisz faktyczną liczbę gotowych porcji, która trafi do pakowania.</small>
                     </div>
 
-                    <button type="submit" class="btn btn-success w-100 py-2">
+                    <button type="submit" class="btn btn-success w-100 py-2" @(Model.CanApproveCooking ? "" : "disabled")>
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                         Zatwierdź Wykonanie Potrawy
                     </button>

@@ -63,4 +63,22 @@ public sealed class WarehouseDemandRowDto
     public string RiskLabel { get; set; } = "Ok";
     public List<string> SourceMeals { get; set; } = new();
     public List<int> SourceDietMenuPlanItemIds { get; set; } = new();
+    public List<WarehouseDemandBatchAllocationDto> FefoAllocations { get; set; } = new();
+}
+
+public sealed class WarehouseDemandBatchAllocationDto
+{
+    public int BatchId { get; set; }
+
+    public int StockItemId { get; set; }
+
+    public string? SupplierBatchNumber { get; set; }
+
+    public decimal AvailableQuantity { get; set; }
+
+    public decimal AllocatedQuantity { get; set; }
+
+    public string Unit { get; set; } = string.Empty;
+
+    public DateTimeOffset? ExpiryDate { get; set; }
 }

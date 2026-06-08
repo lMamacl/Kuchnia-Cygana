@@ -66,6 +66,8 @@
                 adres dostawy, podsumowanie i płatność.
             </p>
             <form asp-controller="Menu" asp-action="Index" method="get" class="catalog-search">
+                <input type="hidden" name="page" value="1" />
+                <input type="hidden" name="pageSize" value="@Model.PageSize" />
                 <div class="input-group input-group-lg">
                     <input type="search" name="search" value="@Model.SearchTerm" class="form-control" placeholder="Szukaj diety" />
                     <button type="submit" class="btn btn-success px-4">Szukaj</button>
@@ -93,6 +95,23 @@
     }
     else
     {
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+            <div class="text-muted small">
+                Pokazano @Model.FirstItem-@Model.LastItem z @Model.TotalCount diet
+            </div>
+            <form asp-controller="Menu" asp-action="Index" method="get" class="d-flex align-items-center gap-2">
+                <input type="hidden" name="search" value="@Model.SearchTerm" />
+                <input type="hidden" name="page" value="1" />
+                <label class="text-muted small mb-0" for="catalogPageSize">Na stronie</label>
+                <select id="catalogPageSize" name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
+                    @foreach (var size in new[] { 6, 12, 24, 48 })
+                    {
+                        <option value="@size" selected="@(Model.PageSize == size)">@size</option>
+                    }
+                </select>
+            </form>
+        </div>
+
         <div class="row g-4">
             @foreach (var diet in Model.Diets)
             {
@@ -172,5 +191,49 @@
                 </div>
             }
         </div>
+
+        @if (Model.TotalPages > 1)
+        {
+            var firstPage = Math.Max(1, Model.Page - 2);
+            var lastPage = Math.Min(Model.TotalPages, Model.Page + 2);
+
+            <nav class="mt-4" aria-label="Strony katalogu diet">
+                <ul class="pagination justify-content-center mb-0">
+                    <li class="page-item @(Model.HasPrevious ? "" : "disabled")">
+                        <a class="page-link"
+                           asp-controller="Menu"
+                           asp-action="Index"
+                           asp-route-search="@Model.SearchTerm"
+                           asp-route-page="@(Model.Page - 1)"
+                           asp-route-pageSize="@Model.PageSize">
+                            Poprzednia
+                        </a>
+                    </li>
+                    @for (var p = firstPage; p <= lastPage; p++)
+                    {
+                        <li class="page-item @(p == Model.Page ? "active" : "")">
+                            <a class="page-link"
+                               asp-controller="Menu"
+                               asp-action="Index"
+                               asp-route-search="@Model.SearchTerm"
+                               asp-route-page="@p"
+                               asp-route-pageSize="@Model.PageSize">
+                                @p
+                            </a>
+                        </li>
+                    }
+                    <li class="page-item @(Model.HasNext ? "" : "disabled")">
+                        <a class="page-link"
+                           asp-controller="Menu"
+                           asp-action="Index"
+                           asp-route-search="@Model.SearchTerm"
+                           asp-route-page="@(Model.Page + 1)"
+                           asp-route-pageSize="@Model.PageSize">
+                            Nastepna
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        }
     }
 </div>

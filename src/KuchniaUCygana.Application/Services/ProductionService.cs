@@ -23,7 +23,7 @@ public sealed class ProductionService : IProductionService
     private readonly IPackingService _packingService;
     private readonly FefoService _fefoService;
     private readonly IRepository<PlanChangeAlert> _planAlertRepository;
-    private readonly IRepository<ProductionAdjustmentApproval> _adjustmentApprovalRepository;
+    private readonly IProductionAdjustmentApprovalRepository _adjustmentApprovalRepository;
     private readonly ICookingSessionService _cookingSessionService;
     private readonly IMapper _mapper;
     private readonly ILogger<ProductionService> _logger;
@@ -36,7 +36,7 @@ public sealed class ProductionService : IProductionService
         IPackingService packingService,
         FefoService fefoService,
         IRepository<PlanChangeAlert> planAlertRepository,
-        IRepository<ProductionAdjustmentApproval> adjustmentApprovalRepository,
+        IProductionAdjustmentApprovalRepository adjustmentApprovalRepository,
         ICookingSessionService cookingSessionService,
         IMapper mapper,
         ILogger<ProductionService> logger)
@@ -450,8 +450,8 @@ public sealed class ProductionService : IProductionService
 
     public async Task<IReadOnlyList<ProductionAdjustmentApprovalDto>> GetProductionAdjustmentApprovalsAsync(int planItemId)
     {
-        var approvals = (await _adjustmentApprovalRepository.GetAllAsync())
-            .Where(approval => approval.ProductionPlanItemId == planItemId)
+        var approvals = (await _adjustmentApprovalRepository.GetByPlanItemAsync(planItemId)
+                ?? Array.Empty<ProductionAdjustmentApproval>())
             .OrderByDescending(approval => approval.RequestedAt)
             .ThenByDescending(approval => approval.Id)
             .Select(MapAdjustmentApproval)
@@ -533,6 +533,7 @@ public sealed class ProductionService : IProductionService
             var snapshotCard = BuildCookingCardFromSnapshot(item, storedSnapshot, null);
             await EnrichComponentSessionProgressAsync(snapshotCard);
             snapshotCard.AdjustmentApprovals = (await GetProductionAdjustmentApprovalsAsync(planItemId)).ToList();
+            PopulateCookingApprovalBlockers(snapshotCard);
             return snapshotCard;
         }
 
@@ -603,6 +604,7 @@ public sealed class ProductionService : IProductionService
         }
 
         card.AdjustmentApprovals = (await GetProductionAdjustmentApprovalsAsync(planItemId)).ToList();
+        PopulateCookingApprovalBlockers(card);
         return card;
     }
 
@@ -692,6 +694,23 @@ public sealed class ProductionService : IProductionService
     {
         var item = await _itemRepository.GetByIdAsync(planItemId)
             ?? throw new InvalidOperationException($"Pozycja planu {planItemId} nie istnieje.");
+        var snapshotItem = TryDeserializeSnapshotItem(item);
+        if (snapshotItem is null)
+        {
+            throw new InvalidOperationException(
+                $"Nie mozna zatwierdzic gotowania pozycji {item.Id} ({item.MealName}). " +
+                "Brak snapshotu M2 z wymaganiami produkcyjnymi. Wygeneruj plan z opublikowanego M2 przed zatwierdzeniem produkcji.");
+        }
+
+        if (!item.FefoDeductedAt.HasValue)
+        {
+            throw new InvalidOperationException(
+                $"Nie mozna zatwierdzic gotowania pozycji {item.Id} ({item.MealName}). " +
+                "Najpierw wykonaj FEFO dla skladnikow planu produkcji.");
+        }
+
+        await EnsureComponentSessionsCompletedAsync(item, snapshotItem);
+
         var approvedAdjustment = await RequireApprovedAdjustmentIfNeededAsync(item, actualQuantity, "CookedQuantity");
 
         await DeductPackagingIfNeededAsync(item, actualQuantity);
@@ -1327,6 +1346,67 @@ public sealed class ProductionService : IProductionService
         }
     }
 
+    private static void PopulateCookingApprovalBlockers(CookingCardDto card)
+    {
+        card.ApprovalBlockers.Clear();
+
+        if (!card.HasM2Snapshot)
+        {
+            card.ApprovalBlockers.Add("Brak snapshotu M2. Najpierw odswiez/wygeneruj plan produkcji z opublikowanego M2.");
+        }
+
+        if (!card.FefoDeductedAt.HasValue)
+        {
+            card.ApprovalBlockers.Add("Najpierw wykonaj FEFO skladnikow dla planu produkcji.");
+        }
+
+        if (card.MissingWarehouseMappings.Count > 0)
+        {
+            card.ApprovalBlockers.Add("Brak mapowania magazynowego dla: " + string.Join(", ", card.MissingWarehouseMappings));
+        }
+
+        var incompleteComponents = card.Components
+            .Where(component => component.TotalStepCount > 0 && !component.IsSessionCompleted)
+            .Select(component => component.ComponentName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(componentName => componentName)
+            .ToList();
+        if (incompleteComponents.Count > 0)
+        {
+            card.ApprovalBlockers.Add("Ukoncz skladowe przed zatwierdzeniem: " + string.Join(", ", incompleteComponents));
+        }
+    }
+
+    private async Task EnsureComponentSessionsCompletedAsync(
+        ProductionPlanItem item,
+        PublishedDietPlanItemDto snapshotItem)
+    {
+        var incompleteComponents = new List<string>();
+        foreach (var component in snapshotItem.Components.Where(ComponentRequiresCookingSession))
+        {
+            var session = await _cookingSessionService.GetComponentSessionAsync(
+                item.Id,
+                component.RecipeComponentVersionId);
+
+            if (!string.Equals(session.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                incompleteComponents.Add(component.ComponentName);
+            }
+        }
+
+        if (incompleteComponents.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Nie mozna zatwierdzic gotowania. Najpierw ukoncz skladowe: " +
+                string.Join(", ", incompleteComponents.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name)));
+        }
+    }
+
+    private static bool ComponentRequiresCookingSession(MealComponentVersionDto component)
+        => component.InstructionSections
+            .SelectMany(section => section.Steps)
+            .Any();
+
     private static ProductionPlanItem? FindProductionItemForSnapshotItem(
         IReadOnlyCollection<ProductionPlanItem> productionItems,
         PublishedDietPlanItemDto snapshotItem)
@@ -1753,10 +1833,6 @@ public sealed class ProductionService : IProductionService
     {
         item.FefoDeductedAt = DateTimeOffset.UtcNow;
         item.FefoReferenceDocument = referenceDocument;
-        if (item.Status == ProductionItemStatus.Planned)
-        {
-            item.Status = ProductionItemStatus.Cooking;
-        }
 
         await _itemRepository.UpdateAsync(item);
     }
@@ -2161,18 +2237,10 @@ public sealed class ProductionService : IProductionService
             return null;
         }
 
-        var allowedTypes = adjustmentType == "CookedQuantity"
-            ? new[] { "CookedQuantity", "PackagingQuantity", "LabelQuantity" }
-            : new[] { adjustmentType };
-
-        var approvedAdjustment = (await _adjustmentApprovalRepository.GetAllAsync())
-            .Where(approval =>
-                approval.ProductionPlanItemId == item.Id &&
-                allowedTypes.Any(type => string.Equals(approval.AdjustmentType, type, StringComparison.OrdinalIgnoreCase)) &&
-                string.Equals(approval.Status, "Approved", StringComparison.OrdinalIgnoreCase) &&
-                approval.RequestedValue == actualValue)
-            .OrderByDescending(approval => approval.ApprovedAt ?? approval.RequestedAt)
-            .FirstOrDefault();
+        var approvedAdjustment = await _adjustmentApprovalRepository.GetLatestApprovedAsync(
+            item.Id,
+            new[] { adjustmentType },
+            actualValue);
 
         if (approvedAdjustment is null)
         {

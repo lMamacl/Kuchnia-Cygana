@@ -8,6 +8,8 @@ public sealed class WorkScheduleDto
 
     public string? EmployeeFullName { get; set; }
 
+    public string? UserRole { get; set; }
+
     public DateOnly ShiftDate { get; set; }
 
     public string Shift { get; set; } = string.Empty;

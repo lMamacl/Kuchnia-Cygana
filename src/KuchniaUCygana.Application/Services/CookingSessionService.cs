@@ -110,6 +110,8 @@ public sealed class CookingSessionService : ICookingSessionService
             throw new InvalidOperationException("Nie mozna zmieniac krokow ukonczonej sesji gotowania.");
         }
 
+        ValidateControlStep(step, request);
+
         var check = await this.stepCheckRepository.GetBySessionAndStepAsync(session.Id, step.StepId);
         if (check is null)
         {
@@ -165,6 +167,41 @@ public sealed class CookingSessionService : ICookingSessionService
         await this.sessionRepository.UpdateAsync(session);
 
         return await BuildSessionDtoAsync(session);
+    }
+
+    private static void ValidateControlStep(ComponentInstructionStepDto step, ToggleCookingStepRequest request)
+    {
+        if (!request.IsChecked || !step.RequiresControl)
+        {
+            return;
+        }
+
+        if (!request.ActualValue.HasValue || string.IsNullOrWhiteSpace(request.ActualUnit))
+        {
+            throw new InvalidOperationException("Krok kontrolny wymaga wartosci kontroli i jednostki.");
+        }
+
+        if (step.ExpectedValue.HasValue
+            && IsMinimumThresholdControl(step.ControlType)
+            && request.ActualValue.Value < step.ExpectedValue.Value)
+        {
+            throw new InvalidOperationException(
+                $"Wartosc kontroli jest ponizej wymaganego progu {step.ExpectedValue.Value:0.##} {step.ExpectedUnit}.");
+        }
+    }
+
+    private static bool IsMinimumThresholdControl(string? controlType)
+    {
+        if (string.IsNullOrWhiteSpace(controlType))
+        {
+            return true;
+        }
+
+        return controlType.Trim() switch
+        {
+            "CoreTemperature" or "Temperature" or "MinTemperature" => true,
+            _ => false,
+        };
     }
 
     public async Task StartComponentSessionAsync(int productionPlanItemId)

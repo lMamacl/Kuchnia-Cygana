@@ -505,8 +505,10 @@ public sealed class PackingService : IPackingService
             throw new InvalidOperationException("Nie można wymienić torby po załadunku lub wysyłce.");
         }
 
-        var board = await GetPackingBoardAsync(session.PackingDate);
-        var route = board.Routes.FirstOrDefault(r => r.Bags.Any(b => b.PackingSessionId == session.Id));
+        var damagedRouteBag = await TryGetRouteBagForPhysicalBagAsync(session, damagedBag);
+        var route = damagedRouteBag is not null && damagedRouteBag.RouteId > 0
+            ? await GetRouteForPackingActionsAsync(session.PackingDate, damagedRouteBag.RouteId)
+            : null;
         if (route?.IsManifestVerified == true && !request.AllowVerifiedManifestChange)
         {
             throw new InvalidOperationException("Zweryfikowany manifest moze zmienic tylko PackingManager albo Admin.");
@@ -559,10 +561,8 @@ public sealed class PackingService : IPackingService
         await sessionRepository.UpdateAsync(session);
         await LogStatusChangeAsync(session.Id, oldStatus, session.Status, $"Wymieniono uszkodzoną torbę {damagedBag.BagCode} na {replacementBag.BagCode}.");
 
-        var refreshedBoard = await GetPackingBoardAsync(session.PackingDate);
-        return refreshedBoard.Routes
-            .SelectMany(r => r.Bags)
-            .First(b => b.PackingBagId == replacementBag.Id);
+        return await TryGetRouteBagForPhysicalBagAsync(session, replacementBag)
+            ?? throw new InvalidOperationException("Nie znaleziono nowej torby w tablicy kompletacji.");
     }
 
     public async Task<IEnumerable<PackingLabelDto>> GenerateTransportLabelsAsync(
@@ -578,19 +578,14 @@ public sealed class PackingService : IPackingService
             throw new InvalidOperationException("Najpierw zamknij torbę po spakowaniu wszystkich pudełek, a dopiero potem wydrukuj etykietę transportową.");
         }
 
-        var board = await GetPackingBoardAsync(session.PackingDate);
-        var bag = board.Routes
-            .SelectMany(r => r.Bags)
-            .FirstOrDefault(b => b.PackingSessionId == sessionId);
+        var physicalBag = await EnsureDefaultBagAsync(session.Id);
+        var routeBag = await GetRouteBagForPhysicalBagAsync(session, physicalBag);
 
-        if (bag is null || bag.RouteId <= 0)
+        if (routeBag is null || routeBag.RouteId <= 0)
         {
             throw new InvalidOperationException("Brak trasy M4 dla tej dostawy. Można pakować pudełka, ale etykieta transportowa wymaga stopu z DeliveryCalendarId.");
         }
 
-        var routeBag = bag;
-
-        var physicalBag = await EnsureDefaultBagAsync(session.Id);
         var shippingLabel = await GetLatestShippingLabelAsync(sessionId, physicalBag.Id);
         var existingPrintCount = await GetShippingLabelPrintCountAsync(sessionId, physicalBag.Id);
 
@@ -665,16 +660,49 @@ public sealed class PackingService : IPackingService
             throw new InvalidOperationException("Najpierw zamknij torbę po spakowaniu wszystkich pudełek, a dopiero potem wydrukuj etykietę transportową.");
         }
 
-        var board = await GetPackingBoardAsync(session.PackingDate);
-        var routeBag = board.Routes
-            .SelectMany(r => r.Bags)
-            .FirstOrDefault(b => b.PackingBagId == physicalBag.Id);
+        var routeBag = await GetRouteBagForPhysicalBagAsync(session, physicalBag);
 
         if (routeBag is null || routeBag.RouteId <= 0)
         {
             throw new InvalidOperationException("Brak trasy M4 dla tej dostawy. Można pakować pudełka, ale etykieta transportowa wymaga stopu z DeliveryCalendarId.");
         }
 
+        return new[]
+        {
+            await GenerateTransportLabelForRouteBagAsync(physicalBag, session, routeBag, reprintReason, forceNewPrint),
+        };
+    }
+
+    private async Task<PackingLabelDto> GenerateTransportLabelForRouteBagAsync(
+        PackingBagDto routeBag,
+        string? reprintReason = null,
+        bool forceNewPrint = false)
+    {
+        var physicalBag = await bagRepository.GetByIdAsync(routeBag.PackingBagId)
+            ?? throw new InvalidOperationException($"Torba fizyczna {routeBag.PackingBagId} nie istnieje.");
+        var session = await sessionRepository.GetWithItemsAsync(physicalBag.PackingSessionId)
+            ?? throw new InvalidOperationException($"Sesja pakowania {physicalBag.PackingSessionId} nie istnieje.");
+
+        if (physicalBag.Status is not (PackingBagStatus.Packed or PackingBagStatus.Labeled or PackingBagStatus.Manifested or PackingBagStatus.Loaded or PackingBagStatus.Dispatched))
+        {
+            throw new InvalidOperationException("Najpierw zamknij torbe po spakowaniu wszystkich pudelek, a dopiero potem wydrukuj etykiete transportowa.");
+        }
+
+        if (routeBag.RouteId <= 0)
+        {
+            throw new InvalidOperationException("Brak trasy M4 dla tej dostawy. Mozna pakowac pudelka, ale etykieta transportowa wymaga stopu z DeliveryCalendarId.");
+        }
+
+        return await GenerateTransportLabelForRouteBagAsync(physicalBag, session, routeBag, reprintReason, forceNewPrint);
+    }
+
+    private async Task<PackingLabelDto> GenerateTransportLabelForRouteBagAsync(
+        PackingBag physicalBag,
+        PackingSession session,
+        PackingBagDto routeBag,
+        string? reprintReason,
+        bool forceNewPrint)
+    {
         var shippingLabel = await GetLatestShippingLabelAsync(session.Id, physicalBag.Id);
         var existingPrintCount = await GetShippingLabelPrintCountAsync(session.Id, physicalBag.Id);
 
@@ -730,7 +758,7 @@ public sealed class PackingService : IPackingService
 
         logger.LogInformation("Wygenerowano lub odczytano etykietę transportową dla torby {PackingBagId}", physicalBag.Id);
 
-        return new[] { CreateTransportLabelDto(shippingLabel, physicalBag, routeBag) };
+        return CreateTransportLabelDto(shippingLabel, physicalBag, routeBag);
     }
 
     public Task<IEnumerable<PackingLabelDto>> GenerateLabelsAsync(int sessionId)
@@ -742,13 +770,7 @@ public sealed class PackingService : IPackingService
     {
         var session = await sessionRepository.GetWithItemsAsync(sessionId)
             ?? throw new InvalidOperationException($"Torba pakowania {sessionId} nie istnieje.");
-        var labels = packingLabelRepository is not null
-            ? await packingLabelRepository.GetShippingForSessionAsync(sessionId)
-            : (await labelRepository.GetAllAsync())
-                .Where(label => label.LabelType == LabelType.Shipping && label.PackingSessionId == sessionId)
-                .OrderByDescending(label => label.PrintNumber)
-                .ThenByDescending(label => label.Id)
-                .ToList();
+        var labels = await RequirePackingLabelRepository().GetShippingForSessionAsync(sessionId);
 
         var result = new List<PackingLabelDto>();
         foreach (var label in labels)
@@ -761,17 +783,9 @@ public sealed class PackingService : IPackingService
 
     public async Task<IEnumerable<PackingLabelDto>> GetTransportLabelsForRouteAsync(DateOnly date, int routeId)
     {
-        var board = await GetPackingBoardAsync(date);
-        var route = GetRouteOrThrow(board, routeId);
+        var route = await GetRouteForPackingActionsAsync(date, routeId);
         var bagIds = route.Bags.Select(bag => bag.PackingBagId).ToArray();
-        var labels = packingLabelRepository is not null
-            ? await packingLabelRepository.GetShippingForBagsAsync(bagIds)
-            : (await labelRepository.GetAllAsync())
-                .Where(label => label.LabelType == LabelType.Shipping && label.PackingBagId.HasValue && bagIds.Contains(label.PackingBagId.Value))
-                .OrderBy(label => label.PackingBagId)
-                .ThenByDescending(label => label.PrintNumber)
-                .ThenByDescending(label => label.Id)
-                .ToList();
+        var labels = await RequirePackingLabelRepository().GetShippingForBagsAsync(bagIds);
 
         var latestByBag = labels
             .Where(label => label.PackingBagId.HasValue)
@@ -783,7 +797,14 @@ public sealed class PackingService : IPackingService
         var result = new List<PackingLabelDto>();
         foreach (var label in latestByBag)
         {
-            result.Add(await CreateTransportLabelDtoAsync(label));
+            var routeBag = route.Bags.First(bag => bag.PackingBagId == label.PackingBagId);
+            var physicalBag = await bagRepository.GetByIdAsync(routeBag.PackingBagId)
+                ?? throw new InvalidOperationException("Nie znaleziono fizycznej torby dla etykiety transportowej.");
+            var session = await sessionRepository.GetWithItemsAsync(routeBag.PackingSessionId)
+                ?? throw new InvalidOperationException("Nie znaleziono sesji kompletacji dla etykiety transportowej.");
+
+            await SynchronizeTransportLabelWithRouteAsync(label, physicalBag, routeBag, BuildMealsList(session));
+            result.Add(CreateTransportLabelDto(label, physicalBag, routeBag));
         }
 
         return result;
@@ -795,14 +816,13 @@ public sealed class PackingService : IPackingService
         string? reprintReason = null,
         bool forceNewPrint = false)
     {
-        var board = await GetPackingBoardAsync(date);
-        var route = GetRouteOrThrow(board, routeId);
+        var route = await GetRouteForPackingActionsAsync(date, routeId);
         var labels = new List<PackingLabelDto>();
 
         foreach (var bag in route.Bags)
         {
-            labels.AddRange(await GenerateTransportLabelsAsync(
-                bag.PackingSessionId,
+            labels.Add(await GenerateTransportLabelForRouteBagAsync(
+                bag,
                 reprintReason,
                 forceNewPrint));
         }
@@ -812,8 +832,7 @@ public sealed class PackingService : IPackingService
 
     public async Task<IReadOnlyList<PackingLabelDto>> GenerateMissingTransportLabelsForRouteAsync(DateOnly date, int routeId)
     {
-        var board = await GetPackingBoardAsync(date);
-        var route = GetRouteOrThrow(board, routeId);
+        var route = await GetRouteForPackingActionsAsync(date, routeId);
         if (route.TotalBags == 0)
         {
             throw new InvalidOperationException("Trasa nie ma toreb do etykietowania.");
@@ -826,7 +845,7 @@ public sealed class PackingService : IPackingService
 
         foreach (var bag in route.Bags.Where(b => !b.HasLabels))
         {
-            await GenerateTransportLabelsForBagAsync(bag.PackingBagId);
+            await GenerateTransportLabelForRouteBagAsync(bag);
         }
 
         return (await GetTransportLabelsForRouteAsync(date, routeId)).ToList();
@@ -2144,37 +2163,46 @@ public sealed class PackingService : IPackingService
 
     private async Task<PackingLabel?> GetLatestShippingLabelAsync(int sessionId, int? packingBagId)
     {
-        if (packingBagId.HasValue && packingLabelRepository is not null)
+        var labels = RequirePackingLabelRepository();
+        if (packingBagId.HasValue)
         {
-            return await packingLabelRepository.GetLatestShippingForBagAsync(packingBagId.Value);
+            var label = await labels.GetLatestShippingForBagAsync(packingBagId.Value);
+            if (label is not null)
+            {
+                return label;
+            }
         }
 
-        var labels = await labelRepository.GetAllAsync();
-        return labels
-            .Where(label => label.LabelType == LabelType.Shipping)
+        var sessionLabels = await labels.GetShippingForSessionAsync(sessionId);
+        return sessionLabels
             .Where(label => packingBagId.HasValue
                 ? label.PackingBagId == packingBagId.Value
                 : label.PackingSessionId == sessionId)
-            .OrderByDescending(label => label.PrintNumber)
-            .ThenByDescending(label => label.Id)
             .FirstOrDefault();
     }
 
     private async Task<PackingLabel?> GetLatestShippingLabelForLabelAsync(PackingLabel label)
     {
-        if (label.PackingBagId.HasValue && packingLabelRepository is not null)
+        var labels = RequirePackingLabelRepository();
+        if (label.PackingBagId.HasValue)
         {
-            return await packingLabelRepository.GetLatestShippingForBagAsync(label.PackingBagId.Value);
+            var latestForBag = await labels.GetLatestShippingForBagAsync(label.PackingBagId.Value);
+            if (latestForBag is not null)
+            {
+                return latestForBag;
+            }
         }
 
-        var labels = await labelRepository.GetAllAsync();
-        return labels
-            .Where(candidate => candidate.LabelType == LabelType.Shipping)
+        if (!label.PackingSessionId.HasValue)
+        {
+            return null;
+        }
+
+        var sessionLabels = await labels.GetShippingForSessionAsync(label.PackingSessionId.Value);
+        return sessionLabels
             .Where(candidate => label.PackingBagId.HasValue
                 ? candidate.PackingBagId == label.PackingBagId.Value
                 : candidate.PackingSessionId == label.PackingSessionId)
-            .OrderByDescending(candidate => candidate.PrintNumber)
-            .ThenByDescending(candidate => candidate.Id)
             .FirstOrDefault();
     }
 
@@ -2196,28 +2224,92 @@ public sealed class PackingService : IPackingService
             ?? throw new InvalidOperationException("Nie znaleziono fizycznej torby dla etykiety transportowej.");
         var session = await sessionRepository.GetWithItemsAsync(physicalBag.PackingSessionId)
             ?? throw new InvalidOperationException("Nie znaleziono sesji kompletacji dla etykiety transportowej.");
-        var board = await GetPackingBoardAsync(session.PackingDate);
-        var routeBag = board.Routes
-            .SelectMany(route => route.Bags)
-            .FirstOrDefault(bag => bag.PackingBagId == physicalBag.Id || bag.PackingSessionId == session.Id)
-            ?? throw new InvalidOperationException("Nie znaleziono trasy dla etykiety transportowej.");
+        var routeBag = await GetRouteBagForPhysicalBagAsync(session, physicalBag);
 
         await SynchronizeTransportLabelWithRouteAsync(label, physicalBag, routeBag, BuildMealsList(session));
 
         return CreateTransportLabelDto(label, physicalBag, routeBag);
     }
 
-    private async Task<int> GetShippingLabelPrintCountAsync(int sessionId, int packingBagId)
+    private async Task<PackingBagDto> GetRouteBagForPhysicalBagAsync(PackingSession session, PackingBag physicalBag)
     {
-        if (packingLabelRepository is not null)
+        var routeBag = await TryGetRouteBagForPhysicalBagAsync(session, physicalBag);
+        if (routeBag is null || routeBag.RouteId <= 0)
         {
-            return await packingLabelRepository.GetShippingPrintCountAsync(sessionId, packingBagId);
+            throw new InvalidOperationException("Brak trasy M4 dla tej dostawy. Mozna pakowac pudelka, ale etykieta transportowa wymaga stopu z DeliveryCalendarId.");
         }
 
-        var labels = await labelRepository.GetAllAsync();
-        return labels.Count(label =>
-            label.LabelType == LabelType.Shipping &&
-            (label.PackingBagId == packingBagId || label.PackingSessionId == sessionId));
+        return routeBag;
+    }
+
+    private async Task<PackingBagDto?> TryGetRouteBagForPhysicalBagAsync(PackingSession session, PackingBag physicalBag)
+    {
+        var boardPage = await GetPackingBoardPageAsync(new PackingBoardQueryDto
+        {
+            Date = session.PackingDate,
+            Search = physicalBag.BagCode,
+            Page = 1,
+            PageSize = 10,
+            Mode = "labels",
+        });
+        var routeBag = boardPage.Board.Routes
+            .SelectMany(route => route.Bags)
+            .FirstOrDefault(bag => bag.PackingBagId == physicalBag.Id || bag.PackingSessionId == session.Id);
+
+        return routeBag;
+    }
+
+    private async Task<PackingRouteDto> GetRouteForPackingActionsAsync(DateOnly date, int routeId)
+    {
+        const int PageSize = 200;
+        var page = 1;
+        PackingRouteDto? route = null;
+
+        while (true)
+        {
+            var boardPage = await GetPackingBoardPageAsync(new PackingBoardQueryDto
+            {
+                Date = date,
+                RouteId = routeId,
+                Page = page,
+                PageSize = PageSize,
+                Mode = "labels",
+            });
+            var summary = boardPage.AllRoutes.FirstOrDefault(candidate => candidate.RouteId == routeId);
+            route ??= summary is null
+                ? null
+                : CloneRouteWithoutBags(summary);
+
+            var pageRoute = boardPage.Board.Routes.FirstOrDefault(candidate => candidate.RouteId == routeId);
+            if (pageRoute is not null)
+            {
+                route ??= CloneRouteWithoutBags(pageRoute);
+                route.Bags.AddRange(pageRoute.Bags);
+            }
+
+            if (page * PageSize >= boardPage.TotalBags)
+            {
+                break;
+            }
+
+            page++;
+        }
+
+        if (route is null)
+        {
+            throw new InvalidOperationException($"Dostawa/trasa {routeId} nie istnieje dla dnia {date:dd.MM.yyyy}.");
+        }
+
+        route.Bags = route.Bags
+            .OrderBy(bag => bag.StopNumber)
+            .ThenBy(bag => bag.PackingBagId)
+            .ToList();
+        return route;
+    }
+
+    private async Task<int> GetShippingLabelPrintCountAsync(int sessionId, int packingBagId)
+    {
+        return await RequirePackingLabelRepository().GetShippingPrintCountAsync(sessionId, packingBagId);
     }
 
     private async Task<IReadOnlyDictionary<int, PackingLabel>> GetLatestShippingLabelsByBagAsync(IEnumerable<int> packingBagIds)
@@ -2228,18 +2320,7 @@ public sealed class PackingService : IPackingService
             return new Dictionary<int, PackingLabel>();
         }
 
-        if (packingLabelRepository is not null)
-        {
-            return await packingLabelRepository.GetLatestShippingForBagsAsync(ids);
-        }
-
-        var labels = await labelRepository.GetAllAsync();
-        return labels
-            .Where(label => label.LabelType == LabelType.Shipping && label.PackingBagId.HasValue && ids.Contains(label.PackingBagId.Value))
-            .GroupBy(label => label.PackingBagId!.Value)
-            .ToDictionary(
-                group => group.Key,
-                group => group.OrderByDescending(label => label.PrintNumber).ThenByDescending(label => label.Id).First());
+        return await RequirePackingLabelRepository().GetLatestShippingForBagsAsync(ids);
     }
 
     private async Task<IReadOnlyDictionary<int, PackingManifest>> GetLatestManifestsByRouteAsync(DateOnly date, IEnumerable<int> routeIds)
@@ -2250,18 +2331,21 @@ public sealed class PackingService : IPackingService
             return new Dictionary<int, PackingManifest>();
         }
 
-        if (packingManifestQueryRepository is not null)
-        {
-            return await packingManifestQueryRepository.GetLatestByRoutesAsync(date, ids);
-        }
+        return await RequirePackingManifestRepository().GetLatestByRoutesAsync(date, ids);
+    }
 
-        var manifests = await packingManifestRepository.GetAllAsync();
-        return manifests
-            .Where(m => m.PackingDate == date && m.RouteId.HasValue && ids.Contains(m.RouteId.Value) && !m.IsSuperseded)
-            .GroupBy(m => m.RouteId!.Value)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(m => m.GeneratedAt).ThenByDescending(m => m.Id).First());
+    private IPackingLabelRepository RequirePackingLabelRepository()
+    {
+        return packingLabelRepository
+            ?? labelRepository as IPackingLabelRepository
+            ?? throw new InvalidOperationException("Brak query repozytorium etykiet transportowych. Kompletacja nie moze uzywac pelnego skanu etykiet przy danych wolumenowych.");
+    }
+
+    private IPackingManifestRepository RequirePackingManifestRepository()
+    {
+        return packingManifestQueryRepository
+            ?? packingManifestRepository as IPackingManifestRepository
+            ?? throw new InvalidOperationException("Brak query repozytorium manifestow. Kompletacja nie moze uzywac pelnego skanu manifestow przy danych wolumenowych.");
     }
 
     private string BuildTransportQrCode(string bagCode)

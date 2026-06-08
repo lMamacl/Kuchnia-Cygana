@@ -11,6 +11,8 @@
         => risk switch
         {
             "Shortage" => "danger",
+            "MissingMapping" => "danger",
+            "UnitMismatch" => "danger",
             "Expired" => "danger",
             "ExpiryRisk" => "warning",
             _ => "success"
@@ -77,6 +79,8 @@
                 <select name="risk" class="form-select">
                     <option value="">Wszystkie</option>
                     <option value="Shortage" selected="@(Model.Filter.Risk == "Shortage")">Braki</option>
+                    <option value="MissingMapping" selected="@(Model.Filter.Risk == "MissingMapping")">Brak mapowania</option>
+                    <option value="UnitMismatch" selected="@(Model.Filter.Risk == "UnitMismatch")">Błąd jednostki</option>
                     <option value="ExpiryRisk" selected="@(Model.Filter.Risk == "ExpiryRisk")">Ryzyko terminu</option>
                     <option value="Expired" selected="@(Model.Filter.Risk == "Expired")">Przeterminowane</option>
                     <option value="Ok" selected="@(Model.Filter.Risk == "Ok")">OK</option>
@@ -246,6 +250,33 @@
                             {
                                 <div>#@row.EarliestBatchId</div>
                                 <div class="small text-secondary">@row.EarliestExpiryDate?.ToLocalTime().ToString("dd.MM.yyyy")</div>
+                                @if (row.FefoAllocations.Count > 0)
+                                {
+                                    <details class="small mt-1">
+                                        <summary>Alokacja partii (@row.FefoAllocations.Count)</summary>
+                                        <ul class="mb-0 ps-3">
+                                            @foreach (var allocation in row.FefoAllocations.Take(5))
+                                            {
+                                                <li>
+                                                    #@allocation.BatchId
+                                                    @if (!string.IsNullOrWhiteSpace(allocation.SupplierBatchNumber))
+                                                    {
+                                                        <span>(@allocation.SupplierBatchNumber)</span>
+                                                    }
+                                                    : @allocation.AllocatedQuantity.ToString("0.##") / @allocation.AvailableQuantity.ToString("0.##") @allocation.Unit
+                                                    @if (allocation.ExpiryDate.HasValue)
+                                                    {
+                                                        <span>, exp. @allocation.ExpiryDate.Value.ToLocalTime().ToString("dd.MM.yyyy")</span>
+                                                    }
+                                                </li>
+                                            }
+                                            @if (row.FefoAllocations.Count > 5)
+                                            {
+                                                <li>+@(row.FefoAllocations.Count - 5) kolejnych partii</li>
+                                            }
+                                        </ul>
+                                    </details>
+                                }
                             }
                             else
                             {

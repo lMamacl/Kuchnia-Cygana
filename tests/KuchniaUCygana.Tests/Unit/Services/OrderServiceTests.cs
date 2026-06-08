@@ -1,6 +1,7 @@
 using AutoMapper;
 using FluentAssertions;
 using KuchniaUCygana.Application.DTOs.Orders;
+using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Application.Services;
 using KuchniaUCygana.Domain.Entities.Orders;
 using KuchniaUCygana.Domain.Interfaces;
@@ -17,19 +18,28 @@ public sealed class OrderServiceTests
     {
         var startDate = new DateTime(2026, 6, 8);
         var orderRepository = new Mock<IOrderRepository>();
-        var orderItemRepository = new Mock<IOrderItemRepository>();
         var deliveryCalendarRepository = new Mock<IDeliveryCalendarRepository>();
+        var addressRepository = CreateAddressRepository(customerId: 44);
         var dietDataProvider = new Mock<IDietDataProvider>();
-        var insertedItems = new List<OrderItem>();
+        var dietOrderingService = CreateDietOrderingService(serverPricePerDay: 99.99m);
+        List<OrderItem> insertedItems = [];
+        List<DeliveryCalendar> insertedDays = [];
+        Order? insertedOrder = null;
 
-        orderRepository.Setup(repo => repo.GenerateOrderNumberAsync()).ReturnsAsync("ORD-20260608-1");
-        orderRepository.Setup(repo => repo.InsertAsync(It.IsAny<Order>())).ReturnsAsync(123);
-        orderItemRepository
-            .Setup(repo => repo.InsertAsync(It.IsAny<OrderItem>()))
-            .Callback<OrderItem>(insertedItems.Add)
-            .ReturnsAsync(0);
-        deliveryCalendarRepository.Setup(repo => repo.InsertAsync(It.IsAny<DeliveryCalendar>())).ReturnsAsync(0);
-        orderRepository.Setup(repo => repo.UpdateAsync(It.IsAny<Order>())).ReturnsAsync(true);
+        orderRepository
+            .Setup(repo => repo.InsertCheckoutAsync(
+                It.IsAny<Order>(),
+                It.IsAny<IReadOnlyCollection<OrderItem>>(),
+                It.IsAny<IReadOnlyCollection<DeliveryCalendar>>()))
+            .Callback<Order, IReadOnlyCollection<OrderItem>, IReadOnlyCollection<DeliveryCalendar>>((order, items, days) =>
+            {
+                insertedOrder = order;
+                insertedItems = items.ToList();
+                insertedDays = days.ToList();
+                foreach (var item in insertedItems) item.OrderId = 123;
+                foreach (var day in insertedDays) day.OrderId = 123;
+            })
+            .ReturnsAsync(123);
 
         dietDataProvider
             .Setup(provider => provider.GetPublishedPlanSnapshotAsync(new DateOnly(2026, 6, 8)))
@@ -40,9 +50,10 @@ public sealed class OrderServiceTests
 
         var service = CreateService(
             orderRepository,
-            orderItemRepository,
             deliveryCalendarRepository,
-            dietDataProvider);
+            addressRepository,
+            dietDataProvider,
+            dietOrderingService);
 
         var orderId = await service.CreateOrderAsync(new CreateOrderRequest
         {
@@ -55,10 +66,10 @@ public sealed class OrderServiceTests
                 {
                     DietId = 5,
                     DietVariantId = 10,
-                    DietName = "Dieta Sport",
-                    VariantName = "2200 kcal",
-                    CaloriesPerDay = 2200,
-                    PricePerDay = 99.99m,
+                    DietName = "Tampered Diet",
+                    VariantName = "Tampered Variant",
+                    CaloriesPerDay = 100,
+                    PricePerDay = 1m,
                     TotalDays = 2,
                 },
             ],
@@ -72,24 +83,38 @@ public sealed class OrderServiceTests
         insertedItems.Select(item => item.MealSlot).Should().BeEquivalentTo(new[] { "Breakfast", "Dinner", "Breakfast", "Dinner" });
         insertedItems.Should().OnlyContain(item => item.TotalDays == 1);
         insertedItems.Should().OnlyContain(item => item.OrderId == 123);
+        insertedItems.Should().OnlyContain(item =>
+            item.DietName == "Dieta Sport" &&
+            item.VariantName == "2200 kcal" &&
+            item.CaloriesPerDay == 2200);
         insertedItems.Where(item => item.DeliveryDate == startDate.Date).Should().HaveCount(2);
         insertedItems.Where(item => item.DeliveryDate == startDate.Date.AddDays(1)).Should().HaveCount(2);
         insertedItems.GroupBy(item => item.DeliveryDate)
             .Should().OnlyContain(group => group.Sum(item => item.TotalPrice) == 99.99m);
 
-        orderRepository.Verify(repo => repo.InsertAsync(It.Is<Order>(order =>
-            order.TotalPrice == 199.98m &&
-            order.FinalPrice == 199.98m &&
-            order.StartDate == startDate)), Times.Once);
+        insertedDays.Should().HaveCount(2);
+        insertedDays.Select(day => day.DeliveryDate).Should().Equal(startDate.Date, startDate.Date.AddDays(1));
+        insertedDays.Should().OnlyContain(day => day.AddressId == 7 && day.DeliveryWindowId == 3);
+
+        insertedOrder.Should().NotBeNull();
+        insertedOrder!.TotalPrice.Should().Be(199.98m);
+        insertedOrder.FinalPrice.Should().Be(199.98m);
+        insertedOrder.StartDate.Should().Be(startDate.Date);
+        insertedOrder.EndDate.Should().Be(startDate.Date.AddDays(1));
+        orderRepository.Verify(repo => repo.InsertCheckoutAsync(
+            It.IsAny<Order>(),
+            It.IsAny<IReadOnlyCollection<OrderItem>>(),
+            It.IsAny<IReadOnlyCollection<DeliveryCalendar>>()), Times.Once);
     }
 
     [Fact]
     public async Task CreateOrderAsync_ShouldRejectCheckoutWhenPublishedM2PlanIsMissing()
     {
         var orderRepository = new Mock<IOrderRepository>();
-        var orderItemRepository = new Mock<IOrderItemRepository>();
         var deliveryCalendarRepository = new Mock<IDeliveryCalendarRepository>();
+        var addressRepository = CreateAddressRepository(customerId: 44);
         var dietDataProvider = new Mock<IDietDataProvider>();
+        var dietOrderingService = CreateDietOrderingService(serverPricePerDay: 99.99m);
 
         dietDataProvider
             .Setup(provider => provider.GetPublishedPlanSnapshotAsync(new DateOnly(2026, 6, 8)))
@@ -97,11 +122,65 @@ public sealed class OrderServiceTests
 
         var service = CreateService(
             orderRepository,
-            orderItemRepository,
             deliveryCalendarRepository,
-            dietDataProvider);
+            addressRepository,
+            dietDataProvider,
+            dietOrderingService);
 
-        var act = () => service.CreateOrderAsync(new CreateOrderRequest
+        var act = () => service.CreateOrderAsync(CreateRequest(), customerId: 44);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Brak opublikowanego snapshotu M2*2026-06-08*");
+
+        orderRepository.Verify(repo => repo.InsertCheckoutAsync(
+            It.IsAny<Order>(),
+            It.IsAny<IReadOnlyCollection<OrderItem>>(),
+            It.IsAny<IReadOnlyCollection<DeliveryCalendar>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateOrderAsync_ShouldRejectAddressThatDoesNotBelongToCustomer()
+    {
+        var orderRepository = new Mock<IOrderRepository>();
+        var deliveryCalendarRepository = new Mock<IDeliveryCalendarRepository>();
+        var addressRepository = CreateAddressRepository(customerId: 99);
+        var dietDataProvider = new Mock<IDietDataProvider>();
+        var dietOrderingService = new Mock<IDietOrderingService>();
+
+        var service = CreateService(
+            orderRepository,
+            deliveryCalendarRepository,
+            addressRepository,
+            dietDataProvider,
+            dietOrderingService);
+
+        var act = () => service.CreateOrderAsync(CreateRequest(), customerId: 44);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*adres dostawy*nie nalezy*");
+        dietOrderingService.Verify(service => service.CreateCartItemAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        orderRepository.Verify(repo => repo.InsertCheckoutAsync(
+            It.IsAny<Order>(),
+            It.IsAny<IReadOnlyCollection<OrderItem>>(),
+            It.IsAny<IReadOnlyCollection<DeliveryCalendar>>()), Times.Never);
+    }
+
+    private static OrderService CreateService(
+        Mock<IOrderRepository> orderRepository,
+        Mock<IDeliveryCalendarRepository> deliveryCalendarRepository,
+        Mock<IAddressRepository> addressRepository,
+        Mock<IDietDataProvider> dietDataProvider,
+        Mock<IDietOrderingService> dietOrderingService)
+        => new(
+            orderRepository.Object,
+            deliveryCalendarRepository.Object,
+            addressRepository.Object,
+            Mock.Of<IMapper>(),
+            dietDataProvider.Object,
+            dietOrderingService.Object);
+
+    private static CreateOrderRequest CreateRequest()
+        => new()
         {
             AddressId = 7,
             StartDate = new DateTime(2026, 6, 8),
@@ -118,28 +197,43 @@ public sealed class OrderServiceTests
                     TotalDays = 1,
                 },
             ],
-        }, customerId: 44);
+        };
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Brak opublikowanego snapshotu M2*2026-06-08*");
+    private static Mock<IAddressRepository> CreateAddressRepository(int customerId)
+    {
+        var repository = new Mock<IAddressRepository>();
+        repository.Setup(repo => repo.GetByIdAsync(7)).ReturnsAsync(new Address
+        {
+            Id = 7,
+            UserId = customerId,
+            Label = "Dom",
+            Street = "Testowa",
+            BuildingNumber = "1",
+            City = "Warszawa",
+            PostalCode = "00-001",
+        });
 
-        orderRepository.Verify(repo => repo.InsertAsync(It.IsAny<Order>()), Times.Never);
-        orderItemRepository.Verify(repo => repo.InsertAsync(It.IsAny<OrderItem>()), Times.Never);
-        deliveryCalendarRepository.Verify(repo => repo.InsertAsync(It.IsAny<DeliveryCalendar>()), Times.Never);
+        return repository;
     }
 
-    private static OrderService CreateService(
-        Mock<IOrderRepository> orderRepository,
-        Mock<IOrderItemRepository> orderItemRepository,
-        Mock<IDeliveryCalendarRepository> deliveryCalendarRepository,
-        Mock<IDietDataProvider> dietDataProvider)
-        => new(
-            orderRepository.Object,
-            orderItemRepository.Object,
-            deliveryCalendarRepository.Object,
-            Mock.Of<IAddressRepository>(),
-            Mock.Of<IMapper>(),
-            dietDataProvider.Object);
+    private static Mock<IDietOrderingService> CreateDietOrderingService(decimal serverPricePerDay)
+    {
+        var service = new Mock<IDietOrderingService>();
+        service
+            .Setup(s => s.CreateCartItemAsync(10, It.IsAny<int>()))
+            .ReturnsAsync((int _, int totalDays) => new CartItemDto
+            {
+                DietId = 5,
+                DietVariantId = 10,
+                DietName = "Dieta Sport",
+                VariantName = "2200 kcal",
+                CaloriesPerDay = 2200,
+                PricePerDay = serverPricePerDay,
+                TotalDays = totalDays,
+            });
+
+        return service;
+    }
 
     private static PublishedDietPlanSnapshotDto CreateSnapshot(DateOnly date, int breakfastItemId, int dinnerItemId)
         => new()

@@ -5,6 +5,12 @@ namespace KuchniaUCygana.Web.Models;
 
 public sealed class HumanResourcesDashboardViewModel
 {
+    public HumanResourcesSummaryDto Summary { get; init; } = new();
+
+    public IReadOnlyList<DepartmentStaffSummaryDto> DepartmentSummaries { get; init; } = [];
+
+    public IReadOnlyList<string> AvailableRoles { get; init; } = [];
+
     public IReadOnlyList<DepartmentDto> Departments { get; init; } = [];
 
     public IReadOnlyList<EmployeeDto> Employees { get; init; } = [];

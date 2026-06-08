@@ -712,7 +712,9 @@ public sealed class WarehouseRepositoriesSqlServerTests
             new ProductionPlanRepository(connectionFactory),
             new BaseRepository<ProductionPlanItem>(connectionFactory),
             mapper,
-            NullLogger<PackingService>.Instance);
+            NullLogger<PackingService>.Instance,
+            packingLabelRepository: new PackingLabelRepository(connectionFactory),
+            packingManifestQueryRepository: new PackingManifestRepository(connectionFactory));
     }
 
     private static LoadingService CreateLoadingService(IDbConnectionFactory connectionFactory, IPackingService packingService)

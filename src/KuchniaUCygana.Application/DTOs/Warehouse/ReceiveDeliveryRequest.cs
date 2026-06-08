@@ -34,4 +34,5 @@ public sealed class ReceiveDeliveryRequest
     /// Numer faktury lub dostawy (opcjonalny).
     /// </summary>
     public string? InvoiceNumber { get; set; }
+    public string? OperationKey { get; set; }
 }

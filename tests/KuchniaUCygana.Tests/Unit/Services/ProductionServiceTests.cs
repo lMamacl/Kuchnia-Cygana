@@ -121,6 +121,107 @@ public sealed class ProductionServiceTests
     }
 
     [Fact]
+    public async Task ApproveCookingAsync_ShouldBlock_WhenFefoWasNotDeducted()
+    {
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.GetByIdAsync(21))
+            .ReturnsAsync(new ProductionPlanItem
+            {
+                Id = 21,
+                ProductionPlanId = 5,
+                MealId = 10,
+                MealName = "Makaron standard",
+                DietVariantId = 1,
+                PlannedQuantity = 10,
+                M2SnapshotJson = JsonSerializer.Serialize(CreateSnapshotItem(
+                    new DateOnly(2026, 6, 5),
+                    1001,
+                    101,
+                    "Makaron standard",
+                    501,
+                    9001,
+                    100m,
+                    1m)),
+            });
+        var service = CreateService(itemRepository: itemRepository);
+
+        var act = () => service.ApproveCookingAsync(21, 10m);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*FEFO*");
+        itemRepository.Verify(repository => repository.UpdateAsync(It.IsAny<ProductionPlanItem>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ApproveCookingAsync_ShouldBlock_WhenRequiredComponentSessionIsNotCompleted()
+    {
+        var snapshotItem = CreateSnapshotItem(
+            new DateOnly(2026, 6, 5),
+            1001,
+            101,
+            "Makaron standard",
+            501,
+            9001,
+            100m,
+            1m);
+        snapshotItem.Components.Single().InstructionSections = new[]
+        {
+            new ComponentInstructionSectionDto
+            {
+                SectionId = 71,
+                Title = "Kontrola",
+                SortOrder = 1,
+                Steps = new[]
+                {
+                    new ComponentInstructionStepDto
+                    {
+                        StepId = 711,
+                        StepText = "Sprawdz temperature rdzenia.",
+                        RequiresControl = true,
+                        IsCritical = true,
+                    },
+                },
+            },
+        };
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.GetByIdAsync(21))
+            .ReturnsAsync(new ProductionPlanItem
+            {
+                Id = 21,
+                ProductionPlanId = 5,
+                MealId = 10,
+                MealName = "Makaron standard",
+                DietVariantId = 1,
+                PlannedQuantity = 10,
+                FefoDeductedAt = DateTimeOffset.UtcNow,
+                PackagingDeductedAt = DateTimeOffset.UtcNow,
+                M2SnapshotJson = JsonSerializer.Serialize(snapshotItem),
+            });
+        var cookingSessionService = new Mock<ICookingSessionService>();
+        cookingSessionService
+            .Setup(service => service.GetComponentSessionAsync(21, 501))
+            .ReturnsAsync(new CookingComponentSessionDto
+            {
+                Status = "InProgress",
+                StepChecksByStepId = new()
+                {
+                    [711] = new CookingStepCheckDto { StepId = 711, Status = "Checked" },
+                },
+            });
+        var service = CreateService(
+            itemRepository: itemRepository,
+            cookingSessionService: cookingSessionService);
+
+        var act = () => service.ApproveCookingAsync(21, 10m);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*skladowe*");
+        itemRepository.Verify(repository => repository.UpdateAsync(It.IsAny<ProductionPlanItem>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ProduceSemiFinishedAsync_ShouldBlock_WhenPublishedM2SnapshotIsMissing()
     {
         var planRepository = new Mock<IProductionPlanRepository>();
@@ -158,6 +259,73 @@ public sealed class ProductionServiceTests
             .WithMessage("*Brak opublikowanego snapshotu M2*");
         dietProvider.Verify(provider => provider.GetRecipeForMealAsync(It.IsAny<int>()), Times.Never);
         planRepository.Verify(repository => repository.UpdateAsync(It.IsAny<ProductionPlan>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProduceSemiFinishedAsync_ShouldRegisterFefoWithoutMovingItemToCooking()
+    {
+        var date = new DateOnly(2026, 6, 5);
+        var item = new ProductionPlanItem
+        {
+            Id = 21,
+            ProductionPlanId = 5,
+            MealId = 10,
+            MealName = "Makaron standard",
+            DietVariantId = 1,
+            PlannedQuantity = 2,
+            Status = ProductionItemStatus.Planned,
+            M2SnapshotJson = JsonSerializer.Serialize(CreateSnapshotItem(date, 1001, 101, "Makaron standard", 501, 9001, 100m, 1m)),
+        };
+        var planRepository = new Mock<IProductionPlanRepository>();
+        planRepository
+            .Setup(repository => repository.GetByIdAsync(5))
+            .ReturnsAsync(new ProductionPlan
+            {
+                Id = 5,
+                ProductionDate = date,
+            });
+        planRepository
+            .Setup(repository => repository.GetPlanItemsAsync(5))
+            .ReturnsAsync(new[] { item });
+
+        var batchRepository = new Mock<IBatchRepository>();
+        batchRepository
+            .Setup(repository => repository.GetActiveBatchesByStockItemAsync(9001))
+            .ReturnsAsync(new[]
+            {
+                new Batch
+                {
+                    Id = 7,
+                    StockItemId = 9001,
+                    CurrentQuantity = 500m,
+                    ExpiryDate = date.ToDateTime(TimeOnly.MinValue).AddDays(2),
+                },
+            });
+        var warehouseCommandRepository = new Mock<IWarehouseCommandRepository>();
+        warehouseCommandRepository
+            .Setup(repository => repository.DeductStockAsync(It.IsAny<WarehouseDeductionCommand>()))
+            .ReturnsAsync(new[]
+            {
+                new InventoryTransaction
+                {
+                    BatchId = 7,
+                    StockItemId = 9001,
+                    QuantityChanged = -200m,
+                },
+            });
+        var service = CreateService(
+            planRepository: planRepository,
+            fefoService: new FefoService(batchRepository.Object, warehouseCommandRepository.Object));
+
+        await service.ProduceSemiFinishedAsync(5);
+
+        item.FefoDeductedAt.Should().NotBeNull();
+        item.Status.Should().Be(ProductionItemStatus.Planned);
+        warehouseCommandRepository.Verify(
+            repository => repository.DeductStockAsync(It.Is<WarehouseDeductionCommand>(command =>
+                command.StockItemId == 9001 &&
+                command.Quantity == 200m)),
+            Times.Once);
     }
 
     [Fact]
@@ -296,6 +464,108 @@ public sealed class ProductionServiceTests
             component.StatusLabel == "w toku" &&
             component.ProgressPercent == 50 &&
             component.ControlMessage == "Kontrole temperatury i kroki krytyczne są odznaczone.");
+    }
+
+    [Fact]
+    public async Task GetCookingCardAsync_ShouldExposeApprovalBlockers_WhenFefoOrComponentsAreIncomplete()
+    {
+        var date = new DateOnly(2026, 6, 5);
+        var snapshotItem = CreateSnapshotItem(date, 1001, 101, "Makaron standard", 501, 9001, 100m, 1.0m);
+        snapshotItem.Components.Single().InstructionSections = new[]
+        {
+            new ComponentInstructionSectionDto
+            {
+                SectionId = 71,
+                Title = "Kontrola",
+                SortOrder = 1,
+                Steps = new[]
+                {
+                    new ComponentInstructionStepDto { StepId = 711, StepText = "Kontrola temperatury", RequiresControl = true, IsCritical = true },
+                },
+            },
+        };
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.GetByIdAsync(21))
+            .ReturnsAsync(new ProductionPlanItem
+            {
+                Id = 21,
+                ProductionPlanId = 5,
+                MealId = 10,
+                MealName = "Makaron standard",
+                DietVariantId = 1,
+                PlannedQuantity = 4,
+                M2SnapshotJson = JsonSerializer.Serialize(snapshotItem),
+            });
+        var cookingSessionService = new Mock<ICookingSessionService>();
+        cookingSessionService
+            .Setup(service => service.GetComponentSessionAsync(21, 501))
+            .ReturnsAsync(new CookingComponentSessionDto
+            {
+                Status = "NotStarted",
+            });
+        var service = CreateService(
+            itemRepository: itemRepository,
+            cookingSessionService: cookingSessionService);
+
+        var card = await service.GetCookingCardAsync(21);
+
+        card.CanApproveCooking.Should().BeFalse();
+        card.ApprovalBlockers.Should().Contain(blocker => blocker.Contains("FEFO", StringComparison.OrdinalIgnoreCase));
+        card.ApprovalBlockers.Should().Contain(blocker => blocker.Contains("Skladowa 501", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task GetCookingCardAsync_ShouldAllowApproval_WhenFefoAndComponentsAreComplete()
+    {
+        var date = new DateOnly(2026, 6, 5);
+        var snapshotItem = CreateSnapshotItem(date, 1001, 101, "Makaron standard", 501, 9001, 100m, 1.0m);
+        snapshotItem.Components.Single().InstructionSections = new[]
+        {
+            new ComponentInstructionSectionDto
+            {
+                SectionId = 71,
+                Title = "Kontrola",
+                SortOrder = 1,
+                Steps = new[]
+                {
+                    new ComponentInstructionStepDto { StepId = 711, StepText = "Kontrola temperatury", RequiresControl = true, IsCritical = true },
+                },
+            },
+        };
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.GetByIdAsync(21))
+            .ReturnsAsync(new ProductionPlanItem
+            {
+                Id = 21,
+                ProductionPlanId = 5,
+                MealId = 10,
+                MealName = "Makaron standard",
+                DietVariantId = 1,
+                PlannedQuantity = 4,
+                FefoDeductedAt = DateTimeOffset.UtcNow,
+                M2SnapshotJson = JsonSerializer.Serialize(snapshotItem),
+            });
+        var cookingSessionService = new Mock<ICookingSessionService>();
+        cookingSessionService
+            .Setup(service => service.GetComponentSessionAsync(21, 501))
+            .ReturnsAsync(new CookingComponentSessionDto
+            {
+                Status = "Completed",
+                StepChecksByStepId = new()
+                {
+                    [711] = new CookingStepCheckDto { StepId = 711, Status = "Checked" },
+                },
+            });
+        var service = CreateService(
+            itemRepository: itemRepository,
+            cookingSessionService: cookingSessionService);
+
+        var card = await service.GetCookingCardAsync(21);
+
+        card.CanApproveCooking.Should().BeTrue();
+        card.ApprovalBlockers.Should().BeEmpty();
     }
 
     [Fact]
@@ -625,6 +895,7 @@ public sealed class ProductionServiceTests
                 MealName = "Makaron standard",
                 DietVariantId = 1,
                 PlannedQuantity = 10,
+                FefoDeductedAt = DateTimeOffset.UtcNow,
                 PackagingDeductedAt = DateTimeOffset.UtcNow,
                 M2SnapshotJson = JsonSerializer.Serialize(CreateSnapshotItem(
                     new DateOnly(2026, 6, 5),
@@ -636,10 +907,13 @@ public sealed class ProductionServiceTests
                     100m,
                     1m)),
             });
-        var adjustmentRepository = new Mock<IRepository<ProductionAdjustmentApproval>>();
+        var adjustmentRepository = new Mock<IProductionAdjustmentApprovalRepository>();
         adjustmentRepository
-            .Setup(repository => repository.GetAllAsync())
-            .ReturnsAsync(Array.Empty<ProductionAdjustmentApproval>());
+            .Setup(repository => repository.GetLatestApprovedAsync(
+                21,
+                It.IsAny<IReadOnlyCollection<string>>(),
+                8m))
+            .ReturnsAsync((ProductionAdjustmentApproval?)null);
         var service = CreateService(
             itemRepository: itemRepository,
             adjustmentRepository: adjustmentRepository);
@@ -662,6 +936,7 @@ public sealed class ProductionServiceTests
             MealName = "Makaron standard",
             DietVariantId = 1,
             PlannedQuantity = 10,
+            FefoDeductedAt = DateTimeOffset.UtcNow,
             PackagingDeductedAt = DateTimeOffset.UtcNow,
             M2SnapshotJson = JsonSerializer.Serialize(CreateSnapshotItem(
                 new DateOnly(2026, 6, 5),
@@ -692,10 +967,13 @@ public sealed class ProductionServiceTests
         itemRepository
             .Setup(repository => repository.GetByIdAsync(21))
             .ReturnsAsync(item);
-        var adjustmentRepository = new Mock<IRepository<ProductionAdjustmentApproval>>();
+        var adjustmentRepository = new Mock<IProductionAdjustmentApprovalRepository>();
         adjustmentRepository
-            .Setup(repository => repository.GetAllAsync())
-            .ReturnsAsync(new[] { approval });
+            .Setup(repository => repository.GetLatestApprovedAsync(
+                21,
+                It.IsAny<IReadOnlyCollection<string>>(),
+                8m))
+            .ReturnsAsync(approval);
         var service = CreateService(
             itemRepository: itemRepository,
             adjustmentRepository: adjustmentRepository);
@@ -706,6 +984,66 @@ public sealed class ProductionServiceTests
         approval.Status.Should().Be("Applied");
         approval.AppliedAt.Should().NotBeNull();
         adjustmentRepository.Verify(repository => repository.UpdateAsync(approval), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveCookingAsync_ShouldNotUsePackagingApproval_ForCookedQuantity()
+    {
+        var item = new ProductionPlanItem
+        {
+            Id = 21,
+            ProductionPlanId = 5,
+            MealId = 10,
+            MealName = "Makaron standard",
+            DietVariantId = 1,
+            PlannedQuantity = 10,
+            FefoDeductedAt = DateTimeOffset.UtcNow,
+            PackagingDeductedAt = DateTimeOffset.UtcNow,
+            M2SnapshotJson = JsonSerializer.Serialize(CreateSnapshotItem(
+                new DateOnly(2026, 6, 5),
+                1001,
+                101,
+                "Makaron standard",
+                501,
+                9001,
+                100m,
+                1m)),
+        };
+        var packagingApproval = new ProductionAdjustmentApproval
+        {
+            Id = 91,
+            ProductionPlanItemId = 21,
+            AdjustmentType = "PackagingQuantity",
+            Status = "Approved",
+            PlannedValue = 10m,
+            RequestedValue = 8m,
+            Unit = "container",
+            Reason = "Mniej pojemnikow",
+            RequestedBy = "Chef",
+            RequestedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            ApprovedBy = "Manager",
+            ApprovedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+        };
+        var itemRepository = new Mock<IRepository<ProductionPlanItem>>();
+        itemRepository
+            .Setup(repository => repository.GetByIdAsync(21))
+            .ReturnsAsync(item);
+        var adjustmentRepository = new Mock<IProductionAdjustmentApprovalRepository>();
+        adjustmentRepository
+            .Setup(repository => repository.GetLatestApprovedAsync(
+                21,
+                It.Is<IReadOnlyCollection<string>>(types => types.Contains("PackagingQuantity")),
+                8m))
+            .ReturnsAsync(packagingApproval);
+        var service = CreateService(
+            itemRepository: itemRepository,
+            adjustmentRepository: adjustmentRepository);
+
+        var act = () => service.ApproveCookingAsync(21, 8m);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*akceptacji managera*");
+        itemRepository.Verify(repository => repository.UpdateAsync(It.IsAny<ProductionPlanItem>()), Times.Never);
     }
 
     [Fact]
@@ -721,7 +1059,7 @@ public sealed class ProductionServiceTests
                 PlannedQuantity = 10,
             });
         ProductionAdjustmentApproval? inserted = null;
-        var adjustmentRepository = new Mock<IRepository<ProductionAdjustmentApproval>>();
+        var adjustmentRepository = new Mock<IProductionAdjustmentApprovalRepository>();
         adjustmentRepository
             .Setup(repository => repository.InsertAsync(It.IsAny<ProductionAdjustmentApproval>()))
             .Callback<ProductionAdjustmentApproval>(approval => inserted = approval)
@@ -752,16 +1090,17 @@ public sealed class ProductionServiceTests
         Mock<IRepository<ProductionPlanItem>>? itemRepository = null,
         Mock<IDietDataProvider>? dietProvider = null,
         Mock<IRepository<PlanChangeAlert>>? alertRepository = null,
-        Mock<IRepository<ProductionAdjustmentApproval>>? adjustmentRepository = null,
+        Mock<IProductionAdjustmentApprovalRepository>? adjustmentRepository = null,
         Mock<ICookingSessionService>? cookingSessionService = null,
         Mock<IOrderDataProvider>? orderProvider = null,
-        ProductionPlanGenerator? planGenerator = null)
+        ProductionPlanGenerator? planGenerator = null,
+        FefoService? fefoService = null)
     {
         planRepository ??= new Mock<IProductionPlanRepository>();
         itemRepository ??= new Mock<IRepository<ProductionPlanItem>>();
         dietProvider ??= new Mock<IDietDataProvider>();
         alertRepository ??= new Mock<IRepository<PlanChangeAlert>>();
-        adjustmentRepository ??= new Mock<IRepository<ProductionAdjustmentApproval>>();
+        adjustmentRepository ??= new Mock<IProductionAdjustmentApprovalRepository>();
         cookingSessionService ??= new Mock<ICookingSessionService>();
 
         orderProvider ??= new Mock<IOrderDataProvider>();
@@ -770,7 +1109,7 @@ public sealed class ProductionServiceTests
             dietProvider.Object,
             new FoodCostCalculator(dietProvider.Object),
             planRepository.Object);
-        var fefoService = new FefoService(
+        fefoService ??= new FefoService(
             Mock.Of<IBatchRepository>(),
             Mock.Of<IWarehouseCommandRepository>());
 

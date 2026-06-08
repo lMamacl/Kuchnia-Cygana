@@ -1,17 +1,29 @@
 @model KuchniaUCygana.Application.DTOs.Orders.OrderDto
+@using KuchniaUCygana.Application.DTOs.Orders
 @using KuchniaUCygana.Domain.Enums
 @{
-    ViewData["Title"] = $"Zamówienie {Model.OrderNumber}";
-
-    var (badgeClass, statusText) = Model.Status switch
-    {
-        OrderStatus.Draft => ("bg-secondary", "Koszyk"),
-        OrderStatus.PendingPayment => ("bg-warning text-dark", "Oczekuje na płatność"),
-        OrderStatus.Paid => ("bg-success", "Opłacone"),
-        OrderStatus.InProduction => ("bg-info text-dark", "W produkcji"),
-        OrderStatus.Cancelled => ("bg-danger", "Anulowane"),
-        _ => ("bg-secondary", "Nieznany")
-    };
+    ViewData["Title"] = $"Zamowienie {Model.OrderNumber}";
+    var culture = new System.Globalization.CultureInfo("pl-PL");
+    var (badgeClass, statusText) = StatusBadge(Model.Status);
+    var groupedDays = Model.Items
+        .Where(item => item.DeliveryDate.HasValue)
+        .GroupBy(item => item.DeliveryDate!.Value.Date)
+        .OrderBy(group => group.Key)
+        .Select(group => new
+        {
+            Date = group.Key,
+            Delivery = Model.DeliveryDays.FirstOrDefault(day => day.DeliveryDate.Date == group.Key),
+            Items = group
+                .OrderBy(item => SlotRank(item.MealSlot))
+                .ThenBy(item => item.DietName)
+                .ThenBy(item => item.DietMenuPlanItemId ?? int.MaxValue)
+                .ThenBy(item => item.Id)
+                .ToList(),
+        })
+        .ToList();
+    var legacyItems = Model.Items
+        .Where(item => !item.DeliveryDate.HasValue)
+        .ToList();
 }
 
 <div class="d-flex justify-content-between align-items-start mb-4">
@@ -19,7 +31,7 @@
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-1">
                 <li class="breadcrumb-item">
-                    <a asp-action="Index">Moje zamówienia</a>
+                    <a asp-action="Index">Moje zamowienia</a>
                 </li>
                 <li class="breadcrumb-item active">@Model.OrderNumber</li>
             </ol>
@@ -29,7 +41,7 @@
             <span class="badge @badgeClass fs-6 ms-2">@statusText</span>
         </h2>
         <small class="text-muted">
-            Złożone: @Model.CreatedAt.ToString("dd.MM.yyyy HH:mm")
+            Zlozone: @Model.CreatedAt.ToString("dd.MM.yyyy HH:mm")
         </small>
     </div>
 
@@ -42,102 +54,161 @@
                    asp-action="Payment"
                    asp-route-orderId="@Model.Id"
                    class="btn btn-success btn-sm">
-                    Przejdź do płatności
+                    Przejdz do platnosci
                 </a>
             }
 
             <form asp-action="Cancel" asp-route-orderId="@Model.Id" method="post"
                   x-data="{}"
-                  x-on:submit.prevent="confirm('Czy na pewno chcesz anulować to zamówienie?') && $el.submit()">
-                <button type="submit" class="btn btn-outline-danger btn-sm">Anuluj zamówienie</button>
+                  x-on:submit.prevent="confirm('Czy na pewno chcesz anulowac to zamowienie?') && $el.submit()">
+                <button type="submit" class="btn btn-outline-danger btn-sm">Anuluj zamowienie</button>
             </form>
         </div>
     }
 </div>
 
 <div class="row g-4">
-
     <div class="col-12">
         <div class="card">
-            <div class="card-header fw-semibold">🍽️ Diety w zamówieniu</div>
-            <div class="card-body p-0">
-                @if (!Model.Items.Any())
+            <div class="card-header fw-semibold">
+                Plan dostaw i posilkow
+                @if (Model.StartDate.HasValue && Model.EndDate.HasValue)
                 {
-                    <p class="text-muted p-3 mb-0">Brak pozycji.</p>
+                    <span class="text-muted fw-normal ms-2">
+                        (@Model.StartDate.Value.ToString("dd.MM.yyyy") -
+                        @Model.EndDate.Value.ToString("dd.MM.yyyy"))
+                    </span>
+                }
+            </div>
+            <div class="card-body">
+                @if (!groupedDays.Any() && !legacyItems.Any())
+                {
+                    <p class="text-muted mb-0">Brak pozycji.</p>
                 }
                 else
                 {
-                    <table class="table table-sm mb-0 align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Dieta</th>
-                                <th>Wariant</th>
-                                <th class="text-center">kcal/dzień</th>
-                                <th class="text-center">Liczba dni</th>
-                                <th class="text-end">Cena/dzień</th>
-                                <th class="text-end">Łącznie</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in Model.Items)
-                            {
-                                <tr>
-                                    <td><strong>@item.DietName</strong></td>
-                                    <td>@item.VariantName</td>
-                                    <td class="text-center">@item.CaloriesPerDay</td>
-                                    <td class="text-center">@item.TotalDays</td>
-                                    <td class="text-end">
-                                        @item.PricePerDay.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
-                                    </td>
-                                    <td class="text-end">
-                                        <strong>
-                                            @item.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
-                                        </strong>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                        <tfoot class="table-light">
-                            <tr>
-                                <td colspan="5" class="text-end fw-semibold">Łącznie brutto:</td>
-                                <td class="text-end fw-semibold">
-                                    @Model.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
-                                </td>
-                            </tr>
-                            @if (Model.DiscountAmount > 0)
-                            {
-                                <tr class="text-success">
-                                    <td colspan="5" class="text-end">Rabat:</td>
-                                    <td class="text-end">
-                                        −@Model.DiscountAmount.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
-                                    </td>
-                                </tr>
-                            }
-                            <tr class="fw-bold">
-                                <td colspan="5" class="text-end">Do zapłaty:</td>
-                                <td class="text-end fs-5">
-                                    @Model.FinalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
-                                </td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                    @foreach (var day in groupedDays)
+                    {
+                        var deliveryStatus = day.Delivery is null ? null : DeliveryStatusText(day.Delivery.Status);
+                        var dayTotal = day.Items.Sum(item => item.TotalPrice);
+
+                        <section class="border rounded-3 mb-3 overflow-hidden">
+                            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 bg-light p-3">
+                                <div>
+                                    <h3 class="h6 fw-bold mb-1">@day.Date.ToString("dd.MM.yyyy")</h3>
+                                    @if (day.Delivery is not null)
+                                    {
+                                        <div class="text-muted small">
+                                            @deliveryStatus
+                                            @if (!string.IsNullOrWhiteSpace(day.Delivery.AddressFullLine))
+                                            {
+                                                <span> | @day.Delivery.AddressFullLine</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                                <div class="text-end">
+                                    <div class="text-muted small">Suma dnia</div>
+                                    <div class="fw-bold">@dayTotal.ToString("C", culture)</div>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-sm mb-0 align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th class="ps-3">Slot</th>
+                                            <th>Dieta</th>
+                                            <th>Wariant</th>
+                                            <th class="text-center">kcal</th>
+                                            <th class="text-end pe-3">Kwota</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var item in day.Items)
+                                        {
+                                            <tr>
+                                                <td class="ps-3 fw-semibold">@SlotLabel(item.MealSlot)</td>
+                                                <td>
+                                                    <strong>@item.DietName</strong>
+                                                    @if (item.DietMenuPlanItemId.HasValue)
+                                                    {
+                                                        <small class="text-muted d-block">
+                                                            M2 plan item #@item.DietMenuPlanItemId
+                                                        </small>
+                                                    }
+                                                </td>
+                                                <td>@DisplayVariant(item)</td>
+                                                <td class="text-center">@item.CaloriesPerDay</td>
+                                                <td class="text-end pe-3 fw-semibold">@item.TotalPrice.ToString("C", culture)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    }
+
+                    @if (legacyItems.Any())
+                    {
+                        <section class="border rounded-3 overflow-hidden">
+                            <div class="bg-light p-3">
+                                <h3 class="h6 fw-bold mb-0">Pozycje bez przypisanej daty dostawy</h3>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm mb-0 align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th class="ps-3">Dieta</th>
+                                            <th>Wariant</th>
+                                            <th class="text-center">Dni</th>
+                                            <th class="text-end pe-3">Kwota</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var item in legacyItems)
+                                        {
+                                            <tr>
+                                                <td class="ps-3"><strong>@item.DietName</strong></td>
+                                                <td>@item.VariantName</td>
+                                                <td class="text-center">@item.TotalDays</td>
+                                                <td class="text-end pe-3 fw-semibold">@item.TotalPrice.ToString("C", culture)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    }
                 }
+            </div>
+            <div class="card-footer bg-light">
+                <div class="row g-2 justify-content-end">
+                    <div class="col-sm-4 col-lg-3">
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Lacznie brutto</span>
+                            <span class="fw-semibold">@Model.TotalPrice.ToString("C", culture)</span>
+                        </div>
+                        @if (Model.DiscountAmount > 0)
+                        {
+                            <div class="d-flex justify-content-between text-success">
+                                <span>Rabat</span>
+                                <span>-@Model.DiscountAmount.ToString("C", culture)</span>
+                            </div>
+                        }
+                        <div class="d-flex justify-content-between fs-5 fw-bold">
+                            <span>Do zaplaty</span>
+                            <span>@Model.FinalPrice.ToString("C", culture)</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <div class="col-12">
         <div class="card">
-            <div class="card-header fw-semibold">
-                📅 Kalendarz dostaw
-                @if (Model.StartDate.HasValue && Model.EndDate.HasValue)
-                {
-                    <span class="text-muted fw-normal ms-2">
-                        (@Model.StartDate.Value.ToString("dd.MM.yyyy") –
-                        @Model.EndDate.Value.ToString("dd.MM.yyyy"))
-                    </span>
-                }
-            </div>
+            <div class="card-header fw-semibold">Kalendarz dostaw</div>
             <div class="card-body p-0">
                 @if (!Model.DeliveryDays.Any())
                 {
@@ -165,5 +236,72 @@
             </div>
         </div>
     </div>
-
 </div>
+
+@functions {
+    private static (string BadgeClass, string Text) StatusBadge(OrderStatus status)
+        => status switch
+        {
+            OrderStatus.Draft => ("bg-secondary", "Koszyk"),
+            OrderStatus.PendingPayment => ("bg-warning text-dark", "Oczekuje na platnosc"),
+            OrderStatus.Paid => ("bg-success", "Oplacone"),
+            OrderStatus.InProduction => ("bg-info text-dark", "W produkcji"),
+            OrderStatus.Cancelled => ("bg-danger", "Anulowane"),
+            _ => ("bg-secondary", "Nieznany")
+        };
+
+    private static string DeliveryStatusText(DeliveryStatus status)
+        => status switch
+        {
+            DeliveryStatus.Scheduled => "Zaplanowana dostawa",
+            DeliveryStatus.Delivered => "Dostarczona",
+            DeliveryStatus.Skipped => "Pominieta",
+            DeliveryStatus.Cancelled => "Anulowana",
+            _ => "Nieznany status"
+        };
+
+    private static int SlotRank(string? slot)
+        => NormalizeSlot(slot) switch
+        {
+            "breakfast" => 10,
+            "secondbreakfast" => 20,
+            "snack" => 30,
+            "lunch" => 40,
+            "dinner" => 50,
+            "supper" => 60,
+            _ => 100
+        };
+
+    private static string SlotLabel(string? slot)
+        => NormalizeSlot(slot) switch
+        {
+            "breakfast" => "Sniadanie",
+            "secondbreakfast" => "Drugie sniadanie",
+            "snack" => "Przekaska",
+            "lunch" => "Lunch",
+            "dinner" => "Obiad",
+            "supper" => "Kolacja",
+            _ => string.IsNullOrWhiteSpace(slot) ? "Pozycja" : slot
+        };
+
+    private static string DisplayVariant(OrderItemDto item)
+    {
+        if (string.IsNullOrWhiteSpace(item.MealSlot))
+        {
+            return item.VariantName;
+        }
+
+        var suffix = " / " + item.MealSlot;
+        return item.VariantName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+            ? item.VariantName[..^suffix.Length]
+            : item.VariantName;
+    }
+
+    private static string NormalizeSlot(string? slot)
+        => string.IsNullOrWhiteSpace(slot)
+            ? string.Empty
+            : slot.Replace(" ", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace("_", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .ToLowerInvariant();
+}

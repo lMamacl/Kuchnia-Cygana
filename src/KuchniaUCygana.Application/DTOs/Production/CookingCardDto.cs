@@ -62,6 +62,10 @@ public sealed class CookingCardDto
     public List<CookingCardPackagingDto> PackagingRequirements { get; set; } = new();
 
     public List<ProductionAdjustmentApprovalDto> AdjustmentApprovals { get; set; } = new();
+
+    public List<string> ApprovalBlockers { get; set; } = new();
+
+    public bool CanApproveCooking => ApprovalBlockers.Count == 0;
 }
 
 /// <summary>

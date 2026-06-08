@@ -15,7 +15,8 @@ public sealed class HumanResourcesService : IHumanResourcesService
     private readonly IRepository<Employee> employeeRepository;
     private readonly IRepository<LeaveRequest> leaveRequestRepository;
     private readonly IWorkScheduleRepository workScheduleRepository;
-    private readonly IRepository<User> userRepository;
+    private readonly IUserRepository userRepository;
+    private readonly IHumanResourcesReadRepository readRepository;
     private readonly IMapper mapper;
 
     public HumanResourcesService(
@@ -23,7 +24,8 @@ public sealed class HumanResourcesService : IHumanResourcesService
         IRepository<Employee> employeeRepository,
         IRepository<LeaveRequest> leaveRequestRepository,
         IWorkScheduleRepository workScheduleRepository,
-        IRepository<User> userRepository,
+        IUserRepository userRepository,
+        IHumanResourcesReadRepository readRepository,
         IMapper mapper)
     {
         this.departmentRepository = departmentRepository;
@@ -31,13 +33,50 @@ public sealed class HumanResourcesService : IHumanResourcesService
         this.leaveRequestRepository = leaveRequestRepository;
         this.workScheduleRepository = workScheduleRepository;
         this.userRepository = userRepository;
+        this.readRepository = readRepository;
         this.mapper = mapper;
     }
 
-    public async Task<IEnumerable<DepartmentDto>> GetDepartmentsAsync()
+    public async Task<HumanResourcesSummaryDto> GetSummaryAsync(DateOnly today)
     {
-        var departments = await departmentRepository.GetAllAsync();
-        return await MapDepartmentsAsync(departments);
+        var summary = await readRepository.GetSummaryAsync(today);
+        return new HumanResourcesSummaryDto
+        {
+            PendingLeaveCount = summary.PendingLeaveCount,
+            ActiveEmployeeCount = summary.ActiveEmployeeCount,
+            InactiveEmployeeCount = summary.InactiveEmployeeCount,
+            TodayScheduleCount = summary.TodayScheduleCount,
+        };
+    }
+
+    public async Task<IReadOnlyList<DepartmentStaffSummaryDto>> GetDepartmentStaffSummariesAsync(string? search = null)
+    {
+        var rows = await readRepository.GetDepartmentStaffSummariesAsync(search);
+        return rows.Select(row => new DepartmentStaffSummaryDto
+        {
+            DepartmentId = row.DepartmentId,
+            DepartmentName = row.DepartmentName,
+            ActiveEmployeeCount = row.ActiveEmployeeCount,
+            TotalEmployeeCount = row.TotalEmployeeCount,
+            HeadEmployeeFullName = row.HeadEmployeeFullName,
+            SampleEmployeeNames = row.SampleEmployeeNames,
+        }).ToArray();
+    }
+
+    public async Task<DepartmentPageDto> SearchDepartmentsAsync(DepartmentSearchRequest request)
+    {
+        var result = await readRepository.SearchDepartmentsAsync(new DepartmentSearchQuery(
+            request.Search,
+            request.Page,
+            request.PageSize));
+
+        return new DepartmentPageDto
+        {
+            Items = result.Items.Select(MapDepartmentSearchRow).ToArray(),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount,
+        };
     }
 
     public async Task<DepartmentDto?> GetDepartmentByIdAsync(int id)
@@ -87,8 +126,14 @@ public sealed class HumanResourcesService : IHumanResourcesService
 
     public async Task<bool> DeleteDepartmentAsync(int id)
     {
-        var employees = await employeeRepository.GetAllAsync();
-        if (employees.Any(employee => employee.DepartmentId == id))
+        var employees = await readRepository.SearchEmployeesAsync(new EmployeeSearchQuery(
+            Search: null,
+            DepartmentId: id,
+            Status: null,
+            Role: null,
+            Page: 1,
+            PageSize: 1));
+        if (employees.TotalCount > 0)
         {
             throw new InvalidOperationException("Nie mozna usunac dzialu, do ktorego przypisani sa pracownicy.");
         }
@@ -96,16 +141,42 @@ public sealed class HumanResourcesService : IHumanResourcesService
         return await departmentRepository.DeleteAsync(id);
     }
 
-    public async Task<IEnumerable<EmployeeDto>> GetEmployeesAsync()
+    public async Task<EmployeePageDto> SearchEmployeesAsync(EmployeeSearchRequest request)
     {
-        var employees = await employeeRepository.GetAllAsync();
-        return await MapEmployeesAsync(employees);
+        var result = await readRepository.SearchEmployeesAsync(new EmployeeSearchQuery(
+            request.Search,
+            request.DepartmentId,
+            request.Status,
+            request.Role,
+            request.Page,
+            request.PageSize));
+
+        return new EmployeePageDto
+        {
+            Items = result.Items.Select(MapEmployeeSearchRow).ToArray(),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount,
+        };
     }
 
-    public async Task<IEnumerable<EmployeeDto>> GetEmployeesByDepartmentAsync(int departmentId)
+    public async Task<IReadOnlyList<EmployeeDto>> GetEmployeeOptionsAsync(bool activeOnly, int limit = 500)
     {
-        var employees = await employeeRepository.GetAllAsync();
-        return await MapEmployeesAsync(employees.Where(employee => employee.DepartmentId == departmentId));
+        var rows = await readRepository.GetEmployeeOptionsAsync(activeOnly, limit);
+        return rows.Select(row => new EmployeeDto
+        {
+            Id = row.Id,
+            UserId = row.UserId,
+            FirstName = row.FullName,
+            FullName = row.FullName,
+            IsActive = row.IsActive,
+        }).ToArray();
+    }
+
+    public async Task<EmployeeDto?> GetEmployeeByUserIdAsync(int userId)
+    {
+        var row = await readRepository.GetEmployeeByUserIdAsync(userId);
+        return row is null ? null : MapEmployeeSearchRow(row);
     }
 
     public async Task<EmployeeDto?> GetEmployeeByIdAsync(int id)
@@ -194,16 +265,28 @@ public sealed class HumanResourcesService : IHumanResourcesService
         return await employeeRepository.DeleteAsync(id);
     }
 
-    public async Task<IEnumerable<LeaveRequestDto>> GetLeaveRequestsAsync()
+    public async Task<LeaveRequestPageDto> SearchLeaveRequestsAsync(LeaveRequestSearchRequest request)
     {
-        var leaveRequests = await leaveRequestRepository.GetAllAsync();
-        return await MapLeaveRequestsAsync(leaveRequests);
+        var result = await readRepository.SearchLeaveRequestsAsync(new LeaveRequestSearchQuery(
+            request.Status,
+            request.LeaveType,
+            request.Search,
+            request.Page,
+            request.PageSize));
+
+        return new LeaveRequestPageDto
+        {
+            Items = result.Items.Select(MapLeaveRequestSearchRow).ToArray(),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount,
+        };
     }
 
     public async Task<IEnumerable<LeaveRequestDto>> GetLeaveRequestsByEmployeeAsync(int employeeId)
     {
-        var leaveRequests = await leaveRequestRepository.GetAllAsync();
-        return await MapLeaveRequestsAsync(leaveRequests.Where(request => request.EmployeeId == employeeId));
+        var rows = await readRepository.GetLeaveRequestsByEmployeeAsync(employeeId);
+        return rows.Select(MapLeaveRequestSearchRow).ToArray();
     }
 
     public async Task<LeaveRequestDto?> GetLeaveRequestByIdAsync(int id)
@@ -267,10 +350,24 @@ public sealed class HumanResourcesService : IHumanResourcesService
         return await leaveRequestRepository.DeleteAsync(id);
     }
 
-    public async Task<IEnumerable<WorkScheduleDto>> GetWorkSchedulesAsync()
+    public async Task<WorkSchedulePageDto> SearchWorkSchedulesAsync(WorkScheduleSearchRequest request)
     {
-        var schedules = await workScheduleRepository.GetAllAsync();
-        return await MapWorkSchedulesAsync(schedules);
+        var result = await readRepository.SearchWorkSchedulesAsync(new WorkScheduleSearchQuery(
+            request.From,
+            request.To,
+            request.Shift,
+            request.Role,
+            request.Search,
+            request.Page,
+            request.PageSize));
+
+        return new WorkSchedulePageDto
+        {
+            Items = result.Items.Select(MapWorkScheduleSearchRow).ToArray(),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount,
+        };
     }
 
     public async Task<IEnumerable<WorkScheduleDto>> GetWorkSchedulesByUserAsync(int userId)
@@ -336,17 +433,85 @@ public sealed class HumanResourcesService : IHumanResourcesService
         return await workScheduleRepository.DeleteAsync(id);
     }
 
+    private static DepartmentDto MapDepartmentSearchRow(DepartmentSearchRow row)
+        => new()
+        {
+            Id = row.Id,
+            Name = row.Name,
+            Description = row.Description,
+            HeadEmployeeId = row.HeadEmployeeId,
+            HeadEmployeeFullName = row.HeadEmployeeFullName,
+        };
+
+    private static EmployeeDto MapEmployeeSearchRow(EmployeeSearchRow row)
+        => new()
+        {
+            Id = row.Id,
+            UserId = row.UserId,
+            FirstName = row.FirstName,
+            LastName = row.LastName,
+            FullName = $"{row.FirstName} {row.LastName}".Trim(),
+            Email = row.Email,
+            PhoneNumber = row.PhoneNumber,
+            HireDate = row.HireDate,
+            TerminationDate = row.TerminationDate,
+            DepartmentId = row.DepartmentId,
+            DepartmentName = row.DepartmentName,
+            Position = row.Position,
+            IsActive = row.IsActive,
+            UserRole = row.UserRole,
+            CreatedAt = row.CreatedAt,
+            UpdatedAt = row.UpdatedAt,
+        };
+
+    private static LeaveRequestDto MapLeaveRequestSearchRow(LeaveRequestSearchRow row)
+        => new()
+        {
+            Id = row.Id,
+            EmployeeId = row.EmployeeId,
+            EmployeeFullName = row.EmployeeFullName,
+            LeaveType = row.LeaveType,
+            StartDate = row.StartDate,
+            EndDate = row.EndDate,
+            Status = row.Status,
+            ApprovedByEmployeeId = row.ApprovedByEmployeeId,
+            ApprovedByEmployeeFullName = row.ApprovedByEmployeeFullName,
+            RejectionReason = row.RejectionReason,
+            CreatedAt = row.CreatedAt,
+            UpdatedAt = row.UpdatedAt,
+        };
+
+    private static WorkScheduleDto MapWorkScheduleSearchRow(WorkScheduleSearchRow row)
+        => new()
+        {
+            Id = row.Id,
+            UserId = row.UserId,
+            EmployeeFullName = row.EmployeeFullName,
+            UserRole = row.UserRole,
+            ShiftDate = row.ShiftDate,
+            Shift = row.Shift.ToString(),
+            RoleAtShift = row.RoleAtShift,
+            CreatedAt = row.CreatedAt,
+            UpdatedAt = row.UpdatedAt,
+        };
+
     private async Task<List<DepartmentDto>> MapDepartmentsAsync(IEnumerable<Department> departments)
     {
         var list = mapper.Map<List<DepartmentDto>>(departments);
-        var employees = (await employeeRepository.GetAllAsync()).ToDictionary(employee => employee.Id);
+        var headEmployeeIds = list
+            .Where(department => department.HeadEmployeeId.HasValue)
+            .Select(department => department.HeadEmployeeId!.Value)
+            .Distinct()
+            .ToArray();
+        var employees = (await readRepository.GetEmployeeOptionsByIdsAsync(headEmployeeIds))
+            .ToDictionary(employee => employee.Id);
 
         foreach (var department in list)
         {
             if (department.HeadEmployeeId.HasValue &&
                 employees.TryGetValue(department.HeadEmployeeId.Value, out var head))
             {
-                department.HeadEmployeeFullName = BuildEmployeeFullName(head);
+                department.HeadEmployeeFullName = head.FullName;
             }
         }
 
@@ -356,7 +521,15 @@ public sealed class HumanResourcesService : IHumanResourcesService
     private async Task<List<EmployeeDto>> MapEmployeesAsync(IEnumerable<Employee> employees)
     {
         var list = mapper.Map<List<EmployeeDto>>(employees);
-        var departments = (await departmentRepository.GetAllAsync()).ToDictionary(department => department.Id);
+        var departments = new Dictionary<int, Department>();
+        foreach (var departmentId in list.Select(employee => employee.DepartmentId).Distinct())
+        {
+            var department = await departmentRepository.GetByIdAsync(departmentId);
+            if (department is not null)
+            {
+                departments[department.Id] = department;
+            }
+        }
 
         foreach (var employee in list)
         {
@@ -372,19 +545,25 @@ public sealed class HumanResourcesService : IHumanResourcesService
     private async Task<List<LeaveRequestDto>> MapLeaveRequestsAsync(IEnumerable<LeaveRequest> leaveRequests)
     {
         var list = mapper.Map<List<LeaveRequestDto>>(leaveRequests);
-        var employees = (await employeeRepository.GetAllAsync()).ToDictionary(employee => employee.Id);
+        var employeeIds = list
+            .Select(request => request.EmployeeId)
+            .Concat(list.Where(request => request.ApprovedByEmployeeId.HasValue).Select(request => request.ApprovedByEmployeeId!.Value))
+            .Distinct()
+            .ToArray();
+        var employees = (await readRepository.GetEmployeeOptionsByIdsAsync(employeeIds))
+            .ToDictionary(employee => employee.Id);
 
         foreach (var leaveRequest in list)
         {
             if (employees.TryGetValue(leaveRequest.EmployeeId, out var employee))
             {
-                leaveRequest.EmployeeFullName = BuildEmployeeFullName(employee);
+                leaveRequest.EmployeeFullName = employee.FullName;
             }
 
             if (leaveRequest.ApprovedByEmployeeId.HasValue &&
                 employees.TryGetValue(leaveRequest.ApprovedByEmployeeId.Value, out var approver))
             {
-                leaveRequest.ApprovedByEmployeeFullName = BuildEmployeeFullName(approver);
+                leaveRequest.ApprovedByEmployeeFullName = approver.FullName;
             }
         }
 
@@ -394,20 +573,26 @@ public sealed class HumanResourcesService : IHumanResourcesService
     private async Task<List<WorkScheduleDto>> MapWorkSchedulesAsync(IEnumerable<WorkSchedule> schedules)
     {
         var list = mapper.Map<List<WorkScheduleDto>>(schedules);
-        var employeesByUserId = (await employeeRepository.GetAllAsync())
+        var userIds = list.Select(schedule => schedule.UserId).Distinct().ToArray();
+        var employeesByUserId = (await readRepository.GetEmployeeOptionsByUserIdsAsync(userIds))
             .GroupBy(employee => employee.UserId)
             .ToDictionary(group => group.Key, group => group.First());
-        var users = (await userRepository.GetAllAsync()).ToDictionary(user => user.Id);
+        var users = (await userRepository.GetByIdsAsync(userIds)).ToDictionary(user => user.Id);
 
         foreach (var schedule in list)
         {
             if (employeesByUserId.TryGetValue(schedule.UserId, out var employee))
             {
-                schedule.EmployeeFullName = BuildEmployeeFullName(employee);
+                schedule.EmployeeFullName = employee.FullName;
             }
             else if (users.TryGetValue(schedule.UserId, out var user))
             {
                 schedule.EmployeeFullName = BuildUserFullName(user);
+            }
+
+            if (users.TryGetValue(schedule.UserId, out var account))
+            {
+                schedule.UserRole = account.Role;
             }
         }
 
