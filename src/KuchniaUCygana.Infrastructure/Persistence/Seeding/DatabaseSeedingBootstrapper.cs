@@ -45,6 +45,12 @@ public static class DatabaseSeedingBootstrapper
             return false;
         }
 
+        var profile = ResolveProfile(options.Profile);
+        if (trigger == SeedingTrigger.Startup && profile == DatabaseSeedingProfile.VolumeDemo)
+        {
+            return false;
+        }
+
         var mode = ResolveMode(options.Mode);
 
         return trigger switch

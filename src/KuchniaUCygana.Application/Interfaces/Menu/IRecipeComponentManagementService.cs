@@ -9,6 +9,8 @@ public interface IRecipeComponentManagementService
 
     Task<IReadOnlyList<RecipeComponentVersionOptionDto>> GetPublishedVersionOptionsAsync();
 
+    Task<IReadOnlyList<RecipeComponentVersionOptionDto>> SearchPublishedVersionOptionsAsync(string? query, int limit = 20);
+
     Task<RecipeComponentDetailDto?> GetComponentAsync(int componentId);
 
     Task<RecipeComponentVersionDetailDto?> GetVersionAsync(int versionId);

@@ -22,6 +22,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
     private const string UnifiedDemoCustomerEmailSuffix = "@kuchnia.local";
     private const string UnifiedDemoCustomerPassword = "Demo123!";
     private const string UnifiedDemoOrderPrefix = "DEMO-M1";
+    private const string M2VolumePrefix = "VOL-M2-";
 
     private readonly IDbConnectionFactory connectionFactory;
     private readonly ILogger<DatabaseSeeder> logger;
@@ -50,6 +51,10 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 }
 
                 await SeedDemoDataAsync(cancellationToken);
+                return;
+            case DatabaseSeedingProfile.VolumeDemo:
+                await SeedMinimalRealisticAsync(cancellationToken);
+                await SeedM2VolumeDemoAsync(cancellationToken);
                 return;
             default:
                 throw new InvalidOperationException($"Unsupported seeding profile: {profile}");
@@ -754,6 +759,734 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await EnsureDietMenuPlanItemsHaveMealVariantsAsync(db, now, auditUser, cancellationToken);
         await SeedCanonicalM2DemoCatalogAsync(db, now, auditUser, cancellationToken);
         await SeedUnifiedDemoScenarioAsync(db, now, auditUser, cancellationToken);
+    }
+
+    private async Task SeedM2VolumeDemoAsync(CancellationToken cancellationToken)
+    {
+        using var db = connectionFactory.CreateConnection();
+        var now = DateTimeOffset.UtcNow;
+        var auditUser = "VolumeDemoSeeder";
+
+        await SeedUnitsOfMeasureAsync(db, now, cancellationToken);
+
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            DECLARE @prefix nvarchar(20) = @M2VolumePrefix;
+            DECLARE @now datetimeoffset = @Now;
+            DECLARE @auditUser nvarchar(100) = @AuditUser;
+            DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
+
+            IF NOT EXISTS (SELECT 1 FROM [Allergens] WHERE [Code] = N'VOL-GLU')
+                INSERT INTO [Allergens] ([Name], [Code], [IconUrl], [CreatedAt], [UpdatedAt])
+                VALUES (N'VOL-M2 Gluten', N'VOL-GLU', NULL, @now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [Allergens] WHERE [Code] = N'VOL-LAC')
+                INSERT INTO [Allergens] ([Name], [Code], [IconUrl], [CreatedAt], [UpdatedAt])
+                VALUES (N'VOL-M2 Laktoza', N'VOL-LAC', NULL, @now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [Allergens] WHERE [Code] = N'VOL-SEL')
+                INSERT INTO [Allergens] ([Name], [Code], [IconUrl], [CreatedAt], [UpdatedAt])
+                VALUES (N'VOL-M2 Seler', N'VOL-SEL', NULL, @now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [Allergens] WHERE [Code] = N'VOL-SOY')
+                INSERT INTO [Allergens] ([Name], [Code], [IconUrl], [CreatedAt], [UpdatedAt])
+                VALUES (N'VOL-M2 Soja', N'VOL-SOY', NULL, @now, NULL);
+
+            IF NOT EXISTS (SELECT 1 FROM [Categories] WHERE [Name] = @prefix + N'Ingredients')
+                INSERT INTO [Categories] ([Name], [Description], [SortOrder], [CreatedAt], [UpdatedAt])
+                VALUES (@prefix + N'Ingredients', N'VolumeDemo M2: skladniki z nutrition i partiami.', 700, @now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [Categories] WHERE [Name] = @prefix + N'RecipeComponents')
+                INSERT INTO [Categories] ([Name], [Description], [SortOrder], [CreatedAt], [UpdatedAt])
+                VALUES (@prefix + N'RecipeComponents', N'VolumeDemo M2: receptury-skladowe.', 701, @now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [Categories] WHERE [Name] = @prefix + N'Meals')
+                INSERT INTO [Categories] ([Name], [Description], [SortOrder], [CreatedAt], [UpdatedAt])
+                VALUES (@prefix + N'Meals', N'VolumeDemo M2: posilki.', 702, @now, NULL);
+
+            IF NOT EXISTS (SELECT 1 FROM [WarehouseCategories] WHERE [Code] = N'VOL-M2-FOOD')
+                INSERT INTO [WarehouseCategories] ([Code], [Name], [IsActive], [DisplayOrder], [CreatedAt], [UpdatedAt])
+                VALUES (N'VOL-M2-FOOD', N'VOL-M2 Produkty spozywcze', 1, 700, @now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [WarehouseCategories] WHERE [Code] = N'VOL-M2-PACK')
+                INSERT INTO [WarehouseCategories] ([Code], [Name], [IsActive], [DisplayOrder], [CreatedAt], [UpdatedAt])
+                VALUES (N'VOL-M2-PACK', N'VOL-M2 Opakowania', 1, 701, @now, NULL);
+
+            DECLARE @ingredientCategoryId int = (SELECT TOP 1 [Id] FROM [Categories] WHERE [Name] = @prefix + N'Ingredients');
+            DECLARE @recipeCategoryId int = (SELECT TOP 1 [Id] FROM [Categories] WHERE [Name] = @prefix + N'RecipeComponents');
+            DECLARE @mealCategoryId int = (SELECT TOP 1 [Id] FROM [Categories] WHERE [Name] = @prefix + N'Meals');
+            DECLARE @foodWarehouseCategoryId int = (SELECT TOP 1 [Id] FROM [WarehouseCategories] WHERE [Code] = N'VOL-M2-FOOD');
+            DECLARE @packWarehouseCategoryId int = (SELECT TOP 1 [Id] FROM [WarehouseCategories] WHERE [Code] = N'VOL-M2-PACK');
+            DECLARE @gUnitId int = (SELECT TOP 1 [Id] FROM [UnitsOfMeasure] WHERE [Symbol] = N'g' ORDER BY [Id]);
+            DECLARE @pcsUnitId int = (SELECT TOP 1 [Id] FROM [UnitsOfMeasure] WHERE [Symbol] = N'szt' ORDER BY [Id]);
+
+            ;WITH Numbers AS (
+                SELECT TOP (1000) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects a CROSS JOIN sys.all_objects b
+            )
+            INSERT INTO [Ingredients]
+                ([Name], [Unit], [CostPerUnit], [Notes], [IsActive], [CreatedAt], [UpdatedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [ResourceType], [FoodCategoryId],
+                 [Description], [ProductComposition], [WarehouseCategoryId], [YieldFactor],
+                 [RequiresCoreTemperatureCheck], [MinimumCoreTemperatureCelsius], [WarehouseCategoryFefoApproved])
+            SELECT
+                @prefix + N'ING-' + RIGHT(N'0000' + CONVERT(nvarchar(4), [N]), 4),
+                N'g',
+                CAST(0.35 + ([N] % 37) * 0.07 AS decimal(10,4)),
+                N'VolumeDemo M2 ingredient.',
+                1,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                CASE WHEN [N] % 10 = 0 THEN N'Spice' ELSE N'Food' END,
+                @ingredientCategoryId,
+                N'VolumeDemo M2 food resource.',
+                CASE WHEN [N] <= 250 THEN N'Produkt przetworzony: skladniki VOL-M2, stabilizator, przyprawy, alergen trace.' ELSE NULL END,
+                @foodWarehouseCategoryId,
+                CAST(0.82 + ([N] % 12) * 0.01 AS decimal(7,4)),
+                CASE WHEN [N] % 17 = 0 THEN 1 ELSE 0 END,
+                CASE WHEN [N] % 17 = 0 THEN CAST(72.00 AS decimal(5,2)) ELSE NULL END,
+                1
+            FROM Numbers n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Ingredients] existing
+                WHERE existing.[Name] = @prefix + N'ING-' + RIGHT(N'0000' + CONVERT(nvarchar(4), n.[N]), 4)
+                  AND existing.[IsDeleted] = 0);
+
+            INSERT INTO [NutritionFacts]
+                ([MealId], [IngredientId], [CaloriesPer100g], [ProteinPer100g], [CarbohydratesPer100g],
+                 [FatPer100g], [FiberPer100g], [CreatedAt], [UpdatedAt])
+            SELECT
+                NULL,
+                i.[Id],
+                CAST(45 + (ROW_NUMBER() OVER (ORDER BY i.[Id]) % 260) AS decimal(8,2)),
+                CAST(2 + (ROW_NUMBER() OVER (ORDER BY i.[Id]) % 28) AS decimal(8,2)),
+                CAST(5 + (ROW_NUMBER() OVER (ORDER BY i.[Id]) % 55) AS decimal(8,2)),
+                CAST(1 + (ROW_NUMBER() OVER (ORDER BY i.[Id]) % 24) AS decimal(8,2)),
+                CAST(1 + (ROW_NUMBER() OVER (ORDER BY i.[Id]) % 12) AS decimal(8,2)),
+                @now,
+                NULL
+            FROM [Ingredients] i
+            WHERE i.[Name] LIKE @prefix + N'ING-%'
+              AND NOT EXISTS (SELECT 1 FROM [NutritionFacts] nf WHERE nf.[IngredientId] = i.[Id]);
+
+            INSERT INTO [IngredientAllergens] ([IngredientId], [AllergenId], [TraceAmount])
+            SELECT i.[Id], a.[Id], CASE WHEN ROW_NUMBER() OVER (ORDER BY i.[Id]) % 3 = 0 THEN 1 ELSE 0 END
+            FROM [Ingredients] i
+            INNER JOIN [Allergens] a ON a.[Code] = CASE
+                WHEN i.[Id] % 4 = 0 THEN N'VOL-GLU'
+                WHEN i.[Id] % 4 = 1 THEN N'VOL-LAC'
+                WHEN i.[Id] % 4 = 2 THEN N'VOL-SEL'
+                ELSE N'VOL-SOY'
+            END
+            WHERE i.[Name] LIKE @prefix + N'ING-%'
+              AND i.[Id] % 5 = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM [IngredientAllergens] existing
+                  WHERE existing.[IngredientId] = i.[Id] AND existing.[AllergenId] = a.[Id]);
+
+            INSERT INTO [StockItems]
+                ([Name], [BaseIngredientId], [DefaultUnitOfMeasureId], [WarehouseCategoryId], [MinimumLevel],
+                 [LeadTimeDays], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                i.[Name],
+                i.[Id],
+                @gUnitId,
+                @foodWarehouseCategoryId,
+                1500,
+                3 + (i.[Id] % 5),
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL
+            FROM [Ingredients] i
+            WHERE i.[Name] LIKE @prefix + N'ING-%'
+              AND NOT EXISTS (
+                  SELECT 1 FROM [StockItems] si
+                  WHERE si.[BaseIngredientId] = i.[Id] AND si.[IsDeleted] = 0);
+
+            UPDATE i
+            SET [StockItemId] = si.[Id],
+                [WarehouseCategoryId] = @foodWarehouseCategoryId,
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [Ingredients] i
+            INNER JOIN [StockItems] si ON si.[BaseIngredientId] = i.[Id] AND si.[IsDeleted] = 0
+            WHERE i.[Name] LIKE @prefix + N'ING-%';
+
+            INSERT INTO [Batches]
+                ([StockItemId], [SupplierBatchNumber], [CurrentQuantity], [ExpiryDate], [ReceivedDate], [IsDepleted],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                si.[Id],
+                @prefix + N'BATCH-' + CONVERT(nvarchar(20), si.[Id]),
+                5000 + (si.[Id] % 50) * 100,
+                DATEADD(day, 14 + (si.[Id] % 40), CONVERT(datetime, @today)),
+                DATEADD(day, -1 * (si.[Id] % 7), CONVERT(datetime, @today)),
+                0,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL
+            FROM [StockItems] si
+            INNER JOIN [Ingredients] i ON i.[Id] = si.[BaseIngredientId]
+            WHERE i.[Name] LIKE @prefix + N'ING-%'
+              AND NOT EXISTS (
+                  SELECT 1 FROM [Batches] b
+                  WHERE b.[StockItemId] = si.[Id]
+                    AND b.[SupplierBatchNumber] = @prefix + N'BATCH-' + CONVERT(nvarchar(20), si.[Id]));
+
+            ;WITH Numbers AS (
+                SELECT TOP (30) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects
+            )
+            INSERT INTO [StockItems]
+                ([Name], [BaseIngredientId], [DefaultUnitOfMeasureId], [WarehouseCategoryId], [MinimumLevel],
+                 [LeadTimeDays], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                @prefix + N'PACK-' + RIGHT(N'000' + CONVERT(nvarchar(3), [N]), 3),
+                NULL,
+                @pcsUnitId,
+                @packWarehouseCategoryId,
+                500,
+                7,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL
+            FROM Numbers n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [StockItems] si
+                WHERE si.[Name] = @prefix + N'PACK-' + RIGHT(N'000' + CONVERT(nvarchar(3), n.[N]), 3)
+                  AND si.[IsDeleted] = 0);
+
+            INSERT INTO [Batches]
+                ([StockItemId], [SupplierBatchNumber], [CurrentQuantity], [ExpiryDate], [ReceivedDate], [IsDepleted],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                si.[Id],
+                @prefix + N'PACK-BATCH-' + CONVERT(nvarchar(20), si.[Id]),
+                2500,
+                DATEADD(day, 180, CONVERT(datetime, @today)),
+                CONVERT(datetime, @today),
+                0,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL
+            FROM [StockItems] si
+            WHERE si.[Name] LIKE @prefix + N'PACK-%'
+              AND NOT EXISTS (
+                  SELECT 1 FROM [Batches] b
+                  WHERE b.[StockItemId] = si.[Id]
+                    AND b.[SupplierBatchNumber] = @prefix + N'PACK-BATCH-' + CONVERT(nvarchar(20), si.[Id]));
+
+            ;WITH Numbers AS (
+                SELECT TOP (150) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects a CROSS JOIN sys.all_objects b
+            )
+            INSERT INTO [RecipeComponents]
+                ([CategoryId], [Name], [Description], [ImageUrl], [PreparationTimeMinutes], [IsActive],
+                 [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted])
+            SELECT
+                @recipeCategoryId,
+                @prefix + N'RC-' + RIGHT(N'000' + CONVERT(nvarchar(3), [N]), 3),
+                N'VolumeDemo M2 recipe component.',
+                NULL,
+                8 + ([N] % 25),
+                1,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0
+            FROM Numbers n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [RecipeComponents] rc
+                WHERE rc.[Name] = @prefix + N'RC-' + RIGHT(N'000' + CONVERT(nvarchar(3), n.[N]), 3)
+                  AND rc.[IsDeleted] = 0);
+
+            INSERT INTO [RecipeComponentVersions]
+                ([RecipeComponentId], [VersionNumber], [Status], [Instructions], [YieldQuantity], [YieldUnit],
+                 [RawWeightGrams], [CookedWeightGrams], [ShelfLifeHours], [UseEarliestIngredientExpiry],
+                 [ChangeSummary], [IsTechnologyChange], [NonTechnologyChangeReason], [PublishedAt], [PublishedBy],
+                 [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted],
+                 [CaloriesPer100g], [ProteinPer100g], [CarbohydratesPer100g], [FatPer100g], [FiberPer100g],
+                 [NutritionSource], [NutritionOverrideReason], [AllergensApproved], [AllergenOverrideReason],
+                 [AllergensApprovedAt], [AllergensApprovedBy])
+            SELECT
+                rc.[Id],
+                1,
+                N'Published',
+                N'VolumeDemo: przygotowac zgodnie z karta technologiczna.',
+                1.000,
+                N'portion',
+                180 + (rc.[Id] % 90),
+                160 + (rc.[Id] % 80),
+                48,
+                1,
+                N'VolumeDemo initial version',
+                1,
+                NULL,
+                @now,
+                @auditUser,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                90 + (rc.[Id] % 180),
+                8 + (rc.[Id] % 25),
+                10 + (rc.[Id] % 35),
+                3 + (rc.[Id] % 18),
+                2 + (rc.[Id] % 9),
+                N'Manual',
+                N'VolumeDemo baseline',
+                1,
+                NULL,
+                @now,
+                @auditUser
+            FROM [RecipeComponents] rc
+            WHERE rc.[Name] LIKE @prefix + N'RC-%'
+              AND rc.[IsDeleted] = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM [RecipeComponentVersions] rcv
+                  WHERE rcv.[RecipeComponentId] = rc.[Id]
+                    AND rcv.[VersionNumber] = 1
+                    AND rcv.[IsDeleted] = 0);
+
+            ;WITH ComponentNumbers AS (
+                SELECT rcv.[Id] AS [VersionId], ROW_NUMBER() OVER (ORDER BY rcv.[Id]) AS [N]
+                FROM [RecipeComponentVersions] rcv
+                INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+                WHERE rc.[Name] LIKE @prefix + N'RC-%'
+                  AND rcv.[IsDeleted] = 0
+            ),
+            IngredientNumbers AS (
+                SELECT i.[Id], i.[StockItemId], i.[WarehouseCategoryId], ROW_NUMBER() OVER (ORDER BY i.[Id]) AS [N]
+                FROM [Ingredients] i
+                WHERE i.[Name] LIKE @prefix + N'ING-%'
+                  AND i.[IsDeleted] = 0
+            )
+            INSERT INTO [RecipeComponentIngredients]
+                ([RecipeComponentVersionId], [IngredientId], [StockItemId], [WarehouseCategoryId],
+                 [WeightInGrams], [YieldFactor], [IsOptional], [Notes], [CreatedAt], [UpdatedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted])
+            SELECT
+                cn.[VersionId],
+                i.[Id],
+                i.[StockItemId],
+                i.[WarehouseCategoryId],
+                45 + ((cn.[N] + src.[Offset]) % 90),
+                0.9200,
+                0,
+                N'VolumeDemo active ingredient.',
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0
+            FROM ComponentNumbers cn
+            CROSS APPLY (VALUES (0), (97)) src([Offset])
+            INNER JOIN IngredientNumbers i ON i.[N] = ((cn.[N] + src.[Offset] - 1) % 200) + 1
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [RecipeComponentIngredients] rci
+                WHERE rci.[RecipeComponentVersionId] = cn.[VersionId]
+                  AND rci.[IngredientId] = i.[Id]
+                  AND rci.[IsDeleted] = 0);
+
+            INSERT INTO [PackagingRequirements]
+                ([OwnerType], [MealId], [MealVariantId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
+                 [ResourceName], [Quantity], [Unit], [ContainerRole], [IsCustomerFacing], [CreatedAt], [UpdatedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted])
+            SELECT
+                N'RecipeComponentVersion',
+                NULL,
+                NULL,
+                rcv.[Id],
+                pack.[Id],
+                @packWarehouseCategoryId,
+                pack.[Name],
+                1,
+                N'pcs',
+                N'component',
+                0,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0
+            FROM [RecipeComponentVersions] rcv
+            INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+            CROSS APPLY (
+                SELECT TOP 1 si.[Id], si.[Name]
+                FROM [StockItems] si
+                WHERE si.[Name] LIKE @prefix + N'PACK-%'
+                  AND si.[IsDeleted] = 0
+                ORDER BY ABS(CHECKSUM(si.[Id], rcv.[Id]))
+            ) pack
+            WHERE rc.[Name] LIKE @prefix + N'RC-%'
+              AND rcv.[IsDeleted] = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM [PackagingRequirements] pr
+                  WHERE pr.[RecipeComponentVersionId] = rcv.[Id]
+                    AND pr.[OwnerType] = N'RecipeComponentVersion'
+                    AND pr.[IsDeleted] = 0);
+
+            ;WITH Numbers AS (
+                SELECT TOP (60) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects
+            )
+            INSERT INTO [Meals]
+                ([CategoryId], [Name], [Description], [MarketingDescription], [Status], [PreparationTimeMinutes],
+                 [IsActive], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted],
+                 [PreparationInstructions], [RawWeightGrams], [CookedWeightGrams], [RequiresCoreTemperatureCheck],
+                 [MinimumCoreTemperatureCelsius], [ShelfLifeHours], [UseEarliestIngredientExpiry])
+            SELECT
+                @mealCategoryId,
+                @prefix + N'MEAL-' + RIGHT(N'000' + CONVERT(nvarchar(3), [N]), 3),
+                N'VolumeDemo M2 meal.',
+                N'VolumeDemo M2 meal for load testing.',
+                N'Published',
+                18 + ([N] % 22),
+                1,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                N'VolumeDemo: assembly and portioning.',
+                430 + ([N] % 80),
+                380 + ([N] % 70),
+                CASE WHEN [N] % 9 = 0 THEN 1 ELSE 0 END,
+                CASE WHEN [N] % 9 = 0 THEN CAST(72.00 AS decimal(5,2)) ELSE NULL END,
+                48,
+                1
+            FROM Numbers n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Meals] m
+                WHERE m.[Name] = @prefix + N'MEAL-' + RIGHT(N'000' + CONVERT(nvarchar(3), n.[N]), 3)
+                  AND m.[IsDeleted] = 0);
+
+            INSERT INTO [NutritionFacts]
+                ([MealId], [IngredientId], [CaloriesPer100g], [ProteinPer100g], [CarbohydratesPer100g],
+                 [FatPer100g], [FiberPer100g], [CreatedAt], [UpdatedAt])
+            SELECT
+                m.[Id],
+                NULL,
+                120 + (m.[Id] % 90),
+                8 + (m.[Id] % 24),
+                12 + (m.[Id] % 42),
+                4 + (m.[Id] % 18),
+                2 + (m.[Id] % 8),
+                @now,
+                NULL
+            FROM [Meals] m
+            WHERE m.[Name] LIKE @prefix + N'MEAL-%'
+              AND NOT EXISTS (SELECT 1 FROM [NutritionFacts] nf WHERE nf.[MealId] = m.[Id]);
+
+            ;WITH MealNumbers AS (
+                SELECT m.[Id] AS [MealId], ROW_NUMBER() OVER (ORDER BY m.[Id]) AS [N]
+                FROM [Meals] m
+                WHERE m.[Name] LIKE @prefix + N'MEAL-%'
+                  AND m.[IsDeleted] = 0
+            ),
+            VersionNumbers AS (
+                SELECT rcv.[Id] AS [VersionId], ROW_NUMBER() OVER (ORDER BY rcv.[Id]) AS [N]
+                FROM [RecipeComponentVersions] rcv
+                INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+                WHERE rc.[Name] LIKE @prefix + N'RC-%'
+                  AND rcv.[IsDeleted] = 0
+            )
+            INSERT INTO [MealRecipeComponents]
+                ([MealId], [RecipeComponentVersionId], [Role], [QuantityPerServing], [Unit], [SortOrder], [IsOptional],
+                 [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted])
+            SELECT
+                mn.[MealId],
+                vn.[VersionId],
+                CASE src.[SortOrder] WHEN 1 THEN N'base' ELSE N'side' END,
+                1.000,
+                N'portion',
+                src.[SortOrder],
+                0,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0
+            FROM MealNumbers mn
+            CROSS APPLY (VALUES (1, 0), (2, 41)) src([SortOrder], [Offset])
+            INNER JOIN VersionNumbers vn ON vn.[N] = ((mn.[N] + src.[Offset] - 1) % 150) + 1
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [MealRecipeComponents] mrc
+                WHERE mrc.[MealId] = mn.[MealId]
+                  AND mrc.[RecipeComponentVersionId] = vn.[VersionId]
+                  AND mrc.[IsDeleted] = 0);
+
+            ;WITH MealNumbers AS (
+                SELECT m.[Id] AS [MealId], ROW_NUMBER() OVER (ORDER BY m.[Id]) AS [N]
+                FROM [Meals] m
+                WHERE m.[Name] LIKE @prefix + N'MEAL-%'
+                  AND m.[IsDeleted] = 0
+            ),
+            VariantSource AS (
+                SELECT [MealId], [N], v.[VariantNo]
+                FROM MealNumbers
+                CROSS APPLY (VALUES (1), (2), (3)) v([VariantNo])
+                WHERE [N] <= 30 OR v.[VariantNo] <= 2
+            )
+            INSERT INTO [MealVariants]
+                ([MealId], [Name], [VariantType], [Status], [Description], [IsDefault],
+                 [RawWeightGrams], [CookedWeightGrams], [CaloriesPer100g], [ProteinPer100g],
+                 [CarbohydratesPer100g], [FatPer100g], [FiberPer100g], [NutritionSource],
+                 [NutritionOverrideReason], [AllergensApproved], [AllergenOverrideReason], [PublishedAt],
+                 [PublishedBy], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted])
+            SELECT
+                [MealId],
+                @prefix + N'VAR-' + RIGHT(N'000' + CONVERT(nvarchar(3), [N]), 3) + N'-' + CONVERT(nvarchar(2), [VariantNo]),
+                CASE [VariantNo] WHEN 1 THEN N'Standard' WHEN 2 THEN N'HighProtein' ELSE N'LowCarb' END,
+                N'Published',
+                N'VolumeDemo meal variant.',
+                CASE WHEN [VariantNo] = 1 THEN 1 ELSE 0 END,
+                430 + ([N] % 80) + ([VariantNo] * 10),
+                380 + ([N] % 70) + ([VariantNo] * 8),
+                120 + ([N] % 90),
+                8 + ([N] % 24),
+                12 + ([N] % 42),
+                4 + ([N] % 18),
+                2 + ([N] % 8),
+                N'Aggregated',
+                NULL,
+                1,
+                NULL,
+                @now,
+                @auditUser,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0
+            FROM VariantSource src
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [MealVariants] mv
+                WHERE mv.[MealId] = src.[MealId]
+                  AND mv.[Name] = @prefix + N'VAR-' + RIGHT(N'000' + CONVERT(nvarchar(3), src.[N]), 3) + N'-' + CONVERT(nvarchar(2), src.[VariantNo])
+                  AND mv.[IsDeleted] = 0);
+
+            ;WITH VariantNumbers AS (
+                SELECT mv.[Id] AS [MealVariantId], ROW_NUMBER() OVER (ORDER BY mv.[Id]) AS [N]
+                FROM [MealVariants] mv
+                WHERE mv.[Name] LIKE @prefix + N'VAR-%'
+                  AND mv.[IsDeleted] = 0
+            ),
+            VersionNumbers AS (
+                SELECT rcv.[Id] AS [VersionId], ROW_NUMBER() OVER (ORDER BY rcv.[Id]) AS [N]
+                FROM [RecipeComponentVersions] rcv
+                INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+                WHERE rc.[Name] LIKE @prefix + N'RC-%'
+                  AND rcv.[IsDeleted] = 0
+            )
+            INSERT INTO [MealVariantComponents]
+                ([MealVariantId], [RecipeComponentVersionId], [Role], [QuantityPerServing], [Unit], [SortOrder],
+                 [IsOptional], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted])
+            SELECT
+                vn.[MealVariantId],
+                rv.[VersionId],
+                N'variant',
+                1.000,
+                N'portion',
+                1,
+                0,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0
+            FROM VariantNumbers vn
+            INNER JOIN VersionNumbers rv ON rv.[N] = ((vn.[N] + 73 - 1) % 150) + 1
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [MealVariantComponents] mvc
+                WHERE mvc.[MealVariantId] = vn.[MealVariantId]
+                  AND mvc.[RecipeComponentVersionId] = rv.[VersionId]
+                  AND mvc.[IsDeleted] = 0);
+
+            ;WITH Numbers AS (
+                SELECT TOP (5) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects
+            )
+            INSERT INTO [Diets]
+                ([Name], [Description], [MarketingDescription], [Status], [IsActive], [ThumbnailUrl],
+                 [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted])
+            SELECT
+                @prefix + N'DIET-' + RIGHT(N'00' + CONVERT(nvarchar(2), [N]), 2),
+                N'VolumeDemo M2 diet.',
+                N'VolumeDemo M2 diet for load and audit demonstration.',
+                N'Active',
+                1,
+                NULL,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0
+            FROM Numbers n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Diets] d
+                WHERE d.[Name] = @prefix + N'DIET-' + RIGHT(N'00' + CONVERT(nvarchar(2), n.[N]), 2)
+                  AND d.[IsDeleted] = 0);
+
+            ;WITH DietNumbers AS (
+                SELECT d.[Id] AS [DietId], ROW_NUMBER() OVER (ORDER BY d.[Id]) AS [N]
+                FROM [Diets] d
+                WHERE d.[Name] LIKE @prefix + N'DIET-%'
+                  AND d.[IsDeleted] = 0
+            ),
+            Calories AS (
+                SELECT * FROM (VALUES (1500, 0.94, 0), (1800, 1.00, 1), (2000, 1.08, 0), (2200, 1.16, 0), (2500, 1.28, 0))
+                    v([TargetCalories], [PriceMultiplier], [IsDefault])
+            )
+            INSERT INTO [DietVariants]
+                ([DietId], [Name], [TargetCalories], [PriceMultiplier], [IsDefault],
+                 [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted])
+            SELECT
+                dn.[DietId],
+                @prefix + CONVERT(nvarchar(4), c.[TargetCalories]),
+                c.[TargetCalories],
+                c.[PriceMultiplier],
+                c.[IsDefault],
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0
+            FROM DietNumbers dn
+            CROSS JOIN Calories c
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [DietVariants] dv
+                WHERE dv.[DietId] = dn.[DietId]
+                  AND dv.[Name] = @prefix + CONVERT(nvarchar(4), c.[TargetCalories])
+                  AND dv.[IsDeleted] = 0);
+
+            ;WITH Numbers AS (
+                SELECT TOP (14) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS [Offset]
+                FROM sys.all_objects
+            )
+            INSERT INTO [DietMenuPlans]
+                ([PlanDate], [Status], [Notes], [PublishedAt], [PublishedBy], [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                DATEADD(day, [Offset], @today),
+                N'Published',
+                N'VOL-M2 VolumeDemo plan 14 days, około 350 pozycji.',
+                @now,
+                @auditUser,
+                @now,
+                @auditUser,
+                0
+            FROM Numbers n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [DietMenuPlans] p
+                WHERE p.[PlanDate] = DATEADD(day, n.[Offset], @today)
+                  AND p.[IsDeleted] = 0);
+
+            UPDATE p
+            SET [Status] = N'Published',
+                [Notes] = N'VOL-M2 VolumeDemo plan 14 days, około 350 pozycji.',
+                [PublishedAt] = COALESCE([PublishedAt], @now),
+                [PublishedBy] = COALESCE([PublishedBy], @auditUser),
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser,
+                [IsDeleted] = 0
+            FROM [DietMenuPlans] p
+            WHERE p.[PlanDate] >= @today
+              AND p.[PlanDate] < DATEADD(day, 14, @today);
+
+            DECLARE @volumeDietVariantIds TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @volumeDietVariantIds ([Id])
+            SELECT dv.[Id]
+            FROM [DietVariants] dv
+            INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
+            WHERE d.[Name] LIKE @prefix + N'DIET-%'
+              AND d.[IsDeleted] = 0
+              AND dv.[IsDeleted] = 0;
+
+            UPDATE dpi
+            SET [IsActive] = 0,
+                [IsDeleted] = 1,
+                [DeletedAt] = @now,
+                [DeletedBy] = @auditUser,
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [DietMenuPlanItems] dpi
+            INNER JOIN [DietMenuPlans] p ON p.[Id] = dpi.[DietMenuPlanId]
+            WHERE p.[PlanDate] >= @today
+              AND p.[PlanDate] < DATEADD(day, 14, @today)
+              AND dpi.[DietVariantId] IN (SELECT [Id] FROM @volumeDietVariantIds)
+              AND dpi.[IsDeleted] = 0;
+
+            ;WITH PlanNumbers AS (
+                SELECT p.[Id] AS [PlanId], p.[PlanDate], ROW_NUMBER() OVER (ORDER BY p.[PlanDate]) AS [DayNo]
+                FROM [DietMenuPlans] p
+                WHERE p.[PlanDate] >= @today
+                  AND p.[PlanDate] < DATEADD(day, 14, @today)
+                  AND p.[IsDeleted] = 0
+            ),
+            VariantNumbers AS (
+                SELECT dv.[Id] AS [DietVariantId], ROW_NUMBER() OVER (ORDER BY d.[Id], dv.[TargetCalories]) AS [VariantNo]
+                FROM [DietVariants] dv
+                INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
+                WHERE d.[Name] LIKE @prefix + N'DIET-%'
+                  AND d.[IsDeleted] = 0
+                  AND dv.[IsDeleted] = 0
+            ),
+            MealVariantNumbers AS (
+                SELECT mv.[Id] AS [MealVariantId], mv.[MealId], ROW_NUMBER() OVER (ORDER BY mv.[Id]) AS [MealVariantNo]
+                FROM [MealVariants] mv
+                WHERE mv.[Name] LIKE @prefix + N'VAR-%'
+                  AND mv.[IsDeleted] = 0
+            )
+            INSERT INTO [DietMenuPlanItems]
+                ([DietMenuPlanId], [DietVariantId], [MealId], [MealVariantId], [MealSlot],
+                 [ServingSizeMultiplier], [SortOrder], [IsActive], [CreatedAt], [CreatedBy], [IsDeleted])
+            SELECT
+                pn.[PlanId],
+                vn.[DietVariantId],
+                mvn.[MealId],
+                mvn.[MealVariantId],
+                CASE ((pn.[DayNo] + vn.[VariantNo]) % 5)
+                    WHEN 0 THEN N'Breakfast'
+                    WHEN 1 THEN N'Snack1'
+                    WHEN 2 THEN N'Lunch'
+                    WHEN 3 THEN N'Snack2'
+                    ELSE N'Dinner'
+                END,
+                1.000,
+                vn.[VariantNo],
+                1,
+                @now,
+                @auditUser,
+                0
+            FROM PlanNumbers pn
+            CROSS JOIN VariantNumbers vn
+            INNER JOIN MealVariantNumbers mvn ON mvn.[MealVariantNo] = ((pn.[DayNo] * 25 + vn.[VariantNo] - 1) % 150) + 1;
+            """,
+            new
+            {
+                M2VolumePrefix,
+                Now = now,
+                AuditUser = auditUser,
+            },
+            commandTimeout: 180,
+            cancellationToken: cancellationToken));
+
+        this.logger.LogInformation("Ensured M2 VolumeDemo dataset with prefix {Prefix}.", M2VolumePrefix);
     }
 
     private async Task ResetDemoDataAsync(CancellationToken cancellationToken)

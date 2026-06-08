@@ -9,6 +9,7 @@ namespace KuchniaUCygana.Domain.Interfaces.Logistics;
 
 public interface IDriverRepository : IRepository<Driver>
 {
+    Task<IReadOnlyList<Driver>> GetByIdsAsync(IEnumerable<int> ids);
     Task<Driver?> GetByUserIdAsync(int userId);
     Task<Driver?> GetByLicenseNumberAsync(string licenseNumber);
     Task<IReadOnlyList<Driver>> GetByIdsAsync(IReadOnlyCollection<int> driverIds);

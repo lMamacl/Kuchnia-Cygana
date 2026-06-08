@@ -3,11 +3,7 @@
     Layout = "_LayoutStaff";
     var employeesPage = Model.EmployeesPage;
     var filter = Model.EmployeesFilter;
-    var usersById = Model.Users.ToDictionary(user => user.Id);
-    var roles = Model.Users
-        .Select(user => user.Role)
-        .Where(role => !string.IsNullOrWhiteSpace(role))
-        .Distinct(StringComparer.Ordinal)
+    var roles = Model.AvailableRoles
         .OrderBy(role => role)
         .ToArray();
 }
@@ -87,9 +83,7 @@
                     <tbody>
                         @foreach (var employee in employeesPage.Items)
                         {
-                            var accountRole = usersById.TryGetValue(employee.UserId, out var account)
-                                ? account.Role
-                                : "-";
+                            var accountRole = string.IsNullOrWhiteSpace(employee.UserRole) ? "-" : employee.UserRole;
                             <tr>
                                 <td>
                                     <div class="fw-semibold">@employee.FullName</div>

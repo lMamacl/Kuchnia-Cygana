@@ -20,11 +20,23 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
         this.connectionFactory = connectionFactory;
     }
 
-    public Task<Batch> ReceiveDeliveryAsync(Batch batch, InventoryTransaction transaction)
+    public Task<Batch> ReceiveDeliveryAsync(
+        Batch batch,
+        InventoryTransaction transaction,
+        bool skipIfReferenceDocumentExists = false)
     {
         return ExecuteInTransactionAsync(async (db, tx) =>
         {
             await EnsureStockItemExistsAsync(db, tx, batch.StockItemId);
+            transaction.ReferenceDocument = NormalizeReferenceDocument(transaction.ReferenceDocument);
+            if (skipIfReferenceDocumentExists && !string.IsNullOrWhiteSpace(transaction.ReferenceDocument))
+            {
+                var existingBatch = await GetExistingReceiptBatchForReferenceAsync(db, tx, transaction.ReferenceDocument);
+                if (existingBatch is not null)
+                {
+                    return existingBatch;
+                }
+            }
 
             var now = DateTimeOffset.UtcNow;
             batch.CreatedAt = now;
@@ -484,6 +496,30 @@ public sealed class WarehouseCommandRepository : IWarehouseCommandRepository
             tx);
 
         return existing > 0;
+    }
+
+    private static async Task<Batch?> GetExistingReceiptBatchForReferenceAsync(
+        IDbConnection db,
+        IDbTransaction tx,
+        string referenceDocument)
+    {
+        await AcquireReferenceDocumentLockAsync(db, tx, referenceDocument);
+        return await db.QuerySingleOrDefaultAsync<Batch>(
+            """
+            SELECT TOP 1 b.*
+            FROM [InventoryTransactions] it
+            INNER JOIN [Batches] b ON b.[Id] = it.[BatchId]
+            WHERE it.[ReferenceDocument] = @referenceDocument
+              AND it.[TransactionType] = @transactionType
+              AND b.[IsDeleted] = 0
+            ORDER BY it.[CreatedAt] DESC, it.[Id] DESC;
+            """,
+            new
+            {
+                referenceDocument,
+                transactionType = (int)InventoryTransactionType.Receipt,
+            },
+            tx);
     }
 
     private static async Task AcquireReferenceDocumentLockAsync(

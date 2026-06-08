@@ -25,5 +25,7 @@ public sealed class ReceiveDeliveryValidator : AbstractValidator<ReceiveDelivery
         RuleFor(x => x.InvoiceNumber)
             .MaximumLength(50)
             .WithMessage("Numer faktury/dostawy może mieć maksymalnie 50 znaków.");
+        RuleFor(x => x.OperationKey)
+            .MaximumLength(50);
     }
 }

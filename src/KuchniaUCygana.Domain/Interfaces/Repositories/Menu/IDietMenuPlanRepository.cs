@@ -32,7 +32,11 @@ public interface IDietMenuPlanRepository
 
     Task<int> CopyDayAsync(int sourcePlanId, DateOnly targetDate, string? userName, bool clearTargetDraft);
 
-    Task PublishAsync(int planId, string? userName);
+    Task PublishAsync(
+        int planId,
+        string? userName,
+        IReadOnlyList<DietMenuPlanPublishedSnapshotRow> snapshots,
+        string? planSnapshotHash);
 }
 
 public sealed class DietMenuPlanDayRow
@@ -131,6 +135,15 @@ public sealed class DietMenuPlanItemRow
     public int PackagingRequirementCount { get; set; }
 
     public int MissingWarehouseCategoryCount { get; set; }
+}
+
+public sealed class DietMenuPlanPublishedSnapshotRow
+{
+    public int DietMenuPlanItemId { get; set; }
+
+    public string SnapshotJson { get; set; } = string.Empty;
+
+    public string SnapshotHash { get; set; } = string.Empty;
 }
 
 public sealed class MealPlanSearchRow

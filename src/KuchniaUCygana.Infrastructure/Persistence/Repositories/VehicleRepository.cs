@@ -20,6 +20,25 @@ public sealed class VehicleRepository : BaseRepository<Vehicle>, IVehicleReposit
         _connectionFactory = connectionFactory;
     }
 
+    public async Task<IReadOnlyList<Vehicle>> GetByIdsAsync(IEnumerable<int> ids)
+    {
+        using var db = _connectionFactory.CreateConnection();
+        var idList = ids
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+
+        if (idList.Length == 0)
+        {
+            return Array.Empty<Vehicle>();
+        }
+
+        var vehicles = await db.QueryAsync<Vehicle>(
+            "SELECT * FROM [Vehicles] WHERE [Id] IN @Ids AND [IsDeleted] = 0 ORDER BY [Id];",
+            new { Ids = idList });
+        return vehicles.ToList();
+    }
+
     public async Task<Vehicle?> GetByRegistrationNumberAsync(string registrationNumber)
     {
         using var db = _connectionFactory.CreateConnection();

@@ -416,11 +416,7 @@ public sealed class LoadingService : ILoadingService, IManifestService
 
     public async Task<int> ResetLoadingAsync(DateOnly date, int? routeId = null)
     {
-        var routes = routeId.HasValue
-            ? new List<PackingRouteDto> { await GetRouteForLoadingActionsAsync(date, routeId.Value) }
-            : (await _packingService.GetPackingBoardAsync(date)).Routes
-                .Where(route => route.RouteId > 0 && route.TotalBags > 0)
-                .ToList();
+        var routes = await GetRoutesForLoadingActionsAsync(date, routeId);
 
         if (routeId.HasValue && routes.Count == 0)
         {
@@ -460,28 +456,16 @@ public sealed class LoadingService : ILoadingService, IManifestService
             }
         }
 
-        var routeIds = routes.Select(route => route.RouteId).ToHashSet();
-        var manifests = (await _packingManifestRepository.GetAllAsync())
-            .Where(manifest => manifest.PackingDate == date &&
-                manifest.RouteId.HasValue &&
-                routeIds.Contains(manifest.RouteId.Value) &&
-                !manifest.IsSuperseded)
-            .ToList();
-        foreach (var manifest in manifests)
-        {
-            manifest.IsSuperseded = true;
-            manifest.RequiresRegeneration = false;
-            manifest.RequiresRegenerationReason = null;
-            manifest.ChangeReason = "Reset zaladunku auta.";
-            await _packingManifestRepository.UpdateAsync(manifest);
-        }
+        var routeIds = routes.Select(route => route.RouteId).ToArray();
+        var supersededManifests = await RequirePackingManifestRepository()
+            .SupersedeActiveByRoutesAsync(date, routeIds, "Reset zaladunku auta.");
 
         _logger.LogInformation(
             "Reset loading for {Date}, route {RouteId}. Reset {BagCount} bags and superseded {ManifestCount} manifests.",
             date,
             routeId,
             resetBags,
-            manifests.Count);
+            supersededManifests);
 
         return resetBags;
     }
@@ -497,10 +481,9 @@ public sealed class LoadingService : ILoadingService, IManifestService
 
         if (shippingLabel is null)
         {
-            shippingLabel = _packingLabelRepository is not null
-                ? await _packingLabelRepository.GetShippingByQrCodeAsync(transportCode)
-                    ?? await _packingLabelRepository.GetShippingByQrCodeAsync(normalizedCode)
-                : await FindShippingLabelByCodeFallbackAsync(transportCode, normalizedCode);
+            var labels = RequirePackingLabelRepository();
+            shippingLabel = await labels.GetShippingByQrCodeAsync(transportCode)
+                ?? await labels.GetShippingByQrCodeAsync(normalizedCode);
         }
 
         if (shippingLabel is null)
@@ -967,17 +950,66 @@ public sealed class LoadingService : ILoadingService, IManifestService
 
     private async Task<PackingManifest?> GetLatestPackingManifestEntityAsync(DateOnly date, int routeId)
     {
-        if (_packingManifestQueryRepository is not null)
+        return await RequirePackingManifestRepository().GetLatestAsync(date, routeId);
+    }
+
+    private async Task<List<PackingRouteDto>> GetRoutesForLoadingActionsAsync(DateOnly date, int? routeId)
+    {
+        if (routeId.HasValue)
         {
-            return await _packingManifestQueryRepository.GetLatestAsync(date, routeId);
+            return new List<PackingRouteDto> { await GetRouteForLoadingActionsAsync(date, routeId.Value) };
         }
 
-        var manifests = await _packingManifestRepository.GetAllAsync();
-        return manifests
-            .Where(m => m.PackingDate == date && m.RouteId == routeId && !m.IsSuperseded)
-            .OrderByDescending(m => m.GeneratedAt)
-            .ThenByDescending(m => m.Id)
-            .FirstOrDefault();
+        const int PageSize = 200;
+        var page = 1;
+        var routesById = new Dictionary<int, PackingRouteDto>();
+
+        while (true)
+        {
+            var boardPage = await _packingService.GetPackingBoardPageAsync(new PackingBoardQueryDto
+            {
+                Date = date,
+                Page = page,
+                PageSize = PageSize,
+                Mode = "labels",
+            });
+
+            foreach (var summary in boardPage.AllRoutes.Where(candidate => candidate.RouteId > 0))
+            {
+                routesById.TryAdd(summary.RouteId, CloneRouteWithoutBags(summary));
+            }
+
+            foreach (var pageRoute in boardPage.Board.Routes.Where(candidate => candidate.RouteId > 0))
+            {
+                if (!routesById.TryGetValue(pageRoute.RouteId, out var route))
+                {
+                    route = CloneRouteWithoutBags(pageRoute);
+                    routesById[pageRoute.RouteId] = route;
+                }
+
+                route.Bags.AddRange(pageRoute.Bags);
+            }
+
+            if (page * PageSize >= boardPage.TotalBags)
+            {
+                break;
+            }
+
+            page++;
+        }
+
+        return routesById.Values
+            .Where(route => route.TotalBags > 0)
+            .OrderBy(route => route.RouteId)
+            .Select(route =>
+            {
+                route.Bags = route.Bags
+                    .OrderBy(bag => bag.StopNumber)
+                    .ThenBy(bag => bag.PackingBagId)
+                    .ToList();
+                return route;
+            })
+            .ToList();
     }
 
     private async Task<PackingRouteDto> GetRouteForLoadingActionsAsync(DateOnly date, int routeId)
@@ -1087,43 +1119,24 @@ public sealed class LoadingService : ILoadingService, IManifestService
     private async Task<IReadOnlyList<PackingLabel>> GetShippingLabelsForRouteAsync(PackingRouteDto route)
     {
         var bagIds = route.Bags.Select(bag => bag.PackingBagId).Where(id => id > 0).Distinct().ToArray();
-        if (_packingLabelRepository is not null)
-        {
-            return await _packingLabelRepository.GetShippingForBagsAsync(bagIds);
-        }
-
-        var labels = await _labelRepository.GetAllAsync();
-        return labels
-            .Where(label => label.LabelType == LabelType.Shipping)
-            .Where(label => label.PackingBagId.HasValue && bagIds.Contains(label.PackingBagId.Value))
-            .ToList();
+        return await RequirePackingLabelRepository().GetShippingForBagsAsync(bagIds);
     }
 
     private async Task<PackingLabel?> GetLatestShippingLabelForBagAsync(int packingSessionId, int packingBagId)
     {
-        if (_packingLabelRepository is not null)
+        var label = await RequirePackingLabelRepository().GetLatestShippingForBagAsync(packingBagId);
+        if (label is not null)
         {
-            return await _packingLabelRepository.GetLatestShippingForBagAsync(packingBagId);
+            return label;
         }
 
-        var labels = await _labelRepository.GetAllAsync();
-        return labels
-            .Where(label => label.LabelType == LabelType.Shipping &&
-                (label.PackingBagId == packingBagId || label.PackingSessionId == packingSessionId))
-            .OrderByDescending(label => label.PrintNumber)
-            .ThenByDescending(label => label.Id)
+        var sessionLabels = await RequirePackingLabelRepository().GetShippingForSessionAsync(packingSessionId);
+        return sessionLabels
+            .Where(candidate => candidate.PackingBagId == packingBagId ||
+                (!candidate.PackingBagId.HasValue && candidate.PackingSessionId == packingSessionId))
+            .OrderByDescending(candidate => candidate.PrintNumber)
+            .ThenByDescending(candidate => candidate.Id)
             .FirstOrDefault();
-    }
-
-    private async Task<PackingLabel?> FindShippingLabelByCodeFallbackAsync(string transportCode, string normalizedCode)
-    {
-        var labels = await _labelRepository.GetAllAsync();
-        return labels
-            .Where(label => label.LabelType == LabelType.Shipping)
-            .FirstOrDefault(label =>
-                string.Equals(label.QrCode, transportCode, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(label.QrCode, normalizedCode, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(TransportLabelCodeNormalizer.Normalize(label.QrCode), normalizedCode, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void ValidateManifestPayload(
@@ -1308,6 +1321,20 @@ public sealed class LoadingService : ILoadingService, IManifestService
             candidate.Bags.Any(bag => bag.PackingBagId == physicalBag.Id || bag.PackingSessionId == session.Id));
 
         return route?.RouteId;
+    }
+
+    private IPackingLabelRepository RequirePackingLabelRepository()
+    {
+        return _packingLabelRepository
+            ?? _labelRepository as IPackingLabelRepository
+            ?? throw new InvalidOperationException("Brak query repozytorium etykiet transportowych. Loading nie moze uzywac pelnego skanu etykiet przy danych wolumenowych.");
+    }
+
+    private IPackingManifestRepository RequirePackingManifestRepository()
+    {
+        return _packingManifestQueryRepository
+            ?? _packingManifestRepository as IPackingManifestRepository
+            ?? throw new InvalidOperationException("Brak query repozytorium manifestow. Loading nie moze uzywac pelnego skanu manifestow przy danych wolumenowych.");
     }
 
     private async Task LogStatusChangeAsync(

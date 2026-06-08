@@ -26,5 +26,7 @@ public sealed class ManualIssueValidator : AbstractValidator<ManualIssueRequest>
             .WithMessage("Pola 'Osoba odbierająca' (IssuedTo) jest wymagane.")
             .MaximumLength(100)
             .WithMessage("Nazwa odbiorcy nie może przekraczać 100 znaków.");
+        RuleFor(x => x.OperationKey)
+            .MaximumLength(50);
     }
 }

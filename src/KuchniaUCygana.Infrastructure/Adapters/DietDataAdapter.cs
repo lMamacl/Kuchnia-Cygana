@@ -1,4 +1,5 @@
 using Dapper;
+using System.Text.Json;
 using KuchniaUCygana.Application.DTOs.Menu;
 using KuchniaUCygana.Application.Interfaces.Menu;
 using KuchniaUCygana.Application.Services.Menu;
@@ -13,6 +14,11 @@ namespace KuchniaUCygana.Infrastructure.Adapters;
 /// </summary>
 public sealed class DietDataAdapter : IDietDataProvider
 {
+    private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IMealVariantResultCalculator _resultCalculator;
 
@@ -52,6 +58,21 @@ public sealed class DietDataAdapter : IDietDataProvider
         if (plan is null)
         {
             return null;
+        }
+
+        var savedSnapshotItems = await GetSavedSnapshotItemsAsync(db, plan.DietMenuPlanId);
+        if (savedSnapshotItems.Count > 0)
+        {
+            return new PublishedDietPlanSnapshotDto
+            {
+                DietMenuPlanId = plan.DietMenuPlanId,
+                PlanDate = plan.PlanDate,
+                PlanStatus = plan.PlanStatus,
+                PublishedAt = plan.PublishedAt,
+                PublishedBy = plan.PublishedBy,
+                Items = savedSnapshotItems,
+                Alerts = await GetPlanAlertsAsync(db, dateParam),
+            };
         }
 
         var itemRows = (await db.QueryAsync<PublishedPlanItemRow>(
@@ -135,32 +156,7 @@ public sealed class DietDataAdapter : IDietDataProvider
         var packagingByMealVariant = await GetPackagingByMealVariantAsync(db, mealVariantIds);
         var packagingByComponentVersion = await GetPackagingByComponentVersionAsync(db, componentVersionIds);
         var allergensByMealVariant = await GetAllergensByMealVariantAsync(db, mealVariantIds);
-        var alerts = (await db.QueryAsync<PlanChangeAlertDto>(
-            """
-            SELECT
-                [Id],
-                [PlanDate],
-                [DietMenuPlanId],
-                [DietMenuPlanItemId],
-                [MealId],
-                [RecipeComponentVersionId],
-                [AlertType],
-                [Severity],
-                [Message],
-                [Reason],
-                [RequiresAcknowledgement],
-                [CreatedAt],
-                [CreatedBy],
-                [AcknowledgedAt],
-                [AcknowledgedBy]
-            FROM [PlanChangeAlerts]
-            WHERE [PlanDate] = @date
-            ORDER BY
-                CASE WHEN [AcknowledgedAt] IS NULL THEN 0 ELSE 1 END,
-                [CreatedAt] DESC,
-                [Id] DESC;
-            """,
-            new { date = dateParam })).ToList();
+        var alerts = await GetPlanAlertsAsync(db, dateParam);
 
         var snapshotItems = new List<PublishedDietPlanItemDto>();
         foreach (var row in itemRows)
@@ -244,6 +240,83 @@ public sealed class DietDataAdapter : IDietDataProvider
             Items = snapshotItems,
             Alerts = alerts,
         };
+    }
+
+    private static async Task<IReadOnlyList<PublishedDietPlanItemDto>> GetSavedSnapshotItemsAsync(
+        System.Data.IDbConnection db,
+        int dietMenuPlanId)
+    {
+        var rows = (await db.QueryAsync<SavedSnapshotItemRow>(
+            """
+            SELECT
+                i.[PublishedSnapshotJson]
+            FROM [DietMenuPlanItems] i
+            WHERE i.[DietMenuPlanId] = @dietMenuPlanId
+              AND i.[IsDeleted] = 0
+              AND i.[IsActive] = 1
+              AND i.[PublishedSnapshotJson] IS NOT NULL
+              AND i.[PublishedSnapshotHash] IS NOT NULL
+            ORDER BY i.[DietVariantId], i.[SortOrder], i.[Id];
+            """,
+            new { dietMenuPlanId })).ToList();
+
+        if (rows.Count == 0)
+        {
+            return Array.Empty<PublishedDietPlanItemDto>();
+        }
+
+        var items = new List<PublishedDietPlanItemDto>();
+        foreach (var row in rows)
+        {
+            if (string.IsNullOrWhiteSpace(row.PublishedSnapshotJson))
+            {
+                continue;
+            }
+
+            var item = JsonSerializer.Deserialize<PublishedDietPlanItemDto>(
+                row.PublishedSnapshotJson,
+                SnapshotJsonOptions);
+            if (item is not null)
+            {
+                items.Add(item);
+            }
+        }
+
+        return items;
+    }
+
+    private static async Task<IReadOnlyList<PlanChangeAlertDto>> GetPlanAlertsAsync(
+        System.Data.IDbConnection db,
+        DateTime date)
+    {
+        var alerts = await db.QueryAsync<PlanChangeAlertDto>(
+            """
+            SELECT
+                [Id],
+                [PlanDate],
+                [DietMenuPlanId],
+                [DietMenuPlanItemId],
+                [MealId],
+                [RecipeComponentVersionId],
+                [AlertType],
+                [Severity],
+                [Message],
+                [Reason],
+                [RequiresAcknowledgement],
+                [CreatedAt],
+                [CreatedBy],
+                [AcknowledgedAt],
+                [AcknowledgedBy]
+            FROM [PlanChangeAlerts]
+            WHERE [PlanDate] = @date
+            ORDER BY
+                CASE WHEN [AcknowledgedAt] IS NULL THEN 0 ELSE 1 END,
+                [CreatedAt] DESC,
+                [Id] DESC;
+            """,
+            new { date });
+
+        return alerts.ToList();
     }
 
     public async Task<IEnumerable<DietPlanEntry>> Get7DayPlanAsync(DateOnly startDate)
@@ -1523,6 +1596,11 @@ public sealed class DietDataAdapter : IDietDataProvider
         public string? VariantNutritionOverrideReason { get; set; }
 
         public bool VariantAllergensApproved { get; set; }
+    }
+
+    private sealed class SavedSnapshotItemRow
+    {
+        public string? PublishedSnapshotJson { get; set; }
     }
 
     private sealed class ComponentRow

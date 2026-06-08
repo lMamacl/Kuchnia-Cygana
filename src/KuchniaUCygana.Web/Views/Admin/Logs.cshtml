@@ -33,15 +33,7 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label" for="UserId">Uzytkownik</label>
-                        <select class="form-select" id="UserId" name="UserId">
-                            <option value="">Wszyscy</option>
-                            @foreach (var user in Model.Users.OrderBy(user => user.FullName))
-                            {
-                                <option value="@user.Id" selected="@(filter.UserId == user.Id)">
-                                    @(string.IsNullOrWhiteSpace(user.FullName) ? user.Email : user.FullName) (@user.Role)
-                                </option>
-                            }
-                        </select>
+                        <input class="form-control" id="UserId" name="UserId" type="number" min="1" value="@filter.UserId" placeholder="ID uzytkownika" />
                     </div>
                     <div class="col-md-2">
                         <label class="form-label" for="Action">Akcja</label>

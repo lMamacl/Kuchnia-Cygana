@@ -154,8 +154,37 @@ public sealed class PackingIncidentService : IPackingIncidentService
             filter.Status,
             filter.Type,
             filter.ClientPublicId,
-            filter.DeliveryCalendarId);
+            filter.DeliveryCalendarId,
+            filter.Search);
 
+        return incidents.Select(Map).ToList();
+    }
+
+    public async Task<PackingIncidentPageDto> SearchPageAsync(PackingIncidentFilterDto filter)
+    {
+        var result = await incidentRepository.SearchPageAsync(new PackingIncidentSearchQuery(
+            filter.Date,
+            filter.Status,
+            filter.Type,
+            filter.ClientPublicId,
+            filter.DeliveryCalendarId,
+            filter.Search,
+            filter.Page,
+            filter.PageSize));
+
+        return new PackingIncidentPageDto
+        {
+            Items = result.Items.Select(Map).ToArray(),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount,
+        };
+    }
+
+    public async Task<IReadOnlyList<PackingIncidentDto>> SearchByDeliveryCalendarIdsAsync(
+        IEnumerable<int> deliveryCalendarIds)
+    {
+        var incidents = await incidentRepository.SearchByDeliveryCalendarIdsAsync(deliveryCalendarIds);
         return incidents.Select(Map).ToList();
     }
 

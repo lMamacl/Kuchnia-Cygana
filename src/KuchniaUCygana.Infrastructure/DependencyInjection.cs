@@ -120,7 +120,9 @@ public static class DependencyInjection
         services.AddScoped<IVehicleRepository, VehicleRepository>();
 
         // Module 5 (HR / Admin) repositories.
+        services.AddScoped<IHumanResourcesReadRepository, HumanResourcesReadRepository>();
         services.AddScoped<ITicketRepository, TicketRepository>();
+        services.AddScoped<ITicketAttachmentRepository, TicketAttachmentRepository>();
         services.AddScoped<IWorkScheduleRepository, WorkScheduleRepository>();
 
         services.AddScoped<IDatabaseSeeder>(sp => new DatabaseSeeder(

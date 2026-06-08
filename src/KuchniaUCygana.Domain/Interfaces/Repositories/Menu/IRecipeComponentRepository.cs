@@ -18,11 +18,15 @@ public interface IRecipeComponentRepository
 
     Task<IReadOnlyList<PackagingRequirementRow>> GetVersionPackagingAsync(int versionId);
 
+    Task<RecipeComponentVersionDetailsBulkRow> GetVersionDetailsBulkAsync(IEnumerable<int> versionIds);
+
     Task<IReadOnlyList<PackagingRequirementRow>> GetMealPackagingAsync(int mealId);
 
     Task<IReadOnlyList<RecipeComponentInstructionSectionRow>> GetVersionInstructionSectionsAsync(int versionId);
 
     Task<IReadOnlyList<RecipeComponentVersionOptionRow>> GetPublishedVersionOptionsAsync();
+
+    Task<IReadOnlyList<RecipeComponentVersionOptionRow>> SearchPublishedVersionOptionsAsync(string? query, int limit);
 
     Task<IEnumerable<MealRecipeComponentDetailsRow>> GetMealComponentDetailsAsync(int mealId);
 
@@ -254,6 +258,8 @@ public sealed class PackagingRequirementRow
 
 public sealed class RecipeComponentAllergenRow
 {
+    public int RecipeComponentVersionId { get; set; }
+
     public int? AllergenId { get; set; }
 
     public string Name { get; set; } = string.Empty;
@@ -274,6 +280,20 @@ public sealed class RecipeComponentVersionOptionRow
     public string ComponentName { get; set; } = string.Empty;
 
     public int VersionNumber { get; set; }
+}
+
+public sealed class RecipeComponentVersionDetailsBulkRow
+{
+    public IReadOnlyDictionary<int, IReadOnlyList<RecipeComponentIngredientRow>> IngredientsByVersionId { get; init; }
+        = new Dictionary<int, IReadOnlyList<RecipeComponentIngredientRow>>();
+
+    public IReadOnlyDictionary<int, IReadOnlyList<PackagingRequirementRow>> PackagingByVersionId { get; init; }
+        = new Dictionary<int, IReadOnlyList<PackagingRequirementRow>>();
+
+    public IReadOnlyDictionary<int, IReadOnlyList<RecipeComponentAllergenRow>> AllergensByVersionId { get; init; }
+        = new Dictionary<int, IReadOnlyList<RecipeComponentAllergenRow>>();
+
+    public static RecipeComponentVersionDetailsBulkRow Empty { get; } = new();
 }
 
 public sealed class MealRecipeComponentDetailsRow

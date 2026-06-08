@@ -9,6 +9,30 @@ public sealed class DeliveryWindowRepository : BaseRepository<DeliveryWindow>, I
 {
     public DeliveryWindowRepository(IDbConnectionFactory factory, ICurrentUserService? currentUserService = null) : base(factory, currentUserService) { }
 
+    public async Task<IReadOnlyList<DeliveryWindow>> GetByIdsAsync(IEnumerable<int> ids)
+    {
+        using var db = Factory.CreateConnection();
+        var idList = ids
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+
+        if (idList.Length == 0)
+        {
+            return Array.Empty<DeliveryWindow>();
+        }
+
+        const string sql = """
+            SELECT *
+            FROM DeliveryWindows
+            WHERE Id IN @Ids
+            ORDER BY SortOrder, Id;
+            """;
+
+        var windows = await db.QueryAsync<DeliveryWindow>(sql, new { Ids = idList });
+        return windows.ToList();
+    }
+
     public async Task<IEnumerable<DeliveryWindow>> GetActiveWindowsAsync()
     {
         using var db = Factory.CreateConnection();

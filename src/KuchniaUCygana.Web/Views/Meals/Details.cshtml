@@ -4,9 +4,6 @@
     ViewData["Title"] = $"Posilek #{Model.Id}";
     ViewData["Section"] = "Katalog Menu";
     ViewData["Description"] = "Zarzadzanie receptura, wariantami, opakowaniami i wynikiem kalkulatora.";
-
-    var componentVersions = ViewBag.ComponentVersions as IEnumerable<KuchniaUCygana.Application.DTOs.Menu.RecipeComponentVersionOptionDto>
-        ?? Enumerable.Empty<KuchniaUCygana.Application.DTOs.Menu.RecipeComponentVersionOptionDto>();
 }
 
 @functions {
@@ -141,6 +138,10 @@
                                                    asp-route-versionId="@component.RecipeComponentVersionId"
                                                    class="btn btn-sm btn-outline-primary">Wersja</a>
                                             }
+                                            else
+                                            {
+                                                <span class="badge bg-warning-lt text-warning">legacy Recipes</span>
+                                            }
                                         </td>
                                     </tr>
                                 }
@@ -155,13 +156,12 @@
                     <input type="hidden" name="MealId" value="@Model.Id" />
                     <div class="col-md-4">
                         <label class="form-label">Dodaj skladowa</label>
-                        <select name="RecipeComponentVersionId" class="form-select" required>
-                            <option value="">Wybierz wersje</option>
-                            @foreach (var option in componentVersions)
-                            {
-                                <option value="@option.RecipeComponentVersionId">@option.ComponentName v@option.VersionNumber</option>
-                            }
-                        </select>
+                        <div class="position-relative recipe-version-lookup">
+                            <input type="hidden" name="RecipeComponentVersionId" class="js-version-id" required />
+                            <input type="text" class="form-control js-version-query" autocomplete="off" placeholder="Wpisz nazwe skladowej" />
+                            <div class="list-group mt-1 shadow-sm d-none js-version-results position-absolute w-100" style="z-index: 1050;"></div>
+                            <div class="form-hint js-version-status">Wpisz min. 2 znaki.</div>
+                        </div>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Rola</label>
@@ -313,14 +313,12 @@
                                                 <input type="hidden" name="Id" value="@component.Id" />
                                                 <div class="col-md-4">
                                                     <label class="form-label">Wersja skladowej</label>
-                                                    <select name="RecipeComponentVersionId" class="form-select" required>
-                                                        @foreach (var option in componentVersions)
-                                                        {
-                                                            <option value="@option.RecipeComponentVersionId" selected="@(option.RecipeComponentVersionId == component.RecipeComponentVersionId ? "selected" : null)">
-                                                                @option.ComponentName v@option.VersionNumber
-                                                            </option>
-                                                        }
-                                                    </select>
+                                                    <div class="position-relative recipe-version-lookup">
+                                                        <input type="hidden" name="RecipeComponentVersionId" class="js-version-id" value="@component.RecipeComponentVersionId" required />
+                                                        <input type="text" class="form-control js-version-query" value="@component.ComponentName v@component.VersionNumber" autocomplete="off" placeholder="Wpisz nazwe skladowej" />
+                                                        <div class="list-group mt-1 shadow-sm d-none js-version-results position-absolute w-100" style="z-index: 1050;"></div>
+                                                        <div class="form-hint js-version-status">Wybrana opublikowana wersja.</div>
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-2">
                                                     <label class="form-label">Rola</label>
@@ -358,13 +356,12 @@
                                             @Html.AntiForgeryToken()
                                             <div class="col-md-4">
                                                 <label class="form-label">Dodaj skladowa</label>
-                                                <select name="RecipeComponentVersionId" class="form-select" required>
-                                                    <option value="">Wybierz wersje</option>
-                                                    @foreach (var option in componentVersions)
-                                                    {
-                                                        <option value="@option.RecipeComponentVersionId">@option.ComponentName v@option.VersionNumber</option>
-                                                    }
-                                                </select>
+                                                <div class="position-relative recipe-version-lookup">
+                                                    <input type="hidden" name="RecipeComponentVersionId" class="js-version-id" required />
+                                                    <input type="text" class="form-control js-version-query" autocomplete="off" placeholder="Wpisz nazwe skladowej" />
+                                                    <div class="list-group mt-1 shadow-sm d-none js-version-results position-absolute w-100" style="z-index: 1050;"></div>
+                                                    <div class="form-hint js-version-status">Wpisz min. 2 znaki.</div>
+                                                </div>
                                             </div>
                                             <div class="col-md-2">
                                                 <label class="form-label">Rola</label>
@@ -580,3 +577,108 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const lookupUrl = '@Url.Content("~/diet-editor/recipe-components/lookups/published-versions")';
+            const debounce = (callback, delay = 250) => {
+                let timer;
+                return (...args) => {
+                    window.clearTimeout(timer);
+                    timer = window.setTimeout(() => callback(...args), delay);
+                };
+            };
+
+            document.querySelectorAll('.recipe-version-lookup').forEach((lookup) => {
+                const idInput = lookup.querySelector('.js-version-id');
+                const queryInput = lookup.querySelector('.js-version-query');
+                const resultsBox = lookup.querySelector('.js-version-results');
+                const status = lookup.querySelector('.js-version-status');
+                let controller;
+                let sequence = 0;
+
+                const setPending = () => {
+                    idInput.value = '';
+                    status.textContent = 'Wybierz wersje z listy.';
+                    status.className = 'form-hint js-version-status text-secondary';
+                };
+
+                const render = (items) => {
+                    resultsBox.innerHTML = '';
+                    if (!items.length) {
+                        resultsBox.classList.add('d-none');
+                        status.textContent = 'Brak opublikowanych wersji.';
+                        return;
+                    }
+
+                    items.forEach((item) => {
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'list-group-item list-group-item-action py-2';
+                        button.innerHTML = `
+                            <div class="fw-semibold">${item.text}</div>
+                            <div class="small text-secondary">RecipeComponents / wersjonowane dane</div>`;
+                        button.addEventListener('click', () => {
+                            idInput.value = item.id;
+                            queryInput.value = item.text;
+                            resultsBox.classList.add('d-none');
+                            status.textContent = 'Wybrana opublikowana wersja.';
+                            status.className = 'form-hint js-version-status text-success';
+                        });
+                        resultsBox.appendChild(button);
+                    });
+
+                    resultsBox.classList.remove('d-none');
+                };
+
+                const search = debounce(async () => {
+                    const query = queryInput.value.trim();
+                    setPending();
+                    if (query.length < 2) {
+                        resultsBox.classList.add('d-none');
+                        status.textContent = 'Wpisz min. 2 znaki.';
+                        return;
+                    }
+
+                    controller?.abort();
+                    controller = new AbortController();
+                    const requestSequence = ++sequence;
+
+                    try {
+                        const response = await fetch(`${lookupUrl}?term=${encodeURIComponent(query)}`, {
+                            headers: { 'Accept': 'application/json' },
+                            signal: controller.signal,
+                        });
+                        if (!response.ok || requestSequence !== sequence) {
+                            return;
+                        }
+
+                        render(await response.json());
+                    } catch (error) {
+                        if (error.name !== 'AbortError') {
+                            status.textContent = 'Nie udalo sie pobrac wersji.';
+                        }
+                    }
+                });
+
+                queryInput.addEventListener('input', search);
+                lookup.closest('form')?.addEventListener('submit', (event) => {
+                    if (!idInput.value) {
+                        event.preventDefault();
+                        status.textContent = 'Wybierz opublikowana wersje z listy.';
+                        status.className = 'form-hint js-version-status text-danger';
+                    }
+                });
+            });
+
+            document.addEventListener('click', (event) => {
+                document.querySelectorAll('.recipe-version-lookup').forEach((lookup) => {
+                    if (!lookup.contains(event.target)) {
+                        lookup.querySelector('.js-version-results')?.classList.add('d-none');
+                    }
+                });
+            });
+        })();
+    </script>
+}

@@ -7,6 +7,8 @@ public interface IIngredientRepository : IRepository<Ingredient>
 {
     Task<IngredientSearchResult> SearchAsync(IngredientSearchQuery query);
 
+    Task<IReadOnlyList<IngredientListRow>> SearchRecipeLookupAsync(string? query, int page, int pageSize);
+
     Task<IReadOnlyList<IngredientAllergenRow>> GetIngredientAllergensAsync(int ingredientId);
 
     Task SaveIngredientAllergensAsync(int ingredientId, IReadOnlyList<IngredientAllergen> allergens);

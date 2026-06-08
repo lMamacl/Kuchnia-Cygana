@@ -8,7 +8,10 @@ namespace KuchniaUCygana.Domain.Interfaces.Warehouse;
 
 public interface IWarehouseCommandRepository
 {
-    Task<Batch> ReceiveDeliveryAsync(Batch batch, InventoryTransaction transaction);
+    Task<Batch> ReceiveDeliveryAsync(
+        Batch batch,
+        InventoryTransaction transaction,
+        bool skipIfReferenceDocumentExists = false);
 
     Task<IReadOnlyList<InventoryTransaction>> DeductStockAsync(WarehouseDeductionCommand command);
 

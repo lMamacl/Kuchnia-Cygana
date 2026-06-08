@@ -1,13 +1,18 @@
 using KuchniaUCygana.Application.DTOs.Menu;
 using KuchniaUCygana.Application.Interfaces.Menu;
 using KuchniaUCygana.Domain.Entities.Menu;
+using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
+using KuchniaUCygana.Domain.Services;
 
 namespace KuchniaUCygana.Application.Services.Menu;
 
 public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementService
 {
+    private const int MinDaysCount = 7;
+    private const int MaxDaysCount = 31;
+
     public static readonly IReadOnlyList<string> DefaultSlots =
     [
         "Breakfast",
@@ -33,7 +38,7 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
 
     public async Task<DietMenuWeekDto> GetWeekAsync(DateOnly startDate, int days = 7)
     {
-        var daysCount = Math.Max(days, 7);
+        var daysCount = NormalizeDaysCount(days);
         var endDate = startDate.AddDays(daysCount - 1);
         var plans = await this.repository.GetPlanSummariesAsync(startDate, endDate);
         var byDate = plans.ToDictionary(p => p.PlanDate);
@@ -249,7 +254,12 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
             throw new InvalidOperationException("Nie mozna opublikowac planu: " + string.Join("; ", validation.Warnings));
         }
 
-        await this.repository.PublishAsync(plan.Id, this.UserName());
+        var itemRows = await this.repository.GetPlanItemsAsync(plan.Id);
+        var snapshots = await this.CreatePublishedSnapshotRowsAsync(plan, itemRows);
+        var planSnapshotHash = ProductionSnapshotPayloadFactory.CreatePlanHash(
+            snapshots.Select(snapshot => snapshot.SnapshotHash));
+
+        await this.repository.PublishAsync(plan.Id, this.UserName(), snapshots, planSnapshotHash);
     }
 
     private async Task<DietMenuDayDto> MapDayAsync(DietMenuPlanDayRow row)
@@ -378,6 +388,201 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
         };
     }
 
+    private async Task<List<DietMenuPlanPublishedSnapshotRow>> CreatePublishedSnapshotRowsAsync(
+        DietMenuPlanDayRow plan,
+        IReadOnlyList<DietMenuPlanItemRow> rows)
+    {
+        var resultKeys = rows
+            .Select(row => new MealVariantResultKey(row.MealId, row.MealVariantId))
+            .Distinct()
+            .ToList();
+        var results = await this.mealManagementService.GetMealVariantResultsAsync(
+            resultKeys,
+            MealVariantResultCacheMode.Fresh);
+        var snapshots = new List<DietMenuPlanPublishedSnapshotRow>();
+
+        foreach (var row in rows)
+        {
+            results.TryGetValue(new MealVariantResultKey(row.MealId, row.MealVariantId), out var result);
+            var item = this.MapItem(row, result);
+            snapshots.Add(CreatePublishedSnapshotRow(plan, item, result));
+        }
+
+        return snapshots;
+    }
+
+    private static DietMenuPlanPublishedSnapshotRow CreatePublishedSnapshotRow(
+        DietMenuPlanDayRow plan,
+        DietMenuPlanItemDto item,
+        MealVariantResultDto? result)
+    {
+        var snapshot = new PublishedDietPlanItemDto
+        {
+            DietMenuPlanItemId = item.Id,
+            DietMenuPlanId = item.DietMenuPlanId,
+            PlanDate = plan.PlanDate,
+            MealId = item.MealId,
+            MealVariantId = item.MealVariantId,
+            MealVariantName = item.MealVariantName,
+            MealName = item.MealName,
+            DietVariantId = item.DietVariantId,
+            DietName = item.DietName,
+            DietVariantName = item.VariantName,
+            MealSlot = item.MealSlot,
+            SortOrder = item.SortOrder,
+            ServingMultiplier = item.ServingSizeMultiplier,
+            RawWeightGrams = result?.FinalRawWeightGrams,
+            CookedWeightGrams = result?.FinalCookedWeightGrams,
+            FinalWeightGrams = result?.FinalWeightGrams,
+            FinalWeightAfterMultiplierGrams = result?.FinalWeightGrams is null
+                ? null
+                : result.FinalWeightGrams.Value * item.ServingSizeMultiplier,
+            NutritionSource = result?.NutritionSource ?? "Aggregated",
+            NutritionOverrideReason = result?.OverrideReason,
+            Nutrition = MapSnapshotNutrition(result, item.ServingSizeMultiplier),
+            Allergens = result?.Allergens.Select(allergen => allergen.Name).Distinct().OrderBy(name => name).ToList()
+                ?? new List<string>(),
+            Components = result?.Components.Select(MapSnapshotComponent).ToList()
+                ?? new List<MealComponentVersionDto>(),
+            AggregateIngredients = result?.Ingredients.Select(MapSnapshotAggregateIngredient).ToList()
+                ?? new List<AggregateIngredientDto>(),
+            PackagingRequirements = result?.PackagingRequirements.Select(MapSnapshotPackaging).ToList()
+                ?? new List<PackagingRequirementDto>(),
+            RecipeComponentVersionIds = result?.Components
+                .Select(component => component.RecipeComponentVersionId)
+                .Where(id => id > 0)
+                .Distinct()
+                .OrderBy(id => id)
+                .ToList() ?? new List<int>(),
+            ValidationWarnings = item.ValidationWarnings,
+            CompletenessStatus = item.CompletenessStatus,
+            IsAggregated = result?.IsAggregated ?? false,
+            IsCompleteForProduction = item.IsResultComplete,
+        };
+
+        var payload = ProductionSnapshotPayloadFactory.Create(snapshot);
+        return new DietMenuPlanPublishedSnapshotRow
+        {
+            DietMenuPlanItemId = item.Id,
+            SnapshotJson = payload.Json,
+            SnapshotHash = payload.Hash,
+        };
+    }
+
+    private static MealComponentVersionDto MapSnapshotComponent(MealVariantResultComponentDto component)
+        => new()
+        {
+            RecipeComponentId = component.RecipeComponentId,
+            RecipeComponentVersionId = component.RecipeComponentVersionId,
+            ComponentName = component.ComponentName,
+            VersionNumber = component.VersionNumber,
+            VersionStatus = component.VersionStatus,
+            Role = component.Role,
+            QuantityPerServing = component.QuantityPerServing,
+            Unit = component.Unit,
+            SortOrder = component.SortOrder,
+            IsOptional = component.IsOptional,
+            YieldQuantity = component.YieldQuantity,
+            YieldUnit = component.YieldUnit,
+            RawWeightGrams = component.RawWeightGrams,
+            CookedWeightGrams = component.CookedWeightGrams,
+            FinalWeightGrams = component.FinalWeightGrams,
+            ScaleFactor = component.ScaleFactor,
+            Nutrition = MapSnapshotNutrition(component.NutritionPer100g, component.NutritionPerServing),
+            Allergens = component.Allergens.Select(allergen => allergen.Name).Distinct().OrderBy(name => name).ToList(),
+            Ingredients = component.Ingredients.Select(MapSnapshotComponentIngredient).ToList(),
+            PackagingRequirements = component.PackagingRequirements.Select(MapSnapshotPackaging).ToList(),
+            ValidationWarnings = component.ValidationWarnings,
+            IsCompleteForProduction = component.IsComplete,
+        };
+
+    private static ComponentIngredientDto MapSnapshotComponentIngredient(MealVariantResultIngredientDto ingredient)
+        => new()
+        {
+            IngredientId = ingredient.IngredientId,
+            IngredientName = ingredient.IngredientName,
+            StockItemId = ingredient.StockItemId,
+            WarehouseCategoryId = ingredient.WarehouseCategoryId,
+            WarehouseCategoryName = ingredient.WarehouseCategoryName,
+            WeightInGrams = ingredient.NetWeightInGrams,
+            YieldFactor = ingredient.YieldFactor,
+            IsOptional = ingredient.IsOptional,
+            Notes = ingredient.Notes,
+        };
+
+    private static AggregateIngredientDto MapSnapshotAggregateIngredient(MealVariantResultIngredientDto ingredient)
+        => new()
+        {
+            IngredientId = ingredient.IngredientId,
+            IngredientName = ingredient.IngredientName,
+            StockItemId = ingredient.StockItemId,
+            WarehouseCategoryId = ingredient.WarehouseCategoryId,
+            WarehouseCategoryName = ingredient.WarehouseCategoryName,
+            NetWeightInGrams = ingredient.NetWeightInGrams,
+            GrossWeightInGrams = ingredient.GrossWeightInGrams,
+            YieldFactor = ingredient.YieldFactor,
+            IsOptional = ingredient.IsOptional,
+            Notes = ingredient.Notes,
+            SourceRecipeComponentVersionIds = ingredient.SourceRecipeComponentVersionIds,
+            SourceComponentNames = ingredient.SourceComponentNames,
+        };
+
+    private static PackagingRequirementDto MapSnapshotPackaging(MealVariantResultPackagingDto packaging)
+        => new()
+        {
+            OwnerType = packaging.OwnerType,
+            MealId = packaging.MealId,
+            MealVariantId = packaging.MealVariantId,
+            RecipeComponentVersionId = packaging.RecipeComponentVersionId,
+            StockItemId = packaging.StockItemId,
+            WarehouseCategoryId = packaging.WarehouseCategoryId,
+            ResourceName = packaging.ResourceName,
+            Quantity = packaging.Quantity,
+            Unit = packaging.Unit,
+            ContainerRole = packaging.ContainerRole,
+            IsCustomerFacing = packaging.IsCustomerFacing,
+        };
+
+    private static LabelNutritionDto? MapSnapshotNutrition(MealVariantResultDto? result, decimal servingMultiplier)
+    {
+        return result is null
+            ? null
+            : MapSnapshotNutrition(
+                result.NutritionPer100g,
+                result.NutritionPerServing is null ? null : ScaleNutrition(result.NutritionPerServing, servingMultiplier));
+    }
+
+    private static LabelNutritionDto? MapSnapshotNutrition(
+        MealVariantNutritionDto? nutritionPer100g,
+        MealVariantNutritionDto? nutritionPerServing)
+    {
+        return nutritionPer100g is null
+            ? null
+            : new LabelNutritionDto
+            {
+                CaloriesPer100g = nutritionPer100g.Calories,
+                ProteinPer100g = nutritionPer100g.Protein,
+                CarbohydratesPer100g = nutritionPer100g.Carbohydrates,
+                FatPer100g = nutritionPer100g.Fat,
+                FiberPer100g = nutritionPer100g.Fiber,
+                CaloriesPerServing = nutritionPerServing?.Calories,
+                ProteinPerServing = nutritionPerServing?.Protein,
+                CarbohydratesPerServing = nutritionPerServing?.Carbohydrates,
+                FatPerServing = nutritionPerServing?.Fat,
+                FiberPerServing = nutritionPerServing?.Fiber,
+            };
+    }
+
+    private static MealVariantNutritionDto ScaleNutrition(MealVariantNutritionDto nutrition, decimal factor)
+        => new()
+        {
+            Calories = nutrition.Calories * factor,
+            Protein = nutrition.Protein * factor,
+            Carbohydrates = nutrition.Carbohydrates * factor,
+            Fat = nutrition.Fat * factor,
+            Fiber = nutrition.Fiber * factor,
+        };
+
     private async Task<DietMenuPlanValidationDto> ValidatePlanAsync(int planId)
     {
         var items = await this.repository.GetPlanItemsAsync(planId);
@@ -485,6 +690,11 @@ public sealed class DietMenuPlanManagementService : IDietMenuPlanManagementServi
                 throw new InvalidOperationException("Wariant dania nie nalezy do wybranego posilku.");
             }
         }
+    }
+
+    private static int NormalizeDaysCount(int days)
+    {
+        return Math.Clamp(days, MinDaysCount, MaxDaysCount);
     }
 
     private static bool IsPublishedMealStatus(string status)

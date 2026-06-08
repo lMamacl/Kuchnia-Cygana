@@ -8,6 +8,8 @@ public interface IMealRepository : IRepository<Meal>
 {
     Task<MealSearchResult> SearchAsync(MealSearchQuery query);
 
+    Task<IReadOnlyList<MealListRow>> SearchPlanningAsync(string? query, int limit);
+
     Task<IEnumerable<Meal>> GetPublishedAsync();
 
     Task<Meal?> GetWithRecipeAsync(int mealId);
@@ -82,6 +84,8 @@ public sealed class MealListRow
     public int PublishedVariantCount { get; set; }
 
     public int ComponentCount { get; set; }
+
+    public int LegacyRecipeCount { get; set; }
 
     public int PackagingRequirementCount { get; set; }
 

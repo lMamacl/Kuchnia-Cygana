@@ -14,5 +14,5 @@ public interface IDietManagementService
 
     Task AddVariantAsync(int dietId, CreateDietVariantRequest request);
 
-    Task AssignMealToVariantAsync(int variantId, int mealId, decimal multiplier, int sortOrder);
+    Task AssignMealToVariantAsync(int dietId, int variantId, int mealId, decimal multiplier, int sortOrder);
 }

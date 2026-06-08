@@ -11,6 +11,8 @@ public sealed class AdminDashboardViewModel
 
     public IReadOnlyList<string> AvailableRoles { get; init; } = [];
 
+    public UserDirectorySummaryDto UserSummary { get; init; } = new();
+
     public PagedList<UserDto> UsersPage { get; init; } = new();
 
     public AdminUserListFilterViewModel UsersFilter { get; init; } = new();
