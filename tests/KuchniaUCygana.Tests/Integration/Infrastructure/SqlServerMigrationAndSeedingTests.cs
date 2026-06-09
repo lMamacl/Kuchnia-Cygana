@@ -835,6 +835,48 @@ public sealed class SqlServerMigrationAndSeedingTests
         var productionService = scope.ServiceProvider.GetRequiredService<IProductionService>();
         await productionService.ProduceSemiFinishedAsync(productionPlanId);
 
+        // Auto-complete cooking sessions for components since they are required to approve cooking
+        await ExecuteNonQueryAsync(
+            connection,
+            """
+            INSERT INTO [CookingSessions] 
+                ([RecipeComponentVersionId], [ProductionDate], [ProductionPlanItemId], [Status], 
+                 [CreatedAt], [CreatedBy], [StartedAt], [StartedBy], [CompletedAt], [CompletedBy], [IsDeleted])
+            SELECT DISTINCT 
+                mvc.[RecipeComponentVersionId], 
+                @today, 
+                ppi.[Id], 
+                N'Completed', 
+                SYSDATETIMEOFFSET(), 
+                N'IntegrationTest', 
+                SYSDATETIMEOFFSET(), 
+                N'IntegrationTest', 
+                SYSDATETIMEOFFSET(), 
+                N'IntegrationTest', 
+                0
+            FROM [ProductionPlanItems] ppi
+            INNER JOIN [ProductionPlans] pp ON pp.[Id] = ppi.[ProductionPlanId]
+            INNER JOIN [MealVariants] mv ON mv.[MealId] = ppi.[MealId] AND mv.[Status] = N'Published' AND mv.[IsDeleted] = 0
+            INNER JOIN [MealVariantComponents] mvc ON mvc.[MealVariantId] = mv.[Id] AND mvc.[IsDeleted] = 0
+            WHERE pp.[ProductionDate] = @today
+              AND pp.[CreatedBy] = N'DemoSeeder'
+              AND NOT EXISTS (
+                  SELECT 1 FROM [CookingSessions] cs
+                  WHERE cs.[ProductionPlanItemId] = ppi.[Id]
+                    AND cs.[RecipeComponentVersionId] = mvc.[RecipeComponentVersionId]
+              );
+
+            UPDATE [CookingSessions]
+            SET [Status] = N'Completed',
+                [CompletedAt] = SYSDATETIMEOFFSET(),
+                [CompletedBy] = N'IntegrationTest'
+            WHERE [ProductionPlanItemId] IN (
+                SELECT [Id] FROM [ProductionPlanItems] WHERE [ProductionPlanId] = @productionPlanId
+            );
+            """,
+            ("@today", today),
+            ("@productionPlanId", productionPlanId));
+
         var pendingFefoAfterProductionStart = await ScalarIntAsync(
             connection,
             """

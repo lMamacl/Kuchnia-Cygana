@@ -51,6 +51,9 @@ public sealed class RoutingServiceTests
             .Setup(r => r.GetAllAsync())
             .ReturnsAsync(vehicles);
         vehicleRepository
+            .Setup(r => r.GetActiveAsync())
+            .ReturnsAsync(vehicles);
+        vehicleRepository
             .Setup(r => r.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>()))
             .ReturnsAsync((IReadOnlyCollection<int> ids) => vehicles.Where(vehicle => ids.Contains(vehicle.Id)).ToList());
         deliveryProvider
@@ -465,6 +468,9 @@ public sealed class RoutingServiceTests
             .Returns(Task.CompletedTask);
         vehicleRepository
             .Setup(repository => repository.GetAllAsync())
+            .ReturnsAsync(vehicles);
+        vehicleRepository
+            .Setup(repository => repository.GetActiveAsync())
             .ReturnsAsync(vehicles);
         vehicleRepository
             .Setup(repository => repository.GetByIdsAsync(It.IsAny<IReadOnlyCollection<int>>()))
