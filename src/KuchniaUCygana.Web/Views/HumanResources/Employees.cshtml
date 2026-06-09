@@ -1,0 +1,172 @@
+@model HumanResourcesDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+    var employeesPage = Model.EmployeesPage;
+    var filter = Model.EmployeesFilter;
+    var roles = Model.AvailableRoles
+        .OrderBy(role => role)
+        .ToArray();
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Pracownicy</h3>
+                <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewEmployee">Dodaj pracownika</a>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" asp-controller="HumanResources" asp-action="Employees">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label" for="Search">Szukaj</label>
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Imie, email, stanowisko..." />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="DepartmentId">Dział</label>
+                            <select class="form-select" id="DepartmentId" name="DepartmentId">
+                                <option value="">Wszystkie</option>
+                                @foreach (var department in Model.Departments.OrderBy(department => department.Name))
+                                {
+                                    <option value="@department.Id" selected="@(filter.DepartmentId == department.Id)">@department.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="Status">Status</label>
+                            <select class="form-select" id="Status" name="Status">
+                                <option value="">Wszystkie</option>
+                                <option value="Active" selected="@(string.Equals(filter.Status, "Active", StringComparison.OrdinalIgnoreCase))">Aktywni</option>
+                                <option value="Inactive" selected="@(string.Equals(filter.Status, "Inactive", StringComparison.OrdinalIgnoreCase))">Nieaktywni</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="Role">Rola konta</label>
+                            <select class="form-select" id="Role" name="Role">
+                                <option value="">Wszystkie</option>
+                                @foreach (var role in roles)
+                                {
+                                    <option value="@role" selected="@(string.Equals(filter.Role, role, StringComparison.OrdinalIgnoreCase))">@role</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label" for="PageSize">Na stronie</label>
+                            <select class="form-select" id="PageSize" name="PageSize">
+                                @foreach (var size in new[] { 10, 25, 50, 100 })
+                                {
+                                    <option value="@size" selected="@(filter.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex justify-content-md-end gap-2">
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Employees">Wyczyść</a>
+                            <button class="btn btn-primary" type="submit">Filtruj</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Pracownik</th>
+                            <th>Dział</th>
+                            <th>Stanowisko</th>
+                            <th>Konto</th>
+                            <th>Zatrudnienie</th>
+                            <th>Status</th>
+                            <th class="text-end">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var employee in employeesPage.Items)
+                        {
+                            var accountRole = string.IsNullOrWhiteSpace(employee.UserRole) ? "-" : employee.UserRole;
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@employee.FullName</div>
+                                    <div class="text-secondary small">@employee.Email</div>
+                                    @if (!string.IsNullOrWhiteSpace(employee.PhoneNumber))
+                                    {
+                                        <div class="text-secondary small">@employee.PhoneNumber</div>
+                                    }
+                                </td>
+                                <td>
+                                    @if (Model.Departments.Count == 0)
+                                    {
+                                        <span class="text-secondary">Brak działów</span>
+                                    }
+                                    else
+                                    {
+                                        <form id="employee-assignment-@employee.Id" asp-action="ChangeEmployeeAssignment" asp-route-id="@employee.Id" method="post">
+                                            @Html.AntiForgeryToken()
+                                            <select class="form-select form-select-sm" name="departmentId" aria-label="Dział pracownika @employee.FullName" required>
+                                                @foreach (var department in Model.Departments.OrderBy(x => x.Name))
+                                                {
+                                                    <option value="@department.Id" selected="@(employee.DepartmentId == department.Id)">@department.Name</option>
+                                                }
+                                            </select>
+                                        </form>
+                                    }
+                                </td>
+                                <td>
+                                    @if (Model.Departments.Count == 0)
+                                    {
+                                        <span>@employee.Position</span>
+                                    }
+                                    else
+                                    {
+                                        <input class="form-control form-control-sm"
+                                               form="employee-assignment-@employee.Id"
+                                               name="position"
+                                               value="@employee.Position"
+                                               maxlength="100"
+                                               aria-label="Stanowisko pracownika @employee.FullName"
+                                               required />
+                                    }
+                                </td>
+                                <td><span class="badge bg-blue-lt text-blue">@accountRole</span></td>
+                                <td class="text-nowrap">@employee.HireDate.ToString("dd.MM.yyyy")</td>
+                                <td>
+                                    <span class="badge @(employee.IsActive ? "bg-green-lt text-green" : "bg-secondary-lt text-secondary")">
+                                        @(employee.IsActive ? "Aktywny" : "Nieaktywny")
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    @if (Model.Departments.Count > 0)
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary" form="employee-assignment-@employee.Id" type="submit">Zmień</button>
+                                    }
+                                    @if (employee.IsActive && (User.IsInRole("HRManager") || User.IsInRole("Admin")))
+                                    {
+                                        <form asp-action="DeactivateEmployee" asp-route-id="@employee.Id" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button class="btn btn-sm btn-outline-danger" type="submit">Dezaktywuj</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @if (employeesPage.TotalCount == 0)
+                        {
+                            <tr>
+                                <td colspan="7" class="text-secondary text-center py-4">
+                                    @(filter.HasActiveCriteria
+                                        ? "Brak pracowników dla wybranych filtrów."
+                                        : "Brak pracowników w bazie. Uruchom seeding albo dodaj pierwszego pracownika formularzem.")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                employeesPage,
+                "HumanResources",
+                "Employees",
+                filter.ToRouteValues()))
+        </div>
+    </div>
+</div>

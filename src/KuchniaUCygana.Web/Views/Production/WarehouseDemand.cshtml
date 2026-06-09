@@ -1,0 +1,317 @@
+@model KuchniaUCygana.Application.DTOs.Warehouse.WarehouseDemandDto
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Zapotrzebowanie magazynu";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = "Agregacja składników i opakowań z opłaconych zamówień oraz snapshotu M2.";
+}
+
+@functions {
+    string RiskColor(string risk)
+        => risk switch
+        {
+            "Shortage" => "danger",
+            "MissingMapping" => "danger",
+            "UnitMismatch" => "danger",
+            "Expired" => "danger",
+            "ExpiryRisk" => "warning",
+            _ => "success"
+        };
+
+    IDictionary<string, string> RouteValues(int page)
+    {
+        var values = new Dictionary<string, string>
+        {
+            ["startDate"] = Model.StartDate.ToString("yyyy-MM-dd"),
+            ["days"] = Model.RangeDays.ToString(),
+            ["page"] = page.ToString(),
+            ["pageSize"] = Model.PageSize.ToString(),
+        };
+
+        Add(values, "search", Model.Filter.Search);
+        Add(values, "resourceType", Model.Filter.ResourceType);
+        Add(values, "risk", Model.Filter.Risk);
+        Add(values, "sortBy", Model.Filter.SortBy);
+        Add(values, "sortDirection", Model.Filter.SortDirection);
+        return values;
+    }
+
+    void Add(IDictionary<string, string> values, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            values[key] = value;
+        }
+    }
+}
+
+<div class="card card-premium mb-4">
+    <div class="card-body">
+        <form method="get" class="row align-items-end g-3">
+            <input type="hidden" name="page" value="1" />
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label fw-bold">Początek zakresu</label>
+                <input type="date" name="startDate" class="form-control" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-sm-6 col-lg-1">
+                <label class="form-label fw-bold">Dni</label>
+                <select name="days" class="form-select">
+                    <option value="7" selected="@(Model.RangeDays == 7)">7</option>
+                    <option value="14" selected="@(Model.RangeDays == 14)">14</option>
+                    <option value="21" selected="@(Model.RangeDays == 21)">21</option>
+                    <option value="31" selected="@(Model.RangeDays == 31)">31</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label fw-bold">Szukaj</label>
+                <input type="search" name="search" class="form-control" value="@Model.Filter.Search" placeholder="Zasób, danie, kategoria, stock item" />
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Typ</label>
+                <select name="resourceType" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="Ingredient" selected="@(Model.Filter.ResourceType == "Ingredient")">Składniki</option>
+                    <option value="Packaging" selected="@(Model.Filter.ResourceType == "Packaging")">Opakowania</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Ryzyko</label>
+                <select name="risk" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="Shortage" selected="@(Model.Filter.Risk == "Shortage")">Braki</option>
+                    <option value="MissingMapping" selected="@(Model.Filter.Risk == "MissingMapping")">Brak mapowania</option>
+                    <option value="UnitMismatch" selected="@(Model.Filter.Risk == "UnitMismatch")">Błąd jednostki</option>
+                    <option value="ExpiryRisk" selected="@(Model.Filter.Risk == "ExpiryRisk")">Ryzyko terminu</option>
+                    <option value="Expired" selected="@(Model.Filter.Risk == "Expired")">Przeterminowane</option>
+                    <option value="Ok" selected="@(Model.Filter.Risk == "Ok")">OK</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Sortuj</label>
+                <select name="sortBy" class="form-select">
+                    <option value="name" selected="@(Model.Filter.SortBy == "name")">Nazwa</option>
+                    <option value="shortage" selected="@(Model.Filter.SortBy == "shortage")">Brak</option>
+                    <option value="required" selected="@(Model.Filter.SortBy == "required")">Potrzeba</option>
+                    <option value="available" selected="@(Model.Filter.SortBy == "available")">Dostępne</option>
+                    <option value="risk" selected="@(Model.Filter.SortBy == "risk")">Ryzyko</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-1">
+                <label class="form-label fw-bold">Kier.</label>
+                <select name="sortDirection" class="form-select">
+                    <option value="asc" selected="@(Model.Filter.SortDirection == "asc")">Rosn.</option>
+                    <option value="desc" selected="@(Model.Filter.SortDirection == "desc")">Mal.</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-1">
+                <label class="form-label fw-bold">Strona</label>
+                <select name="pageSize" class="form-select">
+                    <option value="10" selected="@(Model.PageSize == 10)">10</option>
+                    <option value="25" selected="@(Model.PageSize == 25)">25</option>
+                    <option value="50" selected="@(Model.PageSize == 50)">50</option>
+                    <option value="100" selected="@(Model.PageSize == 100)">100</option>
+                </select>
+            </div>
+            <div class="col-12 col-lg-auto">
+                <button type="submit" class="btn btn-primary">Przelicz</button>
+                <a asp-action="WarehouseDemand" asp-route-startDate="@Model.StartDate.ToString("yyyy-MM-dd")" asp-route-days="@Model.RangeDays" class="btn btn-outline-secondary">Wyczyść</a>
+                <a asp-action="WarehouseDemandPrint" asp-all-route-data="@RouteValues(Model.Page)" class="btn btn-outline-secondary">Drukuj zakres</a>
+                <a asp-action="WarehouseDemandCsv" asp-all-route-data="@RouteValues(Model.Page)" class="btn btn-outline-success">Eksport CSV</a>
+                <a asp-action="M2Plan" asp-route-startDate="@Model.StartDate.ToString("yyyy-MM-dd")" asp-route-days="@Model.RangeDays" class="btn btn-outline-primary">Plan z M2</a>
+                <a asp-action="Index" asp-route-date="@Model.StartDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wróć do kuchni</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row row-cards mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Pozycje zamówień</div>
+                <div class="h2 mb-1">@Model.TotalOrderItems</div>
+                <div class="text-secondary small">Zakres: @Model.RangeDays dni</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Wiersze zapotrzebowania</div>
+                <div class="h2 mb-1">@Model.TotalRows</div>
+                <div class="text-secondary small">Składniki i opakowania</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Braki</div>
+                <div class="h2 mb-1 text-danger">@Model.ShortageRows</div>
+                <div class="text-secondary small">Wiersze z niedoborem</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Dni z planem M2</div>
+                <div class="h2 mb-1">@Model.Days.Count(day => day.HasPublishedSnapshot) / @Model.RangeDays</div>
+                <div class="text-secondary small">Opublikowany snapshot</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-premium mb-4">
+    <div class="card-header bg-transparent">
+        <h3 class="card-title">Status dni</h3>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter card-table">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Status M2</th>
+                    <th class="text-end">Snapshot items</th>
+                    <th class="text-end">Order items</th>
+                    <th class="text-end">Dopasowane</th>
+                    <th class="text-end">Brak dopasowania</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var day in Model.Days)
+                {
+                    <tr>
+                        <td>@day.PlanDate.ToString("dd.MM.yyyy")</td>
+                        <td><span class="badge bg-@(day.HasPublishedSnapshot ? "success" : "secondary")-lt">@day.Status</span></td>
+                        <td class="text-end">@day.SnapshotItemCount</td>
+                        <td class="text-end">@day.OrderItemCount</td>
+                        <td class="text-end">@day.MatchedOrderItemCount</td>
+                        <td class="text-end @(day.MissingSnapshotMatches > 0 ? "text-danger fw-bold" : "text-secondary")">@day.MissingSnapshotMatches</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card card-premium">
+    <div class="card-header bg-transparent">
+        <h3 class="card-title">FEFO preview i braki</h3>
+        <div class="text-secondary small">
+            Wyniki @((Model.FilteredRows == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1)) - @Math.Min(Model.Page * Model.PageSize, Model.FilteredRows) z @Model.FilteredRows filtrowanych wierszy. Cały zakres: @Model.TotalRows.
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter card-table">
+            <thead>
+                <tr>
+                    <th>Zasób</th>
+                    <th>Tryb FEFO</th>
+                    <th class="text-end">Potrzeba</th>
+                    <th class="text-end">Dostępne</th>
+                    <th class="text-end">Brak</th>
+                    <th>Najwcześniejsza partia</th>
+                    <th>Ryzyko</th>
+                    <th>Źródło</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Rows.Count == 0)
+                {
+                    <tr>
+                        <td colspan="8" class="text-center text-secondary py-4">Brak zapotrzebowania dla wybranego zakresu.</td>
+                    </tr>
+                }
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td>
+                            <div class="fw-bold">@row.ResourceName</div>
+                            <div class="small text-secondary">@row.ResourceType</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-blue-lt">@row.SelectionMode</span>
+                            @if (row.StockItemId.HasValue)
+                            {
+                                <div class="small text-secondary">StockItemId @row.StockItemId</div>
+                            }
+                            else
+                            {
+                                <div class="small text-secondary">Kategoria @row.WarehouseCategoryId</div>
+                            }
+                        </td>
+                        <td class="text-end">@row.RequiredQuantity.ToString("0.##") @row.Unit</td>
+                        <td class="text-end">@row.AvailableQuantity.ToString("0.##") @row.Unit</td>
+                        <td class="text-end @(row.ShortageQuantity > 0 ? "text-danger fw-bold" : "text-success")">@row.ShortageQuantity.ToString("0.##") @row.Unit</td>
+                        <td>
+                            @if (row.EarliestBatchId.HasValue)
+                            {
+                                <div>#@row.EarliestBatchId</div>
+                                <div class="small text-secondary">@row.EarliestExpiryDate?.ToLocalTime().ToString("dd.MM.yyyy")</div>
+                                @if (row.FefoAllocations.Count > 0)
+                                {
+                                    <details class="small mt-1">
+                                        <summary>Alokacja partii (@row.FefoAllocations.Count)</summary>
+                                        <ul class="mb-0 ps-3">
+                                            @foreach (var allocation in row.FefoAllocations.Take(5))
+                                            {
+                                                <li>
+                                                    #@allocation.BatchId
+                                                    @if (!string.IsNullOrWhiteSpace(allocation.SupplierBatchNumber))
+                                                    {
+                                                        <span>(@allocation.SupplierBatchNumber)</span>
+                                                    }
+                                                    : @allocation.AllocatedQuantity.ToString("0.##") / @allocation.AvailableQuantity.ToString("0.##") @allocation.Unit
+                                                    @if (allocation.ExpiryDate.HasValue)
+                                                    {
+                                                        <span>, exp. @allocation.ExpiryDate.Value.ToLocalTime().ToString("dd.MM.yyyy")</span>
+                                                    }
+                                                </li>
+                                            }
+                                            @if (row.FefoAllocations.Count > 5)
+                                            {
+                                                <li>+@(row.FefoAllocations.Count - 5) kolejnych partii</li>
+                                            }
+                                        </ul>
+                                    </details>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-secondary">brak partii</span>
+                            }
+                        </td>
+                        <td><span class="badge bg-@RiskColor(row.RiskLabel)-lt">@row.RiskLabel</span></td>
+                        <td class="small text-secondary">@string.Join(", ", row.SourceMeals.Take(3))</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (Model.TotalPages > 1)
+    {
+        <div class="card-footer d-flex align-items-center">
+            <div class="text-secondary small">Strona @Model.Page z @Model.TotalPages</div>
+            <ul class="pagination m-0 ms-auto">
+                <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+                    <a class="page-link" asp-action="WarehouseDemand" asp-all-route-data="@RouteValues(Math.Max(1, Model.Page - 1))">Poprzednia</a>
+                </li>
+                @{
+                    var firstPage = Math.Max(1, Model.Page - 2);
+                    var lastPage = Math.Min(Model.TotalPages, Model.Page + 2);
+                }
+                @for (var pageNumber = firstPage; pageNumber <= lastPage; pageNumber++)
+                {
+                    <li class="page-item @(pageNumber == Model.Page ? "active" : "")">
+                        <a class="page-link" asp-action="WarehouseDemand" asp-all-route-data="@RouteValues(pageNumber)">@pageNumber</a>
+                    </li>
+                }
+                <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                    <a class="page-link" asp-action="WarehouseDemand" asp-all-route-data="@RouteValues(Math.Min(Model.TotalPages, Model.Page + 1))">Następna</a>
+                </li>
+            </ul>
+        </div>
+    }
+</div>

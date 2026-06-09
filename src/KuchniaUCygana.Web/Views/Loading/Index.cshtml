@@ -1,0 +1,102 @@
+﻿@model KuchniaUCygana.Application.DTOs.Packing.PackingBoardDto
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Załadunek aut";
+    ViewData["Section"] = "Załadunek";
+    ViewData["Description"] = "Trasy gotowe do załadunku i skanowania toreb.";
+
+    DateOnly selectedDate = ViewBag.SelectedDate ?? Model.PackingDate;
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body py-4">
+                <div class="row align-items-center g-3">
+                    <div class="col">
+                        <div class="text-uppercase text-secondary small fw-bold">Załadunek aut</div>
+                        <h2 class="h1 mb-1 text-dark">@selectedDate.ToString("dd.MM.yyyy")</h2>
+                        <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
+                            <span>Trasy: <strong>@Model.Routes.Count(r => r.TotalBags > 0)</strong></span>
+                            <span>Torby: <strong>@Model.TotalBags</strong></span>
+                            <span>Spakowane: <strong>@Model.PackedBags</strong></span>
+                            <span>Załadowane: <strong>@Model.LoadedBags</strong></span>
+                        </div>
+                    </div>
+                    <div class="col-auto d-flex flex-wrap gap-2">
+                        <input type="date"
+                               class="form-control"
+                               value="@selectedDate.ToString("yyyy-MM-dd")"
+                               onchange="window.location.href='?date=' + this.value"
+                               aria-label="Filtruj po dacie" />
+                        <a asp-controller="Packing" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Kompletacja</a>
+                        <a asp-controller="Packing" asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Etykiety</a>
+                        <form asp-controller="Loading" asp-action="RefreshFromLogistics" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                            <button type="submit" class="btn btn-outline-primary">Odśwież z logistyki</button>
+                        </form>
+                        @if (User.IsInRole("PackingManager") || User.IsInRole("Admin"))
+                        {
+                            <form asp-controller="Loading" asp-action="ResetLoading" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                                <button type="submit" class="btn btn-outline-danger">Reset załadunku</button>
+                            </form>
+                        }
+                        <a asp-controller="Loading" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-primary">Załadunek aut</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @foreach (var route in Model.Routes.Where(r => r.TotalBags > 0))
+    {
+        var manifestColor = route.IsManifestVerified
+            ? "success"
+            : route.ManifestWorkerApprovedAt.HasValue
+                ? "warning"
+                : route.HasManifest
+                    ? "azure"
+                    : "secondary";
+        var manifestText = route.IsManifestVerified
+            ? "Manifest finalny"
+            : route.ManifestWorkerApprovedAt.HasValue
+                ? "Czeka na przełożonego"
+                : route.HasManifest
+                    ? "Czeka na pracownika"
+                    : "Brak manifestu";
+        if (route.ManifestRequiresRegeneration)
+        {
+            manifestColor = "danger";
+            manifestText = "Wymaga regeneracji";
+        }
+
+        <div class="col-12">
+            <div class="card card-premium">
+                <div class="card-body">
+                    <div class="row align-items-center g-3">
+                        <div class="col">
+                            <h3 class="card-title mb-1">@route.RouteName</h3>
+                            <div class="text-secondary small">Auto @route.VehicleRegistration · @route.TotalBags torby</div>
+                        </div>
+                        <div class="col-md-5">
+                            <div class="d-flex flex-wrap gap-2">
+                                <span class="badge bg-success-lt text-success">@route.PackedBags/@route.TotalBags spakowane</span>
+                                <span class="badge bg-indigo-lt text-indigo">@route.LoadedBags/@route.TotalBags załadowane</span>
+                                <span class="badge bg-@manifestColor-lt text-@manifestColor">@manifestText</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="btn-list">
+                                <a asp-action="Manifest" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-success">Manifest</a>
+                                <a asp-action="Route" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-primary">Transport</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>

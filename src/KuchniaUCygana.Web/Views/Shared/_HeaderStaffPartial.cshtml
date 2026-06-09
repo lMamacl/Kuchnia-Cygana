@@ -1,7 +1,8 @@
 @{
     var title = ViewData["Title"]?.ToString() ?? "Panel pracowniczy";
     var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
-    var section = StaffNavigationCatalog.FindSection(controller);
+    var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
+    var section = StaffNavigationCatalog.FindSection(controller, action, User);
     var department = section?.Label ?? "Staff";
     var departmentDescription = section?.Description ?? "Centralny podgląd wszystkich działów.";
 }

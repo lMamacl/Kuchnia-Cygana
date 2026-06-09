@@ -1,0 +1,164 @@
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto>
+
+<div class="table-responsive">
+    <table class="table table-vcenter card-table table-premium">
+        <thead>
+            <tr>
+                <th class="w-1">ID</th>
+                <th>Składnik</th>
+                <th>Kategoria</th>
+                <th class="text-end">Stan</th>
+                <th class="text-end">Próg Min.</th>
+                <th>Najbliższy Termin Ważności</th>
+                <th>Status</th>
+                <th class="w-1">Operacje</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (!Model.Any())
+            {
+                <tr>
+                    <td colspan="8" class="text-center text-secondary py-4">
+                        Brak składników spełniających kryteria wyszukiwania.
+                    </td>
+                </tr>
+            }
+            else
+            {
+                foreach (var item in Model)
+                {
+                    var rowClass = item.StatusColor switch
+                    {
+                        "danger" => "table-danger",
+                        "warning" => "table-warning",
+                        _ => ""
+                    };
+
+                    <tr class="@rowClass">
+                        <td class="text-secondary font-weight-medium">@item.Id</td>
+                        <td class="font-weight-medium fw-bold text-dark">
+                            <a asp-action="BatchDetails" asp-route-stockItemId="@item.Id" class="text-reset">@item.Name</a>
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary-lt">@item.Category</span>
+                        </td>
+                        <td class="text-end font-weight-bold fw-bold text-dark">
+                            @item.CurrentStock.ToString("F2") @item.UnitSymbol
+                        </td>
+                        <td class="text-end text-secondary">
+                            @item.MinimumLevel.ToString("F2") @item.UnitSymbol
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2 text-secondary small">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-muted" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" /><path d="M16 3v4" /><path d="M8 3v4" /><path d="M4 11h16" /><path d="M11 15h1" /><path d="M12 15v3" /></svg>
+                                @(item.EarliestExpiryDate?.ToString("dd.MM.yyyy") ?? "Brak")
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-@item.StatusColor-lt text-@item.StatusColor d-inline-flex align-items-center gap-1">
+                                <span class="status-dot bg-@item.StatusColor" style="width: 6px; height: 6px;"></span>
+                                @item.Status
+                            </span>
+                        </td>
+                        <td>
+                            <div class="btn-list flex-nowrap">
+                                <a asp-action="BatchDetails" asp-route-stockItemId="@item.Id" class="btn btn-sm btn-outline-primary">Partie</a>
+                                <a asp-action="Receive" class="btn btn-sm btn-outline-success">Przyjmij</a>
+                                <a asp-action="Waste" class="btn btn-sm btn-outline-danger">Odpad</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+<div class="card-footer bg-transparent d-flex align-items-center">
+    @{
+        var currentPage = ViewData["CurrentPage"] as int? ?? 1;
+        var totalPages = ViewData["TotalPages"] as int? ?? 1;
+        var totalCount = ViewData["TotalCount"] as int? ?? Model.Count();
+        var pageSize = ViewData["PageSize"] as int? ?? 15;
+        var firstItem = totalCount == 0 ? 0 : ((currentPage - 1) * pageSize) + 1;
+        var lastItem = totalCount == 0 ? 0 : Math.Min(currentPage * pageSize, totalCount);
+        var startPage = Math.Max(1, currentPage - 2);
+        var endPage = Math.Min(totalPages, currentPage + 2);
+
+        var hasPrevious = currentPage > 1;
+        var hasNext = currentPage < totalPages;
+    }
+    <p class="m-0 text-secondary">Pokazano <strong>@firstItem-@lastItem</strong> z łącznie <strong>@totalCount</strong> wyników</p>
+    
+    @if (totalPages > 1)
+    {
+        <ul class="pagination m-0 ms-auto">
+            <li class="page-item @(hasPrevious ? "" : "disabled")">
+                <a class="page-link" 
+                   href="javascript:void(0)"
+                   @if (hasPrevious)
+                   {
+                       <text>hx-get="/warehouse/stock-table?Page=@(currentPage - 1)&PageSize=@pageSize" hx-target="#stock-table-container" hx-include="#filter-form"</text>
+                   }
+                   tabindex="-1" 
+                   aria-disabled="@(!hasPrevious)">
+                    Poprzednia
+                </a>
+            </li>
+
+            @if (startPage > 1)
+            {
+                <li class="page-item">
+                    <a class="page-link"
+                       href="javascript:void(0)"
+                       hx-get="/warehouse/stock-table?Page=1&PageSize=@pageSize"
+                       hx-target="#stock-table-container"
+                       hx-include="#filter-form">1</a>
+                </li>
+                @if (startPage > 2)
+                {
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                }
+            }
+
+            @for (int p = startPage; p <= endPage; p++)
+            {
+                <li class="page-item @(p == currentPage ? "active" : "")">
+                    <a class="page-link" 
+                       href="javascript:void(0)"
+                       hx-get="/warehouse/stock-table?Page=@p&PageSize=@pageSize" 
+                       hx-target="#stock-table-container" 
+                       hx-include="#filter-form">
+                        @p
+                    </a>
+                </li>
+            }
+
+            @if (endPage < totalPages)
+            {
+                @if (endPage < totalPages - 1)
+                {
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                }
+                <li class="page-item">
+                    <a class="page-link"
+                       href="javascript:void(0)"
+                       hx-get="/warehouse/stock-table?Page=@totalPages&PageSize=@pageSize"
+                       hx-target="#stock-table-container"
+                       hx-include="#filter-form">@totalPages</a>
+                </li>
+            }
+
+            <li class="page-item @(hasNext ? "" : "disabled")">
+                <a class="page-link" 
+                   href="javascript:void(0)"
+                   @if (hasNext)
+                   {
+                       <text>hx-get="/warehouse/stock-table?Page=@(currentPage + 1)&PageSize=@pageSize" hx-target="#stock-table-container" hx-include="#filter-form"</text>
+                   }
+                   aria-disabled="@(!hasNext)">
+                    Następna
+                </a>
+            </li>
+        </ul>
+    }
+</div>

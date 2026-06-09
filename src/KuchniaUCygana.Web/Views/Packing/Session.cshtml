@@ -1,8 +1,267 @@
+@model KuchniaUCygana.Web.Models.PackingSessionViewModel
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Sesja pakowania";
-    ViewData["Section"] ??= "Kompletacja";
-    ViewData["Description"] ??= "Placeholder szczegolow sesji pakowania.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Sesja kompletacji";
+    ViewData["Section"] = "Pakowanie";
+    ViewData["Description"] = "Skanowanie pudełek i kompletacja fizycznej torby.";
 
+    var session = Model.Session;
+    var bag = Model.Bag;
+    var boxes = session.Items;
+    var activeBoxes = boxes.Where(x => x.Status != "Damaged" && x.Status != "Missing").ToList();
+    var packedBoxes = activeBoxes.Count(x => x.Status == "Packed");
+    var progress = activeBoxes.Count > 0 ? packedBoxes * 100 / activeBoxes.Count : 0;
+    var packedBy = User.Identity?.Name ?? "Packing";
+    var statusColor = bag?.StatusColor ?? "secondary";
+    var scanCode = TempData["ScanCode"]?.ToString();
+    var scanMeal = TempData["ScanMeal"]?.ToString();
+    var scanStatus = TempData["ScanStatus"]?.ToString();
+    var canUseManualEmergencyPacking = User.IsInRole("Packing") || User.IsInRole("PackingManager") || User.IsInRole("Admin");
+    var canUseSimulationBoxFallback = boxes.Count == 0 && canUseManualEmergencyPacking;
+}
+
+@functions {
+    string TranslateBoxStatus(string status)
+    {
+        return status switch
+        {
+            "Pending" => "Czeka na etykietę z kuchni",
+            "FoilPrinted" => "Gotowe do skanu",
+            "Packed" => "Spakowane",
+            "Damaged" => "Uszkodzone",
+            "Missing" => "Brak",
+            _ => status
+        };
+    }
+
+    string BoxStatusColor(string status)
+    {
+        return status switch
+        {
+            "FoilPrinted" => "azure",
+            "Packed" => "success",
+            "Damaged" => "danger",
+            "Missing" => "warning",
+            _ => "secondary"
+        };
+    }
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body py-4">
+                <div class="row align-items-center g-3">
+                    <div class="col">
+                        <div class="text-uppercase text-secondary small fw-bold">Sesja #@session.Id</div>
+                        <h2 class="h1 mb-1 text-dark">Zamówienie #@session.OrderId</h2>
+                        <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
+                            <span>Identyfikator klienta: <strong>@session.ClientPublicIdDisplay</strong></span>
+                            <span>Dostawa: <strong>@(session.DeliveryCalendarId?.ToString() ?? "-")</strong></span>
+                            <span>Torba: <strong>@(bag?.BagCode ?? "-")</strong></span>
+                            <span>Auto: <strong>@(bag?.VehicleRegistration ?? "Brak")</strong></span>
+                            <span>Stop: <strong>@(bag?.StopNumber.ToString() ?? "-")</strong></span>
+                            <span>Data: <strong>@session.PackingDate.ToString("dd.MM.yyyy")</strong></span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress progress-sm flex-fill">
+                                <div class="progress-bar bg-@statusColor" style="width: @progress%"></div>
+                            </div>
+                            <span class="fw-bold text-dark">@packedBoxes/@activeBoxes.Count</span>
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <span class="badge bg-@statusColor-lt text-@statusColor">@((bag?.StatusText) ?? session.Status)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(scanCode))
+    {
+        <div class="col-12">
+            <div class="alert alert-info mb-0">
+                <div class="fw-bold">Ostatni skan: @scanCode</div>
+                <div class="small">Posiłek: @(string.IsNullOrWhiteSpace(scanMeal) ? "-" : scanMeal) | Status po decyzji: @(string.IsNullOrWhiteSpace(scanStatus) ? "-" : scanStatus)</div>
+            </div>
+        </div>
+    }
+
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h3 class="card-title mb-1">Kompletacja torby</h3>
+                    @if (!string.IsNullOrWhiteSpace(session.BlockReason))
+                    {
+                        <div class="text-secondary small">@session.BlockReason</div>
+                    }
+                </div>
+                <div class="btn-list">
+                    @if (session.CanCloseBag)
+                    {
+                        <form asp-action="PackBag" asp-route-sessionId="@session.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="packedBy" value="@packedBy" />
+                            <button type="submit" class="btn btn-success">Zamknij torbę</button>
+                        </form>
+                    }
+
+                    @if (bag is not null && session.Status != "Loaded" && session.Status != "Dispatched")
+                    {
+                        <a asp-action="BagIssue"
+                           asp-route-sessionId="@session.Id"
+                           asp-route-packingBagId="@bag.PackingBagId"
+                           class="btn btn-outline-danger">
+                            Zgłoś problem z torbą
+                        </a>
+                    }
+
+                    <a asp-action="Index" asp-route-date="@session.PackingDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><line x1="5" y1="12" x2="19" y2="12" /><line x1="5" y1="12" x2="11" y2="18" /><line x1="5" y1="12" x2="11" y2="6" /></svg> Wróć do listy toreb
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card card-premium bg-dark-lt text-dark">
+            <div class="card-body">
+                <form asp-action="ScanBox" asp-route-sessionId="@session.Id" method="post" id="scan-form">
+                    @Html.AntiForgeryToken()
+                    <div class="row align-items-center g-3">
+                        <div class="col-md-3">
+                            <label for="barcode-input" class="form-label fw-bold mb-0">Skaner etykiet pudełek</label>
+                        </div>
+                        <div class="col-md-7">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white text-muted">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7V5a2 2 0 0 1 2 -2h2" /><path d="M4 17v2a2 2 0 0 0 2 2h2" /><path d="M16 3h2a2 2 0 0 1 2 2v2" /><path d="M16 21h2a2 2 0 0 0 2 -2v-2" /><path d="M7 12h10" /><path d="M10 9v6" /><path d="M14 9v6" /></svg>
+                                </span>
+                                <input type="text" id="barcode-input" name="barcode" class="form-control form-control-lg bg-white" placeholder="Zeskanuj kod QR z pudełka, np. BOX-000001" autofocus disabled="@(!session.CanScan)" />
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-indigo btn-lg w-100" disabled="@(!session.CanScan)">Skanuj</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Pudełka w torbie</h3>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th>Kod</th>
+                            <th>Posiłek</th>
+                            <th>Status</th>
+                            <th>Operator</th>
+                            <th class="w-1 text-end">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (boxes.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="5" class="text-secondary">
+                                    <div>Brak pudełek w tej dostawie. Pudełka powinny pojawić się po akceptacji gotowania w kuchni.</div>
+                                    @if (canUseSimulationBoxFallback)
+                                    {
+                                        <form asp-action="PrepareBoxes" asp-route-sessionId="@session.Id" method="post" class="mt-2">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary">Utwórz pudełka testowe</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @foreach (var box in boxes)
+                        {
+                            var color = BoxStatusColor(box.Status);
+                            <tr>
+                                <td class="fw-bold text-dark font-monospace">@(box.BoxCode ?? $"BOX-{box.Id}")</td>
+                                <td>
+                                    <div class="fw-bold text-dark">@box.MealName</div>
+                                    <div class="text-secondary small">Wariant @box.DietVariantId</div>
+                                    @if (box.ReplacementForPackingItemId.HasValue)
+                                    {
+                                        <div class="text-warning small">Zamiennik dla pudełka #@box.ReplacementForPackingItemId</div>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge bg-@color-lt text-@color d-inline-flex align-items-center gap-1">
+                                        <span class="status-dot bg-@color" style="width: 6px; height: 6px;"></span>
+                                        @TranslateBoxStatus(box.Status)
+                                    </span>
+                                    @if (!string.IsNullOrWhiteSpace(box.BlockReason))
+                                    {
+                                        <div class="text-secondary small mt-1">@box.BlockReason</div>
+                                    }
+                                </td>
+                                <td class="text-secondary small">
+                                    @(box.PackedBy ?? "-")
+                                    @if (box.PackedAt.HasValue)
+                                    {
+                                        <span> · @box.PackedAt.Value.ToLocalTime().ToString("HH:mm")</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex flex-column gap-2 align-items-end">
+                                        @if (box.CanPackManually && canUseManualEmergencyPacking)
+                                        {
+                                            <form asp-action="MarkBoxPacked" asp-route-packingItemId="@box.Id" method="post" class="d-flex flex-column gap-1" style="min-width: 220px;">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="sessionId" value="@session.Id" />
+                                                <input type="hidden" name="packedBy" value="@packedBy" />
+                                                <button type="submit" class="btn btn-sm btn-outline-success">Spakuj ręcznie</button>
+                                            </form>
+                                        }
+                                        else if (box.Status == "Packed")
+                                        {
+                                            <span class="badge bg-success-lt text-success">Spakowane</span>
+                                        }
+
+                                        @if (box.CanReportIssue)
+                                        {
+                                            <a asp-action="ItemIssue"
+                                               asp-route-sessionId="@session.Id"
+                                               asp-route-packingItemId="@box.Id"
+                                               class="btn btn-sm btn-outline-danger">
+                                                Zgłoś problem z pudełkiem
+                                            </a>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const barcodeInput = document.getElementById("barcode-input");
+            if (!barcodeInput || barcodeInput.disabled) {
+                return;
+            }
+
+            barcodeInput.focus();
+        });
+    </script>
+}

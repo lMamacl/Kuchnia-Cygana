@@ -1,0 +1,65 @@
+@model KuchniaUCygana.Application.DTOs.Menu.CreateMealRequest
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Nowy Posiłek";
+    ViewData["Section"] = "Katalog Menu";
+    ViewData["Description"] = "Zdefiniuj bazowe informacje o nowej potrawie.";
+    var categories = ViewBag.Categories as IEnumerable<KuchniaUCygana.Domain.Entities.Menu.Category>
+                     ?? Enumerable.Empty<KuchniaUCygana.Domain.Entities.Menu.Category>();
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-xl-6">
+        <div class="card card-premium">
+            <div class="card-status-top bg-success"></div>
+            <div class="card-header bg-transparent py-3">
+                <h3 class="card-title">Kreator potrawy</h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="Create" method="post" autocomplete="off">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label required" asp-for="Name">Nazwa potrawy</label>
+                        <input type="text" asp-for="Name" class="form-control" placeholder="np. Kurczak Tikka Masala" />
+                        <span asp-validation-for="Name" class="text-danger small"></span>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required" asp-for="CategoryId">Kategoria</label>
+                            <select asp-for="CategoryId" class="form-select">
+                                <option value="">-- Wybierz kategorię --</option>
+                                @foreach (var cat in categories)
+                                {
+                                    <option value="@cat.Id">@cat.Name</option>
+                                }
+                            </select>
+                            <span asp-validation-for="CategoryId" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" asp-for="PreparationTimeMinutes">Czas przygotowania (min)</label>
+                            <input type="number" asp-for="PreparationTimeMinutes" class="form-control" placeholder="0" />
+                            <span asp-validation-for="PreparationTimeMinutes" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" asp-for="Description">Opis wewnętrzny (roboczy)</label>
+                        <textarea asp-for="Description" class="form-control" rows="3"></textarea>
+                        <span asp-validation-for="Description" class="text-danger small"></span>
+                    </div>
+
+                    <div class="card-footer bg-transparent p-0 pt-3 d-flex justify-content-between">
+                        <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
+                        <button type="submit" class="btn btn-success">Zapisz posiłek</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}

@@ -1,8 +1,223 @@
+﻿@model KuchniaUCygana.Web.Models.PackingIndexViewModel
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Kompletacja";
-    ViewData["Section"] ??= "Kompletacja";
-    ViewData["Description"] ??= "Lista sesji pakowania w wersji szkieletowej.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Kompletacja toreb";
+    ViewData["Section"] = "Pakowanie";
+    ViewData["Description"] = "Kompletacja pudełek do fizycznych toreb.";
 
+    var selectedDate = Model.SelectedDate;
+    var progress = Model.Board.TotalBags > 0 ? Model.Board.PackedBags * 100 / Model.Board.TotalBags : 0;
+    var bagStatuses = new[]
+    {
+        ("all", "Wszystkie"),
+        ("pending", "W toku"),
+        ("packed", "Spakowane"),
+        ("labeled", "Z etykietą"),
+        ("loaded", "Załadowane"),
+        ("dispatched", "Wysłane"),
+        ("damaged", "Uszkodzone"),
+    };
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body py-4">
+                <div class="row align-items-center g-3">
+                    <div class="col">
+                        <div class="text-uppercase text-secondary small fw-bold">Kompletacja toreb</div>
+                        <h2 class="h1 mb-1 text-dark">@selectedDate.ToString("dd.MM.yyyy")</h2>
+                        <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
+                            <span>Torby: <strong>@Model.Board.TotalBags</strong></span>
+                            <span>Spakowane: <strong>@Model.Board.PackedBags</strong></span>
+                            <span>W filtrze: <strong>@Model.TotalBags</strong></span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress progress-sm flex-fill">
+                                <div class="progress-bar bg-success" style="width: @progress%"></div>
+                            </div>
+                            <span class="fw-bold text-dark">@progress%</span>
+                        </div>
+                    </div>
+                    <div class="col-auto d-flex flex-wrap gap-2">
+                        <form asp-action="Start" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                            <input type="hidden" name="packedBy" value="@(User.Identity?.Name ?? "Packing")" />
+                            <button type="submit" class="btn btn-outline-secondary">Synchronizuj zamówienia</button>
+                        </form>
+                        <form asp-action="RefreshFromLogistics" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                            <button type="submit" class="btn btn-outline-secondary">Odśwież z logistyki</button>
+                        </form>
+                        <a asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-primary">Kompletacja</a>
+                        <a asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-search="@Model.Search" asp-route-routeId="@Model.RouteId" asp-route-bagStatus="@Model.BagStatus" class="btn btn-outline-primary">Etykiety</a>
+                        <a asp-controller="Loading" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Załadunek aut</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="get" class="row g-3 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label">Data</label>
+                        <input type="date" class="form-control" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Szukaj</label>
+                        <input class="form-control" name="search" value="@Model.Search" placeholder="Zamówienie, DeliveryCalendarId, torba, klient, auto, trasa" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Trasa</label>
+                        <select class="form-select" name="routeId">
+                            <option value="">Wszystkie</option>
+                            @foreach (var route in Model.AllRoutes)
+                            {
+                                <option value="@route.RouteId" selected="@(Model.RouteId == route.RouteId)">@route.RouteName (@route.VehicleRegistration)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Status torby</label>
+                        <select class="form-select" name="bagStatus">
+                            @foreach (var option in bagStatuses)
+                            {
+                                <option value="@option.Item1" selected="@(Model.BagStatus == option.Item1)">@option.Item2</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">Na stronie</label>
+                        <select class="form-select" name="pageSize">
+                            @foreach (var size in new[] { 10, 20, 50, 100 })
+                            {
+                                <option value="@size" selected="@(Model.PageSize == size)">@size</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-1 d-grid">
+                        <input type="hidden" name="page" value="1" />
+                        <button type="submit" class="btn btn-primary">Filtruj</button>
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                        <a asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wyczyść</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.Board.TotalBags == 0)
+    {
+        <div class="col-12">
+            <div class="alert alert-info">Brak aktywnych zamówień do kompletacji dla wybranej daty.</div>
+        </div>
+    }
+    else if (Model.TotalBags == 0)
+    {
+        <div class="col-12">
+            <div class="alert alert-warning">Brak toreb pasujących do wybranych filtrów.</div>
+        </div>
+    }
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="me-auto">
+                    <strong>@Model.FirstItem-@Model.LastItem</strong> z <strong>@Model.TotalBags</strong> toreb
+                </div>
+            </div>
+
+            @foreach (var route in Model.Board.Routes)
+            {
+                <div class="border-top">
+                    <div class="px-3 py-3 d-flex flex-wrap justify-content-between align-items-center gap-3 bg-light">
+                        <div>
+                            <h3 class="card-title mb-1">@route.RouteName</h3>
+                            <div class="text-secondary small">
+                                Auto @route.VehicleRegistration · @route.PackedBags/@route.TotalBags spakowane · @route.LoadedBags załadowane
+                            </div>
+                        </div>
+                        <div class="btn-list">
+                            <a asp-controller="Loading" asp-action="Manifest" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-success">Manifest</a>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-vcenter card-table table-premium mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="w-1">Stop</th>
+                                    <th>Zamówienie</th>
+                                    <th>Identyfikator</th>
+                                    <th>DeliveryCalendarId</th>
+                                    <th>Pudełka</th>
+                                    <th>Status torby</th>
+                                    <th class="w-1 text-end">Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var bag in route.Bags)
+                                {
+                                    <tr>
+                                        <td class="fw-bold text-dark">#@bag.StopNumber</td>
+                                        <td>
+                                            <div class="fw-bold text-dark">#@bag.OrderId</div>
+                                            <div class="text-secondary small">@bag.DeliveryWindow</div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-bold text-dark">@(bag.ClientPublicId ?? "-")</div>
+                                            <span class="badge bg-indigo-lt text-indigo">@bag.DietType</span>
+                                        </td>
+                                        <td class="text-secondary small">@(bag.DeliveryCalendarId?.ToString() ?? "-")</td>
+                                        <td><span class="fw-bold text-dark">@bag.PackedBoxes/@bag.TotalBoxes</span></td>
+                                        <td>
+                                            <span class="badge bg-@bag.StatusColor-lt text-@bag.StatusColor d-inline-flex align-items-center gap-1">
+                                                <span class="status-dot bg-@bag.StatusColor" style="width: 6px; height: 6px;"></span>
+                                                @bag.StatusText
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="btn-list flex-nowrap justify-content-end">
+                                                <a asp-action="Session" asp-route-sessionId="@bag.PackingSessionId" class="btn btn-sm btn-outline-primary">Kompletuj</a>
+                                                <a asp-action="BagIssue" asp-route-sessionId="@bag.PackingSessionId" asp-route-packingBagId="@bag.PackingBagId" class="btn btn-sm btn-outline-danger">Zgłoś problem z torbą</a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
+            @if (Model.TotalPages > 1)
+            {
+                <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div class="text-secondary small">Strona @Model.Page z @Model.TotalPages</div>
+                    <ul class="pagination m-0">
+                        <li class="page-item @(Model.Page <= 1 ? "disabled" : string.Empty)">
+                            <a class="page-link" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-search="@Model.Search" asp-route-routeId="@Model.RouteId" asp-route-bagStatus="@Model.BagStatus" asp-route-page="@(Model.Page - 1)" asp-route-pageSize="@Model.PageSize">Poprzednia</a>
+                        </li>
+                        @for (var pageNumber = Math.Max(1, Model.Page - 2); pageNumber <= Math.Min(Model.TotalPages, Model.Page + 2); pageNumber++)
+                        {
+                            <li class="page-item @(pageNumber == Model.Page ? "active" : string.Empty)">
+                                <a class="page-link" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-search="@Model.Search" asp-route-routeId="@Model.RouteId" asp-route-bagStatus="@Model.BagStatus" asp-route-page="@pageNumber" asp-route-pageSize="@Model.PageSize">@pageNumber</a>
+                            </li>
+                        }
+                        <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : string.Empty)">
+                            <a class="page-link" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-search="@Model.Search" asp-route-routeId="@Model.RouteId" asp-route-bagStatus="@Model.BagStatus" asp-route-page="@(Model.Page + 1)" asp-route-pageSize="@Model.PageSize">Następna</a>
+                        </li>
+                    </ul>
+                </div>
+            }
+        </div>
+    </div>
+</div>

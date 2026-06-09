@@ -4,6 +4,8 @@ using KuchniaUCygana.Application;
 using KuchniaUCygana.Infrastructure;
 using KuchniaUCygana.Infrastructure.Persistence.Migrations;
 using KuchniaUCygana.Infrastructure.Persistence.Seeding;
+using KuchniaUCygana.Web.Filters;
+using KuchniaUCygana.Web.ModelBinding;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.DataProtection;
@@ -34,8 +36,9 @@ builder.Services
         {
             options.Cookie.Name = "KuchniaUCygana.Auth";
             options.Cookie.HttpOnly = true;
-            // Production should keep Always; local HTTP development can switch to SameAsRequest.
-            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
             options.Cookie.SameSite = SameSiteMode.Lax;
             options.LoginPath = "/Account/Login";
             options.AccessDeniedPath = "/Account/AccessDenied";
@@ -68,9 +71,19 @@ builder.Services
             };
         });
 builder.Services.AddAuthorization();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.Cookie.Name = "KuchniaUCygana.Session";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
 builder.Services.AddControllersWithViews(options =>
     {
         options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+        options.Filters.Add<StaffShiftGuardFilter>();
+        options.ModelBinderProviders.Insert(0, new FlexibleDecimalModelBinderProvider());
     })
     .AddFluentValidation(fv => fv.RegisterValidatorsFromAssemblyContaining<Program>());
 
@@ -79,13 +92,21 @@ var app = builder.Build();
 app.UseSerilogRequestLogging();
 
 QuestPDF.Settings.License = LicenseType.Community;
-MigrationRunner.RunMigrations(app.Services, app.Logger);
-await DatabaseSeedingBootstrapper.TrySeedAsync(
-    app.Services,
-    app.Configuration,
-    app.Environment,
-    app.Logger,
-    isSeedCommand ? SeedingTrigger.Command : SeedingTrigger.Startup);
+var skipDatabaseStartup = !isSeedCommand && app.Configuration.GetValue<bool>("DatabaseStartup:Skip");
+if (skipDatabaseStartup)
+{
+    app.Logger.LogInformation("Database startup tasks skipped by configuration.");
+}
+else
+{
+    MigrationRunner.RunMigrations(app.Services, app.Logger);
+    await DatabaseSeedingBootstrapper.TrySeedAsync(
+        app.Services,
+        app.Configuration,
+        app.Environment,
+        app.Logger,
+        isSeedCommand ? SeedingTrigger.Command : SeedingTrigger.Startup);
+}
 
 if (isSeedCommand)
 {
@@ -105,6 +126,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseRouting();
+app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
 

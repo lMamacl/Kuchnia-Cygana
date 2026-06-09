@@ -1,0 +1,66 @@
+@model TransportLabelReprintFormViewModel
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Redruk etykiety transportowej";
+    ViewData["Section"] = "Pakowanie";
+    ViewData["Description"] = "Kontrola i audyt redruku etykiety torby.";
+
+    var label = Model.Labels.FirstOrDefault();
+}
+
+<div class="row g-4">
+    <div class="col-xl-7">
+        <div class="card card-premium">
+            <div class="card-body">
+                <h3 class="mb-1 text-dark">Formularz redruku etykiety</h3>
+                <p class="text-secondary small mb-4">Redruk tworzy nowy rekord audytowy z kolejnym numerem wydruku. Kod torby i QR pozostają takie same.</p>
+
+                @if (label is null)
+                {
+                    <div class="alert alert-warning">Nie znaleziono etykiety do redruku dla tej torby.</div>
+                }
+                else
+                {
+                    <dl class="row small mb-4">
+                        <dt class="col-sm-4">ClientPublicId</dt>
+                        <dd class="col-sm-8">@label.ClientPublicId</dd>
+                        <dt class="col-sm-4">DeliveryCalendarId</dt>
+                        <dd class="col-sm-8">@(label.DeliveryCalendarId?.ToString() ?? "-")</dd>
+                        <dt class="col-sm-4">Kod torby</dt>
+                        <dd class="col-sm-8"><code>@label.BagCode</code></dd>
+                        <dt class="col-sm-4">Obecny wydruk</dt>
+                        <dd class="col-sm-8">#@label.PrintNumber z @(label.PrintedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "-")</dd>
+                        <dt class="col-sm-4">Trasa</dt>
+                        <dd class="col-sm-8">@label.RouteInfo</dd>
+                    </dl>
+                }
+
+                <form asp-action="ReprintLabel" asp-route-sessionId="@Model.SessionId" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label asp-for="ReprintReason" class="form-label">Powód redruku</label>
+                        <textarea asp-for="ReprintReason" class="form-control" rows="4" maxlength="250" required placeholder="Np. etykieta uszkodzona, zamazana, wydruk nieczytelny..."></textarea>
+                        <span asp-validation-for="ReprintReason" class="text-danger small"></span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger" @(label is null ? "disabled" : null)>Wygeneruj redruk</button>
+                        <a asp-action="Labels" asp-route-sessionId="@Model.SessionId" class="btn btn-outline-secondary">Anuluj</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-5">
+        <div class="card">
+            <div class="card-body">
+                <h4 class="mb-3">Co zostanie zapisane</h4>
+                <ul class="small text-secondary mb-0">
+                    <li>nowy rekord <code>PackingLabel</code>,</li>
+                    <li>kolejny <code>PrintNumber</code>,</li>
+                    <li>powód redruku, data i operator,</li>
+                    <li>ten sam <code>BagCode</code> i QR dla tej samej fizycznej torby.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>

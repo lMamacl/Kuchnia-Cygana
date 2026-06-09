@@ -1,8 +1,433 @@
+@model KuchniaUCygana.Application.DTOs.Production.CookingCardDto
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Karta gotowania";
-    ViewData["Section"] ??= "Produkcja";
-    ViewData["Description"] ??= "Placeholder pojedynczej karty gotowania.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Interaktywna Karta Gotowania";
+    ViewData["Section"] = "Kuchnia";
+    ViewData["Description"] = "Szczegółowa specyfikacja receptury z automatycznym przeliczaniem ilości składników na zadaną liczbę porcji.";
 
+    var image = string.IsNullOrWhiteSpace(Model.MainImageUrl) ? GetMealImage(Model.MealName) : Model.MainImageUrl;
+    var category = string.IsNullOrWhiteSpace(Model.CategoryName) ? GetMealCategory(Model.MealName) : Model.CategoryName;
+}
+
+@functions {
+    string GetMealImage(string mealName)
+    {
+        if (mealName.Contains("Kurczak", StringComparison.OrdinalIgnoreCase)) return "/img/chicken_teriyaki.png";
+        if (mealName.Contains("dyni", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Zupa", StringComparison.OrdinalIgnoreCase)) return "/img/pumpkin_soup.png";
+        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Deser", StringComparison.OrdinalIgnoreCase)) return "/img/blueberry_cheesecake.png";
+        if (mealName.Contains("Łosoś", StringComparison.OrdinalIgnoreCase) || mealName.Contains("Ryba", StringComparison.OrdinalIgnoreCase)) return "/img/baked_salmon.png";
+        return "/img/chicken_teriyaki.png"; // fallback
+    }
+
+    string GetMealCategory(string mealName)
+    {
+        if (mealName.Contains("zup", StringComparison.OrdinalIgnoreCase)) return "Zupa";
+        if (mealName.Contains("sernik", StringComparison.OrdinalIgnoreCase) || mealName.Contains("deser", StringComparison.OrdinalIgnoreCase) || mealName.Contains("ciast", StringComparison.OrdinalIgnoreCase)) return "Deser";
+        if (mealName.Contains("śniadan", StringComparison.OrdinalIgnoreCase) || mealName.Contains("owsian", StringComparison.OrdinalIgnoreCase)) return "Śniadanie";
+        return "Danie Główne";
+    }
+
+    string FormatWeight(decimal weightInGrams)
+    {
+        if (weightInGrams >= 1000m)
+        {
+            return $"{(weightInGrams / 1000m).ToString("F2")} kg";
+        }
+        return $"{weightInGrams.ToString("F0")} g";
+    }
+}
+
+<div class="row g-4">
+    <!-- Informacje o daniu & Formularz zatwierdzenia -->
+    <div class="col-lg-5">
+        <div class="card card-premium">
+            <div class="card-status-top bg-azure"></div>
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center gap-3 mb-4">
+                    <span class="avatar avatar-xl rounded-3" style="background-image: url(@image); width: 80px; height: 80px; background-size: cover; background-position: center; border: 1px solid rgba(0, 0, 0, 0.08);"></span>
+                    <div>
+                        <span class="badge bg-indigo-lt text-indigo mb-1">@category</span>
+                        <h2 class="h2 mb-0 text-dark">@Model.MealName</h2>
+                        <div class="text-secondary small mt-1">Pozycja planu #@Model.PlanItemId</div>
+                        @if (Model.Allergens.Count > 0)
+                        {
+                            <div class="small text-danger mt-1">Alergeny: @string.Join(", ", Model.Allergens)</div>
+                        }
+                    </div>
+                </div>
+
+                <div class="hr my-3"></div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-secondary small">Status</div>
+                            <div class="fw-bold text-dark">@Model.Status</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-secondary small">Snapshot M2</div>
+                            <div class="fw-bold @(Model.HasM2Snapshot ? "text-success" : "text-warning")">
+                                @(Model.HasM2Snapshot ? "zamrozony" : "brak")
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-secondary small">FEFO składników</div>
+                            <div class="fw-bold @(Model.FefoDeductedAt.HasValue ? "text-success" : "text-warning")">
+                                @(Model.FefoDeductedAt.HasValue ? $"wykonane {Model.FefoDeductedAt.Value.ToLocalTime():HH:mm}" : "do wykonania")
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="text-secondary small">Opakowania</div>
+                            <div class="fw-bold @(Model.PackagingDeductedAt.HasValue ? "text-success" : "text-secondary")">
+                                @(Model.PackagingDeductedAt.HasValue ? $"zdjete {Model.PackagingDeductedAt.Value.ToLocalTime():HH:mm}" : "czekaja")
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mb-3">
+                    <span class="text-secondary">Wymagane porcje:</span>
+                    <strong class="text-dark">@Model.PlannedQuantity szt.</strong>
+                </div>
+
+                @if (Model.RawWeightGrams.HasValue || Model.CookedWeightGrams.HasValue)
+                {
+                    <div class="d-flex justify-content-between mb-3">
+                        <span class="text-secondary">Waga raw/cooked:</span>
+                        <strong class="text-dark">@Model.RawWeightGrams?.ToString("0") g / @Model.CookedWeightGrams?.ToString("0") g</strong>
+                    </div>
+                }
+
+                @if (Model.RequiresCoreTemperatureCheck)
+                {
+                    <div class="alert alert-warning">
+                        Wymagany test temperatury rdzenia
+                        @if (Model.MinimumCoreTemperatureCelsius.HasValue)
+                        {
+                            <strong>min. @Model.MinimumCoreTemperatureCelsius.Value.ToString("0.#") °C</strong>
+                        }
+                    </div>
+                }
+
+                @if (Model.MissingWarehouseMappings.Count > 0)
+                {
+                    <div class="alert alert-danger">
+                        Brak mapowania do magazynu: @string.Join(", ", Model.MissingWarehouseMappings)
+                    </div>
+                }
+
+                @if (!Model.CanApproveCooking)
+                {
+                    <div class="alert alert-warning">
+                        <div class="fw-bold mb-1">Nie można jeszcze zatwierdzić gotowania</div>
+                        <ul class="mb-0 ps-3">
+                            @foreach (var blocker in Model.ApprovalBlockers)
+                            {
+                                <li>@blocker</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <form asp-action="ApproveCooking" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="planItemId" value="@Model.PlanItemId" />
+                    
+                    <div class="mb-3">
+                        <label class="form-label required">Ugotowana ilość rzeczywista (szt.)</label>
+                        <input type="number" name="actualQuantity" class="form-control form-control-lg text-center fw-bold" value="@Model.PlannedQuantity" required min="0" />
+                        <small class="form-hint text-center">Wpisz faktyczną liczbę gotowych porcji, która trafi do pakowania.</small>
+                    </div>
+
+                    <button type="submit" class="btn btn-success w-100 py-2" @(Model.CanApproveCooking ? "" : "disabled")>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                        Zatwierdź Wykonanie Potrawy
+                    </button>
+                </form>
+
+                <div class="hr my-4"></div>
+
+                <div class="border rounded p-3 bg-light">
+                    <div class="fw-bold mb-2">Odchylenia i akceptacje managera</div>
+                    <div class="small text-secondary mb-3">
+                        Jeśli faktyczna ilość, liczba pudełek albo liczba etykiet różni się od planu,
+                        najpierw zgłoś korektę. Manager/Admin musi ją zaakceptować przed zatwierdzeniem.
+                    </div>
+                    <form asp-action="RequestAdjustmentApproval" method="post" class="row g-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="planItemId" value="@Model.PlanItemId" />
+                        <div class="col-12">
+                            <select name="adjustmentType" class="form-select">
+                                <option value="CookedQuantity">Faktyczna liczba porcji</option>
+                                <option value="PackagingQuantity">Liczba pudełek/pojemników</option>
+                                <option value="LabelQuantity">Liczba etykiet</option>
+                            </select>
+                        </div>
+                        <div class="col-5">
+                            <input type="number" name="requestedValue" class="form-control" min="0" step="1" value="@Model.PlannedQuantity" />
+                        </div>
+                        <div class="col-7">
+                            <input type="text" name="reason" class="form-control" maxlength="500" placeholder="Powód korekty" />
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-outline-warning w-100">Zgłoś korektę do akceptacji</button>
+                        </div>
+                    </form>
+
+                    @if (Model.AdjustmentApprovals.Any())
+                    {
+                        <div class="table-responsive mt-3">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Typ</th>
+                                        <th>Zmiana</th>
+                                        <th>Status</th>
+                                        <th>Powód</th>
+                                        <th class="text-end">Akcja</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var approval in Model.AdjustmentApprovals)
+                                    {
+                                        <tr>
+                                            <td>@approval.Id</td>
+                                            <td>@approval.AdjustmentType</td>
+                                            <td>@approval.PlannedValue.ToString("0.##") → @approval.RequestedValue.ToString("0.##") @approval.Unit</td>
+                                            <td>
+                                                <span class="badge bg-@(approval.Status == "Approved" ? "blue" : approval.Status == "Applied" ? "success" : "warning")-lt">
+                                                    @approval.Status
+                                                </span>
+                                            </td>
+                                            <td>@approval.Reason</td>
+                                            <td class="text-end">
+                                                @if (approval.Status == "Pending" && (User.IsInRole("KitchenManager") || User.IsInRole("Admin")))
+                                                {
+                                                    <form asp-action="ApproveAdjustment" asp-route-approvalId="@approval.Id" method="post" class="d-inline-flex gap-2 justify-content-end">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="planItemId" value="@Model.PlanItemId" />
+                                                        <input type="text" name="approvalNote" class="form-control form-control-sm" placeholder="Notatka" />
+                                                        <button type="submit" class="btn btn-sm btn-success">Akceptuj</button>
+                                                    </form>
+                                                }
+                                                else if (approval.Status == "Approved")
+                                                {
+                                                    <span class="small text-blue">Zaakceptowane, gotowe do zastosowania</span>
+                                                }
+                                                else if (approval.Status == "Applied")
+                                                {
+                                                    <span class="small text-success">Zastosowane</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="card-footer bg-transparent d-flex justify-content-between">
+                <a asp-action="Index" class="btn btn-outline-secondary">Wróć do planu</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skalowana receptura -->
+    <div class="col-lg-7">
+        @if (!string.IsNullOrWhiteSpace(Model.PreparationInstructions))
+        {
+            <div class="card card-premium mb-4">
+                <div class="card-header bg-transparent">
+                    <h3 class="card-title">Instrukcja przygotowania</h3>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0 text-secondary">@Model.PreparationInstructions</p>
+                </div>
+            </div>
+        }
+
+        @if (Model.NutritionFacts is not null)
+        {
+            <div class="card card-premium mb-4">
+                <div class="card-header bg-transparent">
+                    <h3 class="card-title">Wartości odżywcze na 100 g</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 text-center">
+                        <div class="col"><strong>@Model.NutritionFacts.CaloriesPer100g.ToString("0")</strong><div class="small text-secondary">kcal</div></div>
+                        <div class="col"><strong>@Model.NutritionFacts.ProteinPer100g.ToString("0.#")</strong><div class="small text-secondary">białko</div></div>
+                        <div class="col"><strong>@Model.NutritionFacts.CarbohydratesPer100g.ToString("0.#")</strong><div class="small text-secondary">węgle</div></div>
+                        <div class="col"><strong>@Model.NutritionFacts.FatPer100g.ToString("0.#")</strong><div class="small text-secondary">tłuszcz</div></div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (Model.Components.Any())
+        {
+            <div class="card card-premium mb-4">
+                <div class="card-header bg-transparent">
+                    <h3 class="card-title">Składowe ze snapshotu M2</h3>
+                </div>
+                <div class="card-body">
+                    <div class="accordion" id="snapshotComponents">
+                        @foreach (var component in Model.Components)
+                        {
+                            var collapseId = $"snapshot-component-{component.RecipeComponentVersionId}";
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="heading-@collapseId">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="false" aria-controls="@collapseId">
+                                        <span class="fw-bold me-2">@component.ComponentName</span>
+                                        <span class="badge bg-blue-lt text-blue me-2">@component.TotalQuantity.ToString("0.###") @component.Unit</span>
+                                        @if (component.RequiresCoreTemperatureCheck)
+                                        {
+                                            <span class="badge bg-orange-lt text-orange">Temp. @component.MinimumCoreTemperatureCelsius?.ToString("0.#") C</span>
+                                        }
+                                        <span class="badge bg-@component.StatusColor-lt ms-auto">
+                                            @component.StatusLabel: @component.CheckedStepCount/@component.TotalStepCount kroków
+                                        </span>
+                                    </button>
+                                </h2>
+                                <div id="@collapseId" class="accordion-collapse collapse" aria-labelledby="heading-@collapseId" data-bs-parent="#snapshotComponents">
+                                    <div class="accordion-body">
+                                        <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                                            <div class="flex-fill">
+                                                <div class="small text-secondary mb-1">
+                                                    Kroki instrukcji: @component.CheckedStepCount / @component.TotalStepCount
+                                                    @if (component.RequiredStepCount > 0)
+                                                    {
+                                                        <span class="ms-2 text-orange">Kontrole: @component.RequiredCheckedStepCount / @component.RequiredStepCount</span>
+                                                    }
+                                                </div>
+                                                <div class="progress" style="height: 6px;">
+                                                    <div class="progress-bar bg-@component.StatusColor" style="width: @component.ProgressPercent%"></div>
+                                                </div>
+                                                @if (component.RequiredStepCount > 0)
+                                                {
+                                                    <div class="small @(component.RequiresAttention ? "text-warning" : "text-success") mt-2">
+                                                        @component.ControlMessage
+                                                    </div>
+                                                }
+                                            </div>
+                                            <a asp-action="CookingComponent"
+                                               asp-route-planItemId="@Model.PlanItemId"
+                                               asp-route-recipeComponentVersionId="@component.RecipeComponentVersionId"
+                                               class="btn btn-sm btn-primary">
+                                                Gotuj składową
+                                            </a>
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(component.Instructions))
+                                        {
+                                            <div class="bg-light p-3 border rounded mb-3">@component.Instructions</div>
+                                        }
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-vcenter">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Składnik</th>
+                                                        <th class="text-end">Na 1 porcje</th>
+                                                        <th class="text-end">Łącznie</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var ingredient in component.Ingredients)
+                                                    {
+                                                        <tr>
+                                                            <td>@ingredient.IngredientName</td>
+                                                            <td class="text-end">@FormatWeight(ingredient.WeightPerServing)</td>
+                                                            <td class="text-end fw-bold">@FormatWeight(ingredient.TotalWeight)</td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        @if (component.PackagingRequirements.Any())
+                                        {
+                                            <div class="mt-3 small text-secondary">
+                                                Opakowania: @string.Join(", ", component.PackagingRequirements.Select(p => $"{p.ResourceName} x {p.TotalQuantity:0.##} {p.Unit}"))
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (Model.PackagingRequirements.Any())
+        {
+            <div class="card card-premium mb-4">
+                <div class="card-header bg-transparent">
+                    <h3 class="card-title">Pudełka i pojemniki</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-vcenter card-table">
+                        <thead>
+                            <tr>
+                                <th>Zasób</th>
+                                <th>Rola</th>
+                                <th class="text-end">Na 1 porcje</th>
+                                <th class="text-end">Łącznie</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var packaging in Model.PackagingRequirements)
+                            {
+                                <tr>
+                                    <td>@packaging.ResourceName</td>
+                                    <td>@(packaging.ContainerRole ?? "-")</td>
+                                    <td class="text-end">@packaging.QuantityPerServing.ToString("0.##") @packaging.Unit</td>
+                                    <td class="text-end fw-bold">@packaging.TotalQuantity.ToString("0.##") @packaging.Unit</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <div class="card card-premium">
+            <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                <h3 class="card-title">Zapotrzebowanie na Składniki (Skalowane)</h3>
+                <span class="badge bg-azure-lt text-azure">Przeliczono na @Model.PlannedQuantity porcji</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th>Składnik</th>
+                            <th>Kategoria magazynu</th>
+                            <th class="text-end">Na 1 porcję</th>
+                            <th class="text-end font-weight-bold fw-bold text-dark">Łącznie dla @Model.PlannedQuantity porcji</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ing in Model.Ingredients)
+                        {
+                            <tr>
+                                <td class="font-weight-medium fw-bold text-dark">@ing.IngredientName</td>
+                                <td><span class="badge bg-secondary-lt">@(ing.WarehouseCategoryName ?? "Brak mapowania")</span></td>
+                                <td class="text-end text-secondary">
+                                    @FormatWeight(ing.WeightPerServing)
+                                </td>
+                                <td class="text-end font-weight-bold fw-bold text-azure" style="font-size: 1.05rem;">
+                                    @FormatWeight(ing.TotalWeight)
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

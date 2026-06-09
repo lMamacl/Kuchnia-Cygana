@@ -1,0 +1,371 @@
+@using KuchniaUCygana.Application.DTOs.Packing
+@model KuchniaUCygana.Web.Models.PackingDeliveryViewModel
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Manifest trasy";
+    ViewData["Section"] = "Manifest";
+    ViewData["Description"] = "Cyfrowy dokument manifestu, arkusz obsługi i wydruk.";
+
+    var route = Model.Route;
+    var selectedDate = Model.SelectedDate;
+    var control = Model.ManifestControl;
+    var manifest = control?.Manifest ?? Model.Manifest;
+    var checklist = control?.Checklist ?? new List<ManifestChecklistItemDto>();
+    var issues = control?.Issues ?? new List<PackingManifestIssueDto>();
+    var isPrintApproved = manifest?.IsVerified == true;
+    var printStatus = isPrintApproved ? "ZATWIERDZONY" : "WERSJA ROBOCZA";
+    var manifestColor = manifest?.IsVerified == true
+        ? "success"
+        : manifest?.RequiresRegeneration == true
+            ? "danger"
+            : manifest?.WorkerApprovedAt.HasValue == true
+                ? "warning"
+                : manifest is not null
+                    ? "azure"
+                    : "secondary";
+    var manifestText = manifest?.IsVerified == true
+        ? "Finalnie zatwierdzony i wysłany do logistyki"
+        : manifest?.RequiresRegeneration == true
+            ? "Manifest wymaga regeneracji"
+            : manifest?.WorkerApprovedAt.HasValue == true
+                ? "Czeka na zatwierdzenie przełożonego"
+                : manifest is not null
+                    ? "Czeka na zatwierdzenie pracownika"
+                    : "Brak manifestu";
+}
+
+<div class="row row-cards">
+    <div class="col-12 d-print-none">
+        <div class="card card-premium">
+            <div class="card-body d-flex flex-wrap align-items-center gap-2">
+                <a asp-controller="Packing" asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-routeId="@route.RouteId" class="btn btn-outline-primary">Kompletacja</a>
+                <a asp-controller="Packing" asp-action="LabelsIndex" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" asp-route-routeId="@route.RouteId" class="btn btn-outline-primary">Etykiety</a>
+                <a asp-action="Manifest" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-success">Manifest</a>
+                <a asp-action="Route" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-indigo">Transport</a>
+                <a asp-action="Index" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary ms-auto">Wróć do tras</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="manifest-print-area">
+            <div class="card card-premium">
+                <div class="card-body py-4">
+                    <div class="row align-items-start g-3">
+                        <div class="col">
+                            <div class="text-uppercase text-secondary small fw-bold">Manifest trasy #@route.RouteId</div>
+                            <h2 class="h1 mb-1 text-dark">@route.RouteName</h2>
+                            <div class="d-flex flex-wrap gap-3 mt-2 text-secondary small">
+                                <span>Data: <strong>@selectedDate.ToString("dd.MM.yyyy")</strong></span>
+                                <span>Auto: <strong>@route.VehicleRegistration</strong></span>
+                                <span>Torby: <strong>@route.TotalBags</strong></span>
+                                <span>Pudełka: <strong>@route.Bags.Sum(b => b.TotalBoxes)</strong></span>
+                                @if (manifest is not null)
+                                {
+                                    <span>Manifest: <strong>@manifest.ManifestNumber</strong></span>
+                                    <span>Wersja: <strong>@manifest.ManifestVersion</strong></span>
+                                }
+                            </div>
+                            @if (manifest is not null)
+                            {
+                                <div class="text-secondary small mt-3">
+                                    Wygenerowano <strong>@manifest.GeneratedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</strong>
+                                    przez <strong>@(manifest.GeneratedBy ?? "System")</strong>
+                                    @if (manifest.WorkerApprovedAt.HasValue)
+                                    {
+                                        <span> · pracownik: <strong>@manifest.WorkerApprovedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</strong></span>
+                                    }
+                                    @if (manifest.IsVerified && manifest.VerifiedAt.HasValue)
+                                    {
+                                        <span> · przełożony: <strong>@manifest.VerifiedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</strong></span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div class="col-auto text-end">
+                            <div class="badge bg-@manifestColor-lt text-@manifestColor mb-2">@manifestText</div>
+                            <div class="manifest-print-stamp">@printStatus</div>
+                        </div>
+                    </div>
+                    @if (manifest?.RequiresRegeneration == true)
+                    {
+                        <div class="alert alert-danger mt-3 mb-0">
+                            Manifest wymaga regeneracji: @(manifest.RequiresRegenerationReason ?? "zmienił się snapshot trasy, toreb albo etykiet").
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="row row-cards mt-0">
+                <div class="col-lg-5">
+                    <div class="card card-premium h-100">
+                        <div class="card-header">
+                            <h3 class="card-title">Checklist manifestu</h3>
+                        </div>
+                        <div class="list-group list-group-flush">
+                            @foreach (var item in checklist)
+                            {
+                                <div class="list-group-item">
+                                    <label class="form-check mb-0">
+                                        <input class="form-check-input" type="checkbox" checked="@item.IsComplete" disabled />
+                                        <span class="form-check-label fw-bold">@item.Label</span>
+                                    </label>
+                                    <div class="text-secondary small ms-4">@item.Details</div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-7 d-print-none">
+                    <div class="card card-premium h-100">
+                        <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                            <h3 class="card-title mb-0 me-auto">Akcje manifestu</h3>
+                            @if (manifest is not null)
+                            {
+                                <a asp-action="ManifestPayload" asp-route-routeId="@route.RouteId" asp-route-date="@selectedDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary btn-sm">Payload JSON</a>
+                            }
+                            <button type="button" class="btn btn-outline-dark btn-sm" onclick="window.print()">Drukuj manifest</button>
+                        </div>
+                        <div class="card-body">
+                            @if (control is null)
+                            {
+                                <div class="alert alert-warning mb-0">Nie udało się pobrać kontroli manifestu dla tej trasy.</div>
+                            }
+                            else
+                            {
+                                <form asp-action="GenerateManifest" asp-route-routeId="@route.RouteId" method="post" class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                                    @if (manifest is not null)
+                                    {
+                                        <input type="text" name="changeReason" class="form-control" style="max-width: 280px" placeholder="Powód regeneracji" />
+                                    }
+                                    <button type="submit" class="btn btn-outline-primary" disabled="@(!control.CanGenerateManifest ? "disabled" : null)">
+                                        @(manifest is null ? "Generuj manifest" : "Regeneruj manifest")
+                                    </button>
+                                </form>
+
+                                @if (!control.CanGenerateManifest && manifest is null)
+                                {
+                                    <div class="alert alert-warning">Manifest można wygenerować dopiero po spakowaniu toreb, wydruku etykiet i potwierdzeniu ich przyklejenia.</div>
+                                }
+
+                                @if (manifest is not null && !manifest.IsVerified)
+                                {
+                                    <form asp-action="WorkerApproveManifest" asp-route-routeId="@route.RouteId" method="post" class="border rounded p-3 mb-3">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                                        <label class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="confirmedManifest" value="true" required />
+                                            <span class="form-check-label">Potwierdzam zgodność manifestu z torbami, etykietami i trasą.</span>
+                                        </label>
+                                        <button type="submit" class="btn btn-success mt-3" disabled="@(!control.CanWorkerApprove ? "disabled" : null)">Zatwierdź jako pracownik</button>
+                                    </form>
+
+                                    @if (User.IsInRole("PackingManager") || User.IsInRole("Admin"))
+                                    {
+                                        <form asp-action="SupervisorApproveManifest" asp-route-routeId="@route.RouteId" method="post" class="border rounded p-3">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="date" value="@selectedDate.ToString("yyyy-MM-dd")" />
+                                            <label class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="confirmedSupervisor" value="true" required />
+                                                <span class="form-check-label">Finalnie zatwierdzam manifest i wysyłam go do logistyki.</span>
+                                            </label>
+                                            <button type="submit" class="btn btn-indigo mt-3" disabled="@(!control.CanSupervisorApprove ? "disabled" : null)">Zatwierdź jako przełożony</button>
+                                        </form>
+                                    }
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="card card-premium">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h3 class="card-title">Arkusz obsługi</h3>
+                            <span class="badge bg-@((control?.HasBlockingIssues == true ? "danger" : "success"))-lt text-@((control?.HasBlockingIssues == true ? "danger" : "success"))">
+                                @(control?.HasBlockingIssues == true ? $"{control.BlockingIssueCount} blokuje manifest" : "Brak blokad")
+                            </span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-vcenter card-table">
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Problem</th>
+                                        <th>Szczegóły</th>
+                                        <th>Źródło</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!issues.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="4" class="text-secondary">Brak problemów do obsługi.</td>
+                                        </tr>
+                                    }
+                                    @foreach (var issue in issues)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <span class="badge bg-@(issue.IsResolved ? "success" : issue.IsBlocking ? "danger" : "warning")-lt text-@(issue.IsResolved ? "success" : issue.IsBlocking ? "danger" : "warning")">@issue.Status</span>
+                                            </td>
+                                            <td class="fw-bold text-dark">@issue.Title</td>
+                                            <td class="text-secondary small">@issue.Details</td>
+                                            <td class="text-secondary small">@(issue.SourceType ?? issue.IssueType) @(issue.SourceId?.ToString() ?? string.Empty)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="card card-premium">
+                        <div class="card-header">
+                            <h3 class="card-title">Torby i etykiety</h3>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-vcenter card-table table-premium">
+                                <thead>
+                                    <tr>
+                                        <th>Stop</th>
+                                        <th>DeliveryCalendarId</th>
+                                        <th>Identyfikator klienta</th>
+                                        <th>Torba</th>
+                                        <th>Etykieta</th>
+                                        <th>Pudełka</th>
+                                        <th>Status załadunku</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var bag in route.Bags.OrderBy(b => b.StopNumber).ThenBy(b => b.BagNumber))
+                                    {
+                                        <tr>
+                                            <td class="fw-bold text-dark">#@bag.StopNumber</td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@(bag.DeliveryCalendarId?.ToString() ?? "-")</div>
+                                                <div class="text-secondary small">Zamówienie #@bag.OrderId</div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@(bag.ClientPublicId ?? "-")</div>
+                                                <div class="text-secondary small">@bag.DeliveryWindow</div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@bag.BagCode</div>
+                                                <div class="text-secondary small">Torba @bag.BagNumber</div>
+                                            </td>
+                                            <td>
+                                                @if (bag.HasLabels && bag.IsTransportLabelAttached)
+                                                {
+                                                    <span class="badge bg-success-lt text-success">Przyklejona</span>
+                                                }
+                                                else if (bag.HasLabels)
+                                                {
+                                                    <span class="badge bg-warning-lt text-warning">Nieprzyklejona</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-danger-lt text-danger">Brak etykiety</span>
+                                                }
+                                            </td>
+                                            <td class="fw-bold text-dark">@bag.PackedBoxes/@bag.TotalBoxes</td>
+                                            <td><span class="badge bg-@bag.StatusColor-lt text-@bag.StatusColor">@bag.StatusText</span></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="card card-premium manifest-signatures">
+                        <div class="card-header">
+                            <h3 class="card-title">Podpisy do wydruku</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-4">
+                                <div class="col-md-4">
+                                    <div class="signature-line"></div>
+                                    <div class="text-center small text-secondary mt-2">Pracownik kompletacji</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="signature-line"></div>
+                                    <div class="text-center small text-secondary mt-2">Przełożony</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="signature-line"></div>
+                                    <div class="text-center small text-secondary mt-2">Logistyka / odbiór</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Styles {
+    <style>
+        .manifest-print-stamp {
+            border: 2px solid currentColor;
+            display: inline-block;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            padding: .35rem .75rem;
+        }
+
+        .signature-line {
+            border-top: 1px solid #1f2937;
+            min-height: 3rem;
+        }
+
+        @@media print {
+            .d-print-none,
+            .navbar,
+            .navbar-vertical,
+            .page-header,
+            .alert-dismissible,
+            .btn,
+            form {
+                display: none !important;
+            }
+
+            body {
+                background: #fff !important;
+            }
+
+            .page-wrapper,
+            .page-body,
+            .container-xl {
+                margin: 0 !important;
+                max-width: none !important;
+                padding: 0 !important;
+            }
+
+            .card {
+                border: 1px solid #d1d5db !important;
+                box-shadow: none !important;
+                break-inside: avoid;
+            }
+
+            .card-premium {
+                background: #fff !important;
+            }
+
+            .manifest-print-area {
+                color: #111827;
+            }
+
+            .manifest-signatures {
+                margin-top: 1rem;
+            }
+        }
+    </style>
+}

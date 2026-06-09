@@ -1,0 +1,109 @@
+@using KuchniaUCygana.Application.DTOs.Menu
+@using KuchniaUCygana.Application.DTOs.Warehouse
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model PagedResultDto<MealListItemDto>
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Baza posiłków";
+    ViewData["Section"] = "Katalog Menu";
+    ViewData["Description"] = "Lista potraw z filtrowaniem, kompletacja M2 i wariantami.";
+
+    var filter = ViewBag.Filter as MealSearchFilterDto ?? new MealSearchFilterDto();
+    var categories = ViewBag.Categories as IEnumerable<SelectListItem> ?? Enumerable.Empty<SelectListItem>();
+    var allergenOptions = ViewBag.AllergenOptions as IEnumerable<SelectListItem> ?? Enumerable.Empty<SelectListItem>();
+    var statusOptions = new List<SelectListItem>
+    {
+        new("Wszystkie", "", string.IsNullOrWhiteSpace(filter.Status)),
+        new("Szkic", "Draft", filter.Status == "Draft"),
+        new("Gotowy", "Ready", filter.Status == "Ready"),
+        new("Opublikowany", "Published", filter.Status == "Published"),
+        new("Archiwum", "Archived", filter.Status == "Archived"),
+    };
+    var variantOptions = new List<SelectListItem>
+    {
+        new("Wszystkie", "", !filter.HasVariants.HasValue),
+        new("Z wariantami", "true", filter.HasVariants == true),
+        new("Bez wariantów", "false", filter.HasVariants == false),
+    };
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h3 class="card-title mb-0">Katalog potraw</h3>
+                    <div class="text-secondary small">Rekordów: <strong>@Model.TotalCount</strong></div>
+                </div>
+                <div class="btn-list">
+                    <a asp-action="Create" class="btn btn-primary">Nowy posiłek</a>
+                </div>
+            </div>
+            <div class="card-body border-bottom">
+                <form id="meal-filter-form"
+                      asp-action="Index"
+                      method="get"
+                      class="row g-3 align-items-end"
+                      hx-get="/meals/table"
+                      hx-target="#meal-table-container"
+                      hx-trigger="submit, keyup changed delay:300ms from:#MealSearch, change from:select, change from:input[type='checkbox']">
+                    <div class="col-md-3">
+                        <label class="form-label">Szukaj</label>
+                        <input id="MealSearch" name="Search" value="@filter.Search" type="search" class="form-control" placeholder="Nazwa, opis, kategoria" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Kategoria</label>
+                        <select name="CategoryId" class="form-select" asp-items="categories">
+                            <option value="">Wszystkie</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Status</label>
+                        <select name="Status" class="form-select" asp-items="statusOptions"></select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Alergen</label>
+                        <select name="AllergenId" class="form-select" asp-items="allergenOptions">
+                            <option value="">Wszystkie</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Warianty</label>
+                        <select name="HasVariants" class="form-select" asp-items="variantOptions"></select>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">Na str.</label>
+                        <input name="PageSize" value="@Model.PageSize" type="number" min="5" max="100" class="form-control" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-check">
+                            <input name="MissingPublicationData" value="true" type="checkbox" class="form-check-input" checked="@filter.MissingPublicationData" />
+                            <span class="form-check-label">Tylko braki publikacji</span>
+                        </label>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-check">
+                            <input name="MissingPackaging" value="true" type="checkbox" class="form-check-input" checked="@filter.MissingPackaging" />
+                            <span class="form-check-label">Tylko braki opakowań</span>
+                        </label>
+                    </div>
+                    <div class="col-md-4 d-flex flex-wrap gap-2 justify-content-md-end">
+                        <button type="submit" class="btn btn-primary">Filtruj</button>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Wyczyść</a>
+                    </div>
+                </form>
+                <div class="btn-list mt-3">
+                    <a asp-action="Index" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-secondary">Wszystkie</a>
+                    <a asp-action="Index" asp-route-Status="Published" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-success">Opublikowane</a>
+                    <a asp-action="Index" asp-route-Status="Draft" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-secondary">Szkice</a>
+                    <a asp-action="Index" asp-route-MissingPublicationData="true" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-warning">Braki publikacji</a>
+                    <a asp-action="Index" asp-route-MissingPackaging="true" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-danger">Braki opakowań</a>
+                    <a asp-action="Index" asp-route-HasVariants="false" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-primary">Bez wariantów</a>
+                </div>
+            </div>
+            <div id="meal-table-container">
+                @await Html.PartialAsync("_Table", Model)
+            </div>
+        </div>
+    </div>
+</div>

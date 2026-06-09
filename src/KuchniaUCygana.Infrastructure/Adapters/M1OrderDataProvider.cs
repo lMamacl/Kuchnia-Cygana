@@ -1,0 +1,353 @@
+using Dapper;
+using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Domain.Interfaces.External;
+using KuchniaUCygana.Infrastructure.Persistence.ConnectionFactory;
+
+namespace KuchniaUCygana.Infrastructure.Adapters;
+
+/// <summary>
+/// Adapter Modulu 1 oparty o istniejace tabele zamowien.
+/// </summary>
+public sealed class M1OrderDataProvider : IOrderDataProvider
+{
+    private readonly IDbConnectionFactory connectionFactory;
+
+    public M1OrderDataProvider(IDbConnectionFactory connectionFactory)
+    {
+        this.connectionFactory = connectionFactory;
+    }
+
+    public async Task<IEnumerable<ActiveOrderEntry>> GetActiveOrdersAsync(DateOnly deliveryDate)
+    {
+        using var db = connectionFactory.CreateConnection();
+        var from = deliveryDate.ToDateTime(TimeOnly.MinValue);
+        var to = from.AddDays(1);
+
+        var rows = await db.QueryAsync<ActiveOrderRow>(
+            ActiveOrdersSql,
+            new
+            {
+                from,
+                to,
+                paidStatus = (int)OrderStatus.Paid,
+                inProductionStatus = (int)OrderStatus.InProduction,
+                scheduledStatus = (int)DeliveryStatus.Scheduled,
+            });
+
+        return rows.Select(row => new ActiveOrderEntry
+        {
+            DeliveryCalendarId = row.DeliveryCalendarId,
+            OrderId = row.OrderId,
+            ClientId = row.ClientId,
+            ClientPublicId = row.ClientPublicId,
+            ClientName = row.ClientName,
+            DietVariantId = row.DietVariantId,
+            DeliveryDate = DateOnly.FromDateTime(row.DeliveryDate),
+        });
+    }
+
+    public async Task<ActiveOrderEntry?> GetOrderByIdAsync(int orderId)
+    {
+        using var db = connectionFactory.CreateConnection();
+
+        var row = await db.QuerySingleOrDefaultAsync<ActiveOrderRow>(
+            ActiveOrderByIdSql,
+            new
+            {
+                orderId,
+                paidStatus = (int)OrderStatus.Paid,
+                inProductionStatus = (int)OrderStatus.InProduction,
+                scheduledStatus = (int)DeliveryStatus.Scheduled,
+            });
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        return new ActiveOrderEntry
+        {
+            DeliveryCalendarId = row.DeliveryCalendarId,
+            OrderId = row.OrderId,
+            ClientId = row.ClientId,
+            ClientPublicId = row.ClientPublicId,
+            ClientName = row.ClientName,
+            DietVariantId = row.DietVariantId,
+            DeliveryDate = DateOnly.FromDateTime(row.DeliveryDate),
+        };
+    }
+
+    public async Task<IEnumerable<OrderDeliveryInfo>> GetDeliveriesForDateAsync(DateTime date)
+    {
+        using var db = connectionFactory.CreateConnection();
+        var from = date.Date;
+        var to = from.AddDays(1);
+
+        var deliveries = (await db.QueryAsync<OrderDeliveryRow>(
+            DeliveriesForDateSql,
+            new
+            {
+                from,
+                to,
+                paidStatus = (int)OrderStatus.Paid,
+                inProductionStatus = (int)OrderStatus.InProduction,
+                scheduledStatus = (int)DeliveryStatus.Scheduled,
+            })).ToList();
+
+        var orderIds = deliveries.Select(d => d.OrderId).Distinct().ToArray();
+        var itemRows = orderIds.Length == 0
+            ? new List<OrderItemRow>()
+            : (await db.QueryAsync<OrderItemRow>(
+                OrderItemsForDeliveriesSql,
+                new { orderIds })).ToList();
+        var datedItemsByOrderAndDate = itemRows
+            .Where(item => item.DeliveryDate.HasValue)
+            .GroupBy(item => (item.OrderId, DeliveryDate: item.DeliveryDate!.Value.Date))
+            .ToDictionary(group => group.Key, group => group.ToList());
+        var orderIdsWithDatedItems = itemRows
+            .Where(item => item.DeliveryDate.HasValue)
+            .Select(item => item.OrderId)
+            .Distinct()
+            .ToHashSet();
+        var legacyItemsByOrder = itemRows
+            .Where(item => !item.DeliveryDate.HasValue)
+            .GroupBy(item => item.OrderId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var result = new List<OrderDeliveryInfo>(deliveries.Count);
+
+        foreach (var delivery in deliveries)
+        {
+            var deliveryDate = delivery.DeliveryDate.Date;
+            var itemKey = (delivery.OrderId, DeliveryDate: deliveryDate);
+            var items = datedItemsByOrderAndDate.TryGetValue(itemKey, out var datedItems)
+                ? datedItems
+                : orderIdsWithDatedItems.Contains(delivery.OrderId)
+                    ? new List<OrderItemRow>()
+                    : legacyItemsByOrder.GetValueOrDefault(delivery.OrderId) ?? new List<OrderItemRow>();
+
+            result.Add(new OrderDeliveryInfo(
+                delivery.DeliveryCalendarId,
+                delivery.OrderId,
+                delivery.OrderNumber,
+                delivery.CustomerId,
+                delivery.ClientPublicId,
+                delivery.CustomerFullName,
+                delivery.AddressFullLine,
+                delivery.City,
+                delivery.PostalCode,
+                delivery.Latitude,
+                delivery.Longitude,
+                delivery.DeliveryDate,
+                delivery.DeliveryWindowName ?? string.Empty,
+                (items ?? new List<OrderItemRow>()).Select(item => new OrderItemInfo(
+                    item.DietId,
+                    item.DietName,
+                    item.DietVariantId,
+                    item.VariantName,
+                    item.CaloriesPerDay,
+                    item.MealId,
+                    item.MealVariantId,
+                    item.DietMenuPlanItemId,
+                    item.MealSlot)).ToList()));
+        }
+
+        return result;
+    }
+
+    private const string ActiveOrdersSql = """
+        SELECT DISTINCT
+            o.Id AS OrderId,
+            dc.Id AS DeliveryCalendarId,
+            u.Id AS ClientId,
+            LOWER(CONVERT(varchar(36), cp.PublicId)) AS ClientPublicId,
+            CONCAT(u.FirstName, ' ', u.LastName) AS ClientName,
+            oi.DietVariantId AS DietVariantId,
+            dc.DeliveryDate AS DeliveryDate
+        FROM DeliveryCalendar dc
+        INNER JOIN Orders o ON o.Id = dc.OrderId
+        INNER JOIN OrderItems oi ON oi.OrderId = o.Id
+        INNER JOIN Users u ON u.Id = o.CustomerId
+        LEFT JOIN CustomerProfiles cp ON cp.UserId = u.Id AND cp.IsDeleted = 0
+        WHERE dc.DeliveryDate >= @from
+          AND dc.DeliveryDate < @to
+          AND o.Status IN (@paidStatus, @inProductionStatus)
+          AND dc.Status = @scheduledStatus
+          AND (oi.DeliveryDate IS NULL OR (oi.DeliveryDate >= CONVERT(date, dc.DeliveryDate) AND oi.DeliveryDate < DATEADD(day, 1, CONVERT(date, dc.DeliveryDate))))
+          AND dc.IsSkipped = 0
+          AND o.IsDeleted = 0
+          AND oi.IsDeleted = 0
+          AND dc.IsDeleted = 0
+        ORDER BY o.Id, oi.DietVariantId;
+        """;
+
+    private const string ActiveOrderByIdSql = """
+        SELECT DISTINCT TOP 1
+            o.Id AS OrderId,
+            dc.Id AS DeliveryCalendarId,
+            u.Id AS ClientId,
+            LOWER(CONVERT(varchar(36), cp.PublicId)) AS ClientPublicId,
+            CONCAT(u.FirstName, ' ', u.LastName) AS ClientName,
+            oi.DietVariantId AS DietVariantId,
+            dc.DeliveryDate AS DeliveryDate
+        FROM Orders o
+        INNER JOIN OrderItems oi ON oi.OrderId = o.Id
+        INNER JOIN DeliveryCalendar dc ON dc.OrderId = o.Id
+        INNER JOIN Users u ON u.Id = o.CustomerId
+        LEFT JOIN CustomerProfiles cp ON cp.UserId = u.Id AND cp.IsDeleted = 0
+        WHERE o.Id = @orderId
+          AND o.Status IN (@paidStatus, @inProductionStatus)
+          AND dc.Status = @scheduledStatus
+          AND (oi.DeliveryDate IS NULL OR (oi.DeliveryDate >= CONVERT(date, dc.DeliveryDate) AND oi.DeliveryDate < DATEADD(day, 1, CONVERT(date, dc.DeliveryDate))))
+          AND dc.IsSkipped = 0
+          AND o.IsDeleted = 0
+          AND oi.IsDeleted = 0
+          AND dc.IsDeleted = 0
+        ORDER BY dc.DeliveryDate, oi.DietVariantId;
+        """;
+
+    private const string DeliveriesForDateSql = """
+        SELECT
+            o.Id AS OrderId,
+            dc.Id AS DeliveryCalendarId,
+            o.OrderNumber AS OrderNumber,
+            u.Id AS CustomerId,
+            LOWER(CONVERT(varchar(36), cp.PublicId)) AS ClientPublicId,
+            CONCAT(u.FirstName, ' ', u.LastName) AS CustomerFullName,
+            CASE
+                WHEN a.ApartmentNumber IS NULL OR a.ApartmentNumber = ''
+                    THEN CONCAT(a.Street, ' ', a.BuildingNumber, ', ', a.PostalCode, ' ', a.City)
+                ELSE CONCAT(a.Street, ' ', a.BuildingNumber, '/', a.ApartmentNumber, ', ', a.PostalCode, ' ', a.City)
+            END AS AddressFullLine,
+            a.City AS City,
+            a.PostalCode AS PostalCode,
+            a.Latitude AS Latitude,
+            a.Longitude AS Longitude,
+            dc.DeliveryDate AS DeliveryDate,
+            dw.Name AS DeliveryWindowName
+        FROM DeliveryCalendar dc
+        INNER JOIN Orders o ON o.Id = dc.OrderId
+        INNER JOIN Users u ON u.Id = o.CustomerId
+        LEFT JOIN CustomerProfiles cp ON cp.UserId = u.Id AND cp.IsDeleted = 0
+        INNER JOIN Addresses a ON a.Id = dc.AddressId
+        LEFT JOIN DeliveryWindows dw ON dw.Id = dc.DeliveryWindowId
+        WHERE dc.DeliveryDate >= @from
+          AND dc.DeliveryDate < @to
+          AND o.Status IN (@paidStatus, @inProductionStatus)
+          AND dc.Status = @scheduledStatus
+          AND dc.IsSkipped = 0
+          AND o.IsDeleted = 0
+          AND dc.IsDeleted = 0
+          AND a.IsDeleted = 0
+        ORDER BY dc.DeliveryDate, o.Id;
+        """;
+
+    private const string OrderItemsForDeliverySql = """
+        SELECT
+            OrderId,
+            DietId,
+            DietName,
+            DietVariantId,
+            VariantName,
+            CaloriesPerDay,
+            MealId,
+            MealVariantId,
+            DietMenuPlanItemId,
+            MealSlot,
+            DeliveryDate
+        FROM OrderItems
+        WHERE OrderId = @orderId
+          AND IsDeleted = 0
+        ORDER BY Id;
+        """;
+
+    private const string OrderItemsForDeliveriesSql = """
+        SELECT
+            OrderId,
+            DietId,
+            DietName,
+            DietVariantId,
+            VariantName,
+            CaloriesPerDay,
+            MealId,
+            MealVariantId,
+            DietMenuPlanItemId,
+            MealSlot,
+            DeliveryDate
+        FROM OrderItems
+        WHERE OrderId IN @orderIds
+          AND IsDeleted = 0
+        ORDER BY OrderId, DeliveryDate, Id;
+        """;
+
+    private sealed class ActiveOrderRow
+    {
+        public int OrderId { get; set; }
+
+        public int DeliveryCalendarId { get; set; }
+
+        public int ClientId { get; set; }
+
+        public string? ClientPublicId { get; set; }
+
+        public string ClientName { get; set; } = string.Empty;
+
+        public int DietVariantId { get; set; }
+
+        public DateTime DeliveryDate { get; set; }
+    }
+
+    private sealed class OrderDeliveryRow
+    {
+        public int OrderId { get; set; }
+
+        public int DeliveryCalendarId { get; set; }
+
+        public string OrderNumber { get; set; } = string.Empty;
+
+        public int CustomerId { get; set; }
+
+        public string? ClientPublicId { get; set; }
+
+        public string CustomerFullName { get; set; } = string.Empty;
+
+        public string AddressFullLine { get; set; } = string.Empty;
+
+        public string City { get; set; } = string.Empty;
+
+        public string PostalCode { get; set; } = string.Empty;
+
+        public double? Latitude { get; set; }
+
+        public double? Longitude { get; set; }
+
+        public DateTime DeliveryDate { get; set; }
+
+        public string? DeliveryWindowName { get; set; }
+    }
+
+    private sealed class OrderItemRow
+    {
+        public int OrderId { get; set; }
+
+        public int DietId { get; set; }
+
+        public string DietName { get; set; } = string.Empty;
+
+        public int DietVariantId { get; set; }
+
+        public string VariantName { get; set; } = string.Empty;
+
+        public int CaloriesPerDay { get; set; }
+
+        public int? MealId { get; set; }
+
+        public int? MealVariantId { get; set; }
+
+        public int? DietMenuPlanItemId { get; set; }
+
+        public string? MealSlot { get; set; }
+
+        public DateTime? DeliveryDate { get; set; }
+    }
+}

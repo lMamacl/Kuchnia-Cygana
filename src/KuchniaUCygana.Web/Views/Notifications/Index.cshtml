@@ -1,0 +1,229 @@
+@model KuchniaUCygana.Application.DTOs.Notifications.PagedNotificationListDto
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Powiadomienia";
+    ViewData["Section"] = "Staff";
+    ViewData["Description"] = "Pełna lista powiadomień użytkownika.";
+
+    var returnUrl = ViewContext.HttpContext.Request.Path + ViewContext.HttpContext.Request.QueryString;
+    var statusOptions = new[] { ("All", "Wszystkie"), ("Unread", "Nieprzeczytane"), ("Read", "Przeczytane") };
+    var severityOptions = new[] { ("", "Wszystkie"), ("Danger", "Krytyczne"), ("Warning", "Ostrzeżenia"), ("Info", "Informacyjne"), ("Success", "Sukces") };
+    var pageStart = Math.Max(1, Model.Page - 2);
+    var pageEnd = Math.Min(Model.TotalPages, Model.Page + 2);
+}
+
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col">
+                        <h3 class="mb-1 text-dark">Powiadomienia</h3>
+                        <p class="text-secondary small mb-0">Widok pokazuje Twoje aktywne powiadomienia. Usunięcie archiwizuje je tylko na Twojej liście.</p>
+                    </div>
+                    <div class="col-auto">
+                        <span class="badge bg-red-lt text-red">Nieprzeczytane: @Model.UnreadCount</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="get" class="row g-3 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" name="Status">
+                            @foreach (var option in statusOptions)
+                            {
+                                <option value="@option.Item1" selected="@(Model.Filter.Status == option.Item1)">@option.Item2</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Ważność</label>
+                        <select class="form-select" name="Severity">
+                            @foreach (var option in severityOptions)
+                            {
+                                <option value="@option.Item1" selected="@(Model.Filter.Severity == option.Item1 || (string.IsNullOrEmpty(Model.Filter.Severity) && string.IsNullOrEmpty(option.Item1)))">@option.Item2</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Typ</label>
+                        <input class="form-control" name="Type" value="@Model.Filter.Type" placeholder="np. PackingIncident" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Od</label>
+                        <input class="form-control" type="date" name="DateFrom" value="@Model.Filter.DateFrom?.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Do</label>
+                        <input class="form-control" type="date" name="DateTo" value="@Model.Filter.DateTo?.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Na stronie</label>
+                        <select class="form-select" name="PageSize">
+                            @foreach (var size in new[] { 10, 20, 50, 100 })
+                            {
+                                <option value="@size" selected="@(Model.PageSize == size)">@size</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label">Szukaj</label>
+                        <input class="form-control" name="Search" value="@Model.Filter.Search" placeholder="Tytuł, treść albo typ powiadomienia" />
+                    </div>
+                    <div class="col-md-4 d-flex gap-2">
+                        <input type="hidden" name="Page" value="1" />
+                        <button type="submit" class="btn btn-primary flex-fill">Filtruj</button>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Wyczyść</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <form asp-action="Bulk" method="post" id="notifications-bulk-form">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="returnUrl" value="@returnUrl" />
+
+            <div class="card">
+                <div class="card-header d-flex flex-wrap gap-2 align-items-center">
+                    <div class="me-auto">
+                        <strong>@Model.TotalCount</strong> powiadomień w bieżącym filtrze
+                    </div>
+                    <button type="submit" name="Action" value="MarkRead" class="btn btn-outline-primary btn-sm">Oznacz wybrane jako przeczytane</button>
+                    <button type="submit" name="Action" value="Archive" class="btn btn-outline-danger btn-sm" data-confirm="Usunąć zaznaczone powiadomienia z Twojej listy?">Usuń wybrane</button>
+                    <button type="submit" asp-action="ArchiveRead" class="btn btn-outline-danger btn-sm" data-confirm="Usunąć wszystkie przeczytane powiadomienia z Twojej listy?">Usuń przeczytane</button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-vcenter card-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 44px;">
+                                    <input class="form-check-input" type="checkbox" id="select-all-notifications" aria-label="Zaznacz wszystkie" />
+                                </th>
+                                <th>Status</th>
+                                <th>Ważność</th>
+                                <th>Powiadomienie</th>
+                                <th>Dostarczono</th>
+                                <th>Przeczytano</th>
+                                <th class="text-end">Akcje</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.Items.Any())
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center text-secondary py-4">Brak powiadomień dla wybranych filtrów.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var notification in Model.Items)
+                                {
+                                    var severityClass = notification.Severity switch
+                                    {
+                                        "Danger" => "red",
+                                        "Warning" => "yellow",
+                                        "Success" => "green",
+                                        _ => "azure",
+                                    };
+                                    var severityLabel = notification.Severity switch
+                                    {
+                                        "Danger" => "Krytyczne",
+                                        "Warning" => "Ostrzeżenie",
+                                        "Success" => "Sukces",
+                                        _ => "Info",
+                                    };
+
+                                    <tr class="@(notification.IsRead ? string.Empty : "table-active")">
+                                        <td>
+                                            <input class="form-check-input notification-select" type="checkbox" name="UserNotificationIds" value="@notification.UserNotificationId" aria-label="Zaznacz powiadomienie" />
+                                        </td>
+                                        <td>
+                                            <span class="badge @(notification.IsRead ? "bg-secondary-lt text-secondary" : "bg-blue-lt text-blue")">
+                                                @(notification.IsRead ? "Przeczytane" : "Nowe")
+                                            </span>
+                                        </td>
+                                        <td><span class="badge bg-@severityClass-lt text-@severityClass">@severityLabel</span></td>
+                                        <td>
+                                            <div class="fw-semibold">@notification.Title</div>
+                                            <div class="text-secondary small">@notification.Message</div>
+                                            <div class="text-secondary small">Typ: @notification.Type</div>
+                                        </td>
+                                        <td>@notification.DeliveredAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                        <td>@(notification.ReadAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "-")</td>
+                                        <td class="text-end">
+                                            <div class="btn-list justify-content-end">
+                                                @if (!string.IsNullOrWhiteSpace(notification.LinkUrl))
+                                                {
+                                                    <a href="@notification.LinkUrl" class="btn btn-sm btn-outline-secondary">Otwórz</a>
+                                                }
+                                                @if (!notification.IsRead)
+                                                {
+                                                    <button type="submit" class="btn btn-sm btn-outline-primary" formaction="@Url.Action("MarkAsRead", new { userNotificationId = notification.UserNotificationId })">Oznacz jako przeczytane</button>
+                                                }
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" formaction="@Url.Action("Archive", new { userNotificationId = notification.UserNotificationId })" data-confirm="Usunąć to powiadomienie z Twojej listy?">Usuń</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (Model.TotalPages > 1)
+                {
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <div class="text-secondary small">Strona @Model.Page z @Model.TotalPages</div>
+                        <ul class="pagination m-0">
+                            <li class="page-item @(Model.Page <= 1 ? "disabled" : string.Empty)">
+                                <a class="page-link" asp-action="Index" asp-route-Page="@(Model.Page - 1)" asp-route-PageSize="@Model.PageSize" asp-route-Status="@Model.Filter.Status" asp-route-Severity="@Model.Filter.Severity" asp-route-Type="@Model.Filter.Type" asp-route-DateFrom="@Model.Filter.DateFrom?.ToString("yyyy-MM-dd")" asp-route-DateTo="@Model.Filter.DateTo?.ToString("yyyy-MM-dd")" asp-route-Search="@Model.Filter.Search">Poprzednia</a>
+                            </li>
+                            @for (var pageNumber = pageStart; pageNumber <= pageEnd; pageNumber++)
+                            {
+                                <li class="page-item @(pageNumber == Model.Page ? "active" : string.Empty)">
+                                    <a class="page-link" asp-action="Index" asp-route-Page="@pageNumber" asp-route-PageSize="@Model.PageSize" asp-route-Status="@Model.Filter.Status" asp-route-Severity="@Model.Filter.Severity" asp-route-Type="@Model.Filter.Type" asp-route-DateFrom="@Model.Filter.DateFrom?.ToString("yyyy-MM-dd")" asp-route-DateTo="@Model.Filter.DateTo?.ToString("yyyy-MM-dd")" asp-route-Search="@Model.Filter.Search">@pageNumber</a>
+                                </li>
+                            }
+                            <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : string.Empty)">
+                                <a class="page-link" asp-action="Index" asp-route-Page="@(Model.Page + 1)" asp-route-PageSize="@Model.PageSize" asp-route-Status="@Model.Filter.Status" asp-route-Severity="@Model.Filter.Severity" asp-route-Type="@Model.Filter.Type" asp-route-DateFrom="@Model.Filter.DateFrom?.ToString("yyyy-MM-dd")" asp-route-DateTo="@Model.Filter.DateTo?.ToString("yyyy-MM-dd")" asp-route-Search="@Model.Filter.Search">Następna</a>
+                            </li>
+                        </ul>
+                    </div>
+                }
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const selectAll = document.getElementById("select-all-notifications");
+            const checkboxes = [...document.querySelectorAll(".notification-select")];
+            const form = document.getElementById("notifications-bulk-form");
+
+            selectAll?.addEventListener("change", () => {
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = selectAll.checked;
+                });
+            });
+
+            form?.addEventListener("submit", event => {
+                const submitter = event.submitter;
+                const confirmation = submitter?.getAttribute("data-confirm");
+                if (confirmation && !window.confirm(confirmation)) {
+                    event.preventDefault();
+                }
+            });
+        })();
+    </script>
+}

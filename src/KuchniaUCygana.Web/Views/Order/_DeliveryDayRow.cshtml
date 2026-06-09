@@ -1,0 +1,66 @@
+@model KuchniaUCygana.Application.DTOs.Orders.DeliveryCalendarDto
+@using KuchniaUCygana.Domain.Enums
+
+@{
+    var (dayBadge, dayText) = Model.Status switch
+    {
+        DeliveryStatus.Scheduled => ("bg-primary", "Zaplanowana"),
+        DeliveryStatus.Delivered => ("bg-success", "Dostarczona"),
+        DeliveryStatus.Skipped => ("bg-secondary", "Pominięta"),
+        DeliveryStatus.Cancelled => ("bg-danger", "Anulowana"),
+        _ => ("bg-secondary", "Nieznany")
+    };
+}
+
+<tr id="delivery-row-@Model.Id" class="@(Model.IsSkipped ? "table-secondary text-muted" : "")">
+    <td class="text-nowrap fw-semibold">
+        @Model.DeliveryDate.ToString("dd.MM.yyyy")
+        <small class="text-muted fw-normal d-block">
+            @Model.DeliveryDate.ToString("dddd", new System.Globalization.CultureInfo("pl-PL"))
+        </small>
+    </td>
+    <td>
+        @if (!string.IsNullOrEmpty(Model.AddressFullLine))
+        {
+            @Model.AddressFullLine
+        }
+        else
+        {
+            <span class="text-muted">—</span>
+        }
+    </td>
+    <td>
+        <span class="badge @dayBadge">@dayText</span>
+        @if (Model.IsSkipped && !string.IsNullOrEmpty(Model.DeliveryWindowName))
+        {
+            <br />
+            <small class="text-muted">@Model.DeliveryWindowName</small>
+        }
+    </td>
+    <td class="text-end">
+        @if (Model.Status == DeliveryStatus.Scheduled && !Model.IsSkipped)
+        {
+            <div class="d-flex justify-content-end gap-2">
+                <a asp-action="ChangeDelivery"
+                   asp-route-deliveryCalendarId="@Model.Id"
+                   class="btn btn-outline-secondary btn-sm">
+                    Zmień
+                </a>
+
+                <form hx-post="/Order/SkipDelivery"
+                      hx-target="#delivery-row-@Model.Id"
+                      hx-swap="outerHTML">
+
+                    <input type="hidden" name="deliveryCalendarId" value="@Model.Id" />
+                    <input type="hidden" name="reason" value="Anulowano przez użytkownika" />
+
+                    <button type="button" class="btn btn-outline-danger btn-sm"
+                            x-data="{}"
+                            x-on:click="if(confirm('Na pewno pominąć tę dostawę?')) { $el.closest('form').dispatchEvent(new Event('submit', { cancelable: true })) }">
+                        Pomiń
+                    </button>
+                </form>
+            </div>
+        }
+    </td>
+</tr>

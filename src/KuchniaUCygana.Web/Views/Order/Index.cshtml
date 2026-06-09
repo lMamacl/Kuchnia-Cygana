@@ -1,0 +1,267 @@
+@model KuchniaUCygana.Web.Models.OrderHistoryViewModel
+@using KuchniaUCygana.Domain.Enums
+@{
+    ViewData["Title"] = "Moje zamowienia";
+    var culture = new System.Globalization.CultureInfo("pl-PL");
+    var orders = Model.Page.Items;
+    var statusRoute = Model.Status.HasValue ? (int?)Model.Status.Value : null;
+}
+
+<style>
+    .orders-shell {
+        color: #17211b;
+    }
+
+    .orders-hero,
+    .orders-card,
+    .orders-empty,
+    .orders-filter {
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 24px;
+        background: #fff;
+        box-shadow: 0 16px 45px rgba(23, 33, 27, .08);
+    }
+
+    .orders-hero {
+        background: linear-gradient(135deg, #edf8ef, #fff8ea);
+    }
+
+    .orders-card {
+        overflow: hidden;
+    }
+
+    .orders-card thead th {
+        color: #68756d;
+        font-size: .76rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+
+    .order-number {
+        font-weight: 800;
+        color: #17211b;
+    }
+</style>
+
+<div class="orders-shell">
+    <div class="orders-hero p-4 p-md-5 mb-4">
+        <div class="text-success small fw-bold text-uppercase mb-2">Historia</div>
+        <h1 class="fw-bold mb-2">Moje zamowienia</h1>
+        <p class="text-muted mb-0">Wracaj do platnosci, sprawdzaj terminy i zarzadzaj dostawami.</p>
+    </div>
+
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success border-0 shadow-sm">@success</div>
+    }
+    @if (TempData["Error"] is string error)
+    {
+        <div class="alert alert-warning border-0 shadow-sm">@error</div>
+    }
+    @if (TempData["ErrorMessage"] is string errorMessage)
+    {
+        <div class="alert alert-warning border-0 shadow-sm">@errorMessage</div>
+    }
+
+    <form asp-action="Index" method="get" class="orders-filter p-3 p-md-4 mb-4">
+        <input type="hidden" name="page" value="1" />
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label fw-semibold" for="orderNumber">Numer zamowienia</label>
+                <input id="orderNumber" name="orderNumber" value="@Model.OrderNumber" class="form-control" placeholder="np. ORD-20260608" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold" for="status">Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="">Wszystkie</option>
+                    @foreach (var status in Enum.GetValues<OrderStatus>())
+                    {
+                        <option value="@((int)status)" selected="@(Model.Status == status)">@StatusText(status)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold" for="dateFrom">Od</label>
+                <input id="dateFrom" name="dateFrom" type="date" value="@(Model.DateFrom?.ToString("yyyy-MM-dd"))" class="form-control" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold" for="dateTo">Do</label>
+                <input id="dateTo" name="dateTo" type="date" value="@(Model.DateTo?.ToString("yyyy-MM-dd"))" class="form-control" />
+            </div>
+            <div class="col-md-1">
+                <label class="form-label fw-semibold" for="pageSize">Na stronie</label>
+                <select id="pageSize" name="pageSize" class="form-select">
+                    @foreach (var size in new[] { 10, 20, 50 })
+                    {
+                        <option value="@size" selected="@(Model.PageSize == size)">@size</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-success px-4">Filtruj</button>
+                @if (Model.HasActiveFilters)
+                {
+                    <a asp-action="Index" class="btn btn-outline-secondary px-4">Wyczysc</a>
+                }
+            </div>
+        </div>
+    </form>
+
+    @if (!orders.Any())
+    {
+        <div class="orders-empty p-5 text-center">
+            <div class="text-success small fw-bold text-uppercase mb-2">
+                @(Model.HasActiveFilters ? "Brak wynikow" : "Brak zamowien")
+            </div>
+            <h2 class="h4 fw-bold">
+                @(Model.HasActiveFilters ? "Nie znaleziono zamowien dla tych filtrow" : "Nie masz jeszcze zadnych zamowien")
+            </h2>
+            <p class="text-muted mb-4">
+                @(Model.HasActiveFilters ? "Zmien kryteria wyszukiwania albo wyczysc filtry." : "Dodaj diete do koszyka i przejdz przez checkout.")
+            </p>
+            <a asp-controller="Menu" asp-action="Index" class="btn btn-success px-4">Przejdz do katalogu</a>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+            <div class="text-muted small">
+                Pokazano @Model.Page.FirstItem-@Model.Page.LastItem z @Model.Page.TotalCount zamowien
+            </div>
+        </div>
+
+        <div class="orders-card">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Numer zamowienia</th>
+                            <th>Data zlozenia</th>
+                            <th>Okres dostawy</th>
+                            <th>Status</th>
+                            <th class="text-center">Pozycje</th>
+                            <th class="text-end">Kwota</th>
+                            <th class="text-end pe-4">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var order in orders)
+                        {
+                            var (badgeClass, statusText) = StatusBadge(order.Status);
+
+                            <tr>
+                                <td class="ps-4">
+                                    <span class="order-number">@order.OrderNumber</span>
+                                </td>
+                                <td class="text-nowrap">
+                                    @order.CreatedAt.ToString("dd.MM.yyyy")
+                                </td>
+                                <td class="text-nowrap">
+                                    @if (order.StartDate.HasValue && order.EndDate.HasValue)
+                                    {
+                                        @($"{order.StartDate.Value:dd.MM.yyyy} - {order.EndDate.Value:dd.MM.yyyy}")
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">Brak terminu</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge @badgeClass rounded-pill">@statusText</span>
+                                </td>
+                                <td class="text-center">@order.ItemCount</td>
+                                <td class="text-end text-nowrap fw-semibold">
+                                    @order.FinalPrice.ToString("C", culture)
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="d-flex justify-content-end gap-2">
+                                        @if (order.Status == OrderStatus.PendingPayment)
+                                        {
+                                            <a asp-controller="Checkout"
+                                               asp-action="Payment"
+                                               asp-route-orderId="@order.Id"
+                                               class="btn btn-sm btn-success">
+                                                Oplac
+                                            </a>
+                                        }
+
+                                        <a asp-action="Details" asp-route-orderId="@order.Id"
+                                           class="btn btn-sm btn-outline-primary">
+                                            Szczegoly
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (Model.Page.TotalPages > 1)
+        {
+            var firstPage = Math.Max(1, Model.Page.Page - 2);
+            var lastPage = Math.Min(Model.Page.TotalPages, Model.Page.Page + 2);
+
+            <nav class="mt-4" aria-label="Strony historii zamowien">
+                <ul class="pagination justify-content-center mb-0">
+                    <li class="page-item @(Model.Page.HasPrevious ? "" : "disabled")">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-page="@Model.Page.PreviousPage"
+                           asp-route-pageSize="@Model.Page.PageSize"
+                           asp-route-status="@statusRoute"
+                           asp-route-dateFrom="@(Model.DateFrom?.ToString("yyyy-MM-dd"))"
+                           asp-route-dateTo="@(Model.DateTo?.ToString("yyyy-MM-dd"))"
+                           asp-route-orderNumber="@Model.OrderNumber">
+                            Poprzednia
+                        </a>
+                    </li>
+                    @for (var p = firstPage; p <= lastPage; p++)
+                    {
+                        <li class="page-item @(p == Model.Page.Page ? "active" : "")">
+                            <a class="page-link"
+                               asp-action="Index"
+                               asp-route-page="@p"
+                               asp-route-pageSize="@Model.Page.PageSize"
+                               asp-route-status="@statusRoute"
+                               asp-route-dateFrom="@(Model.DateFrom?.ToString("yyyy-MM-dd"))"
+                               asp-route-dateTo="@(Model.DateTo?.ToString("yyyy-MM-dd"))"
+                               asp-route-orderNumber="@Model.OrderNumber">
+                                @p
+                            </a>
+                        </li>
+                    }
+                    <li class="page-item @(Model.Page.HasNext ? "" : "disabled")">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-page="@Model.Page.NextPage"
+                           asp-route-pageSize="@Model.Page.PageSize"
+                           asp-route-status="@statusRoute"
+                           asp-route-dateFrom="@(Model.DateFrom?.ToString("yyyy-MM-dd"))"
+                           asp-route-dateTo="@(Model.DateTo?.ToString("yyyy-MM-dd"))"
+                           asp-route-orderNumber="@Model.OrderNumber">
+                            Nastepna
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        }
+    }
+</div>
+
+@functions {
+    private static (string BadgeClass, string Text) StatusBadge(OrderStatus status)
+        => status switch
+        {
+            OrderStatus.Draft => ("bg-secondary", "Koszyk"),
+            OrderStatus.PendingPayment => ("bg-warning text-dark", "Oczekuje na platnosc"),
+            OrderStatus.Paid => ("bg-success", "Oplacone"),
+            OrderStatus.InProduction => ("bg-info text-dark", "W produkcji"),
+            OrderStatus.Cancelled => ("bg-danger", "Anulowane"),
+            _ => ("bg-secondary", "Nieznany")
+        };
+
+    private static string StatusText(OrderStatus status)
+        => StatusBadge(status).Text;
+}

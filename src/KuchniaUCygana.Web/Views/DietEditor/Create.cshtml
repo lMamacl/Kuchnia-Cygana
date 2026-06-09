@@ -1,5 +1,59 @@
+@model KuchniaUCygana.Application.DTOs.Menu.CreateDietRequest
 @{
     Layout = "_LayoutStaff";
+    ViewData["Title"] = "Nowa dieta";
+    ViewData["Section"] = "Katalog Menu";
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-xl-6">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Program dietetyczny</h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="Create" method="post" autocomplete="off">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label asp-for="Name" class="form-label required">Nazwa diety</label>
+                        <input asp-for="Name" class="form-control" placeholder="np. Standard" />
+                        <span asp-validation-for="Name" class="text-danger small"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Description" class="form-label">Opis</label>
+                        <textarea asp-for="Description" class="form-control" rows="3"></textarea>
+                    </div>
+
+                    <h4 class="mt-4">Wariant startowy</h4>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required">Nazwa wariantu</label>
+                            <input name="Variants[0].Name" value="@Model.Variants.FirstOrDefault()?.Name" class="form-control" />
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label required">Kalorie</label>
+                            <input name="Variants[0].TargetCalories" value="@(Model.Variants.FirstOrDefault()?.TargetCalories ?? 1800)" type="number" class="form-control" />
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label required">Mnożnik ceny</label>
+                            <input name="Variants[0].PriceMultiplier" value="@(Model.Variants.FirstOrDefault()?.PriceMultiplier ?? 1m)" type="number" step="0.01" class="form-control" />
+                        </div>
+                    </div>
+                    <label class="form-check mb-4">
+                        <input class="form-check-input" type="checkbox" name="Variants[0].IsDefault" value="true" checked />
+                        <span class="form-check-label">Wariant domyślny</span>
+                    </label>
+
+                    <div class="d-flex justify-content-between">
+                        <a asp-action="Index" class="btn btn-outline-secondary">Anuluj</a>
+                        <button type="submit" class="btn btn-primary">Utwórz dietę</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}

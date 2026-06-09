@@ -1,8 +1,882 @@
+@model KuchniaUCygana.Application.DTOs.Warehouse.HaccpReportDto
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] ??= "Raport HACCP";
-    ViewData["Section"] ??= "Magazyn";
-    ViewData["Description"] ??= "Placeholder raportu HACCP za wybrany zakres dat.";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
+    ViewData["Title"] = "Raport Zgodności HACCP";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = "Urzędowy raport rejestracji temperatur dla organów kontroli sanitarnej (Sanepid).";
 
+    DateOnly dateFrom = ViewBag.DateFrom;
+    DateOnly dateTo = ViewBag.DateTo;
+
+    var logReq = ViewBag.LogRequest as KuchniaUCygana.Application.DTOs.Warehouse.LogTemperatureRequest
+                 ?? new KuchniaUCygana.Application.DTOs.Warehouse.LogTemperatureRequest();
+
+    var devices = new[]
+    {
+        "Lodówka #1 - Nabiał (Limit: 2°C do 6°C)",
+        "Chłodnia #2 - Mięso (Limit: 0°C do 4°C)",
+        "Zamrażarka #3 - Ryby (Limit: -22°C do -18°C)",
+        "Lodówka #4 - Warzywa (Limit: 4°C do 8°C)",
+        "Witryna Wydawcza (Limit: 2°C do 8°C)"
+    };
+
+    // Helper do pobierania limitów
+    (decimal Min, decimal Max) GetDeviceLimits(string deviceName)
+    {
+        var configuredLocation = Model.Locations.FirstOrDefault(l =>
+            string.Equals(l.Name, deviceName, StringComparison.OrdinalIgnoreCase));
+        if (configuredLocation is not null)
+        {
+            return (configuredLocation.MinTemperatureCelsius, configuredLocation.MaxTemperatureCelsius);
+        }
+
+        var name = deviceName.ToLower();
+        decimal minLimit = -25.0m;
+        decimal maxLimit = 8.0m;
+
+        if (name.Contains("zamrażarka") || name.Contains("freezer"))
+        {
+            minLimit = -22.0m;
+            maxLimit = -18.0m;
+        }
+        else if (name.Contains("mięso"))
+        {
+            minLimit = 0.0m;
+            maxLimit = 4.0m;
+        }
+        else if (name.Contains("nabiał"))
+        {
+            minLimit = 2.0m;
+            maxLimit = 6.0m;
+        }
+        else if (name.Contains("warzywa"))
+        {
+            minLimit = 4.0m;
+            maxLimit = 8.0m;
+        }
+        else if (name.Contains("chłodnia"))
+        {
+            minLimit = 2.0m;
+            maxLimit = 8.0m;
+        }
+        else if (name.Contains("witryna"))
+        {
+            minLimit = 2.0m;
+            maxLimit = 8.0m;
+        }
+        else if (name.Contains("suchy"))
+        {
+            minLimit = 15.0m;
+            maxLimit = 25.0m;
+        }
+        return (minLimit, maxLimit);
+    }
+
+    // Grupowanie pomiarów i obliczanie limitów dla urządzeń
+    var reportRows = Model.Readings
+        .GroupBy(r => r.DeviceNameOrLocation)
+        .Select(g =>
+        {
+            var limits = GetDeviceLimits(g.Key);
+            var temps = g.Select(x => x.RecordedTemperatureCelsius).ToList();
+            var avgTemp = temps.Any() ? temps.Average() : 0m;
+            var minRecorded = temps.Any() ? temps.Min() : 0m;
+            var maxRecorded = temps.Any() ? temps.Max() : 0m;
+            var violations = g.Count(x => x.RecordedTemperatureCelsius < limits.Min || x.RecordedTemperatureCelsius > limits.Max);
+
+            return new
+            {
+                Device = g.Key,
+                MinLimit = limits.Min,
+                MaxLimit = limits.Max,
+                AvgTemp = avgTemp,
+                MinRecorded = minRecorded,
+                MaxRecorded = maxRecorded,
+                Violations = violations
+            };
+        })
+        .ToList();
+
+    string FormatRecordedAt(DateTimeOffset dto)
+    {
+        var localTime = dto.ToLocalTime();
+        var today = DateTime.Today;
+        var yesterday = today.AddDays(-1);
+
+        if (localTime.Date == today)
+        {
+            return $"Dzisiaj, {localTime:HH:mm}";
+        }
+        if (localTime.Date == yesterday)
+        {
+            return $"Wczoraj, {localTime:HH:mm}";
+        }
+        return localTime.ToString("yyyy-MM-dd, HH:mm");
+    }
+
+    string activeTabParam = ViewBag.ActiveTab as string ?? string.Empty;
+    bool hasActiveTab = !string.IsNullOrEmpty(activeTabParam);
+}
+
+<div class="card card-premium d-print-none mb-4">
+    <div class="card-body">
+        <form method="get" asp-action="HaccpReport" class="row align-items-end g-3">
+            <div class="col-md-4">
+                <label class="form-label text-secondary small">Data początkowa</label>
+                <input type="date" name="from" class="form-control" value="@dateFrom.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label text-secondary small">Data końcowa</label>
+                <input type="date" name="to" class="form-control" value="@dateTo.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary flex-fill">Filtruj</button>
+                <a href="/warehouse/haccp-report/csv?from=@dateFrom.ToString("yyyy-MM-dd")&to=@dateTo.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">CSV</a>
+                <a href="/warehouse/haccp-report/pdf?from=@dateFrom.ToString("yyyy-MM-dd")&to=@dateTo.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">PDF</a>
+                <button type="button" class="btn btn-outline-secondary" onclick="window.print();">Drukuj</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card card-premium">
+    <div class="card-body p-5">
+        <!-- Nagłówek raportu do wydruku -->
+        <div class="row align-items-center mb-4">
+            <div class="col">
+                <h1 class="h2 mb-1 text-dark">RAPORT KONTROLI TEMPERATUR (HACCP)</h1>
+                <div class="text-secondary small">
+                    Okres sprawozdawczy: <strong id="date-from-text" class="text-azure cursor-pointer" style="cursor: pointer;" title="Podwójne kliknięcie otwiera kalendarz">@dateFrom.ToString("dd.MM.yyyy")</strong> do <strong id="date-to-text" class="text-azure cursor-pointer" style="cursor: pointer;" title="Podwójne kliknięcie otwiera kalendarz">@dateTo.ToString("dd.MM.yyyy")</strong>
+                </div>
+            </div>
+            <div class="col-auto text-end">
+                <div class="h3 mb-0 text-dark">Kuchnia u Cygana</div>
+                <div class="text-secondary small">Dział Kontroli Jakości</div>
+            </div>
+        </div>
+
+        <hr class="my-4" />
+
+        <div class="row g-4">
+            <!-- Tabela Zbiorcza -->
+            <div class="col-lg-8 col-100-print">
+                <div class="card shadow-none border-0 p-0 m-0">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-vcenter table-premium table-bordered mb-0">
+                                <thead>
+                                    <tr class="bg-light">
+                                        <th>Nazwa Urządzenia / Lokalizacja</th>
+                                        <th class="text-center">Limit min.</th>
+                                        <th class="text-center">Limit max.</th>
+                                        <th class="text-center">Średnia temp.</th>
+                                        <th class="text-center">Min. odczyt</th>
+                                        <th class="text-center">Max. odczyt</th>
+                                        <th class="text-center">Przekroczenia limitu</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!reportRows.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="7" class="text-center py-4 text-secondary">
+                                                Brak zarejestrowanych pomiarów w podanym zakresie dat.
+                                            </td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var row in reportRows)
+                                        {
+                                            <tr>
+                                                <td class="font-weight-medium fw-bold text-dark">@row.Device</td>
+                                                <td class="text-center text-secondary">@row.MinLimit.ToString("F1")°C</td>
+                                                <td class="text-center text-secondary">@row.MaxLimit.ToString("F1")°C</td>
+                                                <td class="text-center font-weight-bold fw-bold text-dark">@row.AvgTemp.ToString("F1")°C</td>
+                                                <td class="text-center text-success">@row.MinRecorded.ToString("F1")°C</td>
+                                                <td class="text-center text-warning">@row.MaxRecorded.ToString("F1")°C</td>
+                                                <td class="text-center">
+                                                    @if (row.Violations > 0)
+                                                    {
+                                                        <span class="badge bg-danger-lt text-danger fw-bold">@row.Violations razy</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-success-lt text-success">Zgodny</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Podpisy pod tabelą zbiorczą (Tylko w druku) -->
+                        <div class="row mt-5 pt-4 justify-content-between d-none d-print-flex">
+                            <div class="col-4 text-center">
+                                <div class="border-bottom border-secondary pb-4" style="border-bottom-style: dotted !important;"></div>
+                                <div class="text-secondary small mt-2">Sporządził (Weryfikator HACCP)</div>
+                            </div>
+                            <div class="col-4 text-center">
+                                <div class="border-bottom border-secondary pb-4" style="border-bottom-style: dotted !important;"></div>
+                                <div class="text-secondary small mt-2">Zatwierdził (Kierownik Magazynu)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Formularz Logowania Odczytu (Tylko na ekranie) -->
+            <div class="col-lg-4 d-print-none">
+                <div class="card shadow-sm border border-secondary-subtle">
+                    <div class="card-status-top bg-azure"></div>
+                    <div class="card-header bg-transparent py-3">
+                        <h3 class="card-title d-flex align-items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 13.5a2.5 2.5 0 1 0 4 0v-8.5a2 2 0 0 0 -4 0v8.5z" /><path d="M10 9l4 0" /><path d="M6.5 17h11" /></svg>
+                            Zarejestruj odczyt
+                        </h3>
+                    </div>
+                    <div class="card-body d-flex flex-column justify-content-between">
+                        <form asp-action="LogTemperature" method="post" autocomplete="off" class="w-100">
+                            @Html.AntiForgeryToken()
+
+                            @{
+                                var modelState = ViewData.ModelState;
+                                var deviceError = modelState["DeviceNameOrLocation"]?.Errors.FirstOrDefault()?.ErrorMessage;
+                                var tempError = modelState["TemperatureCelsius"]?.Errors.FirstOrDefault()?.ErrorMessage;
+                                var remarksError = modelState["Remarks"]?.Errors.FirstOrDefault()?.ErrorMessage;
+                                var formErrors = modelState[string.Empty]?.Errors.Select(e => e.ErrorMessage).ToList() ?? new List<string>();
+                                var hasAnyError = !modelState.IsValid;
+                            }
+
+                            @if (hasAnyError)
+                            {
+                                <div class="alert alert-danger p-2 mb-3" role="alert">
+                                    @foreach (var error in formErrors)
+                                    {
+                                        <div class="small text-danger">@error</div>
+                                    }
+                                    <div class="small text-secondary">Popraw błędy w formularzu poniżej.</div>
+                                </div>
+                            }
+
+                            <div class="mb-3">
+                                <label class="form-label required">Urządzenie / Lokalizacja</label>
+                                <select name="HaccpLocationId" class="form-select" required aria-label="Wybierz urządzenie">
+                                    <option value="">-- Wybierz lokalizację --</option>
+                                    @foreach (var location in Model.Locations)
+                                    {
+                                        var value = location.Id.ToString();
+                                        if (logReq.HaccpLocationId == location.Id || string.Equals(logReq.DeviceNameOrLocation, location.Name, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <option value="@value" selected="selected">@location.Label</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="@value">@location.Label</option>
+                                        }
+                                    }
+                                </select>
+                                @if (!string.IsNullOrEmpty(deviceError))
+                                {
+                                    <span class="text-danger small">@deviceError</span>
+                                }
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label required">Temperatura (°C)</label>
+                                <div class="input-icon">
+                                    <input type="text" inputmode="decimal" name="TemperatureCelsius" class="form-control" placeholder="0.0" required
+                                           value="@(logReq.TemperatureCelsius != 0 ? logReq.TemperatureCelsius.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")" />
+                                    <span class="input-icon-addon">°C</span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(tempError))
+                                {
+                                    <span class="text-danger small">@tempError</span>
+                                }
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Uwagi / Akcja korygująca</label>
+                                <textarea name="Remarks" class="form-control" rows="2" placeholder="np. Drzwi domknięte, włączono odszranianie">@logReq.Remarks</textarea>
+                                @if (!string.IsNullOrEmpty(remarksError))
+                                {
+                                    <span class="text-danger small">@remarksError</span>
+                                }
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100 mt-2">Zapisz odczyt</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sekcja Wykresu (Ekran - z przełącznikiem) -->
+        <div class="page-break-before d-print-none mt-5">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="card-title text-azure mb-0">Analiza Zgodności HACCP (Wykres Temperatur)</h3>
+                <div>
+                    <select id="ChartDeviceSelect" class="form-select form-select-sm w-auto" onchange="updateHaccpChart()">
+                        <option value="">Wszystkie urządzenia</option>
+                        @foreach (var row in reportRows)
+                        {
+                            <option value="@row.Device">@row.Device</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div style="height: 380px; position: relative;">
+                <canvas id="haccpChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Sekcja Wykresów na Wydruku (Osobny wykres dla każdego urządzenia, format A4) -->
+        <div class="print-only-block">
+            @foreach (var row in reportRows)
+            {
+                var chartId = "haccpChart-" + row.Device.Replace(" ", "-").Replace("#", "").Replace("/", "").ToLower();
+                <div class="page-break-before mt-5">
+                    <h2 class="text-dark mb-2">WYKRES MONITORINGU HACCP: @row.Device.ToUpper()</h2>
+                    <div class="text-secondary small mb-3">Okres: @dateFrom.ToString("dd.MM.yyyy") do @dateTo.ToString("dd.MM.yyyy")</div>
+                    <div class="chart-container-print" style="height: 300px; position: relative;">
+                        <canvas id="@chartId"></canvas>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Dziennik Pomiarów HACCP (Tylko na ekranie, z paginacją JS) -->
+        <div class="card card-premium d-print-none mt-5">
+            <div class="card-header bg-transparent py-3">
+                <h3 class="card-title">Dziennik Pomiarów HACCP</h3>
+            </div>
+            <div class="card-body p-0">
+                <ul class="nav nav-tabs" data-bs-toggle="tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <a href="#tab-all" class="nav-link @(hasActiveTab ? "" : "active")" data-bs-toggle="tab" aria-selected="@(hasActiveTab ? "false" : "true")" role="tab">Wszystkie</a>
+                    </li>
+                    @foreach (var deviceName in reportRows.Select(r => r.Device))
+                    {
+                        var tabId = "tab-" + deviceName.Replace(" ", "-").Replace("#", "").Replace("/", "").ToLower();
+                        var isActive = hasActiveTab && string.Equals(activeTabParam, deviceName, StringComparison.OrdinalIgnoreCase);
+                        <li class="nav-item" role="presentation">
+                            <a href="#@tabId" class="nav-link @(isActive ? "active" : "")" data-bs-toggle="tab" aria-selected="@(isActive ? "true" : "false")" role="tab">@deviceName</a>
+                        </li>
+                    }
+                </ul>
+                <div class="tab-content">
+                    <div class="tab-pane @(hasActiveTab ? "" : "active show")" id="tab-all" role="tabpanel">
+                        <div class="table-responsive">
+                            <table id="table-all" class="table table-vcenter card-table table-premium table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Czas pomiaru</th>
+                                        <th>Urządzenie / Lokalizacja</th>
+                                        <th class="text-end">Temperatura</th>
+                                        <th>Status</th>
+                                        <th>Uwagi / Akcje korygujące</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!Model.Readings.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="5" class="text-center py-4 text-secondary">Brak pomiarów.</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var log in Model.Readings.OrderByDescending(r => r.RecordedAt))
+                                        {
+                                            var limits = GetDeviceLimits(log.DeviceNameOrLocation);
+                                            var isOutOfRange = log.RecordedTemperatureCelsius < limits.Min || log.RecordedTemperatureCelsius > limits.Max;
+                                            var color = isOutOfRange ? "danger" : "success";
+                                            var statusText = isOutOfRange ? "Poza normą" : "OK";
+                                            <tr>
+                                                <td class="text-secondary small">@FormatRecordedAt(log.RecordedAt)</td>
+                                                <td class="font-weight-medium text-dark">@log.DeviceNameOrLocation</td>
+                                                <td class="text-end font-weight-bold fw-bold text-@color">
+                                                    @log.RecordedTemperatureCelsius.ToString("F1")°C
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-@color-lt text-@color">@statusText</span>
+                                                </td>
+                                                <td class="text-wrap" style="max-width: 250px;">
+                                                    <span class="text-secondary small">@(!string.IsNullOrEmpty(log.Remarks) ? log.Remarks : "-")</span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    @foreach (var deviceName in reportRows.Select(r => r.Device))
+                    {
+                        var tabId = "tab-" + deviceName.Replace(" ", "-").Replace("#", "").Replace("/", "").ToLower();
+                        var tableId = "table-" + deviceName.Replace(" ", "-").Replace("#", "").Replace("/", "").ToLower();
+                        var deviceLogs = Model.Readings.Where(r => r.DeviceNameOrLocation == deviceName).OrderByDescending(r => r.RecordedAt).ToList();
+                        var isActive = hasActiveTab && string.Equals(activeTabParam, deviceName, StringComparison.OrdinalIgnoreCase);
+
+                        <div class="tab-pane @(isActive ? "active show" : "")" id="@tabId" role="tabpanel">
+                            <div class="table-responsive">
+                                <table id="@tableId" class="table table-vcenter card-table table-premium table-striped mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Czas pomiaru</th>
+                                            <th class="text-end">Temperatura</th>
+                                            <th>Status</th>
+                                            <th>Uwagi / Akcje korygujące</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if (!deviceLogs.Any())
+                                        {
+                                            <tr>
+                                                <td colspan="4" class="text-center py-4 text-secondary">Brak pomiarów dla tego urządzenia.</td>
+                                            </tr>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var log in deviceLogs)
+                                            {
+                                                var limits = GetDeviceLimits(log.DeviceNameOrLocation);
+                                                var isOutOfRange = log.RecordedTemperatureCelsius < limits.Min || log.RecordedTemperatureCelsius > limits.Max;
+                                                var color = isOutOfRange ? "danger" : "success";
+                                                var statusText = isOutOfRange ? "Poza normą" : "OK";
+                                                <tr>
+                                                    <td class="text-secondary small">@FormatRecordedAt(log.RecordedAt)</td>
+                                                    <td class="text-end font-weight-bold fw-bold text-@color">
+                                                        @log.RecordedTemperatureCelsius.ToString("F1")°C
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-@color-lt text-@color">@statusText</span>
+                                                    </td>
+                                                    <td class="text-wrap" style="max-width: 300px;">
+                                                        <span class="text-secondary small">@(!string.IsNullOrEmpty(log.Remarks) ? log.Remarks : "-")</span>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/lib/chartjs/chart.umd.min.js" asp-append-version="true"></script>
+    <script>
+        let haccpChart = null;
+        const rawData = @Html.Raw(Json.Serialize(Model.Readings.OrderBy(r => r.RecordedAt)));
+
+        function getDeviceLimits(deviceName) {
+            const configured = rawData.find(item => item.deviceNameOrLocation === deviceName);
+            if (configured) {
+                return {
+                    min: configured.minTemperatureCelsius,
+                    max: configured.maxTemperatureCelsius
+                };
+            }
+
+            const name = deviceName.toLowerCase();
+            let minLimit = -25.0;
+            let maxLimit = 8.0;
+
+            if (name.includes("zamrażarka") || name.includes("freezer")) {
+                minLimit = -22.0;
+                maxLimit = -18.0;
+            } else if (name.includes("mięso")) {
+                minLimit = 0.0;
+                maxLimit = 4.0;
+            } else if (name.includes("nabiał")) {
+                minLimit = 2.0;
+                maxLimit = 6.0;
+            } else if (name.includes("warzywa")) {
+                minLimit = 4.0;
+                maxLimit = 8.0;
+            } else if (name.includes("chłodnia")) {
+                minLimit = 2.0;
+                maxLimit = 8.0;
+            } else if (name.includes("witryna")) {
+                minLimit = 2.0;
+                maxLimit = 8.0;
+            } else if (name.includes("suchy")) {
+                minLimit = 15.0;
+                maxLimit = 25.0;
+            }
+            return { min: minLimit, max: maxLimit };
+        }
+
+        // JS Client-side Paginator
+        function paginateTable(tableId, pageSize = 15) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr')).filter(tr => !tr.querySelector('td[colspan]'));
+            if (rows.length <= pageSize) return;
+
+            let currentPage = 1;
+            const totalPages = Math.ceil(rows.length / pageSize);
+
+            function showPage(page) {
+                const start = (page - 1) * pageSize;
+                const end = start + pageSize;
+
+                rows.forEach((row, idx) => {
+                    if (idx >= start && idx < end) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            }
+
+            const paginationContainer = document.createElement('div');
+            paginationContainer.className = 'card-footer d-flex align-items-center bg-transparent py-3 border-top';
+            paginationContainer.innerHTML = `
+                <p class="m-0 text-secondary small">Pokazano <strong class="shown-count">1-15</strong> z <strong>${rows.length}</strong> pomiarów</p>
+                <ul class="pagination pagination-sm m-0 ms-auto">
+                    <li class="page-item prev-btn disabled">
+                        <a class="page-link" href="javascript:void(0)" tabindex="-1">poprzednia</a>
+                    </li>
+                    <li class="page-item next-btn">
+                        <a class="page-link" href="javascript:void(0)">następna</a>
+                    </li>
+                </ul>
+            `;
+
+            const wrapper = table.closest('.table-responsive');
+            wrapper.parentNode.insertBefore(paginationContainer, wrapper.nextSibling);
+
+            const prevBtn = paginationContainer.querySelector('.prev-btn');
+            const nextBtn = paginationContainer.querySelector('.next-btn');
+            const shownCount = paginationContainer.querySelector('.shown-count');
+
+            function updateControls() {
+                prevBtn.classList.toggle('disabled', currentPage === 1);
+                nextBtn.classList.toggle('disabled', currentPage === totalPages);
+
+                const start = (currentPage - 1) * pageSize;
+                const end = Math.min(start + pageSize, rows.length);
+                shownCount.innerText = `${start + 1}-${end}`;
+            }
+
+            for (let i = 1; i <= totalPages; i++) {
+                // Renderuj tylko maksymalnie 5 sąsiadujących stron, by nie zalewać paska
+                if (totalPages > 6 && Math.abs(i - currentPage) > 2 && i !== 1 && i !== totalPages) {
+                    if (i === 2 || i === totalPages - 1) {
+                        const dots = document.createElement('li');
+                        dots.className = 'page-item disabled';
+                        dots.innerHTML = '<span class="page-link">...</span>';
+                        nextBtn.parentNode.insertBefore(dots, nextBtn);
+                    }
+                    continue;
+                }
+
+                const pageItem = document.createElement('li');
+                pageItem.className = `page-item num-btn ${i === 1 ? 'active' : ''}`;
+                pageItem.innerHTML = `<a class="page-link" href="javascript:void(0)">${i}</a>`;
+
+                pageItem.addEventListener('click', () => {
+                    currentPage = i;
+                    showPage(currentPage);
+                    paginationContainer.querySelectorAll('.num-btn').forEach(btn => {
+                        if (btn.innerText == i) btn.classList.add('active');
+                        else btn.classList.remove('active');
+                    });
+                    updateControls();
+                });
+
+                nextBtn.parentNode.insertBefore(pageItem, nextBtn);
+            }
+
+            prevBtn.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    showPage(currentPage);
+                    paginationContainer.querySelectorAll('.num-btn').forEach(btn => {
+                        btn.classList.toggle('active', parseInt(btn.innerText) === currentPage);
+                    });
+                    updateControls();
+                }
+            });
+
+            nextBtn.addEventListener('click', () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    showPage(currentPage);
+                    paginationContainer.querySelectorAll('.num-btn').forEach(btn => {
+                        btn.classList.toggle('active', parseInt(btn.innerText) === currentPage);
+                    });
+                    updateControls();
+                }
+            });
+
+            showPage(1);
+            updateControls();
+        }
+
+        function updateHaccpChart() {
+            const selectedDevice = document.getElementById("ChartDeviceSelect").value;
+
+            const deviceGroups = {};
+            rawData.forEach(item => {
+                const deviceName = item.deviceNameOrLocation;
+
+                if (selectedDevice && deviceName !== selectedDevice) {
+                    return;
+                }
+
+                if (!deviceGroups[deviceName]) {
+                    deviceGroups[deviceName] = {
+                        label: deviceName,
+                        data: [],
+                        borderColor: getRandomColor(deviceName),
+                        backgroundColor: getRandomColor(deviceName) + '11',
+                        tension: 0.2,
+                        fill: false,
+                        spanGaps: false
+                    };
+                }
+                deviceGroups[deviceName].data.push({
+                    x: new Date(item.recordedAt).getTime(),
+                    y: item.recordedTemperatureCelsius
+                });
+            });
+
+            let datasets = Object.values(deviceGroups);
+
+            if (selectedDevice && datasets.length > 0) {
+                const limits = getDeviceLimits(selectedDevice);
+                const timestamps = rawData.filter(r => r.deviceNameOrLocation === selectedDevice).map(r => new Date(r.recordedAt).getTime());
+                if (timestamps.length > 0) {
+                    const minX = Math.min(...timestamps);
+                    const maxX = Math.max(...timestamps);
+
+                    datasets.push({
+                        label: `Limit min (${limits.min}°C)`,
+                        data: [{ x: minX, y: limits.min }, { x: maxX, y: limits.min }],
+                        borderColor: '#ef4444',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        showLine: true
+                    });
+
+                    datasets.push({
+                        label: `Limit max (${limits.max}°C)`,
+                        data: [{ x: minX, y: limits.max }, { x: maxX, y: limits.max }],
+                        borderColor: '#ef4444',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        showLine: true
+                    });
+                }
+            }
+
+            const ctx = document.getElementById('haccpChart').getContext('2d');
+
+            if (haccpChart) {
+                haccpChart.destroy();
+            }
+
+            haccpChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            ticks: {
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    return date.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' }) + ' ' +
+                                           date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Czas pomiaru'
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '°C';
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Temperatura'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    if (label.includes('Limit')) {
+                                        return label;
+                                    }
+                                    const val = context.parsed.y;
+                                    const device = context.dataset.label;
+                                    const limits = getDeviceLimits(device);
+                                    return `${device}: ${val}°C (Norma: ${limits.min}°C do ${limits.max}°C)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Renderuje wszystkie wykresy na wydruk
+        function initPrintCharts() {
+            const devicesList = @Html.Raw(Json.Serialize(reportRows.Select(r => r.Device)));
+            devicesList.forEach(device => {
+                const chartId = "haccpChart-" + device.replace(/ /g, "-").replace(/#/g, "").replace(/\//g, "").toLowerCase();
+                const canvas = document.getElementById(chartId);
+                if (!canvas) return;
+
+                const ctx = canvas.getContext('2d');
+                const deviceData = rawData.filter(r => r.deviceNameOrLocation === device);
+                const limits = getDeviceLimits(device);
+
+                const points = deviceData.map(d => ({
+                    x: new Date(d.recordedAt).getTime(),
+                    y: d.recordedTemperatureCelsius
+                }));
+
+                const datasets = [{
+                    label: device,
+                    data: points,
+                    borderColor: getRandomColor(device),
+                    backgroundColor: getRandomColor(device) + '11',
+                    tension: 0.2,
+                    fill: false,
+                    spanGaps: false
+                }];
+
+                if (points.length > 0) {
+                    const timestamps = points.map(p => p.x);
+                    const minX = Math.min(...timestamps);
+                    const maxX = Math.max(...timestamps);
+
+                    datasets.push({
+                        label: `Limit min (${limits.min}°C)`,
+                        data: [{ x: minX, y: limits.min }, { x: maxX, y: limits.min }],
+                        borderColor: '#ef4444',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        showLine: true
+                    });
+
+                    datasets.push({
+                        label: `Limit max (${limits.max}°C)`,
+                        data: [{ x: minX, y: limits.max }, { x: maxX, y: limits.max }],
+                        borderColor: '#ef4444',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        showLine: true
+                    });
+                }
+
+                new Chart(ctx, {
+                    type: 'line',
+                    data: { datasets: datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                ticks: {
+                                    callback: function(value) {
+                                        const date = new Date(value);
+                                        return date.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' }) + ' ' +
+                                               date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                                    }
+                                }
+                            },
+                            y: {
+                                ticks: { callback: value => value + '°C' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 9 } } }
+                        }
+                    }
+                });
+            });
+        }
+
+        function getRandomColor(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+            return "#" + "00000".substring(0, 6 - c.length) + c;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            // Double click date triggers
+            document.getElementById('date-from-text').addEventListener('dblclick', function() {
+                const input = document.querySelector('input[name="from"]');
+                if (input) {
+                    input.focus();
+                    try {
+                        input.showPicker();
+                    } catch(e) {
+                        input.click();
+                    }
+                }
+            });
+            document.getElementById('date-to-text').addEventListener('dblclick', function() {
+                const input = document.querySelector('input[name="to"]');
+                if (input) {
+                    input.focus();
+                    try {
+                        input.showPicker();
+                    } catch(e) {
+                        input.click();
+                    }
+                }
+            });
+
+            updateHaccpChart();
+            initPrintCharts();
+
+            // Inicjalizujemy paginację dla wszystkich tabel
+            paginateTable('table-all', 15);
+            const devicesList = @Html.Raw(Json.Serialize(reportRows.Select(r => r.Device)));
+            devicesList.forEach(device => {
+                const tabId = "table-" + device.replace(/ /g, "-").replace(/#/g, "").replace(/\//g, "").toLowerCase();
+                paginateTable(tabId, 15);
+            });
+        });
+    </script>
+}

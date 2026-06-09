@@ -1,16 +1,29 @@
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=localhost,1433;Database=KuchniaUCygana_Dev;User Id=sa;Password=YourStrong!Passw0rd;Encrypt=True;TrustServerCertificate=True;"
+    "DefaultConnection": "Server=localhost,1433;Database=KuchniaUCygana_Dev;User Id=pracownik;Password=YourStrong!Pracownik123;Encrypt=True;TrustServerCertificate=True;",
+    "MigrationConnection": "Server=localhost,1433;Database=KuchniaUCygana_Dev;User Id=admin;Password=YourStrong!Admin123;Encrypt=True;TrustServerCertificate=True;"
   },
   "DatabaseSeeding": {
     "Enabled": true,
     "Mode": "Both",
-    "Profile": "MinimalRealistic"
+    "Profile": "DemoData",
+    "ResetDemoData": false
   },
   "Stripe": {
     "SecretKey": ""
   },
   "OpenAI": {
     "ApiKey": ""
-  }
+  },
+  "Application": {
+    "BaseUrl": "https://localhost:5001"
+  },
+  "PackingResources": {
+    "TransportBagStockItemId": null,
+    "TransportBagWasteQuantity": 1,
+    "BoxContainerStockItemId": null,
+    "BoxContainerWasteQuantity": 1
+  },
+  "OrderProvider": "M1",
+  "DeliveryManifestProvider": "M4"
 }

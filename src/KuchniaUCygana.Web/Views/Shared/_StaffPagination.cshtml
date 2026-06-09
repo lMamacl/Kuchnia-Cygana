@@ -1,0 +1,68 @@
+@model StaffPaginationViewModel
+@{
+    string PageUrl(int page)
+    {
+        var values = new Microsoft.AspNetCore.Routing.RouteValueDictionary();
+        foreach (var routeValue in Model.RouteValues)
+        {
+            values[routeValue.Key] = routeValue.Value;
+        }
+
+        values["page"] = page;
+        values["pageSize"] = Model.PageSize;
+
+        return Url.Action(Model.Action, Model.Controller, values) ?? "#";
+    }
+
+    var pageStart = Math.Max(1, Model.Page - 2);
+    var pageEnd = Math.Min(Model.TotalPages, Model.Page + 2);
+}
+
+@if (Model.TotalCount > 0)
+{
+    <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <span class="text-secondary small">
+            Pokazuje @Model.FirstItem-@Model.LastItem z @Model.TotalCount, strona @Model.Page / @Model.TotalPages
+        </span>
+        <nav aria-label="Paginacja listy">
+            <ul class="pagination m-0">
+                <li class="page-item @(Model.HasPrevious ? string.Empty : "disabled")">
+                    <a class="page-link" href="@PageUrl(Model.PreviousPage)">Poprzednia</a>
+                </li>
+                @if (pageStart > 1)
+                {
+                    <li class="page-item">
+                        <a class="page-link" href="@PageUrl(1)">1</a>
+                    </li>
+                    @if (pageStart > 2)
+                    {
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                    }
+                }
+                @for (var pageNumber = pageStart; pageNumber <= pageEnd; pageNumber++)
+                {
+                    <li class="page-item @(pageNumber == Model.Page ? "active" : string.Empty)">
+                        <a class="page-link" href="@PageUrl(pageNumber)">@pageNumber</a>
+                    </li>
+                }
+                @if (pageEnd < Model.TotalPages)
+                {
+                    @if (pageEnd < Model.TotalPages - 1)
+                    {
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                    }
+                    <li class="page-item">
+                        <a class="page-link" href="@PageUrl(Model.TotalPages)">@Model.TotalPages</a>
+                    </li>
+                }
+                <li class="page-item @(Model.HasNext ? string.Empty : "disabled")">
+                    <a class="page-link" href="@PageUrl(Model.NextPage)">Nastepna</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+}

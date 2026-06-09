@@ -1,5 +1,223 @@
+@model KuchniaUCygana.Application.DTOs.Menu.DietDto
 @{
     Layout = "_LayoutStaff";
+    ViewData["Title"] = Model.Name;
+    ViewData["Section"] = "Katalog Menu";
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row row-cards">
+    <div class="col-lg-8">
+        <div class="card card-premium">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title">@Model.Name</h3>
+                <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-warning btn-sm">Edytuj dietę</a>
+            </div>
+            <div class="card-body">
+                <p class="text-secondary">@Model.Description</p>
+                <span class="badge @(Model.IsActive ? "bg-success-lt text-success" : "bg-secondary-lt text-secondary")">
+                    @(Model.IsActive ? "Aktywna" : "Wstrzymana")
+                </span>
+            </div>
+        </div>
+
+        <div class="card card-premium mt-3">
+            <div class="card-header">
+                <h3 class="card-title">Warianty i posiłki w planie</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Wariant</th>
+                            <th>Kalorie</th>
+                            <th>Mnożnik ceny</th>
+                            <th>Przypisz posiłek</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var variant in Model.Variants)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@variant.Name</strong>
+                                    @if (variant.IsDefault)
+                                    {
+                                        <span class="badge bg-primary-lt text-primary ms-2">Domyślny</span>
+                                    }
+                                </td>
+                                <td>@variant.TargetCalories kcal</td>
+                                <td>@variant.PriceMultiplier.ToString("F2")</td>
+                                <td style="min-width: 360px;">
+                                    <form asp-action="AssignMeal" asp-route-variantId="@variant.Id" method="post" class="row g-2 align-items-end">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="dietId" value="@Model.Id" />
+                                        <div class="col position-relative diet-meal-lookup">
+                                            <input type="hidden" name="mealId" class="js-diet-meal-id" required />
+                                            <input type="text" class="form-control form-control-sm js-diet-meal-query" autocomplete="off" placeholder="Wpisz nazwę posiłku" />
+                                            <div class="list-group mt-1 shadow-sm d-none js-diet-meal-results position-absolute w-100" style="z-index: 1050;"></div>
+                                            <div class="form-hint js-diet-meal-status">Wpisz min. 2 znaki.</div>
+                                        </div>
+                                        <div class="col-3">
+                                            <input name="multiplier" type="number" step="0.01" min="0.01" value="1" class="form-control form-control-sm" />
+                                        </div>
+                                        <div class="col-2">
+                                            <input name="sortOrder" type="number" min="0" value="0" class="form-control form-control-sm" />
+                                        </div>
+                                        <div class="col-auto">
+                                            <button type="submit" class="btn btn-sm btn-primary">Dodaj</button>
+                                        </div>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Dodaj wariant</h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="AddVariant" asp-route-dietId="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label class="form-label">Nazwa</label>
+                        <input name="Name" class="form-control" placeholder="np. 2000 kcal" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Kalorie</label>
+                        <input name="TargetCalories" type="number" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Mnożnik ceny</label>
+                        <input name="PriceMultiplier" type="number" step="0.01" value="1" class="form-control" required />
+                    </div>
+                    <label class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="IsDefault" value="true" />
+                        <span class="form-check-label">Domyślny</span>
+                    </label>
+                    <button type="submit" class="btn btn-primary w-100">Dodaj wariant</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const lookupUrl = '@Url.Content("~/diet-editor/menu-plan/lookups/meals")';
+            const debounce = (callback, delay = 250) => {
+                let timer;
+                return (...args) => {
+                    window.clearTimeout(timer);
+                    timer = window.setTimeout(() => callback(...args), delay);
+                };
+            };
+
+            document.querySelectorAll('.diet-meal-lookup').forEach((lookup) => {
+                const idInput = lookup.querySelector('.js-diet-meal-id');
+                const queryInput = lookup.querySelector('.js-diet-meal-query');
+                const resultsBox = lookup.querySelector('.js-diet-meal-results');
+                const status = lookup.querySelector('.js-diet-meal-status');
+                let controller;
+                let sequence = 0;
+
+                const resetSelection = () => {
+                    idInput.value = '';
+                    status.textContent = 'Wybierz posiłek z listy.';
+                    status.className = 'form-hint js-diet-meal-status text-secondary';
+                };
+
+                const render = (items) => {
+                    resultsBox.innerHTML = '';
+                    if (!items.length) {
+                        resultsBox.classList.add('d-none');
+                        status.textContent = 'Brak wyników.';
+                        return;
+                    }
+
+                    items.forEach((item) => {
+                        const warnings = Array.isArray(item.warnings) ? item.warnings : [];
+                        const legacy = warnings.some((warning) => warning.toLowerCase().includes('legacy'));
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'list-group-item list-group-item-action py-2';
+                        button.innerHTML = `
+                            <div class="d-flex justify-content-between gap-2">
+                                <span class="fw-semibold">${item.mealName}</span>
+                                ${legacy ? '<span class="badge bg-warning-lt text-warning">legacy Recipes</span>' : ''}
+                            </div>
+                            <div class="small text-secondary">${item.categoryName || ''}${warnings.length ? ' / ' + warnings.join(', ') : ''}</div>`;
+                        button.addEventListener('click', () => {
+                            idInput.value = item.mealId;
+                            queryInput.value = item.mealName;
+                            resultsBox.classList.add('d-none');
+                            status.textContent = warnings.length
+                                ? `Ryzyko danych: ${warnings.join(', ')}`
+                                : 'Gotowe do przypisania.';
+                            status.className = warnings.length
+                                ? 'form-hint js-diet-meal-status text-warning'
+                                : 'form-hint js-diet-meal-status text-success';
+                        });
+                        resultsBox.appendChild(button);
+                    });
+
+                    resultsBox.classList.remove('d-none');
+                };
+
+                const search = debounce(async () => {
+                    const query = queryInput.value.trim();
+                    resetSelection();
+                    if (query.length < 2) {
+                        resultsBox.classList.add('d-none');
+                        status.textContent = 'Wpisz min. 2 znaki.';
+                        return;
+                    }
+
+                    controller?.abort();
+                    controller = new AbortController();
+                    const requestSequence = ++sequence;
+
+                    try {
+                        const response = await fetch(`${lookupUrl}?query=${encodeURIComponent(query)}`, {
+                            headers: { 'Accept': 'application/json' },
+                            signal: controller.signal,
+                        });
+                        if (!response.ok || requestSequence !== sequence) {
+                            return;
+                        }
+
+                        render(await response.json());
+                    } catch (error) {
+                        if (error.name !== 'AbortError') {
+                            status.textContent = 'Nie udało się pobrać wyników.';
+                        }
+                    }
+                });
+
+                queryInput.addEventListener('input', search);
+                lookup.closest('form')?.addEventListener('submit', (event) => {
+                    if (!idInput.value) {
+                        event.preventDefault();
+                        status.textContent = 'Wybierz posiłek z listy wyników.';
+                        status.className = 'form-hint js-diet-meal-status text-danger';
+                        queryInput.focus();
+                    }
+                });
+            });
+
+            document.addEventListener('click', (event) => {
+                document.querySelectorAll('.diet-meal-lookup').forEach((lookup) => {
+                    if (!lookup.contains(event.target)) {
+                        lookup.querySelector('.js-diet-meal-results')?.classList.add('d-none');
+                    }
+                });
+            });
+        })();
+    </script>
+}

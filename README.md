@@ -4,7 +4,7 @@
 
 Platforma webowa dla firmy cateringowej łącząca **portal B2C** (zamawianie diet, płatności online) z **ERP back-office** (produkcja, magazyn, logistyka, HR, helpdesk).
 
-> **Technologie:** ASP.NET MVC 8 · MS SQL Server · Dapper · FluentMigrator · HTMX 2.x · Alpine.js · Clean Architecture
+> **Technologie:** ASP.NET MVC 8 · MS SQL Server · Dapper · HTMX 2.x · Alpine.js · Clean Architecture
 
 ---
 
@@ -20,7 +20,7 @@ Obecnie na gałęzi `develop` znajduje się **Czysty Szablon Architektoniczny**.
 - `KuchniaUCygana.Web` - UI ASP.NET MVC
 - `KuchniaUCygana.Application` - logika aplikacyjna, DTO, mapowania
 - `KuchniaUCygana.Domain` - encje i kontrakty domenowe
-- `KuchniaUCygana.Infrastructure` - dostep do danych, migracje, integracje zewnetrzne
+- `KuchniaUCygana.Infrastructure` - dostęp do danych, migracje, integracje zewnętrzne
 
 Projekt stosuje **N-Tier / Clean Architecture** z czytelnym podziałem odpowiedzialności:
 
@@ -48,14 +48,48 @@ KuchniaUCygana.Infrastructure   ← DAL (Dapper, Migrations, External APIs, Cach
 | 4 | **Logistyka i Dostawy** | DEV 04 | Trasy, kierowcy, pojazdy, geokodowanie (OpenStreetMap) |
 | 5 | **Administracja, HR i Komunikacja** | DEV 05 | Tickety, grafiki pracy, zarządzanie użytkownikami |
 
-## 🔐 Role w Systemie
+## Konta testowe i role
 
-| Rola | Dostęp |
-|------|--------|
-| `Client` | Portal B2C — zamówienia, profil, płatności |
-| `Kitchen` | Panel kuchni — produkcja, kompletacja, magazyn |
-| `Driver` | Panel kierowcy — trasy, dostawy |
-| `Admin` | Pełny dostęp — administracja, raporty, HR |
+Seeder tworzy poniższe konta aplikacyjne w profilach `MinimalRealistic` i `DemoData`.
+Logowanie pracownicze korzysta ze zwykłego formularza `/Account/Login` albo `/staff/login`;
+hasło jest weryfikowane przeciwko `PasswordHash` w tabeli `Users`.
+
+Rejestracja klienta działa przez `/Account/Register`: tworzy nowe konto z rolą `Client`,
+normalizuje email i zapisuje hasło jako hash BCrypt. Role pracownicze nie mają samodzielnej
+rejestracji; do testów korzystają z kont seedowanych poniżej.
+
+### Konta bazowe (`MinimalRealistic`)
+
+| Rola | Email | Hasło | Moduł / użycie |
+|------|-------|-------|----------------|
+| `Admin` | `admin@kuchnia.local` | `Admin123!` | Administracja, pełny dostęp |
+| `Kitchen` | `kitchen@kuchnia.local` | `Kitchen123!` | M3 produkcja |
+| `KitchenManager` | `kitchenm@kuchnia.local` | `Kitchen123!` | M3 kierownik produkcji |
+| `Warehouse` | `warehouse@kuchnia.local` | `Warehouse123!` | M3 magazyn |
+| `WarehouseManager` | `warehousem@kuchnia.local` | `Warehouse123!` | M3 kierownik magazynu |
+| `Packing` | `packing@kuchnia.local` | `Packing123!` | M3 kompletacja |
+| `PackingManager` | `packingm@kuchnia.local` | `Packing123!` | M3 kierownik kompletacji |
+| `Dietitian` | `dietitian@kuchnia.local` | `Diet123!` | M2 katalog diet i receptur |
+| `Logistics` | `logistics@kuchnia.local` | `Logistics123!` | M4 logistyka |
+| `LogisticsManager` | `logisticsm@kuchnia.local` | `Logistics123!` | M4 kierownik logistyki |
+| `Driver` | `driver@kuchnia.local` | `Driver123!` | M4 kierowca |
+| `DriverManager` | `driverm@kuchnia.local` | `Driver123!` | M4 koordynator kierowców |
+| `HR` | `hr@kuchnia.local` | `HR123!` | M5 HR |
+| `HRManager` | `hrm@kuchnia.local` | `HR123!` | M5 kierownik HR |
+| `BOK` | `bok@kuchnia.local` | `BOK123!` | M5 obsługa klienta |
+| `BOKManager` | `bokm@kuchnia.local` | `BOK123!` | M5 kierownik BOK |
+
+### Konta demo (`DemoData`)
+
+| Rola | Email | Hasło | Użycie |
+|------|-------|-------|--------|
+| `Client` | `demo-klient-01@kuchnia.local` ... `demo-klient-15@kuchnia.local` | `Demo123!` | Wspólni klienci M1/M2/M3/M4 z seedowanych zamówień |
+| `Driver` | `driver2@kuchnia.local` | `Driver123!` | Dodatkowy kierowca scenariusza tras M4 |
+| `Driver` | `driver3@kuchnia.local` | `Driver123!` | Dodatkowy kierowca scenariusza tras M4 |
+
+Loginy SQL Server nie są kontami aplikacji. Docker tworzy loginy `admin`, `pracownik` i `klient`
+z hasłami z `.env`; testy integracyjne Testcontainers używają odpowiednio `Admin123!Integration`,
+`Pracownik123!Integration` i `Klient123!Integration`.
 
 ---
 
@@ -78,29 +112,29 @@ cd Kuchnia-Cygana
 
 > **⚠️ UWAGA — WAŻNE:** Wszystkie poniższe komendy (`dotnet`, `docker-compose`) **muszą** być uruchamiane z poziomu **głównego katalogu repozytorium** (tam, gdzie znajduje się plik `KuchniaUCygana.sln`), a **NIE** wewnątrz folderu `src/KuchniaUCygana.Web`!
 
-### 2. Przygotowanie zmiennych srodowiskowych
+### 2. Przygotowanie zmiennych środowiskowych
 
 ```bash
 cp .env.example .env
 ```
-W pliku `.env` uzupelnij nastepujace pola:
+W pliku `.env` uzupełnij następujące pola:
 
 ```
 - `MSSQL_SA_PASSWORD` = Twoje super tajne hasło!
 - `MSSQL_DB_NAME` = `KuchniaUCygana`
 - opcjonalnie `MSSQL_PORT` = `1433`
-- `MSSQL_MEMORY_LIMIT_MB` = `768` (limit RAM dla silnika SQL)
-- `MSSQL_CONTAINER_MEMORY_LIMIT` = `1g` (limit dla kontenera SQL)
-- `WEB_CONTAINER_MEMORY_LIMIT` = `512m` (limit dla kontenera Web)
+- `MSSQL_MEMORY_LIMIT_MB` = `1536` (limit RAM dla silnika SQL)
+- `MSSQL_CONTAINER_MEMORY_LIMIT` = `2g` (limit dla kontenera SQL)
+- `WEB_CONTAINER_MEMORY_LIMIT` = `768m` (limit dla kontenera Web)
 ```
 # Opcjonalnie — klucze API (możesz pominąć jeśli nie testujesz integracji)
 dotnet user-secrets set "Stripe:SecretKey" "sk_test_..." --project src/KuchniaUCygana.Web
 dotnet user-secrets set "OpenAI:ApiKey" "sk-..." --project src/KuchniaUCygana.Web
 
-> **Alternatywa:** Skopiuj `appsettings.Development.json.example` lub utwórz plik `src/KuchniaUCygana.Web/appsettings.Development.json` z wartościami. Plik ten jest w `.gitignore` i nie zostanie scommitowany.
-> Uwaga: `.env` zawiera sekrety i nie moze byc commitowany do repozytorium.
+> **Alternatywa:** Skopiuj `appsettings.Development.json.example` or utwórz plik `src/KuchniaUCygana.Web/appsettings.Development.json` z wartościami. Plik ten jest w `.gitignore` i nie zostanie scommitowany.
+> Uwaga: `.env` zawiera sekrety i nie może być commitowany do repozytorium.
 
-### 3. Przywrocenie zaleznosci
+### 3. Przywrócenie zależności
 
 ```bash
 dotnet restore KuchniaUCygana.sln
@@ -137,8 +171,6 @@ Nie czyść wtedy bazy danych. `docker compose down -v` usuwa named volume `mssq
 Server. Używaj go tylko wtedy, gdy celowo potrzebujesz czystej bazy, naprawiasz migracje albo chcesz wykonać pełny
 greenfield rebuild. Zmiany w widokach, layoutach, plikach `wwwroot/css` i `wwwroot/js` nie wymagają przebudowy bazy.
 
-## Uruchomienie lokalne bez Dockera
-
 ### 5. Zatrzymanie
 
 ```bash
@@ -156,15 +188,16 @@ Co robi reset:
 - usuwa kontenery i sieci projektu,
 - usuwa volume `mssql_data` (tracisz wszystkie dane bazy),
 - usuwa osierocone kontenery compose,
-- po ponownym starcie tworzy czysta baze od zera przez migracje.
+- po ponownym starcie tworzy czystą bazę od zera przez migracje.
 
-### 6. Uruchomienie lokalne bez Dockera
+---
 
+## 💻 Uruchomienie lokalne bez Dockera
 
-Mozesz uruchomic aplikacje lokalnie, ale baza dalej powinna wskazywac na SQL Server.
+Możesz uruchomić aplikację lokalnie, ale baza dalej powinna wskazywać na SQL Server.
 
 1. Przygotuj `src/KuchniaUCygana.Web/appsettings.Development.json` (na bazie `appsettings.Development.json.example`).
-2. Ustaw poprawny `ConnectionStrings:DefaultConnection` do SQL Server.
+2. Ustaw poprawny `ConnectionStrings:DefaultConnection` i opcjonalnie `ConnectionStrings:MigrationConnection` do SQL Server.
 3. Uruchom:
 ```bash
 dotnet run --project src/KuchniaUCygana.Web
@@ -175,12 +208,29 @@ dotnet run --project src/KuchniaUCygana.Web
 ## Baza danych, migracje i seeding
 
 - Strategia danych: **greenfield-only** (bez migracji danych ze SQLite).
-- Kolejnosc startu runtime: `MigrateUp -> Seed (warunkowo) -> Start aplikacji`.
-- Migracje sa uruchamiane automatycznie przy starcie aplikacji.
-- Seeding w startupie dziala tylko dla `Development` i `Test`.
-- W `Production` startup seeding jest wylaczony.
+- Kolejność startu Dockera: `SQL Server healthy -> SQL init loginów -> MigrateUp -> Seed (warunkowo) -> Start aplikacji`.
+- Migracje są uruchamiane automatycznie przy starcie aplikacji.
+- Seeding w startupie działa tylko dla `Development` i `Test`.
+- W `Production` startup seeding jest wyłączony.
+- `ConnectionStrings:DefaultConnection` jest runtime Dappera i powinien używać ograniczonego loginu `pracownik`.
+- `ConnectionStrings:MigrationConnection` jest używany przez FluentMigrator i powinien używać loginu `admin`.
+- Docker tworzy loginy SQL Server `admin`, `pracownik` i `klient` przez `docker/sqlserver-init.sql`; uzupełnij hasła w `.env` na bazie `.env.example`.
+- Seed wydajnościowy 100k+ oraz dokument/prezentacja z porównaniem zapytania przed/po optymalizacji są poza bieżącym zakresem.
 
-Reczne uruchomienie seedingu:
+### Status SBD po domknięciu audytu
+
+- Runtime aplikacji nie używa już `sa`; `sa` zostaje wyłącznie do bootstrapu SQL Server w Dockerze/Testcontainers.
+- Migracje używają `MigrationConnection` (`admin`), a runtime Dappera używa `DefaultConnection` (`pracownik`).
+- Login `klient` jest tworzony z ograniczonym DML jako przygotowanie infrastrukturalne, ale nie jest jeszcze przełączany per request.
+- Fizyczne obiekty T-SQL dla SBD są w migracji `507_AddSbdSqlObjectsAndIndexes`: `tr_Batches_UpdateIsDepleted`, `usp_ArchiveSystemLogs`, `fn_MealNutritionCost` i `SystemLogsArchive`.
+- Auth jest świadomie w trybie preview: `Login` i `Register` nie wykonują pełnego produkcyjnego uwierzytelniania, a pracowniczy dev-login jest wydzielony pod `/staff/login` tylko dla `Development`.
+
+### Aktualne przewodniki po zmianach i uruchomieniu
+
+- [Overview zmian 2026-06-02 i show preview](docs/guides/ZMIANY_2026-06-02_OVERVIEW_I_SHOWCASE.md)
+- [Windows Docker SQL Server setup checklist](docs/guides/WINDOWS_DOCKER_SQLSERVER_SETUP_CHECKLIST.md)
+
+Ręczne uruchomienie seedingu:
 ```bash
 dotnet run --project src/KuchniaUCygana.Web -- seed
 ```
@@ -246,6 +296,13 @@ dopięte pod `_LayoutStaff`, a nie przez osobne layouty ani przez przebudowę `_
 - Dla samych mocków/widoków nie zmieniaj `DependencyInjection.cs`, `Program.cs`, migracji ani `docker-compose.yml`.
 - Jeżeli Twój moduł ma realny serwis/repozytorium, dopisuj rejestrację DI addytywnie. Nie podmieniaj całego pliku.
 
+### Branch integration rules
+
+- `develop` przyjmuje tylko kompatybilną infrastrukturę DB na Dapperze, dokumentację i testy bazowe.
+- `Mamac` zostawia implementacje Modułu 3: Warehouse, Production, Packing, widoki, seeding demo i testy M3.
+- Branche deweloperskie po aktualizacji `develop` robią rebase albo merge i migrują własne repozytoria według `docs/guides/dapper-migration-guide.md`.
+- Nie przenoś pełnym merge'em branchy, które usuwają cudze kontrolery, widoki lub konfigurację Web; wybieraj cherry-pick właściwych plików.
+
 ### 🚀 Sygnały poprawnego startu
 Po uruchomieniu `docker compose up`, w logach powinieneś zobaczyć:
 - `Container kuchnia_sqlserver Healthy` — SQL Server jest gotowy.
@@ -272,11 +329,12 @@ Po uruchomieniu `docker compose up`, w logach powinieneś zobaczyć:
 | [`docs/module-3/PLAN_MODUL_3.md`](docs/module-3/PLAN_MODUL_3.md) | Szczegółowy plan Modułu 3 |
 | [`docs/Decisions_Log.md`](docs/Decisions_Log.md) | Dziennik decyzji architektonicznych |
 | [`docs/guides/Developer_Manual.md`](docs/guides/Developer_Manual.md) | Podręcznik dewelopera (OPRÓCZ PLANU NAJWAŻNIEJSZE) |
+| [`docs/guides/dapper-migration-guide.md`](docs/guides/dapper-migration-guide.md) | Wzorzec migracji repozytoriów i zasady integracji branchy |
 
 ## 🛠️ Narzędzia i Konwencje
 Wszystkie testy:
 
-- **Dostęp do danych:** Dapper (blisko SQL, brak lazy loading — jawne JOINy)
+- **Dostęp do danych:** Dapper (bliżej SQL niż EF Core, brak lazy loading — jawne JOINy)
 - **Migracje:** FluentMigrator — jedyne źródło DDL (nie `db.CreateTableIfNotExists`!)
 - **Mapowania:** AutoMapper — 1 plik Profile per moduł
 - **Walidacja:** FluentValidation (serwer) + jQuery Validation Unobtrusive (klient)
@@ -301,7 +359,7 @@ ERP back-office:        _LayoutAdmin.cshtml
 - **Interaktywność bez reload** — HTMX pobiera fragmenty HTML (Partial Views) i wkleja je w DOM bez przeładowania strony
 - **Lokalna reaktywność** — Alpine.js (`x-data`, `x-show`, `@click`) do modali, toggleów, potwierdzeń
 - **Zero JS boilerplate dla CRUD** — filtry, paginacja, zatwierdzanie pozycji przez atrybuty `hx-*`
-- **Walidacja** — FluentValidation (server) + jQuery Validation Unobtrusive (client); HTMX nie wysła formularza przed walidacją kliencką
+- **Walidacja** — FluentValidation (serwer) + jQuery Validation Unobtrusive (klient); HTMX nie wysyła formularza przed walidacją kliencką
 - **CSRF** — jednorazowa konfiguracja globalna w `htmx-config.js`; wszystkie żądania HTMX automatycznie dostarczają token
 
 ### Wzorzec kontrolera (dual response)

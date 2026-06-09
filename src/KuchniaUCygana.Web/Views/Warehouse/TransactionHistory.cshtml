@@ -1,0 +1,136 @@
+@model KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryDto>
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Historia Transakcji";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = "Dziennik zdarzeń i operacji magazynowych — przyjęcia, odpisy, korekty oraz wydania.";
+
+    var currentFilter = ViewBag.Filter as KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryFilterDto 
+                        ?? new KuchniaUCygana.Application.DTOs.Warehouse.TransactionHistoryFilterDto();
+    var selectedStockItem = ViewBag.SelectedStockItem as KuchniaUCygana.Application.DTOs.Warehouse.StockItemDto;
+}
+
+<div class="container-xl">
+    <!-- Tytuł i Breadcrumb -->
+    <div class="page-header d-print-none mb-3">
+        <div class="row align-items-center">
+            <div class="col">
+                <div class="mb-1">
+                    <ol class="breadcrumb" aria-label="breadcrumbs">
+                        <li class="breadcrumb-item"><a asp-action="Index">Pulpit Magazynu</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Historia transakcji</li>
+                    </ol>
+                </div>
+                <h2 class="page-title text-dark">
+                    Historia Operacji Magazynowych
+                </h2>
+            </div>
+            <div class="col-auto ms-auto">
+                <div class="btn-list">
+                    <a asp-action="Index" class="btn btn-outline-secondary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 14l-4 -4l4 -4" /><path d="M5 10h11a4 4 0 1 1 0 8h-1" /></svg>
+                        Pulpit
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtry wyszukiwania -->
+    <div class="card card-premium mb-4">
+        <div class="card-body">
+            <form id="tx-filter-form" 
+                  hx-get="/warehouse/transaction-history" 
+                  hx-target="#transactions-table-container" 
+                  hx-trigger="change">
+                <div class="row g-3">
+                    <div class="col-md-3 position-relative">
+                        <label class="form-label text-secondary fw-bold">Składnik magazynowy</label>
+                        <input type="hidden" name="StockItemId" id="StockItemId" value="@(currentFilter.StockItemId)" />
+                        <div class="input-group input-group-flat">
+                            <input type="text" 
+                                   id="StockItemSearch" 
+                                   class="form-control" 
+                                   placeholder="Wyszukaj składnik..." 
+                                   autocomplete="off"
+                                   hx-get="/warehouse/stock-lookup"
+                                   hx-trigger="keyup changed delay:200ms"
+                                   hx-target="#search-results"
+                                   name="q"
+                                   value="@(selectedStockItem?.Name ?? "")" />
+                            <span class="input-group-text bg-transparent py-0 px-2">
+                                <a href="javascript:void(0)" class="link-secondary" title="Wyczyść" onclick="clearStockItemFilter()">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                                </a>
+                            </span>
+                        </div>
+                        <div id="search-results" class="position-absolute w-100" style="z-index: 1050;"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-secondary fw-bold">Rodzaj operacji</label>
+                        <select name="TransactionType" class="form-select">
+                            <option value="">-- Wszystkie typy --</option>
+                            <option value="1" selected="@(currentFilter.TransactionType == 1 ? "selected" : null)">Przyjęcie dostawy</option>
+                            <option value="2" selected="@(currentFilter.TransactionType == 2 ? "selected" : null)">Odpad / Strata</option>
+                            <option value="3" selected="@(currentFilter.TransactionType == 3 ? "selected" : null)">Wydanie na produkcję</option>
+                            <option value="5" selected="@(currentFilter.TransactionType == 5 ? "selected" : null)">Wydanie ręczne</option>
+                            <option value="6" selected="@(currentFilter.TransactionType == 6 ? "selected" : null)">Zmiana daty ważności</option>
+                            <option value="4" selected="@(currentFilter.TransactionType == 4 ? "selected" : null)">Korekta inwentaryzacyjna</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-secondary fw-bold">Data od</label>
+                        <input type="date" id="FromDate" name="FromDate" class="form-control" 
+                               value="@(currentFilter.FromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-secondary fw-bold">Data do</label>
+                        <input type="date" id="ToDate" name="ToDate" class="form-control" 
+                               value="@(currentFilter.ToDate?.ToString("yyyy-MM-dd") ?? "")" />
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabela wyników -->
+    <div class="card card-premium">
+        <div id="transactions-table-container">
+            @await Html.PartialAsync("_StockTransactionsPartial", Model)
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function selectStockItem(id, name, stock, unit) {
+            document.getElementById('StockItemId').value = id;
+            document.getElementById('StockItemSearch').value = name;
+            document.getElementById('search-results').innerHTML = '';
+            
+            // Wyzwalamy zdarzenie zmiany, aby HTMX odświeżył tabelę
+            document.getElementById('StockItemId').dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        function clearStockItemFilter() {
+            document.getElementById('StockItemId').value = '';
+            document.getElementById('StockItemSearch').value = '';
+            document.getElementById('search-results').innerHTML = '';
+            
+            document.getElementById('StockItemId').dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        document.getElementById('StockItemSearch').addEventListener('input', function() {
+            if (!this.value.trim()) {
+                document.getElementById('StockItemId').value = '';
+                document.getElementById('StockItemId').dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            if (e.target.id !== 'StockItemSearch') {
+                document.getElementById('search-results').innerHTML = '';
+            }
+        });
+    </script>
+}

@@ -1,0 +1,8 @@
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Warehouse.BatchDto>
+
+<option value="">-- Wybierz partię (lub pozostaw puste, aby usunąć wg FEFO) --</option>
+@foreach (var batch in Model)
+{
+    var expiryStr = batch.ExpiryDate.HasValue ? $"ważna do {batch.ExpiryDate.Value.ToString("dd.MM.yyyy")}" : "bezterminowo";
+    <option value="@batch.Id">Partia #@batch.Id (@(string.IsNullOrEmpty(batch.SupplierBatchNumber) ? "brak nr" : batch.SupplierBatchNumber)) - Ilość: @batch.CurrentQuantity.ToString("F2") (@expiryStr)</option>
+}

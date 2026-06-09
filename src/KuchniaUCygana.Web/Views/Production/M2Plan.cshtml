@@ -1,0 +1,400 @@
+@model KuchniaUCygana.Application.DTOs.Production.ProductionM2PlanOverviewDto
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Plan z M2";
+    ViewData["Section"] = "Kuchnia";
+    ViewData["Description"] = "Podgląd opublikowanego planu diet z M2 i snapshotów produkcyjnych M3.";
+}
+
+@functions {
+    string StatusColor(string status, bool isPublished)
+    {
+        if (isPublished)
+        {
+            return "success";
+        }
+
+        return status switch
+        {
+            "Draft" => "warning",
+            "Missing" => "danger",
+            _ => "secondary"
+        };
+    }
+
+    string AlertColor(string severity)
+        => severity switch
+        {
+            "Critical" => "danger",
+            "Warning" => "warning",
+            _ => "info"
+        };
+
+    string WeightText(KuchniaUCygana.Application.DTOs.Production.ProductionM2PlanItemDto item)
+    {
+        var weight = item.FinalWeightAfterMultiplierGrams
+            ?? item.FinalWeightGrams
+            ?? item.CookedWeightGrams
+            ?? item.RawWeightGrams;
+
+        return weight.HasValue ? $"{weight.Value:0.##} g" : "-";
+    }
+
+    string PreviewList(IEnumerable<string> values, int limit = 3)
+    {
+        var list = values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Take(limit)
+            .ToList();
+
+        return list.Count == 0 ? "-" : string.Join(", ", list);
+    }
+
+    IDictionary<string, string> RouteValues(int page)
+    {
+        var values = new Dictionary<string, string>
+        {
+            ["startDate"] = Model.StartDate.ToString("yyyy-MM-dd"),
+            ["days"] = Model.TotalDays.ToString(),
+            ["page"] = page.ToString(),
+            ["pageSize"] = Model.PageSize.ToString(),
+        };
+
+        Add(values, "search", Model.Filter.Search);
+        Add(values, "snapshot", Model.Filter.Snapshot);
+        Add(values, "refresh", Model.Filter.Refresh);
+        Add(values, "completeness", Model.Filter.Completeness);
+        return values;
+    }
+
+    void Add(IDictionary<string, string> values, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            values[key] = value;
+        }
+    }
+}
+
+<div class="card card-premium mb-4">
+    <div class="card-body">
+        <form method="get" class="row align-items-end g-3">
+            <input type="hidden" name="page" value="1" />
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label fw-bold">Początek zakresu</label>
+                <input type="date" name="startDate" class="form-control" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-sm-6 col-lg-1">
+                <label class="form-label fw-bold">Dni</label>
+                <select name="days" class="form-select">
+                    <option value="7" selected="@(Model.TotalDays == 7)">7</option>
+                    <option value="14" selected="@(Model.TotalDays == 14)">14</option>
+                    <option value="21" selected="@(Model.TotalDays == 21)">21</option>
+                    <option value="31" selected="@(Model.TotalDays == 31)">31</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label fw-bold">Szukaj</label>
+                <input type="search" name="search" class="form-control" value="@Model.Filter.Search" placeholder="Danie, wariant, składnik, opakowanie" />
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Snapshot</label>
+                <select name="snapshot" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="missing" selected="@(Model.Filter.Snapshot == "missing")">Brak</option>
+                    <option value="present" selected="@(Model.Filter.Snapshot == "present")">Odebrany</option>
+                    <option value="current" selected="@(Model.Filter.Snapshot == "current")">Aktualny</option>
+                    <option value="stale" selected="@(Model.Filter.Snapshot == "stale")">Nieaktualny</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Refresh</label>
+                <select name="refresh" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="needs" selected="@(Model.Filter.Refresh == "needs")">Do odświeżenia</option>
+                    <option value="can" selected="@(Model.Filter.Refresh == "can")">Można odświeżyć</option>
+                    <option value="blocked" selected="@(Model.Filter.Refresh == "blocked")">Zablokowane</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <label class="form-label fw-bold">Kompletność</label>
+                <select name="completeness" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="complete" selected="@(Model.Filter.Completeness == "complete")">Kompletne</option>
+                    <option value="incomplete" selected="@(Model.Filter.Completeness == "incomplete")">Z brakami</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-1">
+                <label class="form-label fw-bold">Strona</label>
+                <select name="pageSize" class="form-select">
+                    <option value="10" selected="@(Model.PageSize == 10)">10</option>
+                    <option value="25" selected="@(Model.PageSize == 25)">25</option>
+                    <option value="50" selected="@(Model.PageSize == 50)">50</option>
+                    <option value="100" selected="@(Model.PageSize == 100)">100</option>
+                </select>
+            </div>
+            <div class="col-12 col-lg-auto">
+                <button type="submit" class="btn btn-primary">Odśwież</button>
+                <a asp-action="M2Plan" asp-route-startDate="@Model.StartDate.ToString("yyyy-MM-dd")" asp-route-days="@Model.TotalDays" class="btn btn-outline-secondary">Wyczyść</a>
+                <a asp-action="Index" asp-route-date="@Model.StartDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wróć do kuchni</a>
+                <a asp-action="WarehouseDemand" asp-route-startDate="@Model.StartDate.ToString("yyyy-MM-dd")" asp-route-days="@Model.TotalDays" class="btn btn-outline-primary">Zapotrzebowanie</a>
+            </div>
+        </form>
+        @if (User.IsInRole("Admin"))
+        {
+            <form asp-action="RefreshM2PlanRange" method="post" class="mt-3">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="startDate" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+                <input type="hidden" name="days" value="@Model.TotalDays" />
+                <button type="submit" class="btn btn-warning">Odśwież bezpieczne dni z zakresu</button>
+            </form>
+        }
+    </div>
+</div>
+
+<div class="row row-cards mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Opublikowane dni</div>
+                <div class="h2 mb-1">@Model.PublishedDays / @Model.TotalDays</div>
+                <div class="text-secondary small">Braki publikacji: @Model.MissingPublishedDays</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Pozycje planu M2</div>
+                <div class="h2 mb-1">@Model.TotalPlanItems</div>
+                <div class="text-secondary small">Snapshot M3: @Model.SnapshotItemCount / @Model.TotalPlanItems</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Brak snapshotu M3</div>
+                <div class="h2 mb-1 text-warning">@Model.MissingSnapshotItemCount</div>
+                <div class="text-secondary small">Pozycje nieodebrane do produkcji</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Alerty M2</div>
+                <div class="h2 mb-1 text-danger">@Model.UnacknowledgedAlertCount</div>
+                <div class="text-secondary small">Wszystkie: @Model.AlertCount</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-premium mb-4">
+    <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+        <span class="text-secondary small">
+            Wyniki: @((Model.FilteredItemCount == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1)) - @Math.Min(Model.Page * Model.PageSize, Model.FilteredItemCount) z @Model.FilteredItemCount filtrowanych pozycji.
+        </span>
+        <span class="text-secondary small">Cały zakres: @Model.TotalPlanItems pozycji.</span>
+    </div>
+</div>
+
+@foreach (var day in Model.Days)
+{
+    <div class="card card-premium mb-4">
+        <div class="card-header bg-transparent d-flex flex-wrap gap-2 align-items-center">
+            <h3 class="card-title mb-0">@day.PlanDate.ToString("dd.MM.yyyy")</h3>
+            <span class="badge bg-@StatusColor(day.PlanStatus, day.IsPublished)-lt">@day.PlanStatus</span>
+            @if (day.ProductionPlanId.HasValue)
+            {
+                <a asp-action="Plan" asp-route-planId="@day.ProductionPlanId" class="badge bg-blue-lt text-blue">Plan produkcji #@day.ProductionPlanId</a>
+            }
+            <span class="text-secondary small ms-auto">Snapshot: @day.SnapshotItemCount / @day.TotalItems</span>
+        </div>
+
+        @if (day.Alerts.Count > 0)
+        {
+            <div class="card-body pb-0">
+                @foreach (var alert in day.Alerts)
+                {
+                    <div class="alert alert-@AlertColor(alert.Severity) d-flex align-items-center justify-content-between gap-3">
+                        <div>
+                            <div class="fw-bold">@alert.AlertType: @alert.Message</div>
+                            @if (!string.IsNullOrWhiteSpace(alert.Reason))
+                            {
+                                <div class="small">@alert.Reason</div>
+                            }
+                            <div class="small text-secondary">Utworzono: @alert.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                        </div>
+                        @if (alert.RequiresAcknowledgement && !alert.AcknowledgedAt.HasValue)
+                        {
+                            <form asp-action="AcknowledgeM2PlanAlert" asp-route-alertId="@alert.Id" method="post" class="m-0">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="startDate" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+                                <input type="hidden" name="days" value="@Model.TotalDays" />
+                                <button type="submit" class="btn btn-sm btn-outline-dark">Potwierdź odbiór</button>
+                            </form>
+                        }
+                        else if (alert.AcknowledgedAt.HasValue)
+                        {
+                            <span class="badge bg-success-lt">Potwierdzono @alert.AcknowledgedAt.Value.ToLocalTime().ToString("HH:mm")</span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="table-responsive">
+            <table class="table table-vcenter card-table">
+                <thead>
+                    <tr>
+                        <th>Slot</th>
+                        <th>Wariant diety</th>
+                        <th>Danie / wariant dania</th>
+                        <th>Kompletność</th>
+                        <th class="text-end">Składowe</th>
+                        <th class="text-end">Opakowania</th>
+                        <th>Snapshot M3</th>
+                        <th>Aktualność</th>
+                        <th>Refresh</th>
+                        <th>Produkcja</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (day.Items.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="10" class="text-center text-secondary py-4">Brak pozycji planu dla tego dnia.</td>
+                        </tr>
+                    }
+                    @foreach (var item in day.Items)
+                    {
+                        <tr>
+                            <td>@item.MealSlot</td>
+                            <td>
+                                <div>@(string.IsNullOrWhiteSpace(item.DietVariantLabel) ? $"Wariant #{item.DietVariantId}" : item.DietVariantLabel)</div>
+                                <div class="small text-secondary">ID @item.DietVariantId</div>
+                            </td>
+                            <td>
+                                <div class="fw-bold">@item.MealName</div>
+                                <div class="small text-secondary">@item.CategoryName</div>
+                                <div class="small text-secondary">Gramatura: @WeightText(item)</div>
+                                <div class="small text-secondary">@(item.MealVariantName ?? "wariant domyślny") · x @item.ServingMultiplier.ToString("0.##")</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-@(item.IsCompleteForProduction ? "success" : "warning")-lt">@item.CompletenessStatus</span>
+                                @if (item.ValidationWarningCount > 0)
+                                {
+                                    <div class="small text-warning">@string.Join(", ", item.ValidationWarnings.Take(2))</div>
+                                }
+                                @if (item.MissingDetails.Count > 0)
+                                {
+                                    <div class="small text-warning mt-1">@PreviewList(item.MissingDetails, 2)</div>
+                                }
+                                @if (item.Alerts.Count > 0)
+                                {
+                                    <div class="small text-danger mt-1">@item.Alerts.Count alertow: @PreviewList(item.Alerts.Select(alert => alert.Message), 2)</div>
+                                }
+                            </td>
+                            <td>
+                                <div><span class="badge bg-blue-lt">@item.ComponentCount skl.</span> <span class="badge bg-secondary-lt">@item.IngredientCount poz.</span></div>
+                                <div class="small text-secondary mt-1">@PreviewList(item.IngredientNames)</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-purple-lt">@item.PackagingRequirementCount</span>
+                                <div class="small text-secondary mt-1">@PreviewList(item.PackagingNames)</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-@(item.HasProductionSnapshot ? "success" : "secondary")-lt">
+                                    @(item.HasProductionSnapshot ? "odebrany" : "brak")
+                                </span>
+                                @if (!string.IsNullOrWhiteSpace(item.SnapshotHash))
+                                {
+                                    <div class="small text-secondary">@item.SnapshotHash</div>
+                                }
+                            </td>
+                            <td>
+                                @if (item.IsProductionSnapshotCurrent)
+                                {
+                                    <span class="badge bg-success-lt">aktualny</span>
+                                }
+                                else if (item.HasProductionSnapshot)
+                                {
+                                    <span class="badge bg-warning-lt">nieaktualny</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-lt">brak snapshotu</span>
+                                }
+                            </td>
+                            <td>
+                                @if (item.CanRefresh)
+                                {
+                                    <span class="badge bg-blue-lt">można odświeżyć</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger-lt">zablokowane</span>
+                                    <div class="small text-danger">@string.Join(" | ", item.RefreshBlockers.Take(2))</div>
+                                }
+                            </td>
+                            <td>
+                                @if (item.ProductionPlanItemId.HasValue)
+                                {
+                                    <a asp-action="CookingCard" asp-route-planItemId="@item.ProductionPlanItemId" class="btn btn-sm btn-outline-primary">
+                                        Karta gotowania
+                                    </a>
+                                    <div class="small text-secondary">@item.ProductionStatus · @item.PlannedQuantity porcji</div>
+                                }
+                                else
+                                {
+                                    <span class="text-secondary small">Nie wygenerowano</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (User.IsInRole("Admin") && day.Items.Any(item => item.CanRefresh && item.NeedsRefresh))
+        {
+            <div class="card-footer bg-transparent">
+                <form asp-action="RefreshM2PlanDay" method="post" class="m-0">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="date" value="@day.PlanDate.ToString("yyyy-MM-dd")" />
+                    <input type="hidden" name="startDate" value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+                    <input type="hidden" name="days" value="@Model.TotalDays" />
+                    <button type="submit" class="btn btn-warning">Odśwież dzień @day.PlanDate.ToString("dd.MM.yyyy")</button>
+                </form>
+            </div>
+        }
+    </div>
+}
+
+@if (Model.TotalPages > 1)
+{
+    <div class="card card-premium">
+        <div class="card-body d-flex align-items-center">
+            <div class="text-secondary small">Strona @Model.Page z @Model.TotalPages</div>
+            <ul class="pagination m-0 ms-auto">
+                <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+                    <a class="page-link" asp-action="M2Plan" asp-all-route-data="@RouteValues(Math.Max(1, Model.Page - 1))">Poprzednia</a>
+                </li>
+                @{
+                    var firstPage = Math.Max(1, Model.Page - 2);
+                    var lastPage = Math.Min(Model.TotalPages, Model.Page + 2);
+                }
+                @for (var pageNumber = firstPage; pageNumber <= lastPage; pageNumber++)
+                {
+                    <li class="page-item @(pageNumber == Model.Page ? "active" : "")">
+                        <a class="page-link" asp-action="M2Plan" asp-all-route-data="@RouteValues(pageNumber)">@pageNumber</a>
+                    </li>
+                }
+                <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                    <a class="page-link" asp-action="M2Plan" asp-all-route-data="@RouteValues(Math.Min(Model.TotalPages, Model.Page + 1))">Następna</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+}

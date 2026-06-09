@@ -5,49 +5,48 @@ namespace KuchniaUCygana.Tests.Unit.Infrastructure;
 public sealed class ForbiddenPersistenceUsageTests
 {
     [Fact]
-    public void Source_Should_Not_Use_Removed_ServiceStack_Persistence_Apis()
+    public void SourceFiles_ShouldNotUseRemovedOrmOrLicenseBypass()
     {
         var root = FindRepositoryRoot();
-        var forbidden = new[]
+        var forbiddenTerms = new[]
         {
             "ServiceStack." + "OrmLite",
             "ServiceStack." + "DataAnnotations",
             "License" + "Utils",
             "__activated" + "License",
+            "LicenseType." + "Enterprise",
         };
 
-        var files = Directory
-            .EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
-            .Where(path =>
-                path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-            .Where(path =>
-                !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
-                !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var files = Directory.EnumerateFiles(root.FullName, "*.*", SearchOption.AllDirectories)
+            .Where(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
+                           path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));
 
-        var hits = files
-            .SelectMany(path => forbidden
-                .Where(term => File.ReadAllText(path).Contains(term, StringComparison.Ordinal))
-                .Select(term => $"{Path.GetRelativePath(root, path)} contains {term}"))
-            .ToArray();
+        var violations = new List<string>();
+        foreach (var file in files)
+        {
+            var text = File.ReadAllText(file);
+            foreach (var term in forbiddenTerms)
+            {
+                if (text.Contains(term, StringComparison.Ordinal))
+                {
+                    violations.Add($"{Path.GetRelativePath(root.FullName, file)} contains {term}");
+                }
+            }
+        }
 
-        hits.Should().BeEmpty();
+        violations.Should().BeEmpty();
     }
 
-    private static string FindRepositoryRoot()
+    private static DirectoryInfo FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "KuchniaUCygana.sln")))
         {
-            if (directory.GetFiles("KuchniaUCygana.sln").Length > 0)
-            {
-                return directory.FullName;
-            }
-
             directory = directory.Parent;
         }
 
-        throw new InvalidOperationException("Could not find repository root.");
+        return directory ?? throw new InvalidOperationException("Cannot locate repository root.");
     }
 }

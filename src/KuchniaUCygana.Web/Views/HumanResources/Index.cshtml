@@ -1,0 +1,177 @@
+@model HumanResourcesDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+    var pendingLeaves = Model.LeaveRequests.ToArray();
+    var todaySchedules = Model.WorkSchedules.ToArray();
+    var summary = Model.Summary;
+
+    string LeaveTypeName(int value) => value switch
+    {
+        0 => "Wypoczynkowy",
+        1 => "Chorobowy",
+        2 => "Okolicznościowy",
+        _ => $"Typ {value}",
+    };
+}
+
+<div class="row row-cards">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Wnioski do decyzji</div>
+                <div class="h1 mb-0">@summary.PendingLeaveCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Aktywni pracownicy</div>
+                <div class="h1 mb-0">@summary.ActiveEmployeeCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Dzisiejsze zmiany</div>
+                <div class="h1 mb-0">@summary.TodayScheduleCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Nieaktywni</div>
+                <div class="h1 mb-0">@summary.InactiveEmployeeCount</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-7">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Urlopy oczekujące na decyzję</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Pracownik</th>
+                            <th>Zakres</th>
+                            <th>Typ</th>
+                            <th class="text-end">Akcja</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var leave in pendingLeaves.Take(8))
+                        {
+                            <tr>
+                                <td>@(leave.EmployeeFullName ?? $"#{leave.EmployeeId}")</td>
+                                <td>@leave.StartDate.ToString("dd.MM.yyyy") - @leave.EndDate.ToString("dd.MM.yyyy")</td>
+                                <td>@LeaveTypeName(leave.LeaveType)</td>
+                                <td class="text-end">
+                                    <a class="btn btn-sm btn-outline-primary" asp-controller="HumanResources" asp-action="Leaves">Przejdź</a>
+                                </td>
+                            </tr>
+                        }
+                        @if (pendingLeaves.Length == 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-secondary text-center py-4">Brak oczekujących wniosków.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-5">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Dzisiejszy grafik</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Zmiana</th>
+                            <th>Pracownik</th>
+                            <th>Rola</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var schedule in todaySchedules.Take(8))
+                        {
+                            <tr>
+                                <td>@EnumDisplayNames.WorkShiftName(schedule.Shift)</td>
+                                <td>@(schedule.EmployeeFullName ?? $"Użytkownik #{schedule.UserId}")</td>
+                                <td>@(schedule.RoleAtShift ?? "-")</td>
+                            </tr>
+                        }
+                        @if (todaySchedules.Length == 0)
+                        {
+                            <tr>
+                                <td colspan="3" class="text-secondary text-center py-4">Brak zmian na dzisiaj.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Pracownicy według działów</h3>
+                <span class="text-secondary small">@Model.DepartmentSummaries.Sum(x => x.TotalEmployeeCount) pracowników w @Model.DepartmentSummaries.Count działach</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Dział</th>
+                            <th class="text-end">Aktywni</th>
+                            <th class="text-end">Wszyscy</th>
+                            <th>Kierownik</th>
+                            <th>Przykładowe osoby</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var department in Model.DepartmentSummaries.OrderBy(x => x.DepartmentName))
+                        {
+                            <tr>
+                                <td class="fw-semibold">@department.DepartmentName</td>
+                                <td class="text-end">@department.ActiveEmployeeCount</td>
+                                <td class="text-end">@department.TotalEmployeeCount</td>
+                                <td>@(department.HeadEmployeeFullName ?? "-")</td>
+                                <td class="text-secondary">
+                                    @if (string.IsNullOrWhiteSpace(department.SampleEmployeeNames))
+                                    {
+                                        <span>Brak przypisanych osób</span>
+                                    }
+                                    else
+                                    {
+                                        @department.SampleEmployeeNames
+                                        @if (department.TotalEmployeeCount > 4)
+                                        {
+                                            <span> +@(department.TotalEmployeeCount - 4)</span>
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @if (Model.DepartmentSummaries.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="5" class="text-secondary text-center py-4">Brak działów. Seeder powinien utworzyć podstawową strukturę HR.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

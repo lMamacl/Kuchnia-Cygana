@@ -1,5 +1,113 @@
+@model AdminDashboardViewModel
 @{
     Layout = "_LayoutStaff";
-}
-@await Html.PartialAsync("_StaffPlaceholder")
 
+    var logs = Model.SystemLogs
+        .OrderByDescending(x => x.Timestamp)
+        .ToArray();
+    var userSummary = Model.UserSummary;
+    var roleGroups = userSummary.Roles
+        .OrderByDescending(x => x.TotalCount)
+        .ThenBy(x => x.Role)
+        .ToArray();
+    var auditTotal = Model.AuditPage.TotalCount;
+}
+
+<div class="row row-cards">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Użytkownicy</div>
+                <div class="h1 mb-0">@userSummary.TotalCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Role w użyciu</div>
+                <div class="h1 mb-0">@userSummary.ActiveRoleCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Logi audytu</div>
+                <div class="h1 mb-0">@auditTotal</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Ostatnie wpisy</div>
+                <div class="h1 mb-0">@logs.Length</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title">Ostatnie logi systemowe</h3>
+                <a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Logs">Pełny audyt</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Czas</th>
+                            <th>Użytkownik</th>
+                            <th>Akcja</th>
+                            <th>Obiekt</th>
+                            <th>Zmiana</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in logs.Take(10))
+                        {
+                            var value = log.NewValue ?? log.OldValue;
+                            <tr>
+                                <td>@log.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@(log.UserFullName ?? $"#{log.UserId}")</td>
+                                <td>@log.Action</td>
+                                <td>@log.TargetEntity #@log.TargetId</td>
+                                <td class="text-secondary">
+                                    @(string.IsNullOrWhiteSpace(value) ? "-" : value.Length > 90 ? value.Substring(0, 90) + "..." : value)
+                                </td>
+                            </tr>
+                        }
+                        @if (logs.Length == 0)
+                        {
+                            <tr>
+                                <td colspan="5" class="text-secondary text-center py-4">Brak zapisanych logów systemowych.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Użytkownicy według ról</h3>
+            </div>
+            <div class="list-group list-group-flush">
+                @foreach (var role in roleGroups)
+                {
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">@role.Role</span>
+                        <span class="badge bg-blue-lt text-blue">@role.TotalCount</span>
+                    </div>
+                }
+                @if (roleGroups.Length == 0)
+                {
+                    <div class="list-group-item text-secondary">Brak użytkowników.</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

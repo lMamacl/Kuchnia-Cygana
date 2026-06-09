@@ -16,6 +16,7 @@ appsettings.*.json
 !appsettings.json
 secrets.json
 .env
+.agents/
 
 src/KuchniaUCygana.Web/wwwroot/uploads/
 src/KuchniaUCygana.Web/Keys
@@ -23,6 +24,8 @@ src/KuchniaUCygana.Web/Keys
 coverage/
 *.cobertura.xml
 TestResults/
+publish/
+.tmp/
 
 docker-compose.override.yml
 
@@ -37,3 +40,4 @@ extract.py
 .ai_docs/
 
 
+/.vscode/settings.json

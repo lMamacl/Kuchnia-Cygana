@@ -1,5 +1,188 @@
+@model DriverListViewModel
 @{
     Layout = "_LayoutStaff";
+    var drivers = Model.Drivers;
+    var filter = Model.Filter;
+    var listPage = Model.Page;
+    var pagination = StaffPaginationViewModel.Create(
+        "Logistics",
+        "Drivers",
+        listPage.Page,
+        listPage.PageSize,
+        listPage.TotalCount,
+        filter.ToRouteValues());
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row row-deck row-cards mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Kierowcy og&oacute;&lstrok;em</div>
+                <div class="h1 mb-3">@listPage.TotalDriversCount</div>
+                <div class="text-secondary">Profile pasuj&aogon;ce do wyszukiwania</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-success">Aktywni</div>
+                <div class="h1 mb-3 text-success">@listPage.ActiveCount</div>
+                <div class="text-secondary">Gotowi do pracy</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-indigo">Z pojazdem</div>
+                <div class="h1 mb-3 text-indigo">@listPage.WithVehicleCount</div>
+                <div class="text-secondary">Aktywne przydzia&lstrok;y do aut</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-secondary">Nieaktywni</div>
+                <div class="h1 mb-3">@listPage.InactiveCount</div>
+                <div class="text-secondary">Profile czasowo wy&lstrok;&aogon;czone</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-premium">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h3 class="card-title">Wykaz kierowc&oacute;w</h3>
+        <div class="card-actions">
+            <a asp-action="CreateDriver" class="btn btn-primary">
+                @Html.Raw(StaffIconCatalog.Get("plus"))
+                Dodaj kierowc&eogon;
+            </a>
+        </div>
+    </div>
+    <div class="card-body border-bottom">
+        <form asp-action="Drivers" method="get" class="row g-3 align-items-end">
+            <input type="hidden" name="Page" value="1" />
+            <div class="col-md-4">
+                <label asp-for="Filter.Search" class="form-label">Szukaj</label>
+                <input asp-for="Filter.Search" name="Search" class="form-control" placeholder="Nazwisko, email, prawo jazdy, auto" />
+            </div>
+            <div class="col-md-2">
+                <label asp-for="Filter.IsActive" class="form-label">Status</label>
+                <select asp-for="Filter.IsActive" name="IsActive" class="form-select">
+                    <option value="">Wszyscy</option>
+                    <option value="true">Aktywni</option>
+                    <option value="false">Nieaktywni</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label asp-for="Filter.HasVehicleAssignment" class="form-label">Auto</label>
+                <select asp-for="Filter.HasVehicleAssignment" name="HasVehicleAssignment" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="true">Z pojazdem</option>
+                    <option value="false">Bez pojazdu</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label asp-for="Filter.PageSize" class="form-label">Na stronie</label>
+                <select asp-for="Filter.PageSize" name="PageSize" class="form-select">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary w-100">Filtruj</button>
+                @if (filter.HasActiveCriteria)
+                {
+                    <a asp-action="Drivers" class="btn btn-outline-secondary">Wyczy&sacute;&cacute;</a>
+                }
+            </div>
+        </form>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter table-premium card-table table-striped">
+            <thead>
+                <tr>
+                    <th>Kierowca</th>
+                    <th>Kontakt</th>
+                    <th>Numer prawa jazdy</th>
+                    <th>Status</th>
+                    <th>Przypisane auto</th>
+                    <th class="w-1">Akcje</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (drivers.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="text-center text-secondary py-4">
+                            Brak profili kierowc&oacute;w pasuj&aogon;cych do filtr&oacute;w.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var driver in drivers)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">@driver.FullName</div>
+                                <div class="text-secondary small">Profil #@driver.Id</div>
+                            </td>
+                            <td>@driver.Email</td>
+                            <td>
+                                <span class="badge bg-blue text-blue-fg p-2 font-monospace">@driver.LicenseNumber</span>
+                            </td>
+                            <td>
+                                @if (driver.IsActive)
+                                {
+                                    <span class="badge bg-success-lt text-success d-inline-flex align-items-center gap-2 py-1 px-2">
+                                        <span class="status-dot-pulse bg-success"></span>
+                                        Aktywny
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-lt text-secondary d-inline-flex align-items-center gap-2 py-1 px-2">
+                                        <span class="status-dot bg-secondary"></span>
+                                        Nieaktywny
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                @if (driver.HasVehicleAssignment)
+                                {
+                                    <div class="fw-semibold font-monospace">@driver.CurrentVehicleRegistration</div>
+                                    <div class="text-secondary small">@driver.CurrentVehicleModel</div>
+                                }
+                                else
+                                {
+                                    <span class="text-secondary">Brak przydzia&lstrok;u</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="btn-list flex-nowrap">
+                                    <a asp-action="AssignDriverVehicle" asp-route-id="@driver.Id" class="btn btn-sm btn-outline-secondary">
+                                        @(driver.HasVehicleAssignment ? "Zmie&nacute; auto" : "Przypisz auto")
+                                    </a>
+                                    <a asp-action="EditDriver" asp-route-id="@driver.Id" class="btn btn-sm btn-outline-primary">
+                                        Edytuj
+                                    </a>
+                                    <form asp-action="DeleteDriver" asp-route-id="@driver.Id" method="post" onsubmit="return confirm('Czy na pewno chcesz usunac profil kierowcy @driver.FullName?');" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Usu&nacute;</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    @await Html.PartialAsync("_StaffPagination", pagination)
+</div>

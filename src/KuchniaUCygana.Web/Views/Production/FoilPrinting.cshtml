@@ -1,0 +1,368 @@
+@model KuchniaUCygana.Application.DTOs.Packing.FoilLabelDashboardDto
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Foliowanie i etykiety";
+    ViewData["Section"] = "Kuchnia";
+    ViewData["Description"] = "Stanowisko foliowania z wyszukiwaniem, paginacją i kontrolą redruków.";
+
+    var filter = Model.Filter;
+    var itemsPage = Model.Items;
+}
+
+@functions {
+    string StatusText(string status)
+    {
+        return status switch
+        {
+            "Pending" => "Czeka na folię",
+            "FoilPrinted" => "Etykieta wydrukowana",
+            "Packed" => "Spakowane",
+            "Damaged" => "Uszkodzone",
+            "Missing" => "Brak",
+            _ => status
+        };
+    }
+
+    string StatusColor(string status)
+    {
+        return status switch
+        {
+            "FoilPrinted" => "azure",
+            "Packed" => "success",
+            "Damaged" or "Missing" => "danger",
+            _ => "secondary"
+        };
+    }
+
+    IDictionary<string, string> RouteValues(
+        int page,
+        string? status = null,
+        bool replaceStatus = false,
+        string? labelState = null,
+        bool replaceLabelState = false)
+    {
+        var filter = Model.Filter;
+        var values = new Dictionary<string, string>
+        {
+            ["date"] = filter.Date.ToString("yyyy-MM-dd"),
+            ["page"] = page.ToString(),
+            ["pageSize"] = filter.PageSize.ToString(),
+        };
+
+        Add(values, "search", filter.Search);
+        Add(values, "status", replaceStatus ? status : filter.Status);
+        Add(values, "labelState", replaceLabelState ? labelState : filter.LabelState);
+        Add(values, "sortBy", filter.SortBy);
+        Add(values, "sortDirection", filter.SortDirection);
+        return values;
+    }
+
+    void Add(IDictionary<string, string> values, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            values[key] = value;
+        }
+    }
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body py-4">
+                <div class="row align-items-end g-3">
+                    <div class="col-lg-3">
+                        <div class="text-uppercase text-secondary small fw-bold">Stanowisko foliowania</div>
+                        <h2 class="h1 mb-1 text-dark">@filter.Date.ToString("dd.MM.yyyy")</h2>
+                    </div>
+                    <div class="col-lg-9">
+                        <form method="get" class="row g-2 align-items-end">
+                            <input type="hidden" name="page" value="1" />
+                            <div class="col-sm-6 col-xl-2">
+                                <label class="form-label fw-bold">Data</label>
+                                <input type="date" name="date" class="form-control" value="@filter.Date.ToString("yyyy-MM-dd")" />
+                            </div>
+                            <div class="col-sm-6 col-xl-3">
+                                <label class="form-label fw-bold">Szukaj</label>
+                                <input type="search" name="search" class="form-control" value="@filter.Search" placeholder="Danie, pudełko, klient, zamówienie" />
+                            </div>
+                            <div class="col-sm-6 col-xl-2">
+                                <label class="form-label fw-bold">Status</label>
+                                <select name="status" class="form-select">
+                                    <option value="">Wszystkie</option>
+                                    <option value="Pending" selected="@(filter.Status == "Pending")">Czeka</option>
+                                    <option value="FoilPrinted" selected="@(filter.Status == "FoilPrinted")">Etykieta</option>
+                                    <option value="Packed" selected="@(filter.Status == "Packed")">Spakowane</option>
+                                    <option value="Damaged" selected="@(filter.Status == "Damaged")">Uszkodzone</option>
+                                    <option value="Missing" selected="@(filter.Status == "Missing")">Brak</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-6 col-xl-2">
+                                <label class="form-label fw-bold">Etykieta</label>
+                                <select name="labelState" class="form-select">
+                                    <option value="">Wszystkie</option>
+                                    <option value="missing" selected="@(filter.LabelState == "missing")">Do druku</option>
+                                    <option value="printed" selected="@(filter.LabelState == "printed")">Wydruk</option>
+                                    <option value="reprint" selected="@(filter.LabelState == "reprint")">Redruk</option>
+                                    <option value="blocked" selected="@(filter.LabelState == "blocked")">Blokada</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-6 col-xl-1">
+                                <label class="form-label fw-bold">Strona</label>
+                                <select name="pageSize" class="form-select">
+                                    <option value="10" selected="@(filter.PageSize == 10)">10</option>
+                                    <option value="25" selected="@(filter.PageSize == 25)">25</option>
+                                    <option value="50" selected="@(filter.PageSize == 50)">50</option>
+                                    <option value="100" selected="@(filter.PageSize == 100)">100</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-6 col-xl-2">
+                                <button type="submit" class="btn btn-primary w-100">Filtruj</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-2">
+        <div class="card card-premium"><div class="card-body"><div class="subheader">Pudełka</div><div class="h2">@Model.TotalBoxes</div></div></div>
+    </div>
+    <div class="col-sm-6 col-xl-2">
+        <div class="card card-premium"><div class="card-body"><div class="subheader">Do druku</div><div class="h2 text-warning">@Model.PendingCount</div></div></div>
+    </div>
+    <div class="col-sm-6 col-xl-2">
+        <div class="card card-premium"><div class="card-body"><div class="subheader">Wydrukowane</div><div class="h2 text-success">@Model.PrintedCount</div></div></div>
+    </div>
+    <div class="col-sm-6 col-xl-2">
+        <div class="card card-premium"><div class="card-body"><div class="subheader">Redruki</div><div class="h2 text-azure">@Model.ReprintCount</div></div></div>
+    </div>
+    <div class="col-sm-6 col-xl-2">
+        <div class="card card-premium"><div class="card-body"><div class="subheader">Blokady</div><div class="h2 text-danger">@Model.BlockedCount</div></div></div>
+    </div>
+    <div class="col-sm-6 col-xl-2">
+        <div class="card card-premium"><div class="card-body"><div class="subheader">Spakowane</div><div class="h2">@Model.PackedCount</div></div></div>
+    </div>
+
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-body py-2">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <a asp-action="FoilPrinting" asp-all-route-data="@RouteValues(1, null, true, null, true)" class="btn btn-sm @(string.IsNullOrWhiteSpace(filter.Status) && string.IsNullOrWhiteSpace(filter.LabelState) ? "btn-primary" : "btn-outline-primary")">Wszystkie</a>
+                    <a asp-action="FoilPrinting" asp-all-route-data="@RouteValues(1, labelState: "missing", replaceLabelState: true)" class="btn btn-sm @(filter.LabelState == "missing" ? "btn-warning" : "btn-outline-warning")">Do druku</a>
+                    <a asp-action="FoilPrinting" asp-all-route-data="@RouteValues(1, labelState: "printed", replaceLabelState: true)" class="btn btn-sm @(filter.LabelState == "printed" ? "btn-success" : "btn-outline-success")">Wydrukowane</a>
+                    <a asp-action="FoilPrinting" asp-all-route-data="@RouteValues(1, labelState: "reprint", replaceLabelState: true)" class="btn btn-sm @(filter.LabelState == "reprint" ? "btn-azure" : "btn-outline-azure")">Redruki</a>
+                    <a asp-action="FoilPrinting" asp-all-route-data="@RouteValues(1, labelState: "blocked", replaceLabelState: true)" class="btn btn-sm @(filter.LabelState == "blocked" ? "btn-danger" : "btn-outline-danger")">Blokady</a>
+                    <a asp-action="Index" asp-route-date="@filter.Date.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-secondary ms-auto">Wróć do kuchni</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (itemsPage.TotalCount == 0)
+    {
+        <div class="col-12">
+            <div class="alert alert-info">Brak pudełek dla wybranych filtrów.</div>
+        </div>
+    }
+    else
+    {
+        <div class="col-12">
+            <div class="card card-premium">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3 class="card-title mb-0">Lista pudełek do foliowania</h3>
+                        <div class="text-secondary small">
+                            Wyniki @((itemsPage.TotalCount == 0 ? 0 : ((itemsPage.Page - 1) * itemsPage.PageSize) + 1)) - @Math.Min(itemsPage.Page * itemsPage.PageSize, itemsPage.TotalCount) z @itemsPage.TotalCount
+                        </div>
+                    </div>
+                    <form asp-action="FoilLabelsBulk" method="post" target="_blank" id="bulk-print-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="ids" id="bulk-print-ids" />
+                        <input type="hidden" name="returnDate" value="@filter.Date.ToString("yyyy-MM-dd")" />
+                        <button type="submit" id="btn-print-selected" class="btn btn-indigo" disabled>
+                            Drukuj zaznaczone (<span id="selected-count">0</span>)
+                        </button>
+                    </form>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-vcenter card-table table-premium">
+                        <thead>
+                            <tr>
+                                <th class="w-1"><input type="checkbox" id="select-all-boxes" class="form-check-input" /></th>
+                                <th>Kod pudełka</th>
+                                <th>Danie</th>
+                                <th>Odbiorca</th>
+                                <th>Status</th>
+                                <th>Etykieta</th>
+                                <th class="text-end">Akcje</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in itemsPage.Items)
+                            {
+                                var color = StatusColor(item.Status);
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input box-select" data-id="@item.Id" disabled="@(!item.CanPrint)" />
+                                    </td>
+                                    <td class="font-monospace fw-bold">@item.BoxCode</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@item.MealName</div>
+                                        <div class="text-secondary small">Wariant diety #@item.DietVariantId</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@(item.ClientName ?? $"Zamówienie #{item.OrderId}")</div>
+                                        <div class="text-secondary small">@item.ClientPublicIdDisplay</div>
+                                        @if (item.RouteId.HasValue)
+                                        {
+                                            <div class="text-secondary small">Trasa @item.RouteId, stop @item.StopNumber</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@color-lt text-@color">@StatusText(item.Status)</span>
+                                        @if (!string.IsNullOrWhiteSpace(item.FoilBlockReason))
+                                        {
+                                            <div class="text-danger small mt-1">@item.FoilBlockReason</div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(item.ProductionStatus))
+                                        {
+                                            <div class="text-secondary small mt-1">Produkcja: @item.ProductionStatus</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (item.ProductLabelPrintCount == 0)
+                                        {
+                                            @if (item.CanPrint)
+                                            {
+                                                <span class="badge bg-green-lt text-green">gotowe do druku</span>
+                                            }
+                                            else if (item.IsBlocked)
+                                            {
+                                                <span class="badge bg-red-lt text-red">zablokowane</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-orange-lt text-orange">brak wydruku</span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-green-lt text-green">wydruk #@item.ProductLabelPrintCount</span>
+                                            @if (item.LatestProductLabelPrintedAt.HasValue)
+                                            {
+                                                <div class="text-secondary small">@item.LatestProductLabelPrintedAt.Value.ToLocalTime().ToString("HH:mm")</div>
+                                            }
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-list flex-nowrap justify-content-end">
+                                            @if (item.CanPrint)
+                                            {
+                                                <form asp-action="PrintFoilLabel" asp-route-packingItemId="@item.Id" method="post" target="_blank">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="returnDate" value="@filter.Date.ToString("yyyy-MM-dd")" />
+                                                    <button type="submit" class="btn btn-sm btn-outline-primary">Drukuj</button>
+                                                </form>
+                                            }
+                                            @if (item.ProductLabelPrintCount > 0)
+                                            {
+                                                <a asp-action="FoilLabel" asp-route-packingItemId="@item.Id" target="_blank" class="btn btn-sm btn-outline-secondary">Podgląd</a>
+                                            }
+                                            @if (item.CanReprint)
+                                            {
+                                                <form asp-action="PrintFoilLabel" asp-route-packingItemId="@item.Id" method="post" target="_blank" class="d-flex gap-1">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="returnDate" value="@filter.Date.ToString("yyyy-MM-dd")" />
+                                                    <input type="text" name="reprintReason" class="form-control form-control-sm" placeholder="Powód redruku" required />
+                                                    <button type="submit" class="btn btn-sm btn-outline-azure">Redruk</button>
+                                                </form>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (itemsPage.TotalPages > 1)
+                {
+                    <div class="card-footer d-flex align-items-center">
+                        <div class="text-secondary small">Strona @itemsPage.Page z @itemsPage.TotalPages</div>
+                        <ul class="pagination m-0 ms-auto">
+                            <li class="page-item @(itemsPage.Page <= 1 ? "disabled" : "")">
+                                <a class="page-link" asp-action="FoilPrinting" asp-all-route-data="@RouteValues(Math.Max(1, itemsPage.Page - 1))">Poprzednia</a>
+                            </li>
+                            @{
+                                var firstPage = Math.Max(1, itemsPage.Page - 2);
+                                var lastPage = Math.Min(itemsPage.TotalPages, itemsPage.Page + 2);
+                            }
+                            @for (var pageNumber = firstPage; pageNumber <= lastPage; pageNumber++)
+                            {
+                                <li class="page-item @(pageNumber == itemsPage.Page ? "active" : "")">
+                                    <a class="page-link" asp-action="FoilPrinting" asp-all-route-data="@RouteValues(pageNumber)">@pageNumber</a>
+                                </li>
+                            }
+                            <li class="page-item @(itemsPage.Page >= itemsPage.TotalPages ? "disabled" : "")">
+                                <a class="page-link" asp-action="FoilPrinting" asp-all-route-data="@RouteValues(Math.Min(itemsPage.TotalPages, itemsPage.Page + 1))">Następna</a>
+                            </li>
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const selectAll = document.getElementById("select-all-boxes");
+            const checkboxes = document.querySelectorAll(".box-select:not(:disabled)");
+            const btnPrint = document.getElementById("btn-print-selected");
+            const selectedCountSpan = document.getElementById("selected-count");
+            const bulkForm = document.getElementById("bulk-print-form");
+            const bulkIds = document.getElementById("bulk-print-ids");
+
+            function updateUI() {
+                const checked = document.querySelectorAll(".box-select:checked");
+                selectedCountSpan.textContent = checked.length;
+                btnPrint.disabled = checked.length === 0;
+            }
+
+            if (selectAll) {
+                selectAll.addEventListener("change", function () {
+                    checkboxes.forEach(cb => {
+                        cb.checked = selectAll.checked;
+                    });
+                    updateUI();
+                });
+            }
+
+            checkboxes.forEach(cb => {
+                cb.addEventListener("change", function () {
+                    if (!this.checked && selectAll) {
+                        selectAll.checked = false;
+                    }
+                    updateUI();
+                });
+            });
+
+            if (bulkForm) {
+                bulkForm.addEventListener("submit", function (event) {
+                    const checked = document.querySelectorAll(".box-select:checked");
+                    const ids = Array.from(checked).map(cb => cb.getAttribute("data-id")).join(",");
+                    if (!ids) {
+                        event.preventDefault();
+                        return;
+                    }
+                    bulkIds.value = ids;
+                    setTimeout(function () {
+                        window.location.reload();
+                    }, 1000);
+                });
+            }
+        });
+    </script>
+}
