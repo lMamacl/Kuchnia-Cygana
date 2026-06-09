@@ -7,6 +7,7 @@ using KuchniaUCygana.Domain.Entities.Notifications;
 using KuchniaUCygana.Domain.Entities.Packing;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces;
+using KuchniaUCygana.Domain.Interfaces.External;
 using KuchniaUCygana.Domain.Interfaces.Packing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -23,6 +24,7 @@ public sealed class PackingIncidentService : IPackingIncidentService
     private readonly IWarehouseService warehouseService;
     private readonly INotificationService notificationService;
     private readonly ICurrentUserService currentUserService;
+    private readonly IDietDataProvider dietDataProvider;
     private readonly PackingResourcesOptions options;
     private readonly ILogger<PackingIncidentService> logger;
 
@@ -35,6 +37,7 @@ public sealed class PackingIncidentService : IPackingIncidentService
         IWarehouseService warehouseService,
         INotificationService notificationService,
         ICurrentUserService currentUserService,
+        IDietDataProvider dietDataProvider,
         IOptions<PackingResourcesOptions> options,
         ILogger<PackingIncidentService> logger)
     {
@@ -46,6 +49,7 @@ public sealed class PackingIncidentService : IPackingIncidentService
         this.warehouseService = warehouseService;
         this.notificationService = notificationService;
         this.currentUserService = currentUserService;
+        this.dietDataProvider = dietDataProvider;
         this.options = options.Value;
         this.logger = logger;
     }
@@ -331,6 +335,8 @@ public sealed class PackingIncidentService : IPackingIncidentService
                 Notes = string.IsNullOrWhiteSpace(notes) ? incident.Description : notes,
             });
 
+            await RegisterMealIngredientsWasteAsync(incident, notes);
+
             incident.WarehouseWasteRegisteredAt = DateTimeOffset.UtcNow;
             incident.WarehouseWasteError = null;
             if (incident.Status == PackingIncidentStatus.WarehouseActionRequired)
@@ -352,6 +358,62 @@ public sealed class PackingIncidentService : IPackingIncidentService
                 throw;
             }
         }
+    }
+
+    private async Task RegisterMealIngredientsWasteAsync(PackingIncident incident, string? notes)
+    {
+        if (!incident.MealId.HasValue || incident.Type == PackingIncidentType.BoxMissing ||
+            incident.Type == PackingIncidentType.BagDamaged || incident.Type == PackingIncidentType.BagMissing)
+        {
+            return;
+        }
+
+        try
+        {
+            var ingredients = await dietDataProvider.GetRecipeForMealAsync(incident.MealId.Value);
+            foreach (var ingredient in ingredients)
+            {
+                if (ingredient.StockItemId.HasValue && ingredient.StockItemId.Value > 0 && ingredient.WeightInGrams > 0)
+                {
+                    var stockItem = await warehouseService.GetStockLookupByIdAsync(ingredient.StockItemId.Value);
+                    var unitSymbol = stockItem?.UnitSymbol;
+                    var quantityToDeduct = ConvertRecipeWeightToStockQuantity(ingredient.WeightInGrams, unitSymbol);
+
+                    if (quantityToDeduct > 0)
+                    {
+                        await warehouseService.RegisterWasteAsync(new RegisterWasteRequest
+                        {
+                            StockItemId = ingredient.StockItemId.Value,
+                            Quantity = quantityToDeduct,
+                            Reason = $"Awaria kompletacji #{incident.Id} (posiłek): {GetTypeLabel(incident.Type)} - {incident.MealName}",
+                            Notes = string.IsNullOrWhiteSpace(notes) ? incident.Description : notes,
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Nie udało się automatycznie zarejestrować rozchodu składników dla posiłku w awarii kompletacji {IncidentId}.", incident.Id);
+        }
+    }
+
+    private static decimal ConvertRecipeWeightToStockQuantity(decimal weightInGrams, string? stockUnitSymbol)
+    {
+        var normalizedTo = stockUnitSymbol?.Trim().Trim('.').ToLowerInvariant() switch
+        {
+            "kilogram" or "kilograms" or "kilogramy" or "kg" => "kg",
+            "liter" or "liters" or "litry" or "l" => "l",
+            "gram" or "grams" or "gramy" or "g" => "g",
+            _ => "pcs"
+        };
+
+        if (normalizedTo is "kg" or "l")
+        {
+            return weightInGrams / 1000m;
+        }
+
+        return weightInGrams;
     }
 
     private (int? StockItemId, decimal Quantity) GetWasteResource(PackingIncident incident)
