@@ -8,7 +8,7 @@
     {
         0 => "Wypoczynkowy",
         1 => "Chorobowy",
-        2 => "Okolicznosciowy",
+        2 => "Okolicznościowy",
         _ => $"Typ {value}",
     };
 
@@ -41,7 +41,7 @@
                     <div class="row g-2 align-items-end">
                         <div class="col-md-4">
                             <label class="form-label" for="Search">Szukaj</label>
-                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Pracownik, decyzja, powod..." />
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Pracownik, decyzja, powód..." />
                         </div>
                         <div class="col-md-2">
                             <label class="form-label" for="Status">Status</label>
@@ -73,7 +73,7 @@
                             </select>
                         </div>
                         <div class="col-md-2 d-flex justify-content-md-end gap-2">
-                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Leaves">Wyczysc</a>
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Leaves">Wyczyść</a>
                             <button class="btn btn-primary" type="submit">Filtruj</button>
                         </div>
                     </div>
@@ -126,7 +126,7 @@
                                                 }
                                             </select>
                                             <button class="btn btn-sm btn-outline-success" name="status" value="1" type="submit">Akceptuj</button>
-                                            <button class="btn btn-sm btn-outline-danger" name="status" value="2" type="submit">Odrzuc</button>
+                                            <button class="btn btn-sm btn-outline-danger" name="status" value="2" type="submit">Odrzuć</button>
                                         </form>
                                     }
                                 </td>
@@ -137,8 +137,8 @@
                             <tr>
                                 <td colspan="6" class="text-secondary text-center py-4">
                                     @(filter.HasActiveCriteria
-                                        ? "Brak wnioskow urlopowych dla wybranych filtrow."
-                                        : "Brak wnioskow urlopowych. Seeder dodaje przykladowe pozycje, gdy baza jest pusta.")
+                                        ? "Brak wniosków urlopowych dla wybranych filtrów."
+                                        : "Brak wniosków urlopowych. Seeder dodaje przykładowe pozycje, gdy baza jest pusta.")
                                 </td>
                             </tr>
                         }

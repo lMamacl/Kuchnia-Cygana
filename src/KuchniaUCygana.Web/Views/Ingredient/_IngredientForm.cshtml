@@ -21,7 +21,7 @@
     <div class="col-md-6 mb-3">
         <label asp-for="ResourceType" class="form-label">Typ zasobu</label>
         <select asp-for="ResourceType" class="form-select">
-            <option value="Food">Skladnik spozywczy</option>
+            <option value="Food">Składnik spożywczy</option>
             <option value="Spice">Przyprawa</option>
             <option value="Packaging">Opakowanie</option>
             <option value="Container">Pojemnik</option>
@@ -29,7 +29,7 @@
         </select>
     </div>
     <div class="col-md-6 mb-3">
-        <label asp-for="FoodCategoryId" class="form-label">Kategoria zywnosciowa</label>
+        <label asp-for="FoodCategoryId" class="form-label">Kategoria żywnościowa</label>
         <select asp-for="FoodCategoryId" class="form-select" asp-items="foodCategories">
             <option value="">Brak</option>
         </select>
@@ -40,11 +40,11 @@
     <textarea asp-for="Description" class="form-control" rows="2"></textarea>
 </div>
 <div class="mb-3">
-    <label asp-for="ProductComposition" class="form-label">Sklad opisowy produktu</label>
+    <label asp-for="ProductComposition" class="form-label">Skład opisowy produktu</label>
     <textarea asp-for="ProductComposition" class="form-control" rows="2"></textarea>
 </div>
 <div class="mb-3">
-    <label asp-for="ImageUrl" class="form-label">Zdjecie URL</label>
+    <label asp-for="ImageUrl" class="form-label">Zdjęcie URL</label>
     <input asp-for="ImageUrl" class="form-control" />
 </div>
 <div class="row">
@@ -92,27 +92,27 @@
         <input asp-for="Nutrition.CaloriesPer100g" type="number" step="0.01" class="form-control" />
     </div>
     <div class="col-md-4 mb-3">
-        <label asp-for="Nutrition.ProteinPer100g" class="form-label">Bialko</label>
+        <label asp-for="Nutrition.ProteinPer100g" class="form-label">Białko</label>
         <input asp-for="Nutrition.ProteinPer100g" type="number" step="0.01" class="form-control" />
     </div>
     <div class="col-md-4 mb-3">
-        <label asp-for="Nutrition.CarbohydratesPer100g" class="form-label">Weglowodany</label>
+        <label asp-for="Nutrition.CarbohydratesPer100g" class="form-label">Węglowodany</label>
         <input asp-for="Nutrition.CarbohydratesPer100g" type="number" step="0.01" class="form-control" />
     </div>
     <div class="col-md-4 mb-3">
-        <label asp-for="Nutrition.FatPer100g" class="form-label">Tluszcz</label>
+        <label asp-for="Nutrition.FatPer100g" class="form-label">Tłuszcze</label>
         <input asp-for="Nutrition.FatPer100g" type="number" step="0.01" class="form-control" />
     </div>
     <div class="col-md-4 mb-3">
-        <label asp-for="Nutrition.FiberPer100g" class="form-label">Blonnik</label>
+        <label asp-for="Nutrition.FiberPer100g" class="form-label">Błonnik</label>
         <input asp-for="Nutrition.FiberPer100g" type="number" step="0.01" class="form-control" />
     </div>
 </div>
 
-<h4 class="mb-3 mt-4">Alergeny skladnika</h4>
+<h4 class="mb-3 mt-4">Alergeny składnika</h4>
 @if (!allergens.Any())
 {
-    <p class="text-secondary">Brak zdefiniowanych alergenow.</p>
+    <p class="text-secondary">Brak zdefiniowanych alergenów.</p>
 }
 else
 {
@@ -129,7 +129,7 @@ else
                     </label>
                     <label class="form-check mb-0">
                         <input class="form-check-input" type="checkbox" name="TraceAllergenIds" value="@allergen.Id" checked="@isTrace" />
-                        <span class="form-check-label small">Sladowo</span>
+                        <span class="form-check-label small">Śladowo</span>
                     </label>
                 </div>
             </div>
@@ -148,5 +148,5 @@ else
 </div>
 <label class="form-check form-switch mb-4">
     <input class="form-check-input" type="checkbox" asp-for="IsActive" />
-    <span class="form-check-label">Skladnik aktywny</span>
+    <span class="form-check-label">Składnik aktywny</span>
 </label>

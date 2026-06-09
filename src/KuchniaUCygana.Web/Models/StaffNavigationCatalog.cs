@@ -105,12 +105,11 @@ public static class StaffNavigationCatalog
             "ingredients",
             "Składniki",
             "ingredients",
-            "Katalog składników i wartości odżywcze.",
+            "Katalog składników.",
             true,
             [
                 new("Katalog składników", "Ingredient", "Index", "ingredients", "Lista składników do podpięcia z M2/M3.", "składniki katalog"),
                 new("Dodaj składnik", "Ingredient", "Create", "plus", "Szkielet formularza składnika.", "nowy składnik dodaj"),
-                new("Wartości odżywcze", "Ingredient", "Nutrition", "nutrition", "Makro i alergeny składnika.", "wartości odżywcze makro alergeny"),
             ]),
         new(
             "packing",

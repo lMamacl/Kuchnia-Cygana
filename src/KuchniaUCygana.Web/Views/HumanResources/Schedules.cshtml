@@ -61,7 +61,7 @@
                             </select>
                         </div>
                         <div class="col-12 d-flex justify-content-end gap-2">
-                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Schedules">Wyczysc</a>
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Schedules">Wyczyść</a>
                             <button class="btn btn-primary" type="submit">Filtruj</button>
                         </div>
                     </div>
@@ -87,7 +87,7 @@
                             <tr>
                                 <td class="text-nowrap">@schedule.ShiftDate.ToString("dd.MM.yyyy")</td>
                                 <td>@EnumDisplayNames.WorkShiftName(schedule.Shift)</td>
-                                <td>@(schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}")</td>
+                                <td>@(schedule.EmployeeFullName ?? $"Użytkownik #{schedule.UserId}")</td>
                                 <td><span class="badge bg-blue-lt text-blue">@accountRole</span></td>
                                 <td>@(schedule.RoleAtShift ?? "-")</td>
                                 <td style="min-width: 520px;">
@@ -99,9 +99,9 @@
                                             <input id="schedule-date-@schedule.Id" class="form-control form-control-sm" name="ShiftDate" type="date" value="@schedule.ShiftDate.ToString("yyyy-MM-dd")" required />
                                         </div>
                                         <div class="col-md-3">
-                                            <label class="form-label small" for="schedule-user-@schedule.Id">Uzytkownik</label>
+                                            <label class="form-label small" for="schedule-user-@schedule.Id">Użytkownik</label>
                                             <input type="hidden" name="UserId" value="@schedule.UserId" />
-                                            <input id="schedule-user-@schedule.Id" class="form-control form-control-sm" value="@(schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}")" disabled />
+                                            <input id="schedule-user-@schedule.Id" class="form-control form-control-sm" value="@(schedule.EmployeeFullName ?? $"Użytkownik #{schedule.UserId}")" disabled />
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small" for="schedule-shift-@schedule.Id">Zmiana</label>
@@ -117,7 +117,7 @@
                                             <input id="schedule-role-@schedule.Id" class="form-control form-control-sm" name="RoleAtShift" value="@schedule.RoleAtShift" maxlength="50" />
                                         </div>
                                         <div class="col-md-2 text-end">
-                                            <button class="btn btn-sm btn-outline-primary" type="submit">Zmien</button>
+                                            <button class="btn btn-sm btn-outline-primary" type="submit">Zmień</button>
                                         </div>
                                     </form>
                                 </td>
@@ -126,7 +126,7 @@
                                     {
                                         <form asp-action="DeleteWorkSchedule" asp-route-id="@schedule.Id" method="post" class="d-inline">
                                             @Html.AntiForgeryToken()
-                                            <button class="btn btn-sm btn-outline-danger" type="submit">Usun</button>
+                                            <button class="btn btn-sm btn-outline-danger" type="submit">Usuń</button>
                                         </form>
                                     }
                                 </td>
@@ -137,8 +137,8 @@
                             <tr>
                                 <td colspan="7" class="text-secondary text-center py-4">
                                     @(filter.HasActiveCriteria
-                                        ? "Brak zmian w grafiku dla wybranych filtrow."
-                                        : "Brak zmian w grafiku. Seeder dodaje startowy grafik dla podstawowych rol.")
+                                        ? "Brak zmian w grafiku dla wybranych filtrów."
+                                        : "Brak zmian w grafiku. Seeder dodaje startowy grafik dla podstawowych ról.")
                                 </td>
                             </tr>
                         }

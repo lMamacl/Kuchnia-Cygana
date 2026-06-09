@@ -9,7 +9,7 @@
     {
         0 => "Wypoczynkowy",
         1 => "Chorobowy",
-        2 => "Okolicznosciowy",
+        2 => "Okolicznościowy",
         _ => $"Typ {value}",
     };
 }
@@ -51,7 +51,7 @@
     <div class="col-xl-7">
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">Urlopy oczekujace na decyzje</h3>
+                <h3 class="card-title">Urlopy oczekujące na decyzję</h3>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
@@ -71,14 +71,14 @@
                                 <td>@leave.StartDate.ToString("dd.MM.yyyy") - @leave.EndDate.ToString("dd.MM.yyyy")</td>
                                 <td>@LeaveTypeName(leave.LeaveType)</td>
                                 <td class="text-end">
-                                    <a class="btn btn-sm btn-outline-primary" asp-controller="HumanResources" asp-action="Leaves">Przejdz</a>
+                                    <a class="btn btn-sm btn-outline-primary" asp-controller="HumanResources" asp-action="Leaves">Przejdź</a>
                                 </td>
                             </tr>
                         }
                         @if (pendingLeaves.Length == 0)
                         {
                             <tr>
-                                <td colspan="4" class="text-secondary text-center py-4">Brak oczekujacych wnioskow.</td>
+                                <td colspan="4" class="text-secondary text-center py-4">Brak oczekujących wniosków.</td>
                             </tr>
                         }
                     </tbody>
@@ -106,7 +106,7 @@
                         {
                             <tr>
                                 <td>@EnumDisplayNames.WorkShiftName(schedule.Shift)</td>
-                                <td>@(schedule.EmployeeFullName ?? $"Uzytkownik #{schedule.UserId}")</td>
+                                <td>@(schedule.EmployeeFullName ?? $"Użytkownik #{schedule.UserId}")</td>
                                 <td>@(schedule.RoleAtShift ?? "-")</td>
                             </tr>
                         }
@@ -125,18 +125,18 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <h3 class="card-title">Pracownicy wedlug dzialow</h3>
-                <span class="text-secondary small">@Model.DepartmentSummaries.Sum(x => x.TotalEmployeeCount) pracownikow w @Model.DepartmentSummaries.Count dzialach</span>
+                <h3 class="card-title">Pracownicy według działów</h3>
+                <span class="text-secondary small">@Model.DepartmentSummaries.Sum(x => x.TotalEmployeeCount) pracowników w @Model.DepartmentSummaries.Count działach</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
                     <thead>
                         <tr>
-                            <th>Dzial</th>
+                            <th>Dział</th>
                             <th class="text-end">Aktywni</th>
                             <th class="text-end">Wszyscy</th>
                             <th>Kierownik</th>
-                            <th>Przykladowe osoby</th>
+                            <th>Przykładowe osoby</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -150,7 +150,7 @@
                                 <td class="text-secondary">
                                     @if (string.IsNullOrWhiteSpace(department.SampleEmployeeNames))
                                     {
-                                        <span>Brak przypisanych osob</span>
+                                        <span>Brak przypisanych osób</span>
                                     }
                                     else
                                     {
@@ -166,7 +166,7 @@
                         @if (Model.DepartmentSummaries.Count == 0)
                         {
                             <tr>
-                                <td colspan="5" class="text-secondary text-center py-4">Brak dzialow. Seeder powinien utworzyc podstawowa strukture HR.</td>
+                                <td colspan="5" class="text-secondary text-center py-4">Brak działów. Seeder powinien utworzyć podstawową strukturę HR.</td>
                             </tr>
                         }
                     </tbody>

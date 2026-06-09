@@ -1,14 +1,14 @@
 @model KuchniaUCygana.Application.DTOs.Menu.IngredientDto
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Nowy skladnik";
+    ViewData["Title"] = "Nowy składnik";
     ViewData["Section"] = "Katalog Menu";
 }
 
 <div class="row justify-content-center">
     <div class="col-lg-9">
         <div class="card card-premium">
-            <div class="card-header"><h3 class="card-title">Dodaj skladnik</h3></div>
+            <div class="card-header"><h3 class="card-title">Dodaj składnik</h3></div>
             <div class="card-body">
                 <form asp-action="Create" method="post">
                     @Html.AntiForgeryToken()

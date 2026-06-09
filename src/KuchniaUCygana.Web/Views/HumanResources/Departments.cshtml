@@ -10,7 +10,7 @@
     <div class="col-lg-5">
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">Nowy dzial</h3>
+                <h3 class="card-title">Nowy dział</h3>
             </div>
             <form asp-action="CreateDepartment" method="post">
                 @Html.AntiForgeryToken()
@@ -36,7 +36,7 @@
                     </div>
                 </div>
                 <div class="card-footer text-end">
-                    <button class="btn btn-primary" type="submit">Dodaj dzial</button>
+                    <button class="btn btn-primary" type="submit">Dodaj dział</button>
                 </div>
             </form>
         </div>
@@ -44,7 +44,7 @@
     <div class="col-lg-7">
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <h3 class="card-title">Dzialy</h3>
+                <h3 class="card-title">Działy</h3>
             </div>
             <div class="card-body border-bottom">
                 <form method="get" asp-controller="HumanResources" asp-action="Departments">
@@ -64,7 +64,7 @@
                             </select>
                         </div>
                         <div class="col-md-3 d-flex justify-content-md-end gap-2">
-                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Departments">Wyczysc</a>
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Departments">Wyczyść</a>
                             <button class="btn btn-primary" type="submit">Filtruj</button>
                         </div>
                     </div>
@@ -95,7 +95,7 @@
                                     <div class="text-secondary small">
                                         @if (string.IsNullOrWhiteSpace(sampleEmployeeNames))
                                         {
-                                            <span>Brak przypisanych osob</span>
+                                            <span>Brak przypisanych osób</span>
                                         }
                                         else
                                         {
@@ -114,8 +114,8 @@
                             <tr>
                                 <td colspan="4" class="text-secondary text-center py-4">
                                     @(filter.HasActiveCriteria
-                                        ? "Brak dzialow dla wybranych filtrow."
-                                        : "Brak dzialow w bazie. Seeder powinien utworzyc podstawowa strukture firmy.")
+                                        ? "Brak działów dla wybranych filtrów."
+                                        : "Brak działów w bazie. Seeder powinien utworzyć podstawową strukturę firmy.")
                                 </td>
                             </tr>
                         }

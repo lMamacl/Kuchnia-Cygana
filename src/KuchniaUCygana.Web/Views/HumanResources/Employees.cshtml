@@ -24,7 +24,7 @@
                             <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Imie, email, stanowisko..." />
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label" for="DepartmentId">Dzial</label>
+                            <label class="form-label" for="DepartmentId">Dział</label>
                             <select class="form-select" id="DepartmentId" name="DepartmentId">
                                 <option value="">Wszystkie</option>
                                 @foreach (var department in Model.Departments.OrderBy(department => department.Name))
@@ -61,7 +61,7 @@
                             </select>
                         </div>
                         <div class="col-md-2 d-flex justify-content-md-end gap-2">
-                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Employees">Wyczysc</a>
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Employees">Wyczyść</a>
                             <button class="btn btn-primary" type="submit">Filtruj</button>
                         </div>
                     </div>
@@ -72,7 +72,7 @@
                     <thead>
                         <tr>
                             <th>Pracownik</th>
-                            <th>Dzial</th>
+                            <th>Dział</th>
                             <th>Stanowisko</th>
                             <th>Konto</th>
                             <th>Zatrudnienie</th>
@@ -96,13 +96,13 @@
                                 <td>
                                     @if (Model.Departments.Count == 0)
                                     {
-                                        <span class="text-secondary">Brak dzialow</span>
+                                        <span class="text-secondary">Brak działów</span>
                                     }
                                     else
                                     {
                                         <form id="employee-assignment-@employee.Id" asp-action="ChangeEmployeeAssignment" asp-route-id="@employee.Id" method="post">
                                             @Html.AntiForgeryToken()
-                                            <select class="form-select form-select-sm" name="departmentId" aria-label="Dzial pracownika @employee.FullName" required>
+                                            <select class="form-select form-select-sm" name="departmentId" aria-label="Dział pracownika @employee.FullName" required>
                                                 @foreach (var department in Model.Departments.OrderBy(x => x.Name))
                                                 {
                                                     <option value="@department.Id" selected="@(employee.DepartmentId == department.Id)">@department.Name</option>
@@ -137,7 +137,7 @@
                                 <td class="text-end">
                                     @if (Model.Departments.Count > 0)
                                     {
-                                        <button class="btn btn-sm btn-outline-secondary" form="employee-assignment-@employee.Id" type="submit">Zmien</button>
+                                        <button class="btn btn-sm btn-outline-secondary" form="employee-assignment-@employee.Id" type="submit">Zmień</button>
                                     }
                                     @if (employee.IsActive && (User.IsInRole("HRManager") || User.IsInRole("Admin")))
                                     {
@@ -154,8 +154,8 @@
                             <tr>
                                 <td colspan="7" class="text-secondary text-center py-4">
                                     @(filter.HasActiveCriteria
-                                        ? "Brak pracownikow dla wybranych filtrow."
-                                        : "Brak pracownikow w bazie. Uruchom seeding albo dodaj pierwszego pracownika formularzem.")
+                                        ? "Brak pracowników dla wybranych filtrów."
+                                        : "Brak pracowników w bazie. Uruchom seeding albo dodaj pierwszego pracownika formularzem.")
                                 </td>
                             </tr>
                         }

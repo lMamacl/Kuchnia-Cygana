@@ -12,8 +12,8 @@
     <div class="col-xl-8">
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <h3 class="card-title">Nowe zgloszenie</h3>
-                <a class="btn btn-outline-secondary btn-sm" asp-controller="CustomerSupport" asp-action="Tickets">Zgloszenia</a>
+                <h3 class="card-title">Nowe zgłoszenie</h3>
+                <a class="btn btn-outline-secondary btn-sm" asp-controller="CustomerSupport" asp-action="Tickets">Zgłoszenia</a>
             </div>
             <form asp-action="CreateTicket" method="post">
                 @Html.AntiForgeryToken()
@@ -35,9 +35,9 @@
                             }
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label" for="ticket-delivery">Powiazana dostawa</label>
+                            <label class="form-label" for="ticket-delivery">Powiązana dostawa</label>
                             <select id="ticket-delivery" class="form-select" name="DeliveryCalendarId">
-                                <option value="">Bez powiazania</option>
+                                <option value="">Bez powiązania</option>
                                 @foreach (var option in deliveryOptions)
                                 {
                                     <option value="@option.DeliveryCalendarId"
@@ -57,7 +57,7 @@
                     </div>
                     <div class="row g-3 mt-0">
                         <div class="col-md-8">
-                            <label class="form-label" for="ticket-title">Tytul</label>
+                            <label class="form-label" for="ticket-title">Tytuł</label>
                             <input id="ticket-title" class="form-control" name="Title" value="@Model.NewTicket.Title" maxlength="200" required />
                         </div>
                         <div class="col-md-4">
@@ -76,7 +76,7 @@
                     </div>
                 </div>
                 <div class="card-footer text-end">
-                    <button class="btn btn-primary" type="submit">Dodaj zgloszenie</button>
+                    <button class="btn btn-primary" type="submit">Dodaj zgłoszenie</button>
                 </div>
             </form>
         </div>

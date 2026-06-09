@@ -3,7 +3,7 @@
 @model KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<KuchniaUCygana.Application.DTOs.Menu.IngredientListItemDto>
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Katalog skladnikow";
+    ViewData["Title"] = "Katalog składników";
     ViewData["Section"] = "Katalog Menu";
 
     var filter = ViewBag.Filter as IngredientSearchFilterDto ?? new IngredientSearchFilterDto();
@@ -14,7 +14,7 @@
     var resourceTypes = new List<SelectListItem>
     {
         new("Wszystkie", "", string.IsNullOrWhiteSpace(filter.ResourceType)),
-        new("Skladniki spozywcze", "Food", filter.ResourceType == "Food"),
+        new("Składniki spożywcze", "Food", filter.ResourceType == "Food"),
         new("Przyprawy", "Spice", filter.ResourceType == "Spice"),
         new("Opakowania", "Packaging", filter.ResourceType == "Packaging"),
         new("Pojemniki", "Container", filter.ResourceType == "Container"),
@@ -32,22 +32,22 @@
 
 <div class="card card-premium mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h3 class="card-title">Skladniki</h3>
-        <a asp-action="Create" class="btn btn-primary">Nowy skladnik</a>
+        <h3 class="card-title">Składniki</h3>
+        <a asp-action="Create" class="btn btn-primary">Nowy składnik</a>
     </div>
     <div class="card-body">
         <form asp-action="Index" method="get" class="row g-3 align-items-end">
             <input type="hidden" name="Page" value="1" />
             <div class="col-md-3">
                 <label class="form-label">Szukaj</label>
-                <input name="Search" value="@filter.Search" class="form-control" placeholder="Nazwa, opis, sklad" />
+                <input name="Search" value="@filter.Search" class="form-control" placeholder="Nazwa, opis, skład" />
             </div>
             <div class="col-md-2">
                 <label class="form-label">Typ zasobu</label>
                 <select name="ResourceType" class="form-select" asp-items="resourceTypes"></select>
             </div>
             <div class="col-md-2">
-                <label class="form-label">Kategoria zywn.</label>
+                <label class="form-label">Kategoria żywn.</label>
                 <select name="FoodCategoryId" class="form-select" asp-items="foodCategories">
                     <option value="">Wszystkie</option>
                 </select>
@@ -67,7 +67,7 @@
                 <select name="IsActive" class="form-select" asp-items="activeOptions"></select>
             </div>
             <div class="col-md-2">
-                <label class="form-label">Na strone</label>
+                <label class="form-label">Na stronę</label>
                 <input name="PageSize" value="@Model.PageSize" type="number" min="5" max="100" class="form-control" />
             </div>
             <div class="col-md-3">
@@ -78,8 +78,8 @@
             </div>
             <div class="col-md-7 d-flex gap-2 flex-wrap">
                 <button type="submit" class="btn btn-primary">Filtruj</button>
-                <a asp-action="Index" class="btn btn-outline-secondary">Wyczysc</a>
-                <a asp-action="Index" asp-route-ResourceType="Food" class="btn btn-outline-primary">Spozywcze</a>
+                <a asp-action="Index" class="btn btn-outline-secondary">Wyczyść</a>
+                <a asp-action="Index" asp-route-ResourceType="Food" class="btn btn-outline-primary">Spożywcze</a>
                 <a asp-action="Index" asp-route-ResourceType="Packaging" class="btn btn-outline-primary">Opakowania</a>
                 <a asp-action="Index" asp-route-ResourceType="Container" class="btn btn-outline-primary">Pojemniki</a>
             </div>
@@ -105,7 +105,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="7" class="text-center text-secondary py-4">Brak skladnikow dla wybranych filtrow.</td>
+                        <td colspan="7" class="text-center text-secondary py-4">Brak składników dla wybranych filtrów.</td>
                     </tr>
                 }
                 else
@@ -144,7 +144,7 @@
                                         B @item.ProteinPer100g?.ToString("0.##") /
                                         W @item.CarbohydratesPer100g?.ToString("0.##") /
                                         T @item.FatPer100g?.ToString("0.##") /
-                                        Bl @item.FiberPer100g?.ToString("0.##")
+                                        Bł @item.FiberPer100g?.ToString("0.##")
                                     </div>
                                 }
                                 else
@@ -165,9 +165,9 @@
                             <td>@(item.IsActive ? "Aktywny" : "Wstrzymany")</td>
                             <td class="text-end">
                                 <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Edytuj</a>
-                                <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm('Usunac skladnik?');">
+                                <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm('Usunąć składnik?');">
                                     @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Usun</button>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Usuń</button>
                                 </form>
                             </td>
                         </tr>
@@ -178,7 +178,7 @@
     </div>
     <div class="card-footer d-flex justify-content-between align-items-center">
         <span class="text-secondary">
-            Strona @Model.Page z @(Model.TotalPages == 0 ? 1 : Model.TotalPages), rekordow: @Model.TotalCount
+            Strona @Model.Page z @(Model.TotalPages == 0 ? 1 : Model.TotalPages), rekordów: @Model.TotalCount
         </span>
         <div class="btn-list">
             <a asp-action="Index"
@@ -202,7 +202,7 @@
                asp-route-IsActive="@filter.IsActive"
                asp-route-Page="@(Model.Page + 1)"
                asp-route-PageSize="@Model.PageSize"
-               class="btn btn-outline-secondary @(Model.Page >= Model.TotalPages ? "disabled" : string.Empty)">Nastepna</a>
+               class="btn btn-outline-secondary @(Model.Page >= Model.TotalPages ? "disabled" : string.Empty)">Następna</a>
         </div>
     </div>
 </div>

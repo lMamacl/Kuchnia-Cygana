@@ -1,7 +1,7 @@
 @model KuchniaUCygana.Application.DTOs.Menu.IngredientDto
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Edycja skladnika";
+    ViewData["Title"] = "Edycja składnika";
     ViewData["Section"] = "Katalog Menu";
 }
 
@@ -15,7 +15,7 @@
                     <input type="hidden" asp-for="Id" />
                     <partial name="_IngredientForm" model="Model" />
                     <div class="d-flex justify-content-between">
-                        <a asp-action="Index" class="btn btn-outline-secondary">Powrot</a>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Powrót</a>
                         <button type="submit" class="btn btn-warning">Zapisz</button>
                     </div>
                 </form>

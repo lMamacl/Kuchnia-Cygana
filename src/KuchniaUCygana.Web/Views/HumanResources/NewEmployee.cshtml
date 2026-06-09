@@ -19,7 +19,7 @@
                 <div class="card-body">
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
                     <div class="mb-3">
-                        <label class="form-label" for="employee-user">Uzytkownik</label>
+                        <label class="form-label" for="employee-user">Użytkownik</label>
                         <select id="employee-user" class="form-select" name="UserId" required>
                             <option value="">Wybierz konto pracownicze</option>
                             @foreach (var user in staffUsers)
@@ -36,7 +36,7 @@
                     </div>
                     <div class="row g-2">
                         <div class="col-sm-6">
-                            <label class="form-label" for="employee-first-name">Imie</label>
+                            <label class="form-label" for="employee-first-name">Imię</label>
                             <input id="employee-first-name" class="form-control" name="FirstName" value="@Model.NewEmployee.FirstName" maxlength="50" required />
                         </div>
                         <div class="col-sm-6">
@@ -58,9 +58,9 @@
                             <input id="employee-hire" class="form-control" name="HireDate" type="date" value="@Model.NewEmployee.HireDate.ToString("yyyy-MM-dd")" required />
                         </div>
                         <div class="col-sm-6">
-                            <label class="form-label" for="employee-department">Dzial</label>
+                            <label class="form-label" for="employee-department">Dział</label>
                             <select id="employee-department" class="form-select" name="DepartmentId" required>
-                                <option value="">Wybierz dzial</option>
+                                <option value="">Wybierz dział</option>
                                 @foreach (var department in Model.Departments.OrderBy(x => x.Name))
                                 {
                                     <option value="@department.Id" selected="@(Model.NewEmployee.DepartmentId == department.Id)">@department.Name</option>

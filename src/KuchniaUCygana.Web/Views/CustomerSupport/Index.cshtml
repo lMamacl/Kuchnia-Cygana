@@ -18,7 +18,7 @@
     <div class="col-sm-6 col-xl-3">
         <div class="card staff-metric-card">
             <div class="card-body">
-                <div class="text-secondary">Oczekujace</div>
+                <div class="text-secondary">Oczekujące</div>
                 <div class="h1 mb-0">@summary.WaitingCount</div>
             </div>
         </div>
@@ -42,7 +42,7 @@
     <div class="col-sm-6 col-xl-3">
         <div class="card staff-metric-card">
             <div class="card-body">
-                <div class="text-secondary">Zamkniete dzisiaj</div>
+                <div class="text-secondary">Zamknięte dzisiaj</div>
                 <div class="h1 mb-0">@summary.ClosedTodayCount</div>
             </div>
         </div>
@@ -57,7 +57,7 @@
                 <table class="table table-vcenter card-table">
                     <thead>
                         <tr>
-                            <th>Zgloszenie</th>
+                            <th>Zgłoszenie</th>
                             <th>Klient</th>
                             <th>Status</th>
                             <th>Priorytet</th>
@@ -75,7 +75,7 @@
                                     @if (ticket.OrderId.HasValue || ticket.DeliveryCalendarId.HasValue)
                                     {
                                         <div class="small text-primary">
-                                            Zamowienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
+                                            Zamówienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
                                         </div>
                                     }
                                 </td>
@@ -84,14 +84,14 @@
                                 <td><span class="badge @PriorityClass(ticket.Priority)">@EnumDisplayNames.TicketPriorityName(ticket.Priority)</span></td>
                                 <td>@(ticket.AssignedToFullName ?? "Nieprzypisane")</td>
                                 <td class="text-end">
-                                    <a class="btn btn-sm btn-outline-primary" asp-controller="CustomerSupport" asp-action="Tickets">Obsluz</a>
+                                    <a class="btn btn-sm btn-outline-primary" asp-controller="CustomerSupport" asp-action="Tickets">Obsłuż</a>
                                 </td>
                             </tr>
                         }
                         @if (waitingTickets.Length == 0)
                         {
                             <tr>
-                                <td colspan="6" class="text-secondary text-center py-4">Brak aktywnych zgloszen.</td>
+                                <td colspan="6" class="text-secondary text-center py-4">Brak aktywnych zgłoszeń.</td>
                             </tr>
                         }
                     </tbody>
@@ -103,7 +103,7 @@
     <div class="col-xl-4">
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">Nieprzypisane zgloszenia</h3>
+                <h3 class="card-title">Nieprzypisane zgłoszenia</h3>
             </div>
             <div class="list-group list-group-flush">
                 @foreach (var ticket in unassignedTickets.Take(8))
@@ -119,14 +119,14 @@
                         @if (ticket.OrderId.HasValue || ticket.DeliveryCalendarId.HasValue)
                         {
                             <div class="small text-primary">
-                                Zamowienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
+                                Zamówienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
                             </div>
                         }
                     </div>
                 }
                 @if (unassignedTickets.Length == 0)
                 {
-                    <div class="list-group-item text-secondary">Brak nieprzypisanych zgloszen.</div>
+                    <div class="list-group-item text-secondary">Brak nieprzypisanych zgłoszeń.</div>
                 }
             </div>
         </div>

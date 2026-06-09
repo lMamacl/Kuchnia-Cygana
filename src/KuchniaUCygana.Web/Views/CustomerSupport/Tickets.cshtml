@@ -33,8 +33,8 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <h3 class="card-title">Zgloszenia</h3>
-                <a class="btn btn-primary btn-sm" asp-controller="CustomerSupport" asp-action="NewTicket">Nowe zgloszenie</a>
+                <h3 class="card-title">Zgłoszenia</h3>
+                <a class="btn btn-primary btn-sm" asp-controller="CustomerSupport" asp-action="NewTicket">Nowe zgłoszenie</a>
             </div>
             <div class="card-body border-bottom">
                 <form method="get" asp-controller="CustomerSupport" asp-action="Tickets">
@@ -42,7 +42,7 @@
                     <div class="row g-2 align-items-end">
                         <div class="col-md-3">
                             <label class="form-label" for="Search">Szukaj</label>
-                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Tytul, klient, numer..." />
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Tytuł, klient, numer..." />
                         </div>
                         <div class="col-md-2">
                             <label class="form-label" for="Status">Status</label>
@@ -85,7 +85,7 @@
                             </select>
                         </div>
                         <div class="col-md-2 d-flex justify-content-md-end gap-2">
-                            <a class="btn btn-outline-secondary" asp-controller="CustomerSupport" asp-action="Tickets">Wyczysc</a>
+                            <a class="btn btn-outline-secondary" asp-controller="CustomerSupport" asp-action="Tickets">Wyczyść</a>
                             <button class="btn btn-primary" type="submit">Filtruj</button>
                         </div>
                     </div>
@@ -95,7 +95,7 @@
                 <table class="table table-vcenter card-table">
                     <thead>
                         <tr>
-                            <th>Zgloszenie</th>
+                            <th>Zgłoszenie</th>
                             <th>Klient</th>
                             <th>Status</th>
                             <th>Priorytet</th>
@@ -114,7 +114,7 @@
                                     @if (ticket.OrderId.HasValue || ticket.DeliveryCalendarId.HasValue)
                                     {
                                         <div class="small text-primary">
-                                            Zamowienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
+                                            Zamówienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
                                         </div>
                                     }
                                     <div class="text-secondary small">
@@ -146,7 +146,7 @@
                                                     <option value="@status" selected="@(string.Equals(ticket.Status, status.ToString(), StringComparison.Ordinal))">@EnumDisplayNames.DisplayName(status)</option>
                                                 }
                                             </select>
-                                            <button class="btn btn-sm btn-outline-secondary" type="submit">Zmien</button>
+                                            <button class="btn btn-sm btn-outline-secondary" type="submit">Zmień</button>
                                         </form>
                                     </div>
                                 </td>
@@ -159,7 +159,7 @@
                                             <div class="row g-3">
                                                 <div class="col-xl-4">
                                                     <div class="border rounded-2 p-3 h-100 bg-white">
-                                                        <div class="fw-semibold mb-2">Zamowienie i dostawa</div>
+                                                        <div class="fw-semibold mb-2">Zamówienie i dostawa</div>
                                                         <dl class="row small mb-0">
                                                             <dt class="col-5 text-secondary">Numer</dt>
                                                             <dd class="col-7 mb-1">@TextOrDash(operationalContext.OrderNumber)</dd>
@@ -184,7 +184,7 @@
                                                             <dd class="col-7 mb-1">@TextOrDash(operationalContext.DeliveryNotes)</dd>
                                                             @if (operationalContext.IsSkipped)
                                                             {
-                                                                <dt class="col-5 text-secondary">Pominieta</dt>
+                                                                <dt class="col-5 text-secondary">Pominięta</dt>
                                                                 <dd class="col-7 mb-1">@TextOrDash(operationalContext.SkipReason)</dd>
                                                             }
                                                         </dl>
@@ -255,7 +255,7 @@
                                                         @if (operationalContext.PackingIncidents.Count > 0)
                                                         {
                                                             <div class="mt-2 small">
-                                                                <div class="fw-semibold">Zgloszenia kompletacji</div>
+                                                                <div class="fw-semibold">Zgłoszenia kompletacji</div>
                                                                 @foreach (var incident in operationalContext.PackingIncidents.Take(3))
                                                                 {
                                                                     <div class="border-top py-1">
@@ -271,7 +271,7 @@
                                                 </div>
                                                 <div class="col-xl-4">
                                                     <div class="border rounded-2 p-3 h-100 bg-white">
-                                                        <div class="fw-semibold mb-2">Dieta, sklad i alerty</div>
+                                                        <div class="fw-semibold mb-2">Dieta, skład i alerty</div>
                                                         @if (operationalContext.Meals.Count > 0)
                                                         {
                                                             @foreach (var meal in operationalContext.Meals.Take(4))
@@ -287,7 +287,7 @@
                                                                     }
                                                                     @if (meal.Ingredients.Count > 0)
                                                                     {
-                                                                        <div class="text-secondary">Sklad: @string.Join(", ", meal.Ingredients.Take(8))</div>
+                                                                        <div class="text-secondary">Skład: @string.Join(", ", meal.Ingredients.Take(8))</div>
                                                                     }
                                                                     @if (!string.IsNullOrWhiteSpace(meal.NutritionSummary))
                                                                     {
@@ -298,7 +298,7 @@
                                                         }
                                                         else
                                                         {
-                                                            <div class="text-secondary small">Brak powiazania pozycji z planem menu.</div>
+                                                            <div class="text-secondary small">Brak powiązania pozycji z planem menu.</div>
                                                         }
 
                                                         @if (operationalContext.AssessmentHints.Count > 0)
@@ -323,8 +323,8 @@
                             <tr>
                                 <td colspan="6" class="text-secondary text-center py-4">
                                     @(filter.HasActiveCriteria
-                                        ? "Brak zgloszen dla wybranych filtrow."
-                                        : "Brak zgloszen w bazie. Seeder dodaje startowa kolejke BOK dla kont klienckich.")
+                                        ? "Brak zgłoszeń dla wybranych filtrów."
+                                        : "Brak zgłoszeń w bazie. Seeder dodaje startową kolejkę BOK dla kont klienckich.")
                                 </td>
                             </tr>
                         }

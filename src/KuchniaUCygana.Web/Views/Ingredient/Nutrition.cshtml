@@ -1,22 +1,22 @@
 @model KuchniaUCygana.Application.DTOs.Menu.IngredientDto?
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Wartosci odzywcze";
+    ViewData["Title"] = "Wartości odżywcze";
     ViewData["Section"] = "Katalog Menu";
 }
 
 <div class="card card-premium">
     <div class="card-body">
-        <h3 class="card-title">Wartosci odzywcze</h3>
+        <h3 class="card-title">Wartości odżywcze</h3>
         @if (Model is null)
         {
-            <p class="text-secondary mb-0">Wybierz skladnik z katalogu, aby uzupelnic wartosci odzywcze.</p>
+            <p class="text-secondary mb-0">Wybierz składnik z katalogu, aby uzupełnić wartości odżywcze.</p>
         }
         else
         {
             <div class="row g-3">
                 <div class="col-md-4">
-                    <div class="text-secondary small">Skladnik</div>
+                    <div class="text-secondary small">Składnik</div>
                     <strong>@Model.Name</strong>
                 </div>
                 <div class="col-md-2">
@@ -24,25 +24,25 @@
                     <strong>@Model.Nutrition.CaloriesPer100g.ToString("0.##") kcal</strong>
                 </div>
                 <div class="col-md-2">
-                    <div class="text-secondary small">Bialko</div>
+                    <div class="text-secondary small">Białko</div>
                     <strong>@Model.Nutrition.ProteinPer100g.ToString("0.##") g</strong>
                 </div>
                 <div class="col-md-2">
-                    <div class="text-secondary small">Weglowodany</div>
+                    <div class="text-secondary small">Węglowodany</div>
                     <strong>@Model.Nutrition.CarbohydratesPer100g.ToString("0.##") g</strong>
                 </div>
                 <div class="col-md-2">
-                    <div class="text-secondary small">Tluszcz</div>
+                    <div class="text-secondary small">Tłuszcz</div>
                     <strong>@Model.Nutrition.FatPer100g.ToString("0.##") g</strong>
                 </div>
                 <div class="col-12">
                     <div class="text-secondary small">Alergeny</div>
                     @(Model.Allergens.Any()
-                        ? string.Join(", ", Model.Allergens.Select(a => a.TraceAmount ? $"{a.Name} (sladowo)" : a.Name))
+                        ? string.Join(", ", Model.Allergens.Select(a => a.TraceAmount ? $"{a.Name} (śladowo)" : a.Name))
                         : "Brak")
                 </div>
                 <div class="col-12">
-                    <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-primary">Edytuj skladnik</a>
+                    <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-primary">Edytuj składnik</a>
                 </div>
             </div>
         }
