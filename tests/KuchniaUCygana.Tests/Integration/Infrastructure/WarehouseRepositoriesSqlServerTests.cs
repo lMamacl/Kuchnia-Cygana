@@ -1155,6 +1155,8 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var deliveryDate = new DateOnly(2036, 4, 12);
         var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
         var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2);
+        await SeedRouteAndStopForDeliveryAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1, routeId: 1, routeName: "Mokotow-Poludnie");
+        await SeedRouteAndStopForDeliveryAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2, routeId: 1, routeName: "Mokotow-Poludnie");
         await SeedCookedProductionPlanAndM2OrderItemsAsync(connectionFactory, deliveryDate, seededOne.OrderId, seededTwo.OrderId);
         var service = CreatePackingService(connectionFactory);
 
@@ -1195,6 +1197,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 13);
         var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        await SeedRouteAndStopForDeliveryAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1, routeId: 1, routeName: "Mokotow-Poludnie");
         await SeedCookedProductionPlanAndM2OrderItemsAsync(connectionFactory, deliveryDate, seeded.OrderId);
         var service = CreatePackingService(connectionFactory);
 
@@ -1256,6 +1259,8 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var deliveryDate = new DateOnly(2036, 4, 14);
         var seededOne = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
         var seededTwo = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2);
+        await SeedRouteAndStopForDeliveryAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1, routeId: 1, routeName: "Mokotow-Poludnie");
+        await SeedRouteAndStopForDeliveryAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 2, routeId: 1, routeName: "Mokotow-Poludnie");
         await SeedCookedProductionPlanAndM2OrderItemsAsync(connectionFactory, deliveryDate, seededOne.OrderId, seededTwo.OrderId);
         var packingService = CreatePackingService(connectionFactory);
         var loadingService = CreateLoadingService(connectionFactory, packingService);
@@ -1315,6 +1320,7 @@ public sealed class WarehouseRepositoriesSqlServerTests
         var connectionFactory = CreateConnectionFactory();
         var deliveryDate = new DateOnly(2036, 4, 15);
         var seeded = await SeedM1OrderAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1);
+        await SeedRouteAndStopForDeliveryAsync(connectionFactory, deliveryDate, deliveryDate.DayNumber * 100 + 1, routeId: 1, routeName: "Mokotow-Poludnie");
         await SeedCookedProductionPlanAndM2OrderItemsAsync(connectionFactory, deliveryDate, seeded.OrderId);
         var packingService = CreatePackingService(connectionFactory);
         var loadingService = CreateLoadingService(connectionFactory, packingService);
@@ -1792,6 +1798,71 @@ public sealed class WarehouseRepositoriesSqlServerTests
         public string? GetIpAddress()
         {
             return "127.0.0.1";
+        }
+    }
+
+    private static async Task SeedRouteAndStopForDeliveryAsync(
+        IDbConnectionFactory connectionFactory,
+        DateOnly date,
+        int deliveryCalendarId,
+        int routeId = 1,
+        string routeName = "Mokotow-Poludnie",
+        string vehicleRegistration = "WA 12345")
+    {
+        using var db = connectionFactory.CreateConnection();
+        var now = DateTimeOffset.UtcNow;
+        var planDate = date.ToDateTime(TimeOnly.MinValue);
+
+        var vehicleId = await db.QuerySingleOrDefaultAsync<int?>(
+            "SELECT TOP 1 [Id] FROM [Vehicles] WHERE [RegistrationNumber] = @vehicleRegistration AND [IsDeleted] = 0;",
+            new { vehicleRegistration });
+
+        if (!vehicleId.HasValue)
+        {
+            vehicleId = await db.QuerySingleAsync<int>(
+                """
+                INSERT INTO [Vehicles] ([RegistrationNumber], [Model], [MaxLoadKg], [Status], [CreatedAt], [IsDeleted])
+                VALUES (@vehicleRegistration, N'Test Model', 1000.0, 1, @createdAt, 0);
+                SELECT CAST(SCOPE_IDENTITY() AS int);
+                """,
+                new { vehicleRegistration, createdAt = now });
+        }
+
+        var routeDbId = await db.QuerySingleOrDefaultAsync<int?>(
+            "SELECT TOP 1 [Id] FROM [DeliveryRoutes] WHERE [Id] = @routeId AND [IsDeleted] = 0;",
+            new { routeId });
+
+        if (!routeDbId.HasValue)
+        {
+            await db.ExecuteAsync(
+                """
+                SET IDENTITY_INSERT DeliveryRoutes ON;
+                INSERT INTO [DeliveryRoutes] ([Id], [RouteDate], [Name], [TotalDistanceKm], [Status], [VehicleId], [CreatedAt], [IsDeleted])
+                VALUES (@routeId, @routeDate, @name, 0.0, 1, @vehicleId, @createdAt, 0);
+                SET IDENTITY_INSERT DeliveryRoutes OFF;
+                """,
+                new
+                {
+                    routeId,
+                    routeDate = planDate,
+                    name = routeName,
+                    vehicleId = vehicleId.Value,
+                    createdAt = now
+                });
+        }
+
+        var stopId = await db.QuerySingleOrDefaultAsync<int?>(
+            "SELECT TOP 1 [Id] FROM [DeliveryRouteStops] WHERE [DeliveryCalendarId] = @deliveryCalendarId AND [IsDeleted] = 0;",
+            new { deliveryCalendarId });
+
+        if (!stopId.HasValue)
+        {
+            await db.ExecuteAsync(
+                """
+                INSERT INTO [DeliveryRouteStops] ([RouteId], [DeliveryCalendarId], [SequenceNumber], [Status], [CreatedAt], [IsDeleted])
+                VALUES (@routeId, @deliveryCalendarId, 1, 1, @createdAt, 0);
+                """,
+                new { routeId, deliveryCalendarId, createdAt = now });
         }
     }
 }
