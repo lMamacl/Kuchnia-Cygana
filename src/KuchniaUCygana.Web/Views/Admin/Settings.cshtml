@@ -64,26 +64,26 @@
                         <tr>
                             <td>Konta i role</td>
                             <td><span class="badge bg-green-lt text-green">Aktywne</span></td>
-                            <td class="text-secondary">@userSummary.TotalCount kont, @Model.AvailableRoles.Count rol</td>
-                            <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Users">Otworz</a></td>
+                            <td class="text-secondary">@userSummary.TotalCount kont, @Model.AvailableRoles.Count ról</td>
+                            <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Users">Otwórz</a></td>
                         </tr>
                         <tr>
                             <td>Audyt zmian</td>
                             <td><span class="badge bg-green-lt text-green">Aktywny</span></td>
-                            <td class="text-secondary">@Model.AuditPage.TotalCount wpisow</td>
-                            <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Logs">Otworz</a></td>
+                            <td class="text-secondary">@Model.AuditPage.TotalCount wpisów</td>
+                            <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Logs">Otwórz</a></td>
                         </tr>
                         <tr>
                             <td>HR</td>
                             <td><span class="badge bg-green-lt text-green">Aktywny</span></td>
-                            <td class="text-secondary">Pracownicy, dzialy, urlopy, grafiki</td>
-                            <td class="text-end"><a class="btn btn-sm btn-outline-secondary" asp-controller="HumanResources" asp-action="Index">Otworz</a></td>
+                            <td class="text-secondary">Pracownicy, działy, urlopy, grafiki</td>
+                            <td class="text-end"><a class="btn btn-sm btn-outline-secondary" asp-controller="HumanResources" asp-action="Index">Otwórz</a></td>
                         </tr>
                         <tr>
                             <td>BOK</td>
                             <td><span class="badge bg-green-lt text-green">Aktywny</span></td>
-                            <td class="text-secondary">Zgloszenia, przypisania, statusy</td>
-                            <td class="text-end"><a class="btn btn-sm btn-outline-secondary" asp-controller="CustomerSupport" asp-action="Index">Otworz</a></td>
+                            <td class="text-secondary">Zgłoszenia, przypisania, statusy</td>
+                            <td class="text-end"><a class="btn btn-sm btn-outline-secondary" asp-controller="CustomerSupport" asp-action="Index">Otwórz</a></td>
                         </tr>
                     </tbody>
                 </table>
@@ -99,14 +99,14 @@
             <div class="card-body">
                 @if (lastLog is null)
                 {
-                    <div class="text-secondary">Brak logow systemowych.</div>
+                    <div class="text-secondary">Brak logów systemowych.</div>
                 }
                 else
                 {
                     <dl class="row mb-0">
                         <dt class="col-4">Czas</dt>
                         <dd class="col-8">@lastLog.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</dd>
-                        <dt class="col-4">Uzytkownik</dt>
+                        <dt class="col-4">Użytkownik</dt>
                         <dd class="col-8">@(lastLog.UserFullName ?? $"#{lastLog.UserId}")</dd>
                         <dt class="col-4">Akcja</dt>
                         <dd class="col-8">@lastLog.Action</dd>

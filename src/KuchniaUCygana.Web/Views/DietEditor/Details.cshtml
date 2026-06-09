@@ -53,7 +53,7 @@
                                         <input type="hidden" name="dietId" value="@Model.Id" />
                                         <div class="col position-relative diet-meal-lookup">
                                             <input type="hidden" name="mealId" class="js-diet-meal-id" required />
-                                            <input type="text" class="form-control form-control-sm js-diet-meal-query" autocomplete="off" placeholder="Wpisz nazwe posilku" />
+                                            <input type="text" class="form-control form-control-sm js-diet-meal-query" autocomplete="off" placeholder="Wpisz nazwę posiłku" />
                                             <div class="list-group mt-1 shadow-sm d-none js-diet-meal-results position-absolute w-100" style="z-index: 1050;"></div>
                                             <div class="form-hint js-diet-meal-status">Wpisz min. 2 znaki.</div>
                                         </div>
@@ -129,7 +129,7 @@
 
                 const resetSelection = () => {
                     idInput.value = '';
-                    status.textContent = 'Wybierz posilek z listy.';
+                    status.textContent = 'Wybierz posiłek z listy.';
                     status.className = 'form-hint js-diet-meal-status text-secondary';
                 };
 
@@ -137,7 +137,7 @@
                     resultsBox.innerHTML = '';
                     if (!items.length) {
                         resultsBox.classList.add('d-none');
-                        status.textContent = 'Brak wynikow.';
+                        status.textContent = 'Brak wyników.';
                         return;
                     }
 
@@ -195,7 +195,7 @@
                         render(await response.json());
                     } catch (error) {
                         if (error.name !== 'AbortError') {
-                            status.textContent = 'Nie udalo sie pobrac wynikow.';
+                            status.textContent = 'Nie udało się pobrać wyników.';
                         }
                     }
                 });
@@ -204,7 +204,7 @@
                 lookup.closest('form')?.addEventListener('submit', (event) => {
                     if (!idInput.value) {
                         event.preventDefault();
-                        status.textContent = 'Wybierz posilek z listy wynikow.';
+                        status.textContent = 'Wybierz posiłek z listy wyników.';
                         status.className = 'form-hint js-diet-meal-status text-danger';
                         queryInput.focus();
                     }

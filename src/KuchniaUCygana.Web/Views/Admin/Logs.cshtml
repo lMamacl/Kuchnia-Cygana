@@ -32,8 +32,8 @@
                         <input class="form-control" id="Search" name="Search" value="@filter.Search" placeholder="Akcja, obiekt, JSON, IP..." />
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label" for="UserId">Uzytkownik</label>
-                        <input class="form-control" id="UserId" name="UserId" type="number" min="1" value="@filter.UserId" placeholder="ID uzytkownika" />
+                        <label class="form-label" for="UserId">Użytkownik</label>
+                        <input class="form-control" id="UserId" name="UserId" type="number" min="1" value="@filter.UserId" placeholder="ID użytkownika" />
                     </div>
                     <div class="col-md-2">
                         <label class="form-label" for="Action">Akcja</label>
@@ -80,7 +80,7 @@
                     </div>
                     <div class="col-md-4 d-flex align-items-end justify-content-md-end gap-2">
                         <input type="hidden" name="Page" value="1" />
-                        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Logs">Wyczysc</a>
+                        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Logs">Wyczyść</a>
                         <button class="btn btn-primary" type="submit">Filtruj</button>
                     </div>
                 </div>
@@ -101,11 +101,11 @@
                     <thead>
                         <tr>
                             <th>Czas</th>
-                            <th>Uzytkownik</th>
+                            <th>Użytkownik</th>
                             <th>Akcja</th>
                             <th>Obiekt</th>
-                            <th>Stara wartosc</th>
-                            <th>Nowa wartosc</th>
+                            <th>Stara wartość</th>
+                            <th>Nowa wartość</th>
                             <th>IP</th>
                         </tr>
                     </thead>
@@ -131,7 +131,7 @@
                         @if (!logs.Any())
                         {
                             <tr>
-                                <td colspan="7" class="text-secondary text-center py-4">Brak logow dla wybranych filtrow.</td>
+                                <td colspan="7" class="text-secondary text-center py-4">Brak logów dla wybranych filtrów.</td>
                             </tr>
                         }
                     </tbody>

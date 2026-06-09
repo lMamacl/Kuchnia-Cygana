@@ -9,10 +9,10 @@
         <div class="card card-premium">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
-                    <h3 class="card-title">Dzien menu @Model.PlanDate.ToString("yyyy-MM-dd")</h3>
+                    <h3 class="card-title">Dzień menu @Model.PlanDate.ToString("yyyy-MM-dd")</h3>
                     <div class="text-secondary small">@Model.Status</div>
                 </div>
-                <a asp-controller="DietMenuPlan" asp-action="Index" asp-route-startDate="@Model.PlanDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-primary">Tydzien</a>
+                <a asp-controller="DietMenuPlan" asp-action="Index" asp-route-startDate="@Model.PlanDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-primary">Tydzień</a>
             </div>
             <div class="card-body">
                 @if (Model.HasPlan)
@@ -26,7 +26,7 @@
                         }
                         else
                         {
-                            <span class="badge bg-warning-lt text-warning">@Model.QuickWarningCount brakow</span>
+                            <span class="badge bg-warning-lt text-warning">@Model.QuickWarningCount braków</span>
                         }
                         @if (Model.PublishedAt.HasValue)
                         {
@@ -48,7 +48,7 @@
                             <input name="Notes" class="form-control" maxlength="500" />
                         </div>
                         <div class="col-md-4">
-                            <button type="submit" class="btn btn-primary w-100">Utworz draft dnia</button>
+                            <button type="submit" class="btn btn-primary w-100">Utwórz draft dnia</button>
                         </div>
                     </form>
                 }
@@ -105,7 +105,7 @@
             {
                 <div class="card card-premium mt-3">
                     <div class="card-header">
-                        <h3 class="card-title">Kopiuj dzien</h3>
+                        <h3 class="card-title">Kopiuj dzień</h3>
                     </div>
                     <div class="card-body">
                         <form asp-controller="DietMenuPlan" asp-action="CopyDay" asp-route-planId="@Model.Id" method="post">
@@ -170,9 +170,9 @@
         const completeness = valueOf(meal, 'completenessStatus', 'CompletenessStatus') || '';
         const variantCount = valueOf(meal, 'variantCount', 'VariantCount') ?? 0;
         const warningCount = valueOf(meal, 'warningCount', 'WarningCount') ?? 0;
-        const parts = [status, completeness, `${variantCount} wariantow`].filter(Boolean);
+        const parts = [status, completeness, `${variantCount} wariantów`].filter(Boolean);
         if (warningCount > 0) {
-            parts.push(`${warningCount} brakow`);
+            parts.push(`${warningCount} braków`);
         }
 
         return parts.join(' / ');
@@ -190,7 +190,7 @@
 
         const warningCount = Number(option.dataset.warningCount || 0);
         if (warningCount > 0) {
-            parts.push(`${warningCount} brakow`);
+            parts.push(`${warningCount} braków`);
         }
 
         return parts.join(' / ') || 'Brak statusu wariantu.';
@@ -205,9 +205,9 @@
         variantSelect.innerHTML = '';
 
         if (variants.length === 0) {
-            setVariantPlaceholder(variantSelect, 'Brak wariantow dla dania');
+            setVariantPlaceholder(variantSelect, 'Brak wariantów dla dania');
             variantSelect.disabled = true;
-            variantStatus.textContent = 'Brak dostepnych wariantow.';
+            variantStatus.textContent = 'Brak dostępnych wariantów.';
             return;
         }
 
@@ -240,7 +240,7 @@
         if (selectedVariantId && !selectedFound) {
             const option = document.createElement('option');
             option.value = selectedVariantId;
-            option.textContent = 'aktualny wariant niedostepny';
+            option.textContent = 'aktualny wariant niedostępny';
             option.dataset.status = 'Unavailable';
             option.dataset.completeness = 'Incomplete';
             option.dataset.warningCount = '1';
@@ -265,7 +265,7 @@
         if (meals.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'list-group-item text-secondary small';
-            empty.textContent = 'Brak wynikow.';
+            empty.textContent = 'Brak wyników.';
             resultsBox.appendChild(empty);
             return;
         }
@@ -293,7 +293,7 @@
             badge.className = warningCount > 0
                 ? 'badge bg-warning-lt text-warning mt-1'
                 : 'badge bg-success-lt text-success mt-1';
-            badge.textContent = warningCount > 0 ? `${warningCount} brakow` : 'gotowe';
+            badge.textContent = warningCount > 0 ? `${warningCount} braków` : 'gotowe';
 
             item.appendChild(title);
             item.appendChild(meta);
@@ -309,8 +309,8 @@
     const loadVariants = async function (mealId, variantSelect, variantStatus, selectedVariantId) {
         variantSelect.disabled = true;
         variantSelect.dataset.loading = 'true';
-        setVariantPlaceholder(variantSelect, 'Ladowanie wariantow...');
-        variantStatus.textContent = 'Ladowanie statusu wariantow...';
+        setVariantPlaceholder(variantSelect, 'Ładowanie wariantów...');
+        variantStatus.textContent = 'Ładowanie statusu wariantów...';
 
         try {
             let variants = variantCache.get(mealId.toString());
@@ -319,7 +319,7 @@
                     headers: { 'Accept': 'application/json' },
                 });
                 if (!response.ok) {
-                    throw new Error('Lookup wariantow zwrocil blad.');
+                    throw new Error('Lookup wariantów zwrócił błąd.');
                 }
 
                 variants = asArray(await response.json());
@@ -328,10 +328,10 @@
 
             renderVariantOptions(variantSelect, variantStatus, variants, selectedVariantId || '');
         } catch {
-            setVariantPlaceholder(variantSelect, 'Nie udalo sie pobrac wariantow');
+            setVariantPlaceholder(variantSelect, 'Nie udało się pobrać wariantów');
             variantSelect.dataset.loading = 'false';
             variantSelect.disabled = true;
-            variantStatus.textContent = 'Blad pobierania wariantow.';
+            variantStatus.textContent = 'Błąd pobierania wariantów.';
         }
     };
 
@@ -374,7 +374,7 @@
                         signal: mealSearchController.signal,
                     });
                     if (!response.ok) {
-                        throw new Error('Lookup dan zwrocil blad.');
+                        throw new Error('Lookup dań zwrócił błąd.');
                     }
 
                     const meals = asArray(await response.json());
@@ -397,7 +397,7 @@
                     }
 
                     resultsBox.classList.add('d-none');
-                    mealStatus.textContent = 'Blad pobierania dan.';
+                    mealStatus.textContent = 'Błąd pobierania dań.';
                 }
             }, 250);
 
@@ -418,7 +418,7 @@
                 variantSelect.dataset.selectedVariantId = '';
                 variantSelect.dataset.loaded = 'false';
                 variantSelect.disabled = true;
-                setVariantPlaceholder(variantSelect, 'Najpierw wybierz posilek');
+                setVariantPlaceholder(variantSelect, 'Najpierw wybierz posiłek');
                 variantStatus.textContent = 'Brak wybranego wariantu.';
                 searchMeals();
             });
@@ -438,14 +438,14 @@
             form.addEventListener('submit', function (event) {
                 if (!mealIdInput.value) {
                     event.preventDefault();
-                    mealStatus.textContent = 'Wybierz danie z listy wynikow.';
+                    mealStatus.textContent = 'Wybierz danie z listy wyników.';
                     mealQuery.focus();
                     return;
                 }
 
                 if (variantSelect.dataset.loading === 'true') {
                     event.preventDefault();
-                    variantStatus.textContent = 'Poczekaj na zaladowanie wariantow.';
+                    variantStatus.textContent = 'Poczekaj na załadowanie wariantów.';
                 }
             });
 
@@ -467,20 +467,20 @@
 
         buttons.forEach(item => item.classList.remove('active'));
         button.classList.add('active');
-        details.innerHTML = '<div class="card card-premium"><div class="card-body text-secondary">Ladowanie...</div></div>';
+        details.innerHTML = '<div class="card card-premium"><div class="card-body text-secondary">Ładowanie...</div></div>';
 
         try {
             const response = await fetch(button.dataset.url, {
                 headers: { 'Accept': 'text/html' },
             });
             if (!response.ok) {
-                throw new Error('Nie udalo sie pobrac pozycji wariantu.');
+                throw new Error('Nie udało się pobrać pozycji wariantu.');
             }
 
             details.innerHTML = await response.text();
             initializeMenuPlanForms(details);
         } catch {
-            details.innerHTML = '<div class="card card-premium"><div class="card-body text-danger">Nie udalo sie zaladowac pozycji.</div></div>';
+            details.innerHTML = '<div class="card card-premium"><div class="card-body text-danger">Nie udało się załadować pozycji.</div></div>';
         }
     };
 

@@ -1,9 +1,9 @@
 @model KuchniaUCygana.Application.DTOs.Production.CookingComponentCardDto
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Gotowanie skladowej";
+    ViewData["Title"] = "Gotowanie składowej";
     ViewData["Section"] = "Kuchnia";
-    ViewData["Description"] = "Operacyjna karta skladowej ze snapshotu M2.";
+    ViewData["Description"] = "Operacyjna karta składowej ze snapshotu M2.";
 
     var sessionStarted = Model.Session.Status != "NotStarted";
     var sessionCompleted = Model.Session.Status == "Completed";
@@ -89,7 +89,7 @@
                 <div class="hr my-3"></div>
 
                 <div class="mb-3">
-                    <div class="text-secondary small">Skladowa</div>
+                    <div class="text-secondary small">Składowa</div>
                     <div class="fw-bold">@Model.ComponentName</div>
                     <div class="small text-secondary">
                         v@Model.VersionNumber
@@ -109,7 +109,7 @@
                     </div>
                     <div class="col-6">
                         <div class="border rounded p-2 h-100">
-                            <div class="text-secondary small">Lacznie</div>
+                            <div class="text-secondary small">Łącznie</div>
                             <div class="fw-bold">@FormatQuantity(Model.TotalQuantity, Model.Unit)</div>
                         </div>
                     </div>
@@ -129,7 +129,7 @@
                 @if (Model.FefoDeductedAt is null)
                 {
                     <div class="alert alert-danger">
-                        Najpierw wykonaj FEFO dla planu produkcji. Sesji skladowej nie mozna uruchomic przed zdjeciem magazynu.
+                        Najpierw wykonaj FEFO dla planu produkcji. Sesji składowej nie można uruchomić przed zdjęciem magazynu.
                     </div>
                 }
                 else if (!sessionStarted)
@@ -139,7 +139,7 @@
                           asp-route-recipeComponentVersionId="@Model.RecipeComponentVersionId"
                           method="post">
                         @Html.AntiForgeryToken()
-                        <button type="submit" class="btn btn-primary w-100">Rozpocznij gotowanie skladowej</button>
+                        <button type="submit" class="btn btn-primary w-100">Rozpocznij gotowanie składowej</button>
                     </form>
                 }
                 else if (!sessionCompleted)
@@ -149,14 +149,14 @@
                           asp-route-recipeComponentVersionId="@Model.RecipeComponentVersionId"
                           method="post">
                         @Html.AntiForgeryToken()
-                        <button type="submit" class="btn btn-success w-100">Oznacz skladowa jako ukonczona</button>
-                        <div class="form-hint text-center mt-2">Wymagane kroki krytyczne i kontrolne musza byc odznaczone.</div>
+                        <button type="submit" class="btn btn-success w-100">Oznacz składową jako ukończoną</button>
+                        <div class="form-hint text-center mt-2">Wymagane kroki krytyczne i kontrolne muszą być odznaczone.</div>
                     </form>
                 }
                 else
                 {
                     <div class="alert alert-success mb-0">
-                        Skladowa ukonczona przez @(Model.Session.CompletedBy ?? "-")
+                        Składowa ukończona przez @(Model.Session.CompletedBy ?? "-")
                         @if (Model.Session.CompletedAt.HasValue)
                         {
                             <span>@Model.Session.CompletedAt.Value.ToLocalTime().ToString("dd.MM HH:mm")</span>
@@ -165,7 +165,7 @@
                 }
             </div>
             <div class="card-footer bg-transparent">
-                <a asp-action="CookingCard" asp-route-planItemId="@Model.PlanItemId" class="btn btn-outline-secondary w-100">Wroc do karty dania</a>
+                <a asp-action="CookingCard" asp-route-planItemId="@Model.PlanItemId" class="btn btn-outline-secondary w-100">Wróć do karty dania</a>
             </div>
         </div>
     </div>
@@ -178,7 +178,7 @@
             <div class="card-body">
                 @if (!Model.InstructionSections.Any())
                 {
-                    <div class="text-secondary">Snapshot M2 nie zawiera krokow instrukcji dla tej skladowej.</div>
+                    <div class="text-secondary">Snapshot M2 nie zawiera kroków instrukcji dla tej składowej.</div>
                 }
                 else
                 {
@@ -246,7 +246,7 @@
                                                 @if (isChecked)
                                                 {
                                                     <div class="small text-success mt-1">
-                                                        Odznaczono przez @(check?.CheckedBy ?? "-")
+                                                        Oznaczono przez @(check?.CheckedBy ?? "-")
                                                         @if (check?.CheckedAt.HasValue == true)
                                                         {
                                                             <span>@check.CheckedAt.Value.ToLocalTime().ToString("dd.MM HH:mm")</span>
@@ -264,7 +264,7 @@
                                         {
                                             <div class="row g-2 mt-3">
                                                 <div class="col-md-3">
-                                                    <label class="form-label">Wartosc</label>
+                                                    <label class="form-label">Wartość</label>
                                                     <input type="number" step="0.01" name="actualValue" class="form-control" value="@check?.ActualValue" disabled="@(!sessionStarted || sessionCompleted)" required="@(!isChecked)" />
                                                 </div>
                                                 <div class="col-md-3">
@@ -288,17 +288,17 @@
 
         <div class="card card-premium mb-4">
             <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                <h3 class="card-title">Skladniki skladowej</h3>
+                <h3 class="card-title">Składniki składowej</h3>
                 <span class="badge bg-azure-lt text-azure">na @Model.PlannedQuantity porcji</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
                     <thead>
                         <tr>
-                            <th>Skladnik</th>
+                            <th>Składnik</th>
                             <th>Kategoria</th>
                             <th class="text-end">Na 1 porcje</th>
-                            <th class="text-end">Lacznie</th>
+                            <th class="text-end">Łącznie</th>
                             <th>Kontrola</th>
                         </tr>
                     </thead>
@@ -350,7 +350,7 @@
                             }
                             <div>
                                 <div class="text-secondary small mb-1">Alergeny</div>
-                                <div>@(Model.Allergens.Any() ? string.Join(", ", Model.Allergens) : "Brak zadeklarowanych alergenow")</div>
+                                <div>@(Model.Allergens.Any() ? string.Join(", ", Model.Allergens) : "Brak zadeklarowanych alergenów")</div>
                             </div>
                         </div>
                     </div>
@@ -360,14 +360,14 @@
                     <div class="col-md-6">
                         <div class="card card-premium h-100">
                             <div class="card-header bg-transparent">
-                                <h3 class="card-title">Wartosci odzywcze skladowej / 100 g</h3>
+                                <h3 class="card-title">Wartości odżywcze składowej / 100 g</h3>
                             </div>
                             <div class="card-body">
                                 <div class="row g-2 text-center">
                                     <div class="col-6"><strong>@Model.NutritionFacts.CaloriesPer100g.ToString("0")</strong><div class="small text-secondary">kcal</div></div>
-                                    <div class="col-6"><strong>@Model.NutritionFacts.ProteinPer100g.ToString("0.#")</strong><div class="small text-secondary">bialko</div></div>
-                                    <div class="col-6"><strong>@Model.NutritionFacts.CarbohydratesPer100g.ToString("0.#")</strong><div class="small text-secondary">wegle</div></div>
-                                    <div class="col-6"><strong>@Model.NutritionFacts.FatPer100g.ToString("0.#")</strong><div class="small text-secondary">tluszcz</div></div>
+                                    <div class="col-6"><strong>@Model.NutritionFacts.ProteinPer100g.ToString("0.#")</strong><div class="small text-secondary">białko</div></div>
+                                    <div class="col-6"><strong>@Model.NutritionFacts.CarbohydratesPer100g.ToString("0.#")</strong><div class="small text-secondary">węgle</div></div>
+                                    <div class="col-6"><strong>@Model.NutritionFacts.FatPer100g.ToString("0.#")</strong><div class="small text-secondary">tłuszcz</div></div>
                                 </div>
                             </div>
                         </div>

@@ -17,7 +17,7 @@
     <div class="col-sm-6 col-xl-3">
         <div class="card staff-metric-card">
             <div class="card-body">
-                <div class="text-secondary">Uzytkownicy</div>
+                <div class="text-secondary">Użytkownicy</div>
                 <div class="h1 mb-0">@userSummary.TotalCount</div>
             </div>
         </div>
@@ -25,7 +25,7 @@
     <div class="col-sm-6 col-xl-3">
         <div class="card staff-metric-card">
             <div class="card-body">
-                <div class="text-secondary">Role w uzyciu</div>
+                <div class="text-secondary">Role w użyciu</div>
                 <div class="h1 mb-0">@userSummary.ActiveRoleCount</div>
             </div>
         </div>
@@ -51,14 +51,14 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h3 class="card-title">Ostatnie logi systemowe</h3>
-                <a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Logs">Pelny audyt</a>
+                <a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Logs">Pełny audyt</a>
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
                     <thead>
                         <tr>
                             <th>Czas</th>
-                            <th>Uzytkownik</th>
+                            <th>Użytkownik</th>
                             <th>Akcja</th>
                             <th>Obiekt</th>
                             <th>Zmiana</th>
@@ -81,7 +81,7 @@
                         @if (logs.Length == 0)
                         {
                             <tr>
-                                <td colspan="5" class="text-secondary text-center py-4">Brak zapisanych logow systemowych.</td>
+                                <td colspan="5" class="text-secondary text-center py-4">Brak zapisanych logów systemowych.</td>
                             </tr>
                         }
                     </tbody>
@@ -93,7 +93,7 @@
     <div class="col-xl-4">
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">Uzytkownicy wedlug rol</h3>
+                <h3 class="card-title">Użytkownicy według ról</h3>
             </div>
             <div class="list-group list-group-flush">
                 @foreach (var role in roleGroups)
@@ -105,10 +105,9 @@
                 }
                 @if (roleGroups.Length == 0)
                 {
-                    <div class="list-group-item text-secondary">Brak uzytkownikow.</div>
+                    <div class="list-group-item text-secondary">Brak użytkowników.</div>
                 }
             </div>
         </div>
     </div>
 </div>
-

@@ -32,7 +32,7 @@
             <div class="card-body">
                 <div class="subheader">Wyniki</div>
                 <div class="h1 mb-2 mt-1">@Model.TotalCount</div>
-                <div class="text-secondary small">Skladowe pasujace do filtrow</div>
+                <div class="text-secondary small">Składowe pasujące do filtrów</div>
             </div>
         </div>
     </div>
@@ -67,14 +67,14 @@
     <div class="col-12">
         <div class="card card-premium">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <h3 class="card-title">Przepisy-skladowe</h3>
+                <h3 class="card-title">Przepisy-składowe</h3>
                 <button type="button"
                         class="btn btn-outline-primary"
                         data-bs-toggle="collapse"
                         data-bs-target="#newComponentForm"
                         aria-expanded="false"
                         aria-controls="newComponentForm">
-                    Nowa skladowa
+                    Nowa składowa
                 </button>
             </div>
             <div class="card-body">
@@ -104,7 +104,7 @@
                         <select name="AllergenId" class="form-select" asp-items="allergenOptions"></select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">Na strone</label>
+                        <label class="form-label">Na stronę</label>
                         <input name="PageSize" value="@Model.PageSize" type="number" min="5" max="100" class="form-control" />
                     </div>
                     <div class="col-md-4">
@@ -115,7 +115,7 @@
                     </div>
                     <div class="col-md-8 d-flex gap-2 flex-wrap">
                         <button type="submit" class="btn btn-primary">Filtruj</button>
-                        <a asp-controller="DietEditor" asp-action="Recipes" class="btn btn-outline-secondary">Wyczysc</a>
+                        <a asp-controller="DietEditor" asp-action="Recipes" class="btn btn-outline-secondary">Wyczyść</a>
                     </div>
                 </form>
             </div>
@@ -143,11 +143,11 @@
                         <input name="Description" class="form-control" maxlength="2000" />
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">Zdjecie URL</label>
+                        <label class="form-label">Zdjęcie URL</label>
                         <input name="ImageUrl" class="form-control" maxlength="500" />
                     </div>
                     <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">Utworz</button>
+                        <button type="submit" class="btn btn-primary w-100">Utwórz</button>
                     </div>
                     </form>
                 </div>
@@ -171,14 +171,14 @@
                             <tr>
                                 <td colspan="7">
                                     <div class="empty py-5">
-                                        <div class="empty-title">Brak skladowych dla wybranych filtrow.</div>
+                                        <div class="empty-title">Brak składowych dla wybranych filtrów.</div>
                                         <p class="empty-subtitle text-secondary">
-                                            Zmien kryteria wyszukiwania albo dodaj pierwsza skladowa do katalogu.
+                                            Zmień kryteria wyszukiwania albo dodaj pierwszą składową do katalogu.
                                         </p>
                                         <div class="empty-action btn-list justify-content-center">
                                             @if (hasActiveFilters)
                                             {
-                                                <a asp-controller="DietEditor" asp-action="Recipes" class="btn btn-outline-secondary">Wyczysc filtry</a>
+                                                <a asp-controller="DietEditor" asp-action="Recipes" class="btn btn-outline-secondary">Wyczyść filtry</a>
                                             }
                                             <button type="button"
                                                     class="btn btn-primary"
@@ -186,7 +186,7 @@
                                                     data-bs-target="#newComponentForm"
                                                     aria-expanded="false"
                                                     aria-controls="newComponentForm">
-                                                Dodaj skladowa
+                                                Dodaj składową
                                             </button>
                                         </div>
                                     </div>
@@ -229,7 +229,7 @@
                                         }
                                     </td>
                                     <td>
-                                        <a asp-controller="RecipeComponents" asp-action="Details" asp-route-id="@component.Id" class="btn btn-sm btn-outline-primary">Otworz</a>
+                                        <a asp-controller="RecipeComponents" asp-action="Details" asp-route-id="@component.Id" class="btn btn-sm btn-outline-primary">Otwórz</a>
                                     </td>
                                 </tr>
                             }
@@ -239,7 +239,7 @@
             </div>
             <div class="card-footer d-flex justify-content-between align-items-center">
                 <span class="text-secondary">
-                    Strona @Model.Page z @(Model.TotalPages == 0 ? 1 : Model.TotalPages), rekordow: @Model.TotalCount
+                    Strona @Model.Page z @(Model.TotalPages == 0 ? 1 : Model.TotalPages), rekordów: @Model.TotalCount
                 </span>
                 <div class="btn-list">
                     <a asp-controller="DietEditor"
@@ -261,7 +261,7 @@
                        asp-route-MissingPublicationData="@filter.MissingPublicationData"
                        asp-route-Page="@(Model.Page + 1)"
                        asp-route-PageSize="@Model.PageSize"
-                       class="btn btn-outline-secondary @(Model.Page >= Model.TotalPages ? "disabled" : string.Empty)">Nastepna</a>
+                       class="btn btn-outline-secondary @(Model.Page >= Model.TotalPages ? "disabled" : string.Empty)">Następna</a>
                 </div>
             </div>
         </div>

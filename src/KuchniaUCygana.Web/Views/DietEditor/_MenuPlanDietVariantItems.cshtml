@@ -15,7 +15,7 @@
         }
         else
         {
-            <span class="badge bg-warning-lt text-warning">@Model.Validation.Warnings.Count brakow</span>
+            <span class="badge bg-warning-lt text-warning">@Model.Validation.Warnings.Count braków</span>
         }
     </div>
     <div class="table-responsive">
@@ -23,9 +23,9 @@
             <thead>
                 <tr>
                     <th>Slot</th>
-                    <th>Posilek</th>
+                    <th>Posiłek</th>
                     <th class="text-end">Gramatura</th>
-                    <th class="text-center">Skladowe</th>
+                    <th class="text-center">Składowe</th>
                     <th>Status</th>
                     <th class="w-1"></th>
                 </tr>
@@ -79,7 +79,7 @@
                             }
                             else
                             {
-                                <span class="badge bg-warning-lt text-warning">@item.CompletenessStatus / @item.ValidationWarnings.Count brakow</span>
+                                <span class="badge bg-warning-lt text-warning">@item.CompletenessStatus / @item.ValidationWarnings.Count braków</span>
                                 <div class="text-secondary small">@string.Join("; ", item.ValidationWarnings)</div>
                             }
                         </td>
@@ -89,7 +89,7 @@
                                 <form asp-controller="DietMenuPlan" asp-action="DeleteItem" asp-route-planId="@Model.DietMenuPlanId" asp-route-itemId="@item.Id" method="post">
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Usun</button>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Usuń</button>
                                 </form>
                             }
                         </td>
@@ -123,7 +123,7 @@
                         </select>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">Posilek</label>
+                        <label class="form-label">Posiłek</label>
                         <div class="menu-plan-meal-lookup" data-selected-meal-id="@item.MealId" data-selected-meal-name="@item.MealName">
                             <input type="hidden" name="MealId" class="js-meal-id" value="@item.MealId" />
                             <input type="search" class="form-control form-control-sm js-meal-query" value="@item.MealName" autocomplete="off" />
@@ -156,7 +156,7 @@
 
     <div class="card card-premium mt-3">
         <div class="card-header">
-            <h3 class="card-title">Dodaj pozycje</h3>
+            <h3 class="card-title">Dodaj pozycję</h3>
         </div>
         <div class="card-body">
             <form asp-controller="DietMenuPlan" asp-action="AddItem" asp-route-planId="@Model.DietMenuPlanId" method="post" class="menu-plan-item-form">
@@ -174,27 +174,27 @@
                         </select>
                     </div>
                     <div class="col-md-8">
-                        <label class="form-label">Posilek</label>
+                        <label class="form-label">Posiłek</label>
                         <div class="menu-plan-meal-lookup">
                             <input type="hidden" name="MealId" class="js-meal-id" value="" />
                             <input type="search" class="form-control js-meal-query" autocomplete="off" />
                             <div class="list-group mt-1 shadow-sm d-none js-meal-results"></div>
-                            <div class="small text-secondary mt-1 js-meal-status">Wpisz nazwe dania.</div>
+                            <div class="small text-secondary mt-1 js-meal-status">Wpisz nazwę dania.</div>
                         </div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Wariant dania</label>
                         <select name="MealVariantId" class="form-select js-meal-variant-select" data-selected-variant-id="" data-loaded="false" disabled>
-                            <option value="">Najpierw wybierz posilek</option>
+                            <option value="">Najpierw wybierz posiłek</option>
                         </select>
                         <div class="small text-secondary mt-1 js-variant-status">Brak wybranego wariantu.</div>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Mnoznik</label>
+                        <label class="form-label">Mnożnik</label>
                         <input name="ServingSizeMultiplier" type="number" step="0.01" min="0.01" value="1" class="form-control" />
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Kolejnosc</label>
+                        <label class="form-label">Kolejność</label>
                         <input name="SortOrder" type="number" value="0" class="form-control" />
                     </div>
                 </div>

@@ -62,11 +62,11 @@
     <table class="table table-vcenter card-table table-premium">
         <thead>
             <tr>
-                <th>Posilek</th>
+                <th>Posiłek</th>
                 <th>Kategoria</th>
                 <th>Status</th>
                 <th class="text-center">Warianty</th>
-                <th>Kompletnosc</th>
+                <th>Kompletność</th>
                 <th>Gramatura</th>
                 <th>Nutrition / opakowania</th>
                 <th class="text-end">Akcje</th>
@@ -76,7 +76,7 @@
             @if (!items.Any())
             {
                 <tr>
-                    <td colspan="8" class="text-center text-secondary py-4">Brak posilkow dla wybranych filtrow.</td>
+                    <td colspan="8" class="text-center text-secondary py-4">Brak posiłków dla wybranych filtrów.</td>
                 </tr>
             }
             else
@@ -121,11 +121,11 @@
                                     }
                                 </div>
                             }
-                            <div class="text-secondary small">@meal.ComponentCount skladowych</div>
+                            <div class="text-secondary small">@meal.ComponentCount składowych</div>
                         </td>
                         <td>
                             <div>Surowa: @Weight(meal.RawWeightGrams)</div>
-                            <div class="text-secondary small">Po obrobce: @Weight(meal.CookedWeightGrams)</div>
+                            <div class="text-secondary small">Po obróbce: @Weight(meal.CookedWeightGrams)</div>
                         </td>
                         <td>
                             @if (meal.HasNutrition)
@@ -152,7 +152,7 @@
                         </td>
                         <td class="text-end">
                             <div class="btn-list flex-nowrap justify-content-end">
-                                <a asp-action="Details" asp-route-id="@meal.Id" class="btn btn-sm btn-indigo">Zarzadzaj</a>
+                                <a asp-action="Details" asp-route-id="@meal.Id" class="btn btn-sm btn-indigo">Zarządzaj</a>
                                 <a asp-action="Edit" asp-route-id="@meal.Id" class="btn btn-sm btn-outline-secondary">Edytuj</a>
                             </div>
                         </td>
@@ -163,7 +163,7 @@
     </table>
 </div>
 <div class="card-footer bg-transparent d-flex flex-wrap align-items-center gap-2 border-top">
-    <p class="m-0 text-secondary">Pokazano <strong>@firstItem-@lastItem</strong> z <strong>@Model.TotalCount</strong> wynikow</p>
+    <p class="m-0 text-secondary">Pokazano <strong>@firstItem-@lastItem</strong> z <strong>@Model.TotalCount</strong> wyników</p>
 
     @if (totalPages > 1)
     {
@@ -216,7 +216,7 @@
                    hx-get="@TableUrl(currentPage + 1)"
                    hx-target="#meal-table-container"
                    hx-push-url="@IndexUrl(currentPage + 1)"
-                   aria-disabled="@(currentPage >= totalPages)">Nastepna</a>
+                   aria-disabled="@(currentPage >= totalPages)">Następna</a>
             </li>
         </ul>
     }

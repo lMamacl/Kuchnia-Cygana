@@ -4,7 +4,7 @@
 @model PagedResultDto<MealListItemDto>
 @{
     Layout = "_LayoutStaff";
-    ViewData["Title"] = "Baza posilkow";
+    ViewData["Title"] = "Baza posiłków";
     ViewData["Section"] = "Katalog Menu";
     ViewData["Description"] = "Lista potraw z filtrowaniem, kompletacja M2 i wariantami.";
 
@@ -23,7 +23,7 @@
     {
         new("Wszystkie", "", !filter.HasVariants.HasValue),
         new("Z wariantami", "true", filter.HasVariants == true),
-        new("Bez wariantow", "false", filter.HasVariants == false),
+        new("Bez wariantów", "false", filter.HasVariants == false),
     };
 }
 
@@ -33,10 +33,10 @@
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
                     <h3 class="card-title mb-0">Katalog potraw</h3>
-                    <div class="text-secondary small">Rekordow: <strong>@Model.TotalCount</strong></div>
+                    <div class="text-secondary small">Rekordów: <strong>@Model.TotalCount</strong></div>
                 </div>
                 <div class="btn-list">
-                    <a asp-action="Create" class="btn btn-primary">Nowy posilek</a>
+                    <a asp-action="Create" class="btn btn-primary">Nowy posiłek</a>
                 </div>
             </div>
             <div class="card-body border-bottom">
@@ -84,12 +84,12 @@
                     <div class="col-md-4">
                         <label class="form-check">
                             <input name="MissingPackaging" value="true" type="checkbox" class="form-check-input" checked="@filter.MissingPackaging" />
-                            <span class="form-check-label">Tylko braki opakowan</span>
+                            <span class="form-check-label">Tylko braki opakowań</span>
                         </label>
                     </div>
                     <div class="col-md-4 d-flex flex-wrap gap-2 justify-content-md-end">
                         <button type="submit" class="btn btn-primary">Filtruj</button>
-                        <a asp-action="Index" class="btn btn-outline-secondary">Wyczysc</a>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Wyczyść</a>
                     </div>
                 </form>
                 <div class="btn-list mt-3">
@@ -97,8 +97,8 @@
                     <a asp-action="Index" asp-route-Status="Published" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-success">Opublikowane</a>
                     <a asp-action="Index" asp-route-Status="Draft" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-secondary">Szkice</a>
                     <a asp-action="Index" asp-route-MissingPublicationData="true" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-warning">Braki publikacji</a>
-                    <a asp-action="Index" asp-route-MissingPackaging="true" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-danger">Braki opakowan</a>
-                    <a asp-action="Index" asp-route-HasVariants="false" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-primary">Bez wariantow</a>
+                    <a asp-action="Index" asp-route-MissingPackaging="true" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-danger">Braki opakowań</a>
+                    <a asp-action="Index" asp-route-HasVariants="false" asp-route-PageSize="@Model.PageSize" class="btn btn-sm btn-outline-primary">Bez wariantów</a>
                 </div>
             </div>
             <div id="meal-table-container">

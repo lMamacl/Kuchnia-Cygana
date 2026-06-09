@@ -17,8 +17,8 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <h3 class="card-title">Uzytkownicy</h3>
-                <a class="btn btn-primary btn-sm" asp-controller="Admin" asp-action="NewUser">Nowy uzytkownik</a>
+                <h3 class="card-title">Użytkownicy</h3>
+                <a class="btn btn-primary btn-sm" asp-controller="Admin" asp-action="NewUser">Nowy użytkownik</a>
             </div>
             <div class="card-body border-bottom">
                 <form method="get" asp-controller="Admin" asp-action="Users">
@@ -26,7 +26,7 @@
                     <div class="row g-2 align-items-end">
                         <div class="col-md-5">
                             <label class="form-label" for="Search">Szukaj</label>
-                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Imie, nazwisko, email..." />
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Imię, nazwisko, email..." />
                         </div>
                         <div class="col-md-3">
                             <label class="form-label" for="Role">Rola</label>
@@ -48,7 +48,7 @@
                             </select>
                         </div>
                         <div class="col-md-2 d-flex justify-content-md-end gap-2">
-                            <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Users">Wyczysc</a>
+                            <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Users">Wyczyść</a>
                             <button class="btn btn-primary" type="submit">Filtruj</button>
                         </div>
                     </div>
@@ -61,7 +61,7 @@
                             <th>Konto</th>
                             <th>Rola</th>
                             <th>Edycja</th>
-                            <th>Haslo</th>
+                            <th>Hasło</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -80,7 +80,7 @@
                                     <form class="row g-2 align-items-end" method="post" asp-controller="Admin" asp-action="UpdateUser" asp-route-id="@user.Id">
                                         <input type="hidden" name="Id" value="@user.Id" />
                                         <div class="col-md-6">
-                                            <label class="form-label small" for="FirstName_@user.Id">Imie</label>
+                                            <label class="form-label small" for="FirstName_@user.Id">Imię</label>
                                             <input class="form-control form-control-sm" id="FirstName_@user.Id" name="FirstName" value="@user.FirstName" />
                                         </div>
                                         <div class="col-md-6">
@@ -108,13 +108,13 @@
                                 <td style="min-width: 210px;">
                                     <form class="d-flex gap-2" method="post" asp-controller="Admin" asp-action="ResetUserPassword" asp-route-id="@user.Id">
                                         <input type="hidden" name="Id" value="@user.Id" />
-                                        <input class="form-control form-control-sm" name="NewPassword" type="password" minlength="6" autocomplete="new-password" placeholder="Nowe haslo" required />
+                                        <input class="form-control form-control-sm" name="NewPassword" type="password" minlength="6" autocomplete="new-password" placeholder="Nowe hasło" required />
                                         <button class="btn btn-sm btn-outline-secondary" type="submit">Reset</button>
                                     </form>
                                 </td>
                                 <td class="text-end">
                                     <form method="post" asp-controller="Admin" asp-action="DeleteUser" asp-route-id="@user.Id">
-                                        <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Usunac to konto?');">Usun</button>
+                                        <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Czy na pewno chcesz usunąć to konto?');">Usuń</button>
                                     </form>
                                 </td>
                             </tr>
@@ -124,8 +124,8 @@
                             <tr>
                                 <td colspan="5" class="text-secondary text-center py-4">
                                     @(filter.HasActiveCriteria
-                                        ? "Brak kont uzytkownikow dla wybranych filtrow."
-                                        : "Brak kont uzytkownikow. Seeder tworzy podstawowe konta dla HR, BOK, Admin i pozostalych rol.")
+                                        ? "Brak kont użytkowników dla wybranych filtrów."
+                                        : "Brak kont użytkowników. Seeder tworzy podstawowe konta dla HR, BOK, Admin i pozostałych ról.")
                                 </td>
                             </tr>
                         }

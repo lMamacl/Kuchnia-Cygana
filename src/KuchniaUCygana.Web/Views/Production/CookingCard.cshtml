@@ -38,7 +38,7 @@
 }
 
 <div class="row g-4">
-    <!-- Informacje o Danie & Formularz Zatwierdzenia -->
+    <!-- Informacje o daniu & Formularz zatwierdzenia -->
     <div class="col-lg-5">
         <div class="card card-premium">
             <div class="card-status-top bg-azure"></div>
@@ -75,7 +75,7 @@
                     </div>
                     <div class="col-6">
                         <div class="border rounded p-2 h-100">
-                            <div class="text-secondary small">FEFO skladnikow</div>
+                            <div class="text-secondary small">FEFO składników</div>
                             <div class="fw-bold @(Model.FefoDeductedAt.HasValue ? "text-success" : "text-warning")">
                                 @(Model.FefoDeductedAt.HasValue ? $"wykonane {Model.FefoDeductedAt.Value.ToLocalTime():HH:mm}" : "do wykonania")
                             </div>
@@ -125,7 +125,7 @@
                 @if (!Model.CanApproveCooking)
                 {
                     <div class="alert alert-warning">
-                        <div class="fw-bold mb-1">Nie mozna jeszcze zatwierdzic gotowania</div>
+                        <div class="fw-bold mb-1">Nie można jeszcze zatwierdzić gotowania</div>
                         <ul class="mb-0 ps-3">
                             @foreach (var blocker in Model.ApprovalBlockers)
                             {
@@ -258,14 +258,14 @@
         {
             <div class="card card-premium mb-4">
                 <div class="card-header bg-transparent">
-                    <h3 class="card-title">Wartosci odzywcze na 100 g</h3>
+                    <h3 class="card-title">Wartości odżywcze na 100 g</h3>
                 </div>
                 <div class="card-body">
                     <div class="row g-2 text-center">
                         <div class="col"><strong>@Model.NutritionFacts.CaloriesPer100g.ToString("0")</strong><div class="small text-secondary">kcal</div></div>
-                        <div class="col"><strong>@Model.NutritionFacts.ProteinPer100g.ToString("0.#")</strong><div class="small text-secondary">bialko</div></div>
-                        <div class="col"><strong>@Model.NutritionFacts.CarbohydratesPer100g.ToString("0.#")</strong><div class="small text-secondary">wegle</div></div>
-                        <div class="col"><strong>@Model.NutritionFacts.FatPer100g.ToString("0.#")</strong><div class="small text-secondary">tluszcz</div></div>
+                        <div class="col"><strong>@Model.NutritionFacts.ProteinPer100g.ToString("0.#")</strong><div class="small text-secondary">białko</div></div>
+                        <div class="col"><strong>@Model.NutritionFacts.CarbohydratesPer100g.ToString("0.#")</strong><div class="small text-secondary">węgle</div></div>
+                        <div class="col"><strong>@Model.NutritionFacts.FatPer100g.ToString("0.#")</strong><div class="small text-secondary">tłuszcz</div></div>
                     </div>
                 </div>
             </div>
@@ -275,7 +275,7 @@
         {
             <div class="card card-premium mb-4">
                 <div class="card-header bg-transparent">
-                    <h3 class="card-title">Skladowe ze snapshotu M2</h3>
+                    <h3 class="card-title">Składowe ze snapshotu M2</h3>
                 </div>
                 <div class="card-body">
                     <div class="accordion" id="snapshotComponents">
@@ -321,7 +321,7 @@
                                                asp-route-planItemId="@Model.PlanItemId"
                                                asp-route-recipeComponentVersionId="@component.RecipeComponentVersionId"
                                                class="btn btn-sm btn-primary">
-                                                Gotuj skladowa
+                                                Gotuj składową
                                             </a>
                                         </div>
                                         @if (!string.IsNullOrWhiteSpace(component.Instructions))
@@ -332,9 +332,9 @@
                                             <table class="table table-sm table-vcenter">
                                                 <thead>
                                                     <tr>
-                                                        <th>Skladnik</th>
+                                                        <th>Składnik</th>
                                                         <th class="text-end">Na 1 porcje</th>
-                                                        <th class="text-end">Lacznie</th>
+                                                        <th class="text-end">Łącznie</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -368,16 +368,16 @@
         {
             <div class="card card-premium mb-4">
                 <div class="card-header bg-transparent">
-                    <h3 class="card-title">Pudelka i pojemniki</h3>
+                    <h3 class="card-title">Pudełka i pojemniki</h3>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-vcenter card-table">
                         <thead>
                             <tr>
-                                <th>Zasob</th>
+                                <th>Zasób</th>
                                 <th>Rola</th>
                                 <th class="text-end">Na 1 porcje</th>
-                                <th class="text-end">Lacznie</th>
+                                <th class="text-end">Łącznie</th>
                             </tr>
                         </thead>
                         <tbody>
