@@ -20,7 +20,7 @@ Obecnie na gałęzi `develop` znajduje się **Czysty Szablon Architektoniczny**.
 - `KuchniaUCygana.Web` - UI ASP.NET MVC
 - `KuchniaUCygana.Application` - logika aplikacyjna, DTO, mapowania
 - `KuchniaUCygana.Domain` - encje i kontrakty domenowe
-- `KuchniaUCygana.Infrastructure` - dostep do danych, migracje, integracje zewnetrzne
+- `KuchniaUCygana.Infrastructure` - dostęp do danych, migracje, integracje zewnętrzne
 
 Projekt stosuje **N-Tier / Clean Architecture** z czytelnym podziałem odpowiedzialności:
 
@@ -50,19 +50,19 @@ KuchniaUCygana.Infrastructure   ← DAL (Dapper, Migrations, External APIs, Cach
 
 ## Konta testowe i role
 
-Seeder tworzy ponizsze konta aplikacyjne w profilach `MinimalRealistic` i `DemoData`.
-Logowanie pracownicze korzysta ze zwyklego formularza `/Account/Login` albo `/staff/login`;
-haslo jest weryfikowane przeciwko `PasswordHash` w tabeli `Users`.
+Seeder tworzy poniższe konta aplikacyjne w profilach `MinimalRealistic` i `DemoData`.
+Logowanie pracownicze korzysta ze zwykłego formularza `/Account/Login` albo `/staff/login`;
+hasło jest weryfikowane przeciwko `PasswordHash` w tabeli `Users`.
 
-Rejestracja klienta dziala przez `/Account/Register`: tworzy nowe konto z rola `Client`,
-normalizuje email i zapisuje haslo jako hash BCrypt. Role pracownicze nie maja samodzielnej
-rejestracji; do testow korzystaja z kont seedowanych ponizej.
+Rejestracja klienta działa przez `/Account/Register`: tworzy nowe konto z rolą `Client`,
+normalizuje email i zapisuje hasło jako hash BCrypt. Role pracownicze nie mają samodzielnej
+rejestracji; do testów korzystają z kont seedowanych poniżej.
 
 ### Konta bazowe (`MinimalRealistic`)
 
-| Rola | Email | Haslo | Modul / uzycie |
+| Rola | Email | Hasło | Moduł / użycie |
 |------|-------|-------|----------------|
-| `Admin` | `admin@kuchnia.local` | `Admin123!` | Administracja, pelny dostep |
+| `Admin` | `admin@kuchnia.local` | `Admin123!` | Administracja, pełny dostęp |
 | `Kitchen` | `kitchen@kuchnia.local` | `Kitchen123!` | M3 produkcja |
 | `KitchenManager` | `kitchenm@kuchnia.local` | `Kitchen123!` | M3 kierownik produkcji |
 | `Warehouse` | `warehouse@kuchnia.local` | `Warehouse123!` | M3 magazyn |
@@ -73,22 +73,22 @@ rejestracji; do testow korzystaja z kont seedowanych ponizej.
 | `Logistics` | `logistics@kuchnia.local` | `Logistics123!` | M4 logistyka |
 | `LogisticsManager` | `logisticsm@kuchnia.local` | `Logistics123!` | M4 kierownik logistyki |
 | `Driver` | `driver@kuchnia.local` | `Driver123!` | M4 kierowca |
-| `DriverManager` | `driverm@kuchnia.local` | `Driver123!` | M4 koordynator kierowcow |
+| `DriverManager` | `driverm@kuchnia.local` | `Driver123!` | M4 koordynator kierowców |
 | `HR` | `hr@kuchnia.local` | `HR123!` | M5 HR |
 | `HRManager` | `hrm@kuchnia.local` | `HR123!` | M5 kierownik HR |
-| `BOK` | `bok@kuchnia.local` | `BOK123!` | M5 obsluga klienta |
+| `BOK` | `bok@kuchnia.local` | `BOK123!` | M5 obsługa klienta |
 | `BOKManager` | `bokm@kuchnia.local` | `BOK123!` | M5 kierownik BOK |
 
 ### Konta demo (`DemoData`)
 
-| Rola | Email | Haslo | Uzycie |
+| Rola | Email | Hasło | Użycie |
 |------|-------|-------|--------|
-| `Client` | `demo-klient-01@kuchnia.local` ... `demo-klient-15@kuchnia.local` | `Demo123!` | Wspolni klienci M1/M2/M3/M4 z seedowanych zamowien |
+| `Client` | `demo-klient-01@kuchnia.local` ... `demo-klient-15@kuchnia.local` | `Demo123!` | Wspólni klienci M1/M2/M3/M4 z seedowanych zamówień |
 | `Driver` | `driver2@kuchnia.local` | `Driver123!` | Dodatkowy kierowca scenariusza tras M4 |
 | `Driver` | `driver3@kuchnia.local` | `Driver123!` | Dodatkowy kierowca scenariusza tras M4 |
 
-Loginy SQL Server nie sa kontami aplikacji. Docker tworzy loginy `admin`, `pracownik` i `klient`
-z haslami z `.env`; testy integracyjne Testcontainers uzywaja odpowiednio `Admin123!Integration`,
+Loginy SQL Server nie są kontami aplikacji. Docker tworzy loginy `admin`, `pracownik` i `klient`
+z hasłami z `.env`; testy integracyjne Testcontainers używają odpowiednio `Admin123!Integration`,
 `Pracownik123!Integration` i `Klient123!Integration`.
 
 ---
@@ -112,12 +112,12 @@ cd Kuchnia-Cygana
 
 > **⚠️ UWAGA — WAŻNE:** Wszystkie poniższe komendy (`dotnet`, `docker-compose`) **muszą** być uruchamiane z poziomu **głównego katalogu repozytorium** (tam, gdzie znajduje się plik `KuchniaUCygana.sln`), a **NIE** wewnątrz folderu `src/KuchniaUCygana.Web`!
 
-### 2. Przygotowanie zmiennych srodowiskowych
+### 2. Przygotowanie zmiennych środowiskowych
 
 ```bash
 cp .env.example .env
 ```
-W pliku `.env` uzupelnij nastepujace pola:
+W pliku `.env` uzupełnij następujące pola:
 
 ```
 - `MSSQL_SA_PASSWORD` = Twoje super tajne hasło!
@@ -131,10 +131,10 @@ W pliku `.env` uzupelnij nastepujace pola:
 dotnet user-secrets set "Stripe:SecretKey" "sk_test_..." --project src/KuchniaUCygana.Web
 dotnet user-secrets set "OpenAI:ApiKey" "sk-..." --project src/KuchniaUCygana.Web
 
-> **Alternatywa:** Skopiuj `appsettings.Development.json.example` lub utwórz plik `src/KuchniaUCygana.Web/appsettings.Development.json` z wartościami. Plik ten jest w `.gitignore` i nie zostanie scommitowany.
-> Uwaga: `.env` zawiera sekrety i nie moze byc commitowany do repozytorium.
+> **Alternatywa:** Skopiuj `appsettings.Development.json.example` or utwórz plik `src/KuchniaUCygana.Web/appsettings.Development.json` z wartościami. Plik ten jest w `.gitignore` i nie zostanie scommitowany.
+> Uwaga: `.env` zawiera sekrety i nie może być commitowany do repozytorium.
 
-### 3. Przywrocenie zaleznosci
+### 3. Przywrócenie zależności
 
 ```bash
 dotnet restore KuchniaUCygana.sln
@@ -171,8 +171,6 @@ Nie czyść wtedy bazy danych. `docker compose down -v` usuwa named volume `mssq
 Server. Używaj go tylko wtedy, gdy celowo potrzebujesz czystej bazy, naprawiasz migracje albo chcesz wykonać pełny
 greenfield rebuild. Zmiany w widokach, layoutach, plikach `wwwroot/css` i `wwwroot/js` nie wymagają przebudowy bazy.
 
-## Uruchomienie lokalne bez Dockera
-
 ### 5. Zatrzymanie
 
 ```bash
@@ -190,12 +188,13 @@ Co robi reset:
 - usuwa kontenery i sieci projektu,
 - usuwa volume `mssql_data` (tracisz wszystkie dane bazy),
 - usuwa osierocone kontenery compose,
-- po ponownym starcie tworzy czysta baze od zera przez migracje.
+- po ponownym starcie tworzy czystą bazę od zera przez migracje.
 
-### 6. Uruchomienie lokalne bez Dockera
+---
 
+## 💻 Uruchomienie lokalne bez Dockera
 
-Mozesz uruchomic aplikacje lokalnie, ale baza dalej powinna wskazywac na SQL Server.
+Możesz uruchomić aplikację lokalnie, ale baza dalej powinna wskazywać na SQL Server.
 
 1. Przygotuj `src/KuchniaUCygana.Web/appsettings.Development.json` (na bazie `appsettings.Development.json.example`).
 2. Ustaw poprawny `ConnectionStrings:DefaultConnection` i opcjonalnie `ConnectionStrings:MigrationConnection` do SQL Server.
@@ -231,7 +230,7 @@ dotnet run --project src/KuchniaUCygana.Web
 - [Overview zmian 2026-06-02 i show preview](docs/guides/ZMIANY_2026-06-02_OVERVIEW_I_SHOWCASE.md)
 - [Windows Docker SQL Server setup checklist](docs/guides/WINDOWS_DOCKER_SQLSERVER_SETUP_CHECKLIST.md)
 
-Reczne uruchomienie seedingu:
+Ręczne uruchomienie seedingu:
 ```bash
 dotnet run --project src/KuchniaUCygana.Web -- seed
 ```
@@ -360,7 +359,7 @@ ERP back-office:        _LayoutAdmin.cshtml
 - **Interaktywność bez reload** — HTMX pobiera fragmenty HTML (Partial Views) i wkleja je w DOM bez przeładowania strony
 - **Lokalna reaktywność** — Alpine.js (`x-data`, `x-show`, `@click`) do modali, toggleów, potwierdzeń
 - **Zero JS boilerplate dla CRUD** — filtry, paginacja, zatwierdzanie pozycji przez atrybuty `hx-*`
-- **Walidacja** — FluentValidation (server) + jQuery Validation Unobtrusive (client); HTMX nie wysła formularza przed walidacją kliencką
+- **Walidacja** — FluentValidation (serwer) + jQuery Validation Unobtrusive (klient); HTMX nie wysyła formularza przed walidacją kliencką
 - **CSRF** — jednorazowa konfiguracja globalna w `htmx-config.js`; wszystkie żądania HTMX automatycznie dostarczają token
 
 ### Wzorzec kontrolera (dual response)
