@@ -28,7 +28,6 @@ public sealed class UserRepository : BaseRepository<User>, IUserRepository
 
     public async Task<IReadOnlyList<User>> GetByIdsAsync(IEnumerable<int> ids)
     {
-        using var db = Factory.CreateConnection();
         var idList = ids
             .Where(id => id > 0)
             .Distinct()
@@ -39,6 +38,7 @@ public sealed class UserRepository : BaseRepository<User>, IUserRepository
             return Array.Empty<User>();
         }
 
+        using var db = Factory.CreateConnection();
         const string sql = """
             SELECT [Id], [Email], [FirstName], [LastName], [Role], [CreatedAt], [UpdatedAt]
             FROM [Users]

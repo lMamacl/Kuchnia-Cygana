@@ -2,6 +2,7 @@ using AutoMapper;
 using KuchniaUCygana.Application.DTOs.Logistics;
 using KuchniaUCygana.Application.Interfaces;
 using KuchniaUCygana.Domain.Entities.Logistics;
+using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 
 namespace KuchniaUCygana.Application.Services.Logistics;
@@ -26,6 +27,27 @@ public class VehicleService : IVehicleService
     {
         var vehicles = await _vehicleRepo.GetAllAsync();
         return _mapper.Map<IEnumerable<VehicleDto>>(vehicles);
+    }
+
+    public async Task<VehiclePageDto> SearchAsync(VehicleSearchRequest request)
+    {
+        var result = await _vehicleRepo.SearchAsync(new VehicleSearchQuery(
+            request.Search,
+            ParseVehicleStatus(request.Status),
+            request.Page,
+            request.PageSize));
+
+        return new VehiclePageDto
+        {
+            Items = _mapper.Map<IReadOnlyList<VehicleDto>>(result.Items),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount,
+            TotalFleetCount = result.TotalFleetCount,
+            ActiveCount = result.ActiveCount,
+            MaintenanceCount = result.MaintenanceCount,
+            ActiveCapacityKg = result.ActiveCapacityKg,
+        };
     }
 
     public async Task<VehicleDto?> GetByIdAsync(int id)
@@ -78,5 +100,12 @@ public class VehicleService : IVehicleService
     {
         await _assignmentRepository.UnassignVehicleAsync(id);
         return await _vehicleRepo.DeleteAsync(id);
+    }
+
+    private static VehicleStatus? ParseVehicleStatus(string? status)
+    {
+        return Enum.TryParse<VehicleStatus>(status, ignoreCase: true, out var parsed)
+            ? parsed
+            : null;
     }
 }

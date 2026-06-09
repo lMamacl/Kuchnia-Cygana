@@ -1,5 +1,4 @@
 using KuchniaUCygana.Application.DTOs.Logistics;
-using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Logistics;
 
 namespace KuchniaUCygana.Web.Models.Logistics;
@@ -12,11 +11,15 @@ public sealed class LogisticsDashboardViewModel
 
     public IReadOnlyList<DeliveryRouteDto> Routes { get; init; } = [];
 
-    public IReadOnlyList<VehicleDto> Vehicles { get; init; } = [];
-
-    public IReadOnlyList<DriverDto> Drivers { get; init; } = [];
-
     public int PendingAddressesCount { get; init; }
+
+    public int ActiveVehiclesCount { get; init; }
+
+    public decimal ActiveVehiclesCapacityKg { get; init; }
+
+    public int ActiveDriversCount { get; init; }
+
+    public int DriversWithVehicleCount { get; init; }
 
     public int DeliveriesCount => this.Deliveries.Count;
 
@@ -31,15 +34,4 @@ public sealed class LogisticsDashboardViewModel
 
     public double TotalDistanceKm => this.Routes.Sum(route => route.TotalDistanceKm);
 
-    public int ActiveVehiclesCount =>
-        this.Vehicles.Count(vehicle => vehicle.Status == VehicleStatus.Active.ToString());
-
-    public decimal ActiveVehiclesCapacityKg =>
-        this.Vehicles
-            .Where(vehicle => vehicle.Status == VehicleStatus.Active.ToString())
-            .Sum(vehicle => vehicle.MaxLoadKg);
-
-    public int ActiveDriversCount => this.Drivers.Count(driver => driver.IsActive);
-
-    public int DriversWithVehicleCount => this.Drivers.Count(driver => driver.HasVehicleAssignment);
 }

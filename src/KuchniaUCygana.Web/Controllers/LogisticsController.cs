@@ -16,6 +16,8 @@ namespace KuchniaUCygana.Web.Controllers;
 [Route("logistics")]
 public sealed class LogisticsController : Controller
 {
+    private const int LookupPageSize = 100;
+
     private readonly IVehicleService _vehicleService;
     private readonly IDriverService _driverService;
     private readonly IGeocodeService _geocodeService;
@@ -244,13 +246,23 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet("vehicles")]
-    public async Task<IActionResult> Vehicles()
+    public async Task<IActionResult> Vehicles([FromQuery] VehicleListFilterViewModel filter)
     {
         ViewData["Title"] = "Flota";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = "Zarządzanie flotą pojazdów dostawczych i ich gotowością operacyjną.";
-        var vehicles = await _vehicleService.GetAllAsync();
-        return View(vehicles);
+        var page = await _vehicleService.SearchAsync(new VehicleSearchRequest
+        {
+            Search = filter.Search,
+            Status = filter.Status,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+        });
+        return View(new VehicleListViewModel
+        {
+            Filter = filter,
+            Page = page,
+        });
     }
 
     [HttpGet("vehicles/create")]
@@ -334,12 +346,24 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet("drivers")]
-    public async Task<IActionResult> Drivers()
+    public async Task<IActionResult> Drivers([FromQuery] DriverListFilterViewModel filter)
     {
         ViewData["Title"] = "Kierowcy";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = "Profile kierowców uprawnionych do realizacji dostaw.";
-        return View(await _driverService.GetAllAsync());
+        var page = await _driverService.SearchAsync(new DriverSearchRequest
+        {
+            Search = filter.Search,
+            IsActive = filter.IsActive,
+            HasVehicleAssignment = filter.HasVehicleAssignment,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+        });
+        return View(new DriverListViewModel
+        {
+            Filter = filter,
+            Page = page,
+        });
     }
 
     [HttpGet("drivers/create")]
@@ -515,12 +539,12 @@ public sealed class LogisticsController : Controller
                 .ToList(),
         };
 
-        var vehicles = (await _vehicleService.GetAllAsync())
-            .Where(vehicle => vehicle.Status == VehicleStatus.Active.ToString())
-            .OrderBy(vehicle => vehicle.RegistrationNumber)
-            .ToList();
-        var drivers = (await _driverService.GetAllAsync())
-            .Where(driver => driver.IsActive)
+        var vehiclesTask = GetActiveVehicleLookupAsync();
+        var driversTask = GetDriverLookupAsync(isActive: true, hasVehicleAssignment: null);
+        await Task.WhenAll(vehiclesTask, driversTask);
+
+        var vehicles = await vehiclesTask;
+        var drivers = (await driversTask)
             .OrderByDescending(driver => request.VehicleId > 0 && driver.CurrentVehicleId == request.VehicleId)
             .ThenBy(driver => driver.LastName)
             .ThenBy(driver => driver.FirstName)
@@ -541,21 +565,94 @@ public sealed class LogisticsController : Controller
     {
         var deliveriesTask = _deliveryDataProvider.GetDeliveriesForDateAsync(selectedDate.Date);
         var routesTask = _deliveryRouteService.GetRoutesForDateAsync(selectedDate);
-        var vehiclesTask = _vehicleService.GetAllAsync();
-        var driversTask = _driverService.GetAllAsync();
+        var vehicleSummaryTask = _vehicleService.SearchAsync(new VehicleSearchRequest
+        {
+            Page = 1,
+            PageSize = 5,
+        });
+        var driverSummaryTask = _driverService.SearchAsync(new DriverSearchRequest
+        {
+            Page = 1,
+            PageSize = 5,
+        });
         var pendingAddressesTask = _addressRepository.GetPendingAddressesAsync();
 
-        await Task.WhenAll(deliveriesTask, routesTask, vehiclesTask, driversTask, pendingAddressesTask);
+        await Task.WhenAll(deliveriesTask, routesTask, vehicleSummaryTask, driverSummaryTask, pendingAddressesTask);
+
+        var vehicleSummary = await vehicleSummaryTask;
+        var driverSummary = await driverSummaryTask;
 
         return new LogisticsDashboardViewModel
         {
             SelectedDate = selectedDate,
             Deliveries = await deliveriesTask,
             Routes = await routesTask,
-            Vehicles = (await vehiclesTask).ToList(),
-            Drivers = (await driversTask).ToList(),
+            ActiveVehiclesCount = vehicleSummary.ActiveCount,
+            ActiveVehiclesCapacityKg = vehicleSummary.ActiveCapacityKg,
+            ActiveDriversCount = driverSummary.ActiveCount,
+            DriversWithVehicleCount = driverSummary.WithVehicleCount,
             PendingAddressesCount = (await pendingAddressesTask).Count(),
         };
+    }
+
+    private async Task<IReadOnlyList<VehicleDto>> GetActiveVehicleLookupAsync()
+    {
+        var vehicles = new List<VehicleDto>();
+        var page = 1;
+
+        while (true)
+        {
+            var result = await _vehicleService.SearchAsync(new VehicleSearchRequest
+            {
+                Status = VehicleStatus.Active.ToString(),
+                Page = page,
+                PageSize = LookupPageSize,
+            });
+
+            vehicles.AddRange(result.Items);
+            if (vehicles.Count >= result.TotalCount || result.Items.Count == 0)
+            {
+                break;
+            }
+
+            page++;
+        }
+
+        return vehicles
+            .OrderBy(vehicle => vehicle.RegistrationNumber)
+            .ThenBy(vehicle => vehicle.Id)
+            .ToList();
+    }
+
+    private async Task<IReadOnlyList<DriverDto>> GetDriverLookupAsync(bool? isActive, bool? hasVehicleAssignment)
+    {
+        var drivers = new List<DriverDto>();
+        var page = 1;
+
+        while (true)
+        {
+            var result = await _driverService.SearchAsync(new DriverSearchRequest
+            {
+                IsActive = isActive,
+                HasVehicleAssignment = hasVehicleAssignment,
+                Page = page,
+                PageSize = LookupPageSize,
+            });
+
+            drivers.AddRange(result.Items);
+            if (drivers.Count >= result.TotalCount || result.Items.Count == 0)
+            {
+                break;
+            }
+
+            page++;
+        }
+
+        return drivers
+            .OrderBy(driver => driver.LastName)
+            .ThenBy(driver => driver.FirstName)
+            .ThenBy(driver => driver.Email)
+            .ToList();
     }
 
     private async Task<DriverCreateViewModel> BuildDriverCreateViewModelAsync(CreateDriverRequest? request = null)
@@ -606,13 +703,12 @@ public sealed class LogisticsController : Controller
         var driver = await _driverService.GetByIdAsync(driverId);
         if (driver == null) return null;
 
-        var drivers = (await _driverService.GetAllAsync()).ToList();
+        var drivers = await GetDriverLookupAsync(isActive: null, hasVehicleAssignment: true);
         var assignedDrivers = drivers
             .Where(item => item.CurrentVehicleId.HasValue)
-            .ToDictionary(item => item.CurrentVehicleId!.Value);
-        var vehicles = (await _vehicleService.GetAllAsync())
-            .Where(vehicle => vehicle.Status == VehicleStatus.Active.ToString())
-            .OrderBy(vehicle => vehicle.RegistrationNumber)
+            .GroupBy(item => item.CurrentVehicleId!.Value)
+            .ToDictionary(group => group.Key, group => group.First());
+        var vehicles = (await GetActiveVehicleLookupAsync())
             .Select(vehicle =>
             {
                 assignedDrivers.TryGetValue(vehicle.Id, out var assignedDriver);

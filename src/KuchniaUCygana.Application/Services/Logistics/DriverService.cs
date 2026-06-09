@@ -47,6 +47,28 @@ public sealed class DriverService : IDriverService
             .ToList();
     }
 
+    public async Task<DriverPageDto> SearchAsync(DriverSearchRequest request)
+    {
+        var result = await _driverRepository.SearchAsync(new DriverSearchQuery(
+            request.Search,
+            request.IsActive,
+            request.HasVehicleAssignment,
+            request.Page,
+            request.PageSize));
+
+        return new DriverPageDto
+        {
+            Items = result.Items.Select(Map).ToList(),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount,
+            TotalDriversCount = result.TotalDriversCount,
+            ActiveCount = result.ActiveCount,
+            WithVehicleCount = result.WithVehicleCount,
+            InactiveCount = result.InactiveCount,
+        };
+    }
+
     public async Task<DriverDto?> GetByIdAsync(int id)
     {
         var driver = await _driverRepository.GetByIdAsync(id);
@@ -210,6 +232,23 @@ public sealed class DriverService : IDriverService
             CurrentVehicleId = assignment?.VehicleId,
             CurrentVehicleRegistration = vehicle?.RegistrationNumber,
             CurrentVehicleModel = vehicle?.Model,
+        };
+    }
+
+    private static DriverDto Map(DriverListRow row)
+    {
+        return new DriverDto
+        {
+            Id = row.Id,
+            UserId = row.UserId,
+            FirstName = row.FirstName,
+            LastName = row.LastName,
+            Email = row.Email,
+            LicenseNumber = row.LicenseNumber,
+            IsActive = row.IsActive,
+            CurrentVehicleId = row.CurrentVehicleId,
+            CurrentVehicleRegistration = row.CurrentVehicleRegistration,
+            CurrentVehicleModel = row.CurrentVehicleModel,
         };
     }
 }
