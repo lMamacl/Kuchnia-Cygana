@@ -11,6 +11,7 @@ namespace KuchniaUCygana.Domain.Interfaces.Logistics;
 public interface IVehicleRepository : IRepository<Vehicle>
 {
     Task<IReadOnlyList<Vehicle>> GetByIdsAsync(IEnumerable<int> ids);
+    Task<IReadOnlyList<Vehicle>> GetActiveAsync();
     Task<VehicleSearchResult> SearchAsync(VehicleSearchQuery query);
     public Task<Vehicle?> GetByRegistrationNumberAsync(string registrationNumber);
     Task<IReadOnlyList<Vehicle>> GetByIdsAsync(IReadOnlyCollection<int> vehicleIds);

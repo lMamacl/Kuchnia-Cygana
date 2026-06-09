@@ -42,6 +42,22 @@ public sealed class VehicleRepository : BaseRepository<Vehicle>, IVehicleReposit
         return vehicles.ToList();
     }
 
+    public async Task<IReadOnlyList<Vehicle>> GetActiveAsync()
+    {
+        using var db = _connectionFactory.CreateConnection();
+        var vehicles = await db.QueryAsync<Vehicle>(
+            """
+            SELECT [Id], [RegistrationNumber], [Model], [MaxLoadKg], [Status], [CreatedAt], [UpdatedAt]
+            FROM [Vehicles]
+            WHERE [IsDeleted] = 0
+              AND [Status] = @Status
+            ORDER BY [MaxLoadKg] DESC, [RegistrationNumber], [Id];
+            """,
+            new { Status = (int)VehicleStatus.Active });
+
+        return vehicles.ToList();
+    }
+
     public async Task<Vehicle?> GetByRegistrationNumberAsync(string registrationNumber)
     {
         using var db = _connectionFactory.CreateConnection();

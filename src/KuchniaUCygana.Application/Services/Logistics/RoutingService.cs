@@ -111,11 +111,7 @@ public sealed class RoutingService : IDeliveryRouteService
             };
         }
 
-        var vehicles = (await _vehicleRepository.GetAllAsync())
-            .Where(v => v.Status == VehicleStatus.Active)
-            .OrderByDescending(v => v.MaxLoadKg)
-            .ThenBy(v => v.RegistrationNumber)
-            .ToList();
+        var vehicles = (await _vehicleRepository.GetActiveAsync()).ToList();
 
         if (vehicles.Count == 0)
         {
