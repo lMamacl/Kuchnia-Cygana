@@ -1,0 +1,498 @@
+@model KuchniaUCygana.Application.DTOs.Menu.DietMenuDayShellDto
+@{
+    Layout = "_LayoutStaff";
+    var defaultVariant = Model.DietVariants.FirstOrDefault(v => v.ActiveItemCount > 0) ?? Model.DietVariants.FirstOrDefault();
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h3 class="card-title">Dzień menu @Model.PlanDate.ToString("yyyy-MM-dd")</h3>
+                    <div class="text-secondary small">@Model.Status</div>
+                </div>
+                <a asp-controller="DietMenuPlan" asp-action="Index" asp-route-startDate="@Model.PlanDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-primary">Tydzień</a>
+            </div>
+            <div class="card-body">
+                @if (Model.HasPlan)
+                {
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <span class="badge @(Model.Status == "Published" ? "bg-success-lt text-success" : "bg-blue-lt text-blue")">@Model.Status</span>
+                        <span class="text-secondary">@Model.ActiveItemCount pozycji</span>
+                        @if (Model.QuickWarningCount == 0)
+                        {
+                            <span class="badge bg-success-lt text-success">Szybka walidacja OK</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-warning-lt text-warning">@Model.QuickWarningCount braków</span>
+                        }
+                        @if (Model.PublishedAt.HasValue)
+                        {
+                            <span class="text-secondary">Opublikowano: @Model.PublishedAt.Value.ToString("yyyy-MM-dd HH:mm") przez @Model.PublishedBy</span>
+                        }
+                    </div>
+                    @if (!Model.CanEdit && !string.IsNullOrWhiteSpace(Model.EditBlockReason))
+                    {
+                        <div class="alert alert-warning mt-3 mb-0">@Model.EditBlockReason</div>
+                    }
+                }
+                else
+                {
+                    <form asp-controller="DietMenuPlan" asp-action="CreateDay" method="post" class="row g-3 align-items-end">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="PlanDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
+                        <div class="col-md-8">
+                            <label class="form-label">Notatka</label>
+                            <input name="Notes" class="form-control" maxlength="500" />
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary w-100">Utwórz draft dnia</button>
+                        </div>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (Model.HasPlan)
+    {
+        <div class="col-lg-4">
+            <div class="card card-premium">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="card-title">Warianty diet</h3>
+                    @if (Model.CanEdit)
+                    {
+                        <form asp-controller="DietMenuPlan" asp-action="Publish" asp-route-planId="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="planDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
+                            <button type="submit" class="btn btn-sm btn-success" disabled="@(!Model.CanPublishQuick)">Publikuj</button>
+                        </form>
+                    }
+                </div>
+                <div class="list-group list-group-flush">
+                    @foreach (var variant in Model.DietVariants)
+                    {
+                        var isDefault = defaultVariant?.DietVariantId == variant.DietVariantId;
+                        <button type="button"
+                                class="list-group-item list-group-item-action js-load-diet-variant @(isDefault ? "active" : null)"
+                                data-default="@(isDefault ? "true" : "false")"
+                                data-url="@Url.Action("DietVariantItems", "DietMenuPlan", new { planId = Model.Id, dietVariantId = variant.DietVariantId })">
+                            <div class="d-flex justify-content-between gap-3">
+                                <div>
+                                    <div class="fw-bold">@variant.DietName</div>
+                                    <div class="small @(isDefault ? "text-white-50" : "text-secondary")">@variant.VariantName · @variant.TargetCalories kcal</div>
+                                </div>
+                                <div class="text-end">
+                                    <div>@variant.ActiveItemCount</div>
+                                    @if (variant.QuickWarningCount > 0)
+                                    {
+                                        <span class="badge bg-warning-lt text-warning">@variant.QuickWarningCount</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success-lt text-success">OK</span>
+                                    }
+                                </div>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (Model.CanEdit)
+            {
+                <div class="card card-premium mt-3">
+                    <div class="card-header">
+                        <h3 class="card-title">Kopiuj dzień</h3>
+                    </div>
+                    <div class="card-body">
+                        <form asp-controller="DietMenuPlan" asp-action="CopyDay" asp-route-planId="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="returnDate" value="@Model.PlanDate.ToString("yyyy-MM-dd")" />
+                            <label class="form-label">Data docelowa</label>
+                            <input type="date" name="TargetDate" class="form-control" required />
+                            <button type="submit" class="btn btn-outline-primary w-100 mt-3">Kopiuj aktywne pozycje</button>
+                        </form>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="col-lg-8">
+            <div id="dietVariantDetails" class="min-vh-25">
+                <div class="card card-premium">
+                    <div class="card-body text-secondary">Wybierz wariant diety.</div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+(function () {
+    const details = document.getElementById('dietVariantDetails');
+    const buttons = Array.from(document.querySelectorAll('.js-load-diet-variant'));
+    const mealsLookupUrl = '@Url.Content("~/diet-editor/menu-plan/lookups/meals")';
+    const variantsLookupUrlTemplate = '@Url.Content("~/diet-editor/menu-plan/lookups/meals/__mealId__/variants")';
+    const variantCache = new Map();
+
+    const valueOf = function (item, camelName, pascalName) {
+        return item[camelName] ?? item[pascalName];
+    };
+
+    const asArray = function (value) {
+        return Array.isArray(value) ? value : [];
+    };
+
+    const debounce = function (callback, delay) {
+        let timeoutId;
+        return function () {
+            window.clearTimeout(timeoutId);
+            const args = arguments;
+            timeoutId = window.setTimeout(function () {
+                callback.apply(null, args);
+            }, delay);
+        };
+    };
+
+    const setVariantPlaceholder = function (variantSelect, text) {
+        variantSelect.innerHTML = '';
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = text;
+        variantSelect.appendChild(option);
+    };
+
+    const mealStatusText = function (meal) {
+        const status = valueOf(meal, 'status', 'Status') || '';
+        const completeness = valueOf(meal, 'completenessStatus', 'CompletenessStatus') || '';
+        const variantCount = valueOf(meal, 'variantCount', 'VariantCount') ?? 0;
+        const warningCount = valueOf(meal, 'warningCount', 'WarningCount') ?? 0;
+        const parts = [status, completeness, `${variantCount} wariantów`].filter(Boolean);
+        if (warningCount > 0) {
+            parts.push(`${warningCount} braków`);
+        }
+
+        return parts.join(' / ');
+    };
+
+    const variantStatusText = function (option) {
+        const parts = [
+            option.dataset.status,
+            option.dataset.completeness,
+        ].filter(Boolean);
+
+        if (option.dataset.weight) {
+            parts.push(`${option.dataset.weight} g`);
+        }
+
+        const warningCount = Number(option.dataset.warningCount || 0);
+        if (warningCount > 0) {
+            parts.push(`${warningCount} braków`);
+        }
+
+        return parts.join(' / ') || 'Brak statusu wariantu.';
+    };
+
+    const updateVariantStatus = function (variantSelect, variantStatus) {
+        const selected = variantSelect.selectedOptions[0];
+        variantStatus.textContent = selected ? variantStatusText(selected) : 'Brak wybranego wariantu.';
+    };
+
+    const renderVariantOptions = function (variantSelect, variantStatus, variants, selectedVariantId) {
+        variantSelect.innerHTML = '';
+
+        if (variants.length === 0) {
+            setVariantPlaceholder(variantSelect, 'Brak wariantów dla dania');
+            variantSelect.disabled = true;
+            variantStatus.textContent = 'Brak dostępnych wariantów.';
+            return;
+        }
+
+        let selectedFound = false;
+        variants.forEach(function (variant) {
+            const id = valueOf(variant, 'mealVariantId', 'MealVariantId');
+            const name = valueOf(variant, 'name', 'Name') || 'wariant';
+            const status = valueOf(variant, 'status', 'Status') || '';
+            const completeness = valueOf(variant, 'completenessStatus', 'CompletenessStatus') || '';
+            const warningCount = valueOf(variant, 'warningCount', 'WarningCount') ?? 0;
+            const finalWeight = valueOf(variant, 'finalWeightGrams', 'FinalWeightGrams');
+            const option = document.createElement('option');
+            option.value = id == null ? '' : id.toString();
+            option.textContent = `${name} (${status})`;
+            option.dataset.status = status;
+            option.dataset.completeness = completeness;
+            option.dataset.warningCount = warningCount.toString();
+            if (finalWeight != null) {
+                option.dataset.weight = Number(finalWeight).toFixed(2);
+            }
+
+            if (option.value === selectedVariantId) {
+                option.selected = true;
+                selectedFound = true;
+            }
+
+            variantSelect.appendChild(option);
+        });
+
+        if (selectedVariantId && !selectedFound) {
+            const option = document.createElement('option');
+            option.value = selectedVariantId;
+            option.textContent = 'aktualny wariant niedostępny';
+            option.dataset.status = 'Unavailable';
+            option.dataset.completeness = 'Incomplete';
+            option.dataset.warningCount = '1';
+            option.selected = true;
+            variantSelect.appendChild(option);
+        }
+
+        if (!selectedVariantId) {
+            variantSelect.value = '';
+        }
+
+        variantSelect.dataset.loaded = 'true';
+        variantSelect.dataset.loading = 'false';
+        variantSelect.disabled = false;
+        updateVariantStatus(variantSelect, variantStatus);
+    };
+
+    const renderMealResults = function (resultsBox, meals, onSelect) {
+        resultsBox.innerHTML = '';
+        resultsBox.classList.remove('d-none');
+
+        if (meals.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'list-group-item text-secondary small';
+            empty.textContent = 'Brak wyników.';
+            resultsBox.appendChild(empty);
+            return;
+        }
+
+        meals.forEach(function (meal) {
+            const mealId = valueOf(meal, 'mealId', 'MealId');
+            const mealName = valueOf(meal, 'mealName', 'MealName') || '';
+            const categoryName = valueOf(meal, 'categoryName', 'CategoryName') || 'bez kategorii';
+            const status = valueOf(meal, 'status', 'Status') || '';
+            const completeness = valueOf(meal, 'completenessStatus', 'CompletenessStatus') || '';
+            const warningCount = valueOf(meal, 'warningCount', 'WarningCount') ?? 0;
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'list-group-item list-group-item-action py-2';
+
+            const title = document.createElement('div');
+            title.className = 'fw-bold';
+            title.textContent = mealName;
+
+            const meta = document.createElement('div');
+            meta.className = 'small text-secondary';
+            meta.textContent = `${categoryName} / ${status} / ${completeness}`;
+
+            const badge = document.createElement('span');
+            badge.className = warningCount > 0
+                ? 'badge bg-warning-lt text-warning mt-1'
+                : 'badge bg-success-lt text-success mt-1';
+            badge.textContent = warningCount > 0 ? `${warningCount} braków` : 'gotowe';
+
+            item.appendChild(title);
+            item.appendChild(meta);
+            item.appendChild(badge);
+            item.addEventListener('click', function () {
+                onSelect(mealId, mealName, meal);
+            });
+
+            resultsBox.appendChild(item);
+        });
+    };
+
+    const loadVariants = async function (mealId, variantSelect, variantStatus, selectedVariantId) {
+        variantSelect.disabled = true;
+        variantSelect.dataset.loading = 'true';
+        setVariantPlaceholder(variantSelect, 'Ładowanie wariantów...');
+        variantStatus.textContent = 'Ładowanie statusu wariantów...';
+
+        try {
+            let variants = variantCache.get(mealId.toString());
+            if (!variants) {
+                const response = await fetch(variantsLookupUrlTemplate.replace('__mealId__', encodeURIComponent(mealId)), {
+                    headers: { 'Accept': 'application/json' },
+                });
+                if (!response.ok) {
+                    throw new Error('Lookup wariantów zwrócił błąd.');
+                }
+
+                variants = asArray(await response.json());
+                variantCache.set(mealId.toString(), variants);
+            }
+
+            renderVariantOptions(variantSelect, variantStatus, variants, selectedVariantId || '');
+        } catch {
+            setVariantPlaceholder(variantSelect, 'Nie udało się pobrać wariantów');
+            variantSelect.dataset.loading = 'false';
+            variantSelect.disabled = true;
+            variantStatus.textContent = 'Błąd pobierania wariantów.';
+        }
+    };
+
+    const initializeMenuPlanForms = function (root) {
+        root.querySelectorAll('.menu-plan-item-form').forEach(function (form) {
+            if (form.dataset.initialized === 'true') {
+                return;
+            }
+
+            form.dataset.initialized = 'true';
+            const lookup = form.querySelector('.menu-plan-meal-lookup');
+            const mealIdInput = form.querySelector('.js-meal-id');
+            const mealQuery = form.querySelector('.js-meal-query');
+            const resultsBox = form.querySelector('.js-meal-results');
+            const mealStatus = form.querySelector('.js-meal-status');
+            const variantSelect = form.querySelector('.js-meal-variant-select');
+            const variantStatus = form.querySelector('.js-variant-status');
+            if (!lookup || !mealIdInput || !mealQuery || !resultsBox || !variantSelect || !variantStatus) {
+                return;
+            }
+
+            let mealSearchController;
+            let mealSearchSequence = 0;
+
+            const searchMeals = debounce(async function () {
+                const query = mealQuery.value.trim();
+                if (query.length < 2) {
+                    resultsBox.classList.add('d-none');
+                    mealStatus.textContent = mealIdInput.value ? mealStatus.textContent : 'Wpisz minimum 2 znaki.';
+                    return;
+                }
+
+                mealSearchController?.abort();
+                mealSearchController = new AbortController();
+                const requestSequence = ++mealSearchSequence;
+
+                try {
+                    const response = await fetch(`${mealsLookupUrl}?query=${encodeURIComponent(query)}`, {
+                        headers: { 'Accept': 'application/json' },
+                        signal: mealSearchController.signal,
+                    });
+                    if (!response.ok) {
+                        throw new Error('Lookup dań zwrócił błąd.');
+                    }
+
+                    const meals = asArray(await response.json());
+                    if (requestSequence !== mealSearchSequence) {
+                        return;
+                    }
+
+                    renderMealResults(resultsBox, meals, function (mealId, mealName, meal) {
+                        mealIdInput.value = mealId;
+                        mealQuery.value = mealName;
+                        resultsBox.classList.add('d-none');
+                        mealStatus.textContent = mealStatusText(meal);
+                        variantSelect.dataset.selectedVariantId = '';
+                        variantSelect.dataset.loaded = 'false';
+                        loadVariants(mealId, variantSelect, variantStatus, '');
+                    });
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        return;
+                    }
+
+                    resultsBox.classList.add('d-none');
+                    mealStatus.textContent = 'Błąd pobierania dań.';
+                }
+            }, 250);
+
+            const ensureVariantsLoaded = function () {
+                if (!mealIdInput.value || variantSelect.dataset.loaded === 'true' || variantSelect.dataset.loading === 'true') {
+                    return;
+                }
+
+                loadVariants(
+                    mealIdInput.value,
+                    variantSelect,
+                    variantStatus,
+                    variantSelect.dataset.selectedVariantId || variantSelect.value || '');
+            };
+
+            mealQuery.addEventListener('input', function () {
+                mealIdInput.value = '';
+                variantSelect.dataset.selectedVariantId = '';
+                variantSelect.dataset.loaded = 'false';
+                variantSelect.disabled = true;
+                setVariantPlaceholder(variantSelect, 'Najpierw wybierz posiłek');
+                variantStatus.textContent = 'Brak wybranego wariantu.';
+                searchMeals();
+            });
+
+            mealQuery.addEventListener('focus', function () {
+                if (!mealIdInput.value) {
+                    searchMeals();
+                }
+            });
+
+            variantSelect.addEventListener('focus', ensureVariantsLoaded);
+            variantSelect.addEventListener('pointerdown', ensureVariantsLoaded);
+            variantSelect.addEventListener('change', function () {
+                updateVariantStatus(variantSelect, variantStatus);
+            });
+
+            form.addEventListener('submit', function (event) {
+                if (!mealIdInput.value) {
+                    event.preventDefault();
+                    mealStatus.textContent = 'Wybierz danie z listy wyników.';
+                    mealQuery.focus();
+                    return;
+                }
+
+                if (variantSelect.dataset.loading === 'true') {
+                    event.preventDefault();
+                    variantStatus.textContent = 'Poczekaj na załadowanie wariantów.';
+                }
+            });
+
+        });
+    };
+
+    document.addEventListener('click', function (event) {
+        document.querySelectorAll('.menu-plan-meal-lookup').forEach(function (lookup) {
+            if (!lookup.contains(event.target)) {
+                lookup.querySelector('.js-meal-results')?.classList.add('d-none');
+            }
+        });
+    });
+
+    const loadDietVariant = async function (button) {
+        if (!details || !button) {
+            return;
+        }
+
+        buttons.forEach(item => item.classList.remove('active'));
+        button.classList.add('active');
+        details.innerHTML = '<div class="card card-premium"><div class="card-body text-secondary">Ładowanie...</div></div>';
+
+        try {
+            const response = await fetch(button.dataset.url, {
+                headers: { 'Accept': 'text/html' },
+            });
+            if (!response.ok) {
+                throw new Error('Nie udało się pobrać pozycji wariantu.');
+            }
+
+            details.innerHTML = await response.text();
+            initializeMenuPlanForms(details);
+        } catch {
+            details.innerHTML = '<div class="card card-premium"><div class="card-body text-danger">Nie udało się załadować pozycji.</div></div>';
+        }
+    };
+
+    buttons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            loadDietVariant(button);
+        });
+    });
+
+    const initial = buttons.find(button => button.dataset.default === 'true') || buttons[0];
+    if (initial) {
+        loadDietVariant(initial);
+    }
+})();
+</script>

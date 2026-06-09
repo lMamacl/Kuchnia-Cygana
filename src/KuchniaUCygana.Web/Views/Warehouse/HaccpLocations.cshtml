@@ -1,0 +1,205 @@
+@model IReadOnlyList<KuchniaUCygana.Application.DTOs.Warehouse.HaccpLocationDto>
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Lokalizacje HACCP";
+    ViewData["Section"] = "Magazyn";
+    ViewData["Description"] = "Zarządzanie lokalizacjami, limitami temperatur i powiązaniami z kategoriami magazynowymi.";
+
+    var categories = ViewBag.Categories as IReadOnlyList<KuchniaUCygana.Application.DTOs.Warehouse.WarehouseCategoryDto>
+        ?? Array.Empty<KuchniaUCygana.Application.DTOs.Warehouse.WarehouseCategoryDto>();
+}
+
+<div class="row row-cards">
+    <div class="col-lg-4">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Nowa lokalizacja</h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="SaveHaccpLocation" method="post" autocomplete="off">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="Id" value="0" />
+
+                    <div class="mb-3">
+                        <label class="form-label required">Kod</label>
+                        <input class="form-control" name="Code" maxlength="40" required placeholder="np. FRIDGE_DAIRY_1" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label required">Nazwa</label>
+                        <input class="form-control" name="Name" maxlength="120" required placeholder="np. Lodówka #1 - Nabiał" />
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label required">Minimum °C</label>
+                            <input class="form-control" name="MinTemperatureCelsius" type="number" step="0.1" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label required">Maksimum °C</label>
+                            <input class="form-control" name="MaxTemperatureCelsius" type="number" step="0.1" required />
+                        </div>
+                    </div>
+
+                    <div class="mt-3 mb-3">
+                        <label class="form-label">Kategorie</label>
+                        @foreach (var category in categories)
+                        {
+                            <label class="form-check">
+                                <input class="form-check-input" type="checkbox" name="CategoryIds" value="@category.Id" />
+                                <span class="form-check-label">@category.Name</span>
+                            </label>
+                        }
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Kolejność</label>
+                        <input class="form-control" name="DisplayOrder" type="number" value="100" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Uwagi</label>
+                        <textarea class="form-control" name="Notes" rows="2"></textarea>
+                    </div>
+
+                    <label class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="IsActive" value="true" checked />
+                        <span class="form-check-label">Aktywna</span>
+                    </label>
+
+                    <button class="btn btn-primary w-100" type="submit">Zapisz lokalizację</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Lokalizacje HACCP</h3>
+                <div class="card-actions">
+                    <a asp-action="HaccpReport" class="btn btn-outline-secondary btn-sm">Raport HACCP</a>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter table-premium card-table">
+                    <thead>
+                        <tr>
+                            <th>Nazwa</th>
+                            <th>Limit</th>
+                            <th>Kategorie</th>
+                            <th>Status</th>
+                            <th class="text-end">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Any())
+                        {
+                            <tr>
+                                <td colspan="5" class="text-center text-secondary py-4">Brak lokalizacji HACCP.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var location in Model)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">@location.Name</div>
+                                        <div class="text-secondary small">@location.Code</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-azure-lt">
+                                            @location.MinTemperatureCelsius.ToString("F1")°C do @location.MaxTemperatureCelsius.ToString("F1")°C
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="text-secondary small">@(!string.IsNullOrWhiteSpace(location.CategoryNames) ? location.CategoryNames : "Brak")</span>
+                                    </td>
+                                    <td>
+                                        @if (location.IsActive)
+                                        {
+                                            <span class="badge bg-success-lt text-success">Aktywna</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-lt text-secondary">Nieaktywna</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <button class="btn btn-outline-secondary btn-sm"
+                                                type="button"
+                                                data-bs-toggle="collapse"
+                                                data-bs-target="#edit-location-@location.Id"
+                                                aria-expanded="false"
+                                                aria-controls="edit-location-@location.Id">
+                                            Edytuj
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr class="collapse" id="edit-location-@location.Id">
+                                    <td colspan="5" class="bg-light">
+                                        <form asp-action="SaveHaccpLocation" method="post" autocomplete="off" class="p-3">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="Id" value="@location.Id" />
+
+                                            <div class="row g-3">
+                                                <div class="col-md-4">
+                                                    <label class="form-label required">Kod</label>
+                                                    <input class="form-control form-control-sm" name="Code" maxlength="40" required value="@location.Code" />
+                                                </div>
+                                                <div class="col-md-8">
+                                                    <label class="form-label required">Nazwa</label>
+                                                    <input class="form-control form-control-sm" name="Name" maxlength="120" required value="@location.Name" />
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label required">Minimum °C</label>
+                                                    <input class="form-control form-control-sm" name="MinTemperatureCelsius" type="number" step="0.1" required value="@location.MinTemperatureCelsius.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label required">Maksimum °C</label>
+                                                    <input class="form-control form-control-sm" name="MaxTemperatureCelsius" type="number" step="0.1" required value="@location.MaxTemperatureCelsius.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Kolejność</label>
+                                                    <input class="form-control form-control-sm" name="DisplayOrder" type="number" value="@location.DisplayOrder" />
+                                                </div>
+                                                <div class="col-md-3 d-flex align-items-end">
+                                                    <label class="form-check mb-2">
+                                                        <input class="form-check-input" type="checkbox" name="IsActive" value="true" checked="@location.IsActive" />
+                                                        <span class="form-check-label">Aktywna</span>
+                                                    </label>
+                                                </div>
+                                                <div class="col-md-7">
+                                                    <label class="form-label">Kategorie</label>
+                                                    <div class="d-flex flex-wrap gap-3">
+                                                        @foreach (var category in categories)
+                                                        {
+                                                            var isChecked = location.CategoryIds.Contains(category.Id);
+                                                            <label class="form-check m-0">
+                                                                <input class="form-check-input" type="checkbox" name="CategoryIds" value="@category.Id" checked="@isChecked" />
+                                                                <span class="form-check-label">@category.Name</span>
+                                                            </label>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-5">
+                                                    <label class="form-label">Uwagi</label>
+                                                    <input class="form-control form-control-sm" name="Notes" value="@location.Notes" />
+                                                </div>
+                                            </div>
+
+                                            <div class="mt-3 text-end">
+                                                <button class="btn btn-primary btn-sm" type="submit">Zapisz zmiany</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

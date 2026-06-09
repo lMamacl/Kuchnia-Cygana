@@ -1,0 +1,107 @@
+@model CustomerSupportDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+    var clientUsers = Model.Users
+        .Where(user => string.Equals(user.Role, "Client", StringComparison.Ordinal))
+        .OrderBy(user => user.FullName)
+        .ToArray();
+    var deliveryOptions = Model.DeliveryOptions;
+}
+
+<div class="row row-cards">
+    <div class="col-xl-8">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Nowe zgłoszenie</h3>
+                <a class="btn btn-outline-secondary btn-sm" asp-controller="CustomerSupport" asp-action="Tickets">Zgłoszenia</a>
+            </div>
+            <form asp-action="CreateTicket" method="post">
+                @Html.AntiForgeryToken()
+                <div class="card-body">
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="ticket-client">Klient</label>
+                            <select id="ticket-client" class="form-select" name="ClientUserId" required>
+                                <option value="">Wybierz klienta</option>
+                                @foreach (var user in clientUsers)
+                                {
+                                    <option value="@user.Id" selected="@(Model.NewTicket.ClientUserId == user.Id)">@user.FullName (@user.Email)</option>
+                                }
+                            </select>
+                            @if (clientUsers.Length == 0)
+                            {
+                                <div class="form-hint text-warning">Brak kont klienckich w bazie.</div>
+                            }
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="ticket-delivery">Powiązana dostawa</label>
+                            <select id="ticket-delivery" class="form-select" name="DeliveryCalendarId">
+                                <option value="">Bez powiązania</option>
+                                @foreach (var option in deliveryOptions)
+                                {
+                                    <option value="@option.DeliveryCalendarId"
+                                            data-order-id="@option.OrderId"
+                                            data-client-id="@option.CustomerId"
+                                            selected="@(Model.NewTicket.DeliveryCalendarId == option.DeliveryCalendarId)">
+                                        @option.Label (@option.DeliveryStatus)
+                                    </option>
+                                }
+                            </select>
+                            <input id="ticket-order-id" type="hidden" name="OrderId" value="@Model.NewTicket.OrderId" />
+                            @if (deliveryOptions.Count == 0)
+                            {
+                                <div class="form-hint text-warning">Brak dostaw w ostatnim zakresie dat.</div>
+                            }
+                        </div>
+                    </div>
+                    <div class="row g-3 mt-0">
+                        <div class="col-md-8">
+                            <label class="form-label" for="ticket-title">Tytuł</label>
+                            <input id="ticket-title" class="form-control" name="Title" value="@Model.NewTicket.Title" maxlength="200" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="ticket-priority">Priorytet</label>
+                            <select id="ticket-priority" class="form-select" name="Priority">
+                                @foreach (var priority in Enum.GetValues<TicketPriority>())
+                                {
+                                    <option value="@priority" selected="@(Model.NewTicket.Priority == priority)">@EnumDisplayNames.DisplayName(priority)</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label class="form-label" for="ticket-description">Opis</label>
+                        <textarea id="ticket-description" class="form-control" name="Description" rows="7" required>@Model.NewTicket.Description</textarea>
+                    </div>
+                </div>
+                <div class="card-footer text-end">
+                    <button class="btn btn-primary" type="submit">Dodaj zgłoszenie</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    (() => {
+        const deliverySelect = document.getElementById("ticket-delivery");
+        const clientSelect = document.getElementById("ticket-client");
+        const orderInput = document.getElementById("ticket-order-id");
+
+        if (!deliverySelect || !clientSelect || !orderInput) {
+            return;
+        }
+
+        const syncLinkedDelivery = () => {
+            const option = deliverySelect.selectedOptions[0];
+            orderInput.value = option?.dataset.orderId || "";
+            if (option?.dataset.clientId) {
+                clientSelect.value = option.dataset.clientId;
+            }
+        };
+
+        deliverySelect.addEventListener("change", syncLinkedDelivery);
+        syncLinkedDelivery();
+    })();
+</script>

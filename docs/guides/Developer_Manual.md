@@ -21,7 +21,7 @@ System oparty jest na architekturze Clean Architecture i wzorcach DDD
 (Domain-Driven Design).
 
   - Runtime Bazy: MS SQL Server (Docker).
-  - Dostęp do danych: Dapper + jawny SQL.
+  - Dostep do danych: Dapper (Micro-ORM) + jawny SQL.
   - Migracje: FluentMigrator.
   - Strategia: Greenfield (brak migracji ze starego SQLite).
   - Gałąź develop: Zawiera czysty szablon architektoniczny (Infrastruktura,
@@ -43,9 +43,9 @@ System oparty jest na architekturze Clean Architecture i wzorcach DDD
 
 ### 💡 Limity Pamięci (RAM)
 W pliku `.env` możesz dostosować limity pamięci dla kontenerów (domyślne wartości zoptymalizowane pod lokalne dev):
-- `MSSQL_MEMORY_LIMIT_MB=768` (limit silnika SQL)
-- `MSSQL_CONTAINER_MEMORY_LIMIT=1g` (limit kontenera Docker)
-- `WEB_CONTAINER_MEMORY_LIMIT=512m` (limit kontenera aplikacji)
+- `MSSQL_MEMORY_LIMIT_MB=1536` (limit silnika SQL)
+- `MSSQL_CONTAINER_MEMORY_LIMIT=2g` (limit kontenera Docker)
+- `WEB_CONTAINER_MEMORY_LIMIT=768m` (limit kontenera aplikacji)
 
 ### Panel staff i standard Tablera
 
@@ -129,8 +129,7 @@ W tym projekcie nie używamy EF Core. Migracje i zapytania obsługujemy ręcznie
     CRUD z obsługą Soft Delete.
   - Relacje: Brak relacji nawigacyjnych (Lazy Loading nie istnieje). Używaj
     jawnych kluczy obcych (CategoryId) i złączeń JOIN w zapytaniach.
-  - Zapytania: używaj jawnego, parametryzowanego SQL przez Dapper. Nie dodawaj
-    zależności od komercyjnego ORM ani adnotacji ServiceStack w encjach.
+  - Zapytania: Pisz jawny SQL parametryzowany przez Dapper.
 
 5. Standardy Kodowania Modułu (Krok po Kroku)
 
@@ -169,9 +168,18 @@ Używamy Conventional Commits. Każdy commit musi być poprzedzony prefiksem:
 
 - [ ] dotnet build przechodzi bez błędów.
 - [ ] Wszystkie testy jednostkowe i integracyjne przechodzą (dotnet test).
+- [ ] Guard migracji Dapper nie znajduje starych zależności ani obejść licencji.
 - [ ] Brak twardo zapisanych haseł/kluczy (używaj user-secrets).
 - [ ] Dokumentacja (jeśli wymagana) jest zaktualizowana w języku polskim.
 - [ ] Kod jest sformatowany zgodnie ze standardami projektu.
+
+8. Aktualizacja dokumentacji i integracja branchy
+
+- Szczegółowy wzorzec migracji repozytoriów jest w `docs/guides/dapper-migration-guide.md`.
+- `develop` przyjmuje tylko wspólną, kompatybilną warstwę infrastruktury DB, dokumentację i testy bazowe.
+- `Mamac` utrzymuje implementacje Modułu 3: Warehouse, Production, Packing, widoki, seeding demo i testy M3.
+- Branche deweloperskie po aktualizacji `develop` robią rebase albo merge i migrują własne repozytoria według wzorca Dapper.
+- Nie przenoś pełnym merge'em zmian, które usuwają cudze kontrolery, widoki albo konfigurację Web; wybieraj cherry-pick właściwych modułów.
 
 ⚠️ Ważne Uwagi Techniczne
 
@@ -179,16 +187,6 @@ Używamy Conventional Commits. Każdy commit musi być poprzedzony prefiksem:
     czasowymi.
   - Usuwanie: Nigdy nie używaj db.Delete() na encjach biznesowych. Korzystaj z
     metod repozytorium wspierających Soft Delete.
-
-### Zasady integracji branchy po migracji na Dapper
-
-- `develop` zawiera tylko wspólną, legalną warstwę infrastruktury i nie powinien
-  przyjmować niedokończonych implementacji modułów.
-- Branche modułowe po aktualizacji `develop` wykonują rebase albo merge i
-  migrują własne repozytoria według wzorca Dapper.
-- Nie merge'ujemy pełnych branchy, które usuwają cudze kontrolery, widoki lub
-  zasoby Web. Takie zmiany należy wydzielać przez cherry-pick albo ręczne
-  przeniesienie właściwego modułu.
   - Widoki staff: dla mocków i ekranów back-office używaj `_LayoutStaff` oraz
     `StaffNavigationCatalog`. Nie dopisuj rejestracji DI tylko po to, żeby
     uruchomić statyczny widok testowy.

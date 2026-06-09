@@ -1,5 +1,309 @@
+@using KuchniaUCygana.Application.DTOs.Menu
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<KuchniaUCygana.Application.DTOs.Menu.RecipeComponentListItemDto>
 @{
     Layout = "_LayoutStaff";
+    var filter = ViewBag.Filter as RecipeComponentSearchFilterDto ?? new RecipeComponentSearchFilterDto();
+    var allergens = ViewBag.Allergens as IEnumerable<AllergenDto> ?? Enumerable.Empty<AllergenDto>();
+    var selectedCategoryName = ViewBag.SelectedCategoryName as string;
+    var statusOptions = new List<SelectListItem>
+    {
+        new("Wszystkie", "", string.IsNullOrWhiteSpace(filter.VersionStatus)),
+        new("Draft", "Draft", filter.VersionStatus == "Draft"),
+        new("Published", "Published", filter.VersionStatus == "Published"),
+        new("Archived", "Archived", filter.VersionStatus == "Archived"),
+    };
+    var allergenOptions = new List<SelectListItem> { new("Wszystkie", "", !filter.AllergenId.HasValue) };
+    allergenOptions.AddRange(allergens.Select(a => new SelectListItem(a.Name, a.Id.ToString(), filter.AllergenId == a.Id)));
+    var items = Model.Items;
+    var currentPageCount = items.Count;
+    var publishedCount = items.Count(component => string.Equals(component.LatestVersionStatus, "Published", StringComparison.OrdinalIgnoreCase));
+    var missingCount = items.Count(component => component.HasPublicationGaps || !component.LatestVersionId.HasValue);
+    var hasActiveFilters = !string.IsNullOrWhiteSpace(filter.Query)
+        || filter.CategoryId.HasValue
+        || !string.IsNullOrWhiteSpace(filter.VersionStatus)
+        || filter.AllergenId.HasValue
+        || filter.MissingPublicationData;
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row row-cards">
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="subheader">Wyniki</div>
+                <div class="h1 mb-2 mt-1">@Model.TotalCount</div>
+                <div class="text-secondary small">Składowe pasujące do filtrów</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="subheader">Na stronie</div>
+                <div class="h1 mb-2 mt-1">@currentPageCount</div>
+                <div class="text-secondary small">Widoczne rekordy listy</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="subheader">Opublikowane</div>
+                <div class="h1 mb-2 mt-1 text-success">@publishedCount</div>
+                <div class="text-secondary small">Na aktualnej stronie</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card card-premium card-premium-hoverable">
+            <div class="card-body">
+                <div class="subheader">Braki</div>
+                <div class="h1 mb-2 mt-1 text-warning">@missingCount</div>
+                <div class="text-secondary small">Braki publikacji lub wersji</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h3 class="card-title">Przepisy-składowe</h3>
+                <button type="button"
+                        class="btn btn-outline-primary"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#newComponentForm"
+                        aria-expanded="false"
+                        aria-controls="newComponentForm">
+                    Nowa składowa
+                </button>
+            </div>
+            <div class="card-body">
+                <form method="get" asp-controller="DietEditor" asp-action="Recipes" class="row g-3 align-items-end">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="col-md-3">
+                        <label class="form-label">Szukaj</label>
+                        <input type="search" name="Query" value="@filter.Query" class="form-control" placeholder="Nazwa lub opis" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Kategoria</label>
+                        <input id="componentCategoryFilterSearch" type="search" class="form-control mb-1" placeholder="Szukaj kategorii" autocomplete="off" />
+                        <select id="componentCategoryFilter" name="CategoryId" class="form-select" data-placeholder="Wszystkie kategorie">
+                            <option value="">Wszystkie kategorie</option>
+                            @if (filter.CategoryId.HasValue && !string.IsNullOrWhiteSpace(selectedCategoryName))
+                            {
+                                <option value="@filter.CategoryId.Value" selected>@selectedCategoryName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Status wersji</label>
+                        <select name="VersionStatus" class="form-select" asp-items="statusOptions"></select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Alergen</label>
+                        <select name="AllergenId" class="form-select" asp-items="allergenOptions"></select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Na stronę</label>
+                        <input name="PageSize" value="@Model.PageSize" type="number" min="5" max="100" class="form-control" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-check">
+                            <input name="MissingPublicationData" type="checkbox" value="true" class="form-check-input" checked="@filter.MissingPublicationData" />
+                            <span class="form-check-label">Tylko braki publikacji</span>
+                        </label>
+                    </div>
+                    <div class="col-md-8 d-flex gap-2 flex-wrap">
+                        <button type="submit" class="btn btn-primary">Filtruj</button>
+                        <a asp-controller="DietEditor" asp-action="Recipes" class="btn btn-outline-secondary">Wyczyść</a>
+                    </div>
+                </form>
+            </div>
+            <div id="newComponentForm" class="collapse">
+                <div class="card-body border-top">
+                    <form asp-controller="RecipeComponents" asp-action="Create" method="post" class="row g-2 align-items-end">
+                    @Html.AntiForgeryToken()
+                    <div class="col-md-4">
+                        <label class="form-label">Nazwa</label>
+                        <input name="Name" class="form-control" required maxlength="200" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Kategoria</label>
+                        <input id="newComponentCategorySearch" type="search" class="form-control mb-1" placeholder="Szukaj kategorii" autocomplete="off" />
+                        <select id="newComponentCategory" name="CategoryId" class="form-select" data-placeholder="Bez kategorii">
+                            <option value="">Bez kategorii</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Czas min</label>
+                        <input name="PreparationTimeMinutes" type="number" min="0" value="0" class="form-control" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Opis</label>
+                        <input name="Description" class="form-control" maxlength="2000" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Zdjęcie URL</label>
+                        <input name="ImageUrl" class="form-control" maxlength="500" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Utwórz</button>
+                    </div>
+                    </form>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Nazwa</th>
+                            <th>Kategoria</th>
+                            <th>Czas</th>
+                            <th>Status wersji</th>
+                            <th class="text-center">Wersje</th>
+                            <th>Braki</th>
+                            <th class="w-1"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!items.Any())
+                        {
+                            <tr>
+                                <td colspan="7">
+                                    <div class="empty py-5">
+                                        <div class="empty-title">Brak składowych dla wybranych filtrów.</div>
+                                        <p class="empty-subtitle text-secondary">
+                                            Zmień kryteria wyszukiwania albo dodaj pierwszą składową do katalogu.
+                                        </p>
+                                        <div class="empty-action btn-list justify-content-center">
+                                            @if (hasActiveFilters)
+                                            {
+                                                <a asp-controller="DietEditor" asp-action="Recipes" class="btn btn-outline-secondary">Wyczyść filtry</a>
+                                            }
+                                            <button type="button"
+                                                    class="btn btn-primary"
+                                                    data-bs-toggle="collapse"
+                                                    data-bs-target="#newComponentForm"
+                                                    aria-expanded="false"
+                                                    aria-controls="newComponentForm">
+                                                Dodaj składową
+                                            </button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var component in items)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold">@component.Name</div>
+                                        @if (!string.IsNullOrWhiteSpace(component.Description))
+                                        {
+                                            <div class="text-secondary small">@component.Description</div>
+                                        }
+                                    </td>
+                                    <td>@(component.CategoryName ?? "-")</td>
+                                    <td>@component.PreparationTimeMinutes min</td>
+                                    <td>
+                                        @if (component.LatestVersionId.HasValue)
+                                        {
+                                            <span class="badge bg-blue-lt">v@component.LatestVersionNumber @component.LatestVersionStatus</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-lt">Brak wersji</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">@component.VersionCount</td>
+                                    <td>
+                                        @if (component.HasPublicationGaps)
+                                        {
+                                            <span class="badge bg-orange-lt">@component.PublicationGapCount</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-green-lt">OK</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <a asp-controller="RecipeComponents" asp-action="Details" asp-route-id="@component.Id" class="btn btn-sm btn-outline-primary">Otwórz</a>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer d-flex justify-content-between align-items-center">
+                <span class="text-secondary">
+                    Strona @Model.Page z @(Model.TotalPages == 0 ? 1 : Model.TotalPages), rekordów: @Model.TotalCount
+                </span>
+                <div class="btn-list">
+                    <a asp-controller="DietEditor"
+                       asp-action="Recipes"
+                       asp-route-Query="@filter.Query"
+                       asp-route-CategoryId="@filter.CategoryId"
+                       asp-route-VersionStatus="@filter.VersionStatus"
+                       asp-route-AllergenId="@filter.AllergenId"
+                       asp-route-MissingPublicationData="@filter.MissingPublicationData"
+                       asp-route-Page="@(Model.Page - 1)"
+                       asp-route-PageSize="@Model.PageSize"
+                       class="btn btn-outline-secondary @(Model.Page <= 1 ? "disabled" : string.Empty)">Poprzednia</a>
+                    <a asp-controller="DietEditor"
+                       asp-action="Recipes"
+                       asp-route-Query="@filter.Query"
+                       asp-route-CategoryId="@filter.CategoryId"
+                       asp-route-VersionStatus="@filter.VersionStatus"
+                       asp-route-AllergenId="@filter.AllergenId"
+                       asp-route-MissingPublicationData="@filter.MissingPublicationData"
+                       asp-route-Page="@(Model.Page + 1)"
+                       asp-route-PageSize="@Model.PageSize"
+                       class="btn btn-outline-secondary @(Model.Page >= Model.TotalPages ? "disabled" : string.Empty)">Następna</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const wireLookup = (searchId, selectId, url) => {
+                const search = document.getElementById(searchId);
+                const select = document.getElementById(selectId);
+                if (!search || !select) return;
+
+                let timeoutId;
+                const load = async () => {
+                    const response = await fetch(`${url}?term=${encodeURIComponent(search.value)}`);
+                    const items = await response.json();
+                    const currentValue = select.value;
+                    const currentText = select.options[select.selectedIndex]?.text;
+                    const placeholder = select.dataset.placeholder || "Wybierz";
+                    select.innerHTML = `<option value="">${placeholder}</option>`;
+
+                    if (currentValue && !items.some(item => `${item.id}` === currentValue)) {
+                        select.add(new Option(currentText, currentValue, true, true));
+                    }
+
+                    items.forEach(item => {
+                        const option = new Option(item.text, item.id, false, `${item.id}` === currentValue);
+                        select.add(option);
+                    });
+                };
+
+                search.addEventListener("input", () => {
+                    window.clearTimeout(timeoutId);
+                    timeoutId = window.setTimeout(load, 250);
+                });
+                search.addEventListener("focus", load);
+            };
+
+            wireLookup("componentCategoryFilterSearch", "componentCategoryFilter", "/diet-editor/recipe-components/lookups/categories");
+            wireLookup("newComponentCategorySearch", "newComponentCategory", "/diet-editor/recipe-components/lookups/categories");
+        })();
+    </script>
+}

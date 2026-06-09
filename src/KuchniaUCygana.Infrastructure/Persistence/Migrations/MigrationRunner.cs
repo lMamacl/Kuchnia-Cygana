@@ -54,11 +54,12 @@ public static class MigrationRunner
     private static void EnsureDatabaseExists(IServiceProvider serviceProvider, ILogger logger)
     {
         var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-        var targetConnectionString = configuration.GetConnectionString("DefaultConnection");
+        var targetConnectionString = configuration.GetConnectionString("MigrationConnection")
+            ?? configuration.GetConnectionString("DefaultConnection");
 
         if (string.IsNullOrWhiteSpace(targetConnectionString))
         {
-            throw new InvalidOperationException("Migration connection string is missing.");
+            throw new InvalidOperationException("Migration or default connection string is missing.");
         }
 
         var targetBuilder = new SqlConnectionStringBuilder(targetConnectionString);

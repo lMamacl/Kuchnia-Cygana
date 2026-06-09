@@ -1,148 +1,250 @@
+using System.Security.Claims;
+using KuchniaUCygana.Application.DTOs.HR;
+using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Entities.Auth;
+using KuchniaUCygana.Domain.Enums;
+using KuchniaUCygana.Domain.Interfaces;
+using KuchniaUCygana.Web.Filters;
 using KuchniaUCygana.Web.Models;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
 public sealed class AccountController : Controller
 {
-    private readonly IWebHostEnvironment env;
+    private static readonly string[] StaffRoles =
+    [
+        UserRoles.Kitchen,
+        UserRoles.KitchenManager,
+        UserRoles.Warehouse,
+        UserRoles.WarehouseManager,
+        UserRoles.Packing,
+        UserRoles.PackingManager,
+        UserRoles.Dietitian,
+        UserRoles.Logistics,
+        UserRoles.LogisticsManager,
+        UserRoles.Driver,
+        UserRoles.DriverManager,
+        UserRoles.HR,
+        UserRoles.HRManager,
+        UserRoles.BOK,
+        UserRoles.BOKManager,
+    ];
 
-    /// <summary>
-    /// Initializes a new instance of <see cref="AccountController"/> and captures the hosting environment for environment-specific behavior.
-    /// </summary>
-    public AccountController(IWebHostEnvironment env)
+    private static readonly IReadOnlyDictionary<string, string> DevRoleEmails =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [UserRoles.Admin] = "admin@kuchnia.local",
+            [UserRoles.Kitchen] = "kitchen@kuchnia.local",
+            [UserRoles.KitchenManager] = "kitchenm@kuchnia.local",
+            [UserRoles.Warehouse] = "warehouse@kuchnia.local",
+            [UserRoles.WarehouseManager] = "warehousem@kuchnia.local",
+            [UserRoles.Packing] = "packing@kuchnia.local",
+            [UserRoles.PackingManager] = "packingm@kuchnia.local",
+            [UserRoles.Dietitian] = "dietitian@kuchnia.local",
+            [UserRoles.Logistics] = "logistics@kuchnia.local",
+            [UserRoles.LogisticsManager] = "logisticsm@kuchnia.local",
+            [UserRoles.Driver] = "driver@kuchnia.local",
+            [UserRoles.DriverManager] = "driverm@kuchnia.local",
+            [UserRoles.HR] = "hr@kuchnia.local",
+            [UserRoles.HRManager] = "hrm@kuchnia.local",
+            [UserRoles.BOK] = "bok@kuchnia.local",
+            [UserRoles.BOKManager] = "bokm@kuchnia.local",
+        };
+
+    private readonly IWebHostEnvironment env;
+    private readonly IUserRepository userRepository;
+    private readonly IHumanResourcesService humanResourcesService;
+
+    public AccountController(
+        IWebHostEnvironment env,
+        IUserRepository userRepository,
+        IHumanResourcesService humanResourcesService)
     {
         this.env = env;
+        this.userRepository = userRepository;
+        this.humanResourcesService = humanResourcesService;
     }
-    /// <summary>
-    /// Displays the account center main view and prepares view metadata.
-    /// </summary>
-    /// <returns>The view for the account index page.</returns>
+
     [HttpGet]
     public IActionResult Index()
     {
-        ViewData["Title"] = "Konto";
-        ViewData["Description"] = "Szkielet centrum konta klienta.";
-        return View();
+        return RedirectToRoleHome(GetPrimaryRole(User), returnUrl: null);
     }
 
-    /// <summary>
-    /// Displays the client profile view and prepares page metadata.
-    /// </summary>
-    /// <returns>The profile view result. ViewData["Title"] is set to "Profil klienta" and ViewData["Description"] to "Placeholder profilu klienta."</returns>
+    [Authorize]
     [HttpGet]
-    public IActionResult Profile()
+    public async Task<IActionResult> Profile()
     {
-        ViewData["Title"] = "Profil klienta";
-        ViewData["Description"] = "Placeholder profilu klienta.";
-        return View();
+        ViewData["Title"] = "Profil";
+        ViewData["Description"] = "Profil pracownika, grafik i wnioski urlopowe.";
+        return View(await BuildProfileModelAsync());
     }
 
-    /// <summary>
-    /// Displays the login page.
-    /// </summary>
-    /// <param name="returnUrl">Optional URL to redirect to after successful login; preserved in the view model.</param>
-    /// <returns>The login view populated with a <c>LoginViewModel</c> whose <c>ReturnUrl</c> is set to the provided value.</returns>
-    [HttpGet]
-    public IActionResult Login(string? returnUrl = null)
-    {
-        return View(new LoginViewModel { ReturnUrl = returnUrl });
-    }
-
-    /// <summary>
-    /// Handles submitted login data in the preview environment and redirects the user without performing authentication.
-    /// </summary>
-    /// <param name="model">The submitted login view model; its <c>ReturnUrl</c> determines the post-login redirect when present.</param>
-    /// <returns>A redirect to <c>model.ReturnUrl</c> if provided; otherwise to the Account controller's Index action, falling back to <c>/account</c>.</returns>
+    [Authorize]
     [HttpPost]
-    public async Task<IActionResult> Login(LoginViewModel model)
+    [Route("account/profile/leave")]
+    [AllowOutsideShift]
+    public async Task<IActionResult> RequestLeave(CreateLeaveRequestRequest request)
     {
-        await Task.CompletedTask;
-        TempData["Success"] = "Logowanie jest pominiete w wersji preview.";
-        return Redirect(model.ReturnUrl ?? Url.Action(nameof(Index), "Account") ?? "/account");
+        var employee = await GetCurrentEmployeeAsync();
+        if (employee is null)
+        {
+            TempData["Error"] = "Nie znaleziono kartoteki pracownika dla zalogowanego konta.";
+            return RedirectToAction(nameof(Profile));
+        }
+
+        if (request.EndDate < request.StartDate)
+        {
+            TempData["Error"] = "Data konca urlopu nie moze byc wczesniejsza niz data poczatku.";
+            return RedirectToAction(nameof(Profile));
+        }
+
+        request.EmployeeId = employee.Id;
+        try
+        {
+            await humanResourcesService.CreateLeaveRequestAsync(request);
+            TempData["Success"] = "Wniosek urlopowy zostal przekazany do HR.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Profile));
     }
 
-    /// <summary>
-    /// Displays the registration page with a new, empty registration model.
-    /// </summary>
-    /// <returns>The registration view populated with a new <see cref="RegisterViewModel"/>.</returns>
+    [AllowAnonymous]
+    [HttpGet]
+    public IActionResult Login(string? returnUrl = null, string? email = null)
+    {
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            return RedirectToRoleHome(GetPrimaryRole(User), returnUrl);
+        }
+
+        return View(new LoginViewModel
+        {
+            ReturnUrl = returnUrl,
+            Email = email?.Trim() ?? string.Empty,
+        });
+    }
+
+    [AllowAnonymous]
+    [HttpGet]
+    public IActionResult StaffLogin(string? returnUrl = null)
+    {
+        return RedirectToAction(nameof(Login), new { returnUrl });
+    }
+
+    [AllowAnonymous]
+    [HttpPost]
+    public async Task<IActionResult> Login(LoginViewModel model, string? returnUrl = null)
+    {
+        model.ReturnUrl ??= returnUrl;
+
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var normalizedEmail = model.Email.Trim();
+        var user = await userRepository.FindByEmailAsync(normalizedEmail);
+        if (user is null || !VerifyPassword(model.Password, user.PasswordHash))
+        {
+            ModelState.AddModelError(string.Empty, "Nieprawidlowy email lub haslo.");
+            return View(model);
+        }
+
+        await SignInAsync(
+            user.Id.ToString(),
+            $"{user.FirstName} {user.LastName}".Trim(),
+            user.Email,
+            user.Role);
+
+        TempData["Success"] = $"Zalogowano jako {user.Role}.";
+        return RedirectToRoleHome(user.Role, model.ReturnUrl);
+    }
+
+    [AllowAnonymous]
     [HttpGet]
     public IActionResult Register()
     {
         return View(new RegisterViewModel());
     }
 
-    /// <summary>
-    /// Processes registration submissions in preview mode without creating a user account.
-    /// </summary>
-    /// <param name="model">The submitted registration form values.</param>
-    /// <returns>A redirect to the account index action.</returns>
+    [AllowAnonymous]
     [HttpPost]
     public async Task<IActionResult> Register(RegisterViewModel model)
     {
-        await Task.CompletedTask;
-        TempData["Success"] = "Rejestracja jest pominieta w wersji preview.";
-        return RedirectToAction(nameof(Index));
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var normalizedEmail = model.Email.Trim().ToLowerInvariant();
+        if (await userRepository.ExistsWithEmailAsync(normalizedEmail))
+        {
+            ModelState.AddModelError(nameof(RegisterViewModel.Email), "Konto z tym adresem e-mail juz istnieje.");
+            model.Email = normalizedEmail;
+            return View(model);
+        }
+
+        var user = new User
+        {
+            Email = normalizedEmail,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.Password),
+            FirstName = model.FirstName.Trim(),
+            LastName = model.LastName.Trim(),
+            Role = UserRoles.Client,
+        };
+
+        await userRepository.InsertAsync(user);
+        TempData["Success"] = "Konto zostalo utworzone. Mozesz sie zalogowac.";
+        return RedirectToAction(nameof(Login), new { email = normalizedEmail });
     }
 
-    /// <summary>
-    /// Performs a development-only sign-in that creates a cookie-authenticated user with the specified role and redirects to an appropriate page.
-    /// </summary>
-    /// <param name="role">The role name to assign to the created user; used for the generated user email and role claim.</param>
-    /// <param name="returnUrl">Optional URL to redirect to after sign-in; when null or empty the action redirects based on the provided role.</param>
-    /// <returns>
-    /// An <see cref="IActionResult"/> that is:
-    /// - a BadRequest result with an explanatory message when the host environment is not development;
-    /// - a redirect to <paramref name="returnUrl"/> when provided;
-    /// - otherwise a redirect to a role-specific controller index action.
-    /// </returns>
+    [AllowAnonymous]
     [HttpPost]
     [Route("account/dev-login")]
     public async Task<IActionResult> DevLogin(string role, string? returnUrl = null)
     {
         if (!env.IsDevelopment())
         {
-            return BadRequest("Logowanie deweloperskie jest wyłączone na tym środowisku.");
+            return BadRequest("Logowanie deweloperskie jest wylaczone na tym srodowisku.");
         }
 
-        var claims = new List<Claim>
+        if (!StaffRoles.Contains(role, StringComparer.Ordinal) && role != UserRoles.Admin)
         {
-            new Claim(ClaimTypes.Name, $"dev-{role.ToLower()}@kuchniaucygana.pl"),
-            new Claim(ClaimTypes.Role, role)
-        };
-
-        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var principal = new ClaimsPrincipal(identity);
-
-        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
-
-        TempData["Success"] = $"Zalogowano jako: {role} (Bypass HR).";
-
-        if (string.IsNullOrEmpty(returnUrl))
-        {
-            if (role.Contains("Kitchen")) return RedirectToAction("Index", "Production");
-            if (role.Contains("Warehouse")) return RedirectToAction("Index", "Warehouse");
-            if (role.Contains("Packing")) return RedirectToAction("Index", "Packing");
-            return RedirectToAction("Index", "Staff");
+            return BadRequest("Nieznana rola deweloperska.");
         }
 
-        return Redirect(returnUrl);
+        if (!DevRoleEmails.TryGetValue(role, out var seedEmail))
+        {
+            return BadRequest("Brak domyslnego konta dla wybranej roli.");
+        }
+
+        var seedUser = await userRepository.FindByEmailAsync(seedEmail);
+        if (seedUser is null)
+        {
+            TempData["Error"] = $"Brak seedowanego konta {seedEmail}. Uruchom seeder przed logowaniem.";
+            return RedirectToAction(nameof(Login), new { returnUrl });
+        }
+
+        return RedirectToAction(nameof(Login), new { returnUrl, email = seedUser.Email });
     }
 
-    /// <summary>
-    /// Signs the current user out of the cookie authentication scheme and redirects to the home page.
-    /// </summary>
-    /// <remarks>Sets <c>TempData["Success"]</c> to a confirmation message indicating successful logout.</remarks>
-    /// <returns>A redirect to the Home controller's Index action.</returns>
+    [Authorize]
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-        TempData["Success"] = "Pomyślnie wylogowano.";
+        TempData["Success"] = "Pomyslnie wylogowano.";
         return RedirectToAction("Index", "Home");
     }
 
@@ -154,7 +256,141 @@ public sealed class AccountController : Controller
     public IActionResult AccessDenied()
     {
         ViewData["Title"] = "Brak dostepu";
-        ViewData["Description"] = "Preview nie wymusza uprawnien. Ten widok zostaje jako przyszly punkt integracji.";
+        ViewData["Description"] = "Nie masz uprawnien do wybranego widoku.";
         return View();
+    }
+
+    private async Task SignInAsync(string userId, string displayName, string email, string role)
+    {
+        var name = string.IsNullOrWhiteSpace(displayName) ? email : displayName;
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, userId),
+            new(ClaimTypes.Name, name),
+            new(ClaimTypes.Email, email),
+        };
+
+        foreach (var expandedRole in ExpandRoles(role))
+        {
+            claims.Add(new Claim(ClaimTypes.Role, expandedRole));
+        }
+
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var principal = new ClaimsPrincipal(identity);
+
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+    }
+
+    private async Task<EmployeeProfileViewModel> BuildProfileModelAsync()
+    {
+        var userId = GetCurrentUserId();
+        var employee = await GetCurrentEmployeeAsync();
+        var schedules = userId > 0
+            ? (await humanResourcesService.GetWorkSchedulesByUserAsync(userId)).ToArray()
+            : Array.Empty<WorkScheduleDto>();
+        var leaveRequests = employee is null
+            ? Array.Empty<LeaveRequestDto>()
+            : (await humanResourcesService.GetLeaveRequestsByEmployeeAsync(employee.Id)).ToArray();
+
+        return new EmployeeProfileViewModel
+        {
+            DisplayName = User.Identity?.Name ?? "Uzytkownik",
+            Email = User.Claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Email)?.Value ?? string.Empty,
+            Roles = User.Claims
+                .Where(claim => claim.Type == ClaimTypes.Role)
+                .Select(claim => claim.Value)
+                .Distinct()
+                .ToArray(),
+            Employee = employee,
+            WorkSchedules = schedules
+                .OrderBy(schedule => schedule.ShiftDate)
+                .ThenBy(schedule => schedule.Shift)
+                .ToArray(),
+            LeaveRequests = leaveRequests
+                .OrderByDescending(request => request.CreatedAt)
+                .ToArray(),
+        };
+    }
+
+    private async Task<EmployeeDto?> GetCurrentEmployeeAsync()
+    {
+        var userId = GetCurrentUserId();
+        if (userId <= 0)
+        {
+            return null;
+        }
+
+        return await humanResourcesService.GetEmployeeByUserIdAsync(userId);
+    }
+
+    private int GetCurrentUserId()
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(value, out var userId) ? userId : 0;
+    }
+
+    private IActionResult RedirectToRoleHome(string? role, string? returnUrl)
+    {
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+        {
+            return LocalRedirect(returnUrl);
+        }
+
+        return role switch
+        {
+            UserRoles.Admin => RedirectToAction("Index", "Admin"),
+            UserRoles.HR or UserRoles.HRManager => RedirectToAction("Index", "HumanResources"),
+            UserRoles.BOK or UserRoles.BOKManager => RedirectToAction("Index", "CustomerSupport"),
+            UserRoles.Kitchen or UserRoles.KitchenManager => RedirectToAction("Index", "Production"),
+            UserRoles.Warehouse or UserRoles.WarehouseManager => RedirectToAction("Index", "Warehouse"),
+            UserRoles.Packing or UserRoles.PackingManager => RedirectToAction("Index", "Packing"),
+            UserRoles.Dietitian => RedirectToAction("Index", "DietEditor"),
+            UserRoles.Logistics or UserRoles.LogisticsManager => RedirectToAction("Index", "Logistics"),
+            UserRoles.Driver or UserRoles.DriverManager => RedirectToAction("Index", "DriverMobile"),
+            UserRoles.Client => RedirectToAction("Index", "Home"),
+            _ => RedirectToAction("Index", "Home"),
+        };
+    }
+
+    private static bool VerifyPassword(string password, string passwordHash)
+    {
+        try
+        {
+            return BCrypt.Net.BCrypt.Verify(password, passwordHash);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static IEnumerable<string> ExpandRoles(string role)
+    {
+        var roles = new HashSet<string>(StringComparer.Ordinal) { role };
+
+        if (role == UserRoles.Admin)
+        {
+            foreach (var staffRole in StaffRoles)
+            {
+                roles.Add(staffRole);
+            }
+        }
+        else if (role.EndsWith("Manager", StringComparison.Ordinal))
+        {
+            roles.Add(role[..^"Manager".Length]);
+        }
+
+        return roles;
+    }
+
+    private static string? GetPrimaryRole(ClaimsPrincipal user)
+    {
+        if (user.IsInRole(UserRoles.Admin))
+        {
+            return UserRoles.Admin;
+        }
+
+        return StaffRoles.FirstOrDefault(user.IsInRole) ??
+            user.Claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Role)?.Value;
     }
 }

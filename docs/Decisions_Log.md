@@ -34,8 +34,8 @@ Definiuje on przymusowe atrybuty: `IsDeleted`, `DeletedAt` i `DeletedBy`.
 Najważniejszy model dla ERP. Zamiast `BaseEntity` – tabele ruchome takie jak "Partia Towaru", "Dziennik Logowania Temperatury", "Zlecenie" będą po nim dziedziczyć.
 Klasa powołuje do życia zasady śledzenia historii (Kto stworzył? Kto edytował? Zaimplementowano u niej automatycznie _Soft Delete_, co pozwala nam nigdy nie wymazywać z bazy (komenda DB `DELETE`) rekordów dla sanepidu, a zmieniać im flagę na `IsDeleted = true`).
 
-#### 4. Użycie atrybutów `standardowych atrybutow .NET` w Domain
-Aby nie ciągnąć zależności ORM-a takich jak sam `OrmLite`, ale posiadać nad klasami logikę dla silnika bazy np. `[PrimaryKey]` czy `[AutoIncrement]`, dograno cienką paczkę **`standardowe atrybuty .NET`**. Pozwala to utrzymać Czystą Architekturę, gdzie biblioteka domenowa jest maksymalnie bezinwazyjna, ale baza danych wie po czym ma utworzyć autoincrement.
+#### 4. Standardowe atrybuty .NET w Domain
+Po migracji na Dapper encje domenowe nie używają atrybutów vendor-specific. Dopuszczalne są standardowe atrybuty .NET, np. `[Key]`, `[Table]`, `[NotMapped]`, `[Required]` i `[StringLength]`. Schemat bazy nadal opisują migracje FluentMigrator, a Dapper wykonuje jawne zapytania SQL.
 
 ### 📚 Jak to rozumieć i zapamiętać?
 * Pomyśl o **`BaseEntity`** jak o pustym pojemniku, który dostaję metkę na taśmie produkcyjnej (ID + Data utworzenia). Idealny na encje słownikowe, stałe wartości (Typy Jednostek: *Kilogramy, Litry*).
@@ -88,7 +88,7 @@ Projekt składa się z 5 modułów domenowych z wyraźnymi zależnościami kieru
 **Obszar:** `KuchniaUCygana.Domain.Interfaces.External`
 
 ### Decyzja
-Interfejsy kontraktów między modułami (`IOrderDataProvider`, `IDietDataProvider`, `IDeliveryManifestProvider`) definiowane w warstwie Domain. Implementacje mock w Domain/Mocks (tymczasowo), docelowe adaptery w Infrastructure (po integracji FAZY 5).
+Interfejsy kontraktów między modułami (`IOrderDataProvider`, `IDietDataProvider`, `IDeliveryManifestProvider`) definiowane w warstwie Domain. Runtime po integracji używa adapterów Infrastructure: M1 dla zamówień, M2 dla planów diet/menu oraz M4 dla manifestów logistycznych. Mocki zostają wyłącznie jako jawnie skonfigurowany tryb test/dev.
 
 ### Kontekst
 Moduł 3 (Produkcja) potrzebuje danych z Modułu 1 (zamówienia) i Modułu 2 (receptury), ale te moduły mogą nie być gotowe w momencie rozpoczęcia pracy nad M3. Potrzebna strategia umożliwiająca niezależny rozwój.
@@ -179,7 +179,7 @@ Clean Architecture mówi, że Domain nie powinien mieć zależności na Infrastr
 
 ### Alternatywy
 - **Wszystko w Application Services:** Odrzucono — serwis aplikacyjny staje się „God Service" łączący logikę DB z logiką biznesową. Trudno testować bez mockowania repozytoriów.
-- **Logika w encjach (Rich Domain Model):** Rozważano — zbyt inwazyjne dla obecnego projektu opartego na OrmLite (encje muszą być proste POCO). Encje nie mają dostępu do repozytoriów.
+- **Logika w encjach (Rich Domain Model):** Rozważano — zbyt inwazyjne dla obecnego projektu opartego na prostych encjach POCO. Encje nie mają dostępu do repozytoriów.
 - **Serwisy domenowe + serwisy aplikacyjne (wybrane ✅):** Serwisy domenowe przyjmują czyste dane (listy, wartości), nie znają repozytoriów. Serwisy aplikacyjne pobierają dane, wywołują serwisy domenowe, zapisują wyniki.
 
 ### Konsekwencje

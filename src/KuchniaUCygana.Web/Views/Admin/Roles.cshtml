@@ -1,5 +1,104 @@
+@model AdminDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+
+    var roles = Model.AvailableRoles.OrderBy(role => role).ToArray();
+    var summariesByRole = Model.UserSummary.Roles.ToDictionary(summary => summary.Role);
+    var activeRoles = roles.Count(role => summariesByRole.TryGetValue(role, out var summary) && summary.TotalCount > 0);
+    var staffCount = Model.UserSummary.StaffCount;
+    var clientCount = Model.UserSummary.ClientCount;
 }
-@await Html.PartialAsync("_StaffPlaceholder")
+
+<div class="row row-cards">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Role w systemie</div>
+                <div class="h1 mb-0">@roles.Length</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Role obsadzone</div>
+                <div class="h1 mb-0">@activeRoles</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Pracownicy</div>
+                <div class="h1 mb-0">@staffCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Klienci</div>
+                <div class="h1 mb-0">@clientCount</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Role i przypisane konta</h3>
+                <a class="btn btn-sm btn-outline-primary" asp-controller="Admin" asp-action="Users">Zmien przypisania</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Rola</th>
+                            <th>Typ</th>
+                            <th>Liczba kont</th>
+                            <th>Przykladowe konta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var role in roles)
+                        {
+                            summariesByRole.TryGetValue(role, out var roleSummary);
+                            var roleUserCount = roleSummary?.TotalCount ?? 0;
+                            var sampleUsers = roleSummary?.SampleUsers;
+
+                            <tr>
+                                <td class="fw-semibold">@role</td>
+                                <td>
+                                    @if (string.Equals(role, "Client", StringComparison.Ordinal))
+                                    {
+                                        <span class="badge bg-green-lt text-green">Klient</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-blue-lt text-blue">Pracownik</span>
+                                    }
+                                </td>
+                                <td>@roleUserCount</td>
+                                <td class="text-secondary">
+                                    @if (roleUserCount == 0)
+                                    {
+                                        <span>Brak</span>
+                                    }
+                                    else
+                                    {
+                                        @sampleUsers
+                                        @if (roleUserCount > 3)
+                                        {
+                                            <span> +@(roleUserCount - 3)</span>
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 

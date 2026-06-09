@@ -1,0 +1,41 @@
+@model KuchniaUCygana.Application.DTOs.Menu.DietDto
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Edycja diety";
+    ViewData["Section"] = "Katalog Menu";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-xl-6">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Edycja: @Model.Name</h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="Edit" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label class="form-label" asp-for="Name">Nazwa</label>
+                        <input asp-for="Name" class="form-control" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" asp-for="Description">Opis</label>
+                        <textarea asp-for="Description" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" asp-for="MarketingDescription">Opis marketingowy</label>
+                        <textarea asp-for="MarketingDescription" class="form-control" rows="4"></textarea>
+                    </div>
+                    <label class="form-check form-switch mb-4">
+                        <input class="form-check-input" type="checkbox" asp-for="IsActive" />
+                        <span class="form-check-label">Dieta aktywna w ofercie</span>
+                    </label>
+                    <div class="d-flex justify-content-between">
+                        <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary">Anuluj</a>
+                        <button type="submit" class="btn btn-warning">Zapisz</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

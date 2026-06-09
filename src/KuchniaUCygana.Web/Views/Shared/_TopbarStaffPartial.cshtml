@@ -1,5 +1,25 @@
+@using System.Security.Claims
+@inject KuchniaUCygana.Application.Interfaces.INotificationService NotificationService
 @{
-    var searchItems = StaffNavigationCatalog.Sections
+    var isAuthenticated = User.Identity?.IsAuthenticated == true;
+    var userName = isAuthenticated
+        ? User.Identity?.Name ?? "Użytkownik"
+        : "Podgląd użytkownika";
+    var userRole = User.Claims
+        .Where(claim => claim.Type == ClaimTypes.Role)
+        .Select(claim => claim.Value)
+        .Distinct()
+        .FirstOrDefault() ?? "Brak roli";
+    var avatarText = isAuthenticated
+        ? new string(userName.Where(char.IsLetterOrDigit).Take(2).Select(char.ToUpperInvariant).ToArray())
+        : "PU";
+    if (string.IsNullOrWhiteSpace(avatarText))
+    {
+        avatarText = "PU";
+    }
+
+    var visibleSections = StaffNavigationCatalog.VisibleSections(User);
+    var searchItems = visibleSections
         .SelectMany(section => section.Items.Select(item => new
         {
             title = item.Label,
@@ -11,6 +31,10 @@
         }))
         .ToArray();
     var searchJson = System.Text.Json.JsonSerializer.Serialize(searchItems);
+    var notificationSummary = isAuthenticated
+        ? await NotificationService.GetCurrentUserSummaryAsync(5)
+        : new KuchniaUCygana.Application.DTOs.Notifications.NotificationSummaryDto();
+    var returnUrl = Context.Request.Path + Context.Request.QueryString;
 }
 
 <header class="navbar navbar-expand-md d-print-none staff-topbar">
@@ -24,26 +48,71 @@
         </div>
 
         <div class="navbar-nav flex-row order-md-last ms-auto staff-top-actions">
-            <button class="nav-link px-2 staff-icon-button" type="button" data-staff-theme-toggle title="Tryb ciemny" aria-label="Przelacz tryb ciemny">
+            <button class="nav-link px-2 staff-icon-button" type="button" data-staff-theme-toggle title="Tryb ciemny" aria-label="Przełącz tryb ciemny">
                 @Html.Raw(StaffIconCatalog.Get("moon"))
             </button>
 
             <div class="nav-item dropdown">
                 <button class="nav-link px-2 staff-icon-button position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Powiadomienia" aria-label="Powiadomienia">
                     @Html.Raw(StaffIconCatalog.Get("bell"))
-                    <span class="badge bg-red staff-notification-dot" aria-hidden="true"></span>
+                    @if (notificationSummary.UnreadCount > 0)
+                    {
+                        <span class="badge bg-red staff-notification-dot" aria-hidden="true"></span>
+                    }
                 </button>
                 <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow staff-dropdown">
                     <div class="dropdown-header">Powiadomienia</div>
-                    <div class="dropdown-item-text text-secondary">Brak nowych alarmow w trybie preview.</div>
+                    @if (!notificationSummary.Items.Any())
+                    {
+                        <div class="dropdown-item-text text-secondary">Brak nowych powiadomień.</div>
+                    }
+                    else
+                    {
+                        @foreach (var notification in notificationSummary.Items)
+                        {
+                            var message = notification.Message.Length > 120
+                                ? $"{notification.Message[..120]}..."
+                                : notification.Message;
+
+                            <div class="dropdown-item-text">
+                                <div class="d-flex align-items-start gap-2">
+                                    <span class="badge bg-@(notification.Severity == "Danger" ? "red" : notification.Severity == "Warning" ? "yellow" : "azure")-lt mt-1">Nowe</span>
+                                    <div>
+                                        @if (!string.IsNullOrWhiteSpace(notification.LinkUrl))
+                                        {
+                                            <a class="text-reset fw-semibold" href="@notification.LinkUrl">@notification.Title</a>
+                                        }
+                                        else
+                                        {
+                                            <span class="fw-semibold">@notification.Title</span>
+                                        }
+                                        <div class="text-secondary small">@message</div>
+                                        <div class="text-secondary small">@notification.DeliveredAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                        <form asp-controller="Notifications" asp-action="MarkAsRead" asp-route-userNotificationId="@notification.UserNotificationId" method="post" class="mt-1">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                            <button type="submit" class="btn btn-link btn-sm p-0">Oznacz jako przeczytane</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" asp-controller="Warehouse" asp-action="Temperatures">Temperatury HACCP</a>
-                    <a class="dropdown-item" asp-controller="Production" asp-action="CookingCards">Karty gotowania</a>
+                    <a class="dropdown-item" asp-controller="Notifications" asp-action="Index">Wszystkie powiadomienia</a>
+                    @if (notificationSummary.UnreadCount > 0)
+                    {
+                        <form asp-controller="Notifications" asp-action="MarkAllAsRead" method="post" class="px-3 py-1">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                            <button type="submit" class="btn btn-link btn-sm p-0">Oznacz wszystkie jako przeczytane</button>
+                        </form>
+                    }
                 </div>
             </div>
 
             <div class="nav-item dropdown">
-                <button class="nav-link px-2 staff-icon-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Szybkie przejscia" aria-label="Szybkie przejscia">
+                <button class="nav-link px-2 staff-icon-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Szybkie przejścia" aria-label="Szybkie przejścia">
                     @Html.Raw(StaffIconCatalog.Get("grid"))
                 </button>
                 <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
@@ -56,17 +125,22 @@
             </div>
 
             <div class="nav-item dropdown">
-                <button class="nav-link d-flex lh-1 text-reset p-0 staff-user-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Podglad uzytkownika" aria-label="Podglad uzytkownika">
-                    <span class="avatar avatar-sm staff-avatar">PU</span>
+                <button class="nav-link d-flex lh-1 text-reset p-0 staff-user-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Podgląd użytkownika" aria-label="Podgląd użytkownika">
+                    <span class="avatar avatar-sm staff-avatar">@avatarText</span>
                     <span class="d-none d-xl-block ps-2 text-start">
-                        <span class="staff-user-name">Podglad uzytkownika</span>
-                        <span class="staff-user-role">Brak roli</span>
+                        <span class="staff-user-name">@userName</span>
+                        <span class="staff-user-role">@userRole</span>
                     </span>
                 </button>
                 <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
                     <div class="dropdown-header">Preview</div>
-                    <a class="dropdown-item" asp-controller="Staff" asp-action="Index">Profil preview</a>
+                    <a class="dropdown-item" asp-controller="Account" asp-action="Profile">Profil</a>
                     <a class="dropdown-item" asp-controller="Admin" asp-action="Settings">Ustawienia</a>
+                    <div class="dropdown-divider"></div>
+                    <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="dropdown-item text-danger">Wyloguj</button>
+                    </form>
                 </div>
             </div>
         </div>

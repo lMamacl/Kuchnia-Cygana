@@ -1,0 +1,8 @@
+@{
+    var description = ViewData["Description"]?.ToString() ?? "Widok klienta przygotowany jako placeholder.";
+}
+<div class="p-4 bg-light rounded border">
+    <h1 class="h3">@ViewData["Title"]</h1>
+    <p class="text-muted mb-0">@description</p>
+</div>
+

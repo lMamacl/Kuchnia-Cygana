@@ -1,62 +1,115 @@
+using KuchniaUCygana.Application.DTOs.Logistics;
+using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Domain.Enums;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KuchniaUCygana.Web.Controllers;
 
+[Authorize(Roles = UserRoles.Driver)]
 [Route("driver")]
 public sealed class DriverMobileController : Controller
 {
-    /// <summary>
-    /// Displays the mobile-first driver route overview.
-    /// </summary>
-    /// <returns>The view for the driver's route overview. Sets ViewData["Title"] to "Moja trasa" and ViewData["Description"] to "Lista stopow kierowcy w wersji mobile-first".</returns>
+    private readonly IDriverMobileService driverMobileService;
+
+    public DriverMobileController(IDriverMobileService driverMobileService)
+    {
+        this.driverMobileService = driverMobileService;
+    }
+
     [HttpGet("")]
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
-        ViewData["Title"] = "Moja trasa";
-        ViewData["Description"] = "Lista stopow kierowcy w wersji mobile-first.";
-        return View();
+        SetTitle("Moja trasa");
+        return this.View(await this.driverMobileService.GetDashboardAsync());
     }
 
-    /// <summary>
-    /// Displays the stop details view for a driver and customizes the description based on an optional stop id.
-    /// </summary>
-    /// <param name="id">Optional stop identifier; when provided the description includes that stop number.</param>
-    /// <returns>A view result that renders the stop details page.</returns>
-    [HttpGet("stop")]
-    [HttpGet("stop/{id:int?}")]
-    public IActionResult Stop(int? id)
+    [HttpPost("start")]
+    public async Task<IActionResult> StartRoute()
     {
-        ViewData["Title"] = "Szczegoly stopu";
-        ViewData["Description"] = id.HasValue ? $"Placeholder stopu #{id}." : "Placeholder aktywnego stopu.";
-        return View();
+        try
+        {
+            await this.driverMobileService.StartRouteAsync();
+            this.TempData["Success"] = "Trasa zostala rozpoczeta.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            this.TempData["Error"] = exception.Message;
+        }
+
+        return this.RedirectToAction(nameof(this.Index));
     }
 
-    /// <summary>
-    /// Displays the delivery confirmation view, optionally scoped to a specific stop.
-    /// </summary>
-    /// <param name="id">Optional stop identifier used to personalize the confirmation content; when null the generic delivery confirmation is shown.</param>
-    /// <returns>The view that renders the delivery confirmation page.</returns>
-    [HttpGet("stop/confirm")]
+    [HttpGet("stop/{id:int}")]
+    public async Task<IActionResult> Stop(int id)
+    {
+        SetTitle("Szczegoly dostawy");
+        var stop = await this.driverMobileService.GetStopAsync(id);
+        return stop is null ? this.NotFound() : this.View(stop);
+    }
+
+    [HttpPost("stop/{id:int}/start")]
+    public async Task<IActionResult> StartStop(int id)
+    {
+        try
+        {
+            await this.driverMobileService.StartStopAsync(id);
+            this.TempData["Success"] = "Rozpoczeto obsluge przystanku.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            this.TempData["Error"] = exception.Message;
+        }
+
+        return this.RedirectToAction(nameof(this.Stop), new { id });
+    }
+
     [HttpGet("stop/{id:int}/confirm")]
-    public IActionResult Confirm(int? id)
+    public async Task<IActionResult> Confirm(int id)
     {
-        ViewData["Title"] = "Potwierdzenie dostawy";
-        ViewData["Description"] = id.HasValue ? $"Placeholder potwierdzenia stopu #{id}." : "Placeholder potwierdzenia dostawy.";
-        return View();
+        SetTitle("Potwierdzenie dostawy");
+        var stop = await this.driverMobileService.GetStopAsync(id);
+        return stop is null ? this.NotFound() : this.View(stop);
     }
 
-    /// <summary>
-    /// Displays the problem-reporting view for a delivery stop.
-    /// </summary>
-    /// <param name="id">Optional stop identifier; when provided, the view description references that stop number.</param>
-    /// <returns>An <see cref="IActionResult"/> that renders the problem report view for the current or specified stop.</returns>
-    [HttpGet("stop/problem")]
-    [HttpGet("stop/{id:int}/problem")]
-    public IActionResult Problem(int? id)
+    [HttpPost("stop/{id:int}/confirm")]
+    public async Task<IActionResult> Confirm(int id, ConfirmDriverDeliveryRequest request)
     {
-        ViewData["Title"] = "Problem z dostawa";
-        ViewData["Description"] = id.HasValue ? $"Placeholder problemu stopu #{id}." : "Placeholder zgloszenia problemu.";
-        return View();
+        try
+        {
+            await this.driverMobileService.ConfirmDeliveryAsync(id, request);
+            this.TempData["Success"] = "Dostawa zostala potwierdzona.";
+            return this.RedirectToAction(nameof(this.Index));
+        }
+        catch (InvalidOperationException exception)
+        {
+            this.TempData["Error"] = exception.Message;
+            return this.RedirectToAction(nameof(this.Confirm), new { id });
+        }
+    }
+
+    [HttpGet("stop/{id:int}/problem")]
+    public async Task<IActionResult> Problem(int id)
+    {
+        SetTitle("Problem z dostawa");
+        var stop = await this.driverMobileService.GetStopAsync(id);
+        return stop is null ? this.NotFound() : this.View(stop);
+    }
+
+    [HttpPost("stop/{id:int}/problem")]
+    public async Task<IActionResult> Problem(int id, ReportDriverDeliveryProblemRequest request)
+    {
+        try
+        {
+            await this.driverMobileService.ReportProblemAsync(id, request);
+            this.TempData["Success"] = "Problem zostal zapisany.";
+            return this.RedirectToAction(nameof(this.Index));
+        }
+        catch (InvalidOperationException exception)
+        {
+            this.TempData["Error"] = exception.Message;
+            return this.RedirectToAction(nameof(this.Problem), new { id });
+        }
     }
 
     /// <summary>
@@ -64,11 +117,14 @@ public sealed class DriverMobileController : Controller
     /// </summary>
     /// <returns>The view for the daily summary page; ViewData contains Title = "Podsumowanie dnia" and Description = "Podsumowanie dostaw po zakonczeniu trasy."</returns>
     [HttpGet("summary")]
-    public IActionResult Summary()
+    public async Task<IActionResult> Summary()
     {
-        ViewData["Title"] = "Podsumowanie dnia";
-        ViewData["Description"] = "Podsumowanie dostaw po zakonczeniu trasy.";
-        return View();
+        SetTitle("Podsumowanie dnia");
+        return this.View(await this.driverMobileService.GetSummaryAsync());
+    }
+
+    private void SetTitle(string title)
+    {
+        this.ViewData["Title"] = title;
     }
 }
-

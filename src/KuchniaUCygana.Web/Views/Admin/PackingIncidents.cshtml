@@ -1,0 +1,224 @@
+@using KuchniaUCygana.Domain.Enums
+@model KuchniaUCygana.Web.Models.PackingIncidentListViewModel
+@{
+    Layout = "_LayoutStaff";
+    var incidentsPage = Model.IncidentsPage;
+    var filter = Model.Filter;
+}
+
+@functions {
+    string TypeLabel(PackingIncidentType type) => type switch
+    {
+        PackingIncidentType.BagDamaged => "Uszkodzona torba",
+        PackingIncidentType.BagMissing => "Brak torby",
+        PackingIncidentType.BoxDamaged => "Uszkodzone pudełko",
+        PackingIncidentType.BoxMissing => "Brak pudełka",
+        PackingIncidentType.LabelProblem => "Problem z etykietą",
+        PackingIncidentType.WrongMeal => "Nieprawidłowe danie",
+        PackingIncidentType.Other => "Inne",
+        _ => type.ToString()
+    };
+
+    string StatusLabel(PackingIncidentStatus status) => status switch
+    {
+        PackingIncidentStatus.New => "Nowe",
+        PackingIncidentStatus.InProgress => "W obsłudze",
+        PackingIncidentStatus.KitchenReworkRequested => "Kuchnia: zamiennik",
+        PackingIncidentStatus.WarehouseActionRequired => "Wymaga magazynu",
+        PackingIncidentStatus.Resolved => "Zamknięte",
+        _ => status.ToString()
+    };
+
+    string StatusColor(PackingIncidentStatus status) => status switch
+    {
+        PackingIncidentStatus.New => "red",
+        PackingIncidentStatus.InProgress => "azure",
+        PackingIncidentStatus.KitchenReworkRequested => "yellow",
+        PackingIncidentStatus.WarehouseActionRequired => "orange",
+        PackingIncidentStatus.Resolved => "green",
+        _ => "secondary"
+    };
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Awarie kompletacji</h3>
+            </div>
+            <div class="card-body">
+                <form method="get" asp-controller="Admin" asp-action="PackingIncidents" class="row g-2 align-items-end">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="col-md-3">
+                        <label asp-for="Filter.Search" class="form-label">Szukaj</label>
+                        <input asp-for="Filter.Search" name="Search" type="search" class="form-control" placeholder="Klient, posiłek, kod, powód..." />
+                    </div>
+                    <div class="col-md-2">
+                        <label asp-for="Filter.Date" class="form-label">Data</label>
+                        <input asp-for="Filter.Date" name="Date" type="date" class="form-control" />
+                    </div>
+                    <div class="col-md-2">
+                        <label asp-for="Filter.Status" class="form-label">Status</label>
+                        <select asp-for="Filter.Status" name="Status" class="form-select">
+                            <option value="">Wszystkie</option>
+                            @foreach (PackingIncidentStatus status in Enum.GetValues(typeof(PackingIncidentStatus)))
+                            {
+                                <option value="@status">@StatusLabel(status)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label asp-for="Filter.Type" class="form-label">Typ</label>
+                        <select asp-for="Filter.Type" name="Type" class="form-select">
+                            <option value="">Wszystkie</option>
+                            @foreach (PackingIncidentType type in Enum.GetValues(typeof(PackingIncidentType)))
+                            {
+                                <option value="@type">@TypeLabel(type)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label asp-for="Filter.ClientPublicId" class="form-label">Klient ID</label>
+                        <input asp-for="Filter.ClientPublicId" name="ClientPublicId" class="form-control" />
+                    </div>
+                    <div class="col-md-2">
+                        <label asp-for="Filter.DeliveryCalendarId" class="form-label">DeliveryCalendarId</label>
+                        <input asp-for="Filter.DeliveryCalendarId" name="DeliveryCalendarId" class="form-control" />
+                    </div>
+                    <div class="col-md-2">
+                        <label asp-for="Filter.PageSize" class="form-label">Na stronie</label>
+                        <select asp-for="Filter.PageSize" name="PageSize" class="form-select">
+                            @foreach (var size in new[] { 10, 25, 50, 100 })
+                            {
+                                <option value="@size">@size</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex justify-content-md-end gap-2">
+                        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="PackingIncidents">Wyczyść</a>
+                        <button type="submit" class="btn btn-primary">Filtruj</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card card-premium">
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table table-premium">
+                    <thead>
+                        <tr>
+                            <th>Zgłoszenie</th>
+                            <th>Dostawa</th>
+                            <th>Obiekt</th>
+                            <th>Powody</th>
+                            <th>Status</th>
+                            <th class="w-1 text-end">Obsługa</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Incidents.Any())
+                        {
+                            <tr>
+                                <td colspan="6" class="text-secondary">Brak zgłoszeń dla wybranych filtrów.</td>
+                            </tr>
+                        }
+                        @foreach (var incident in Model.Incidents)
+                        {
+                            var color = StatusColor(incident.Status);
+                            <tr>
+                                <td>
+                                    <div class="fw-bold">#@incident.Id · @TypeLabel(incident.Type)</div>
+                                    <div class="text-secondary small">@incident.ReportedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                </td>
+                                <td>
+                                    <div>Klient ID: <strong>@(incident.ClientPublicId ?? "-")</strong></div>
+                                    <div class="text-secondary small">DeliveryCalendarId: @(incident.DeliveryCalendarId?.ToString() ?? "-")</div>
+                                    <div class="text-secondary small">Sesja: #@incident.PackingSessionId</div>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(incident.BagCode))
+                                    {
+                                        <div>Torba: <span class="font-monospace">@incident.BagCode</span></div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(incident.BoxCode))
+                                    {
+                                        <div>Pudełko: <span class="font-monospace">@incident.BoxCode</span></div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(incident.MealName))
+                                    {
+                                        <div class="text-secondary small">@incident.MealName</div>
+                                    }
+                                </td>
+                                <td>
+                                    <div>@incident.ReasonSummary</div>
+                                    @if (!string.IsNullOrWhiteSpace(incident.Description))
+                                    {
+                                        <div class="text-secondary small">@incident.Description</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(incident.WarehouseWasteError))
+                                    {
+                                        <div class="text-danger small">Magazyn: @incident.WarehouseWasteError</div>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge bg-@color-lt text-@color">@StatusLabel(incident.Status)</span>
+                                    @if (incident.WarehouseWasteRegisteredAt.HasValue)
+                                    {
+                                        <div class="text-success small mt-1">Rozchód magazynowy zarejestrowany</div>
+                                    }
+                                    @if (incident.KitchenPreparedAt.HasValue)
+                                    {
+                                        <div class="text-success small mt-1">Kuchnia oznaczyła jako przygotowane</div>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex flex-column gap-2 align-items-end">
+                                        @if (incident.Status != PackingIncidentStatus.Resolved)
+                                        {
+                                            <form asp-action="AssignPackingIncident" asp-route-incidentId="@incident.Id" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-primary">Przypisz do mnie</button>
+                                            </form>
+
+                                            <form asp-action="AddPackingIncidentNote" asp-route-incidentId="@incident.Id" method="post" class="d-flex gap-1">
+                                                @Html.AntiForgeryToken()
+                                                <input class="form-control form-control-sm" name="notes" placeholder="Notatka" />
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary">Dodaj</button>
+                                            </form>
+
+                                            <form asp-action="RegisterPackingIncidentWaste" asp-route-incidentId="@incident.Id" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-warning">Zarejestruj rozchód</button>
+                                            </form>
+
+                                            @if (incident.ReplacementPackingItemId.HasValue)
+                                            {
+                                                <form asp-action="RequestPackingIncidentRework" asp-route-incidentId="@incident.Id" method="post">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="btn btn-sm btn-outline-indigo">Ponów zadanie kuchni</button>
+                                                </form>
+                                            }
+
+                                            <form asp-action="ResolvePackingIncident" asp-route-incidentId="@incident.Id" method="post" class="d-flex gap-1">
+                                                @Html.AntiForgeryToken()
+                                                <input class="form-control form-control-sm" name="resolutionNotes" placeholder="Uwagi zamknięcia" />
+                                                <button type="submit" class="btn btn-sm btn-success">Zamknij</button>
+                                            </form>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                incidentsPage,
+                "Admin",
+                "PackingIncidents",
+                filter.ToRouteValues()))
+        </div>
+    </div>
+</div>

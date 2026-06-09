@@ -1,0 +1,198 @@
+@model IEnumerable<KuchniaUCygana.Application.DTOs.Packing.PackingLabelDto>
+@{
+    Layout = "_LayoutStaff";
+    ViewData["Title"] = "Etykiety transportowe";
+    ViewData["Section"] = "Załadunek";
+    ViewData["Description"] = "Audytowalne etykiety transportowe fizycznych toreb.";
+
+    object sessionIdValue = ViewBag.SessionId;
+    object routeIdValue = ViewBag.RouteId;
+    object selectedDateValue = ViewBag.SelectedDate;
+    int sessionId = sessionIdValue is int sessionValue ? sessionValue : 0;
+    int routeId = routeIdValue is int routeValue ? routeValue : 0;
+    DateOnly? selectedDate = selectedDateValue is DateOnly dateValue ? dateValue : null;
+}
+
+@section Styles {
+    <style>
+        .transport-label {
+            border: 2px solid #111827;
+            border-radius: 6px;
+            padding: 14px;
+            background: #fff;
+            color: #111827;
+            min-height: 360px;
+            page-break-inside: avoid;
+        }
+
+        .transport-label__qr {
+            width: 3.2cm;
+            height: 3.2cm;
+            border: 1px solid #111827;
+            padding: 4px;
+            background: #fff;
+        }
+
+        .transport-label__code {
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .transport-label__meta {
+            font-size: 0.78rem;
+            line-height: 1.3;
+        }
+
+        .transport-label__meals {
+            white-space: pre-line;
+            font-size: 0.82rem;
+            line-height: 1.35;
+        }
+
+        @@media print {
+            body * {
+                visibility: hidden;
+            }
+
+            .printable-area,
+            .printable-area * {
+                visibility: visible;
+            }
+
+            .printable-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+
+            .d-print-none {
+                display: none !important;
+            }
+        }
+    </style>
+}
+
+<div class="card card-premium d-print-none mb-4">
+    <div class="card-body">
+        <div class="row align-items-end g-3">
+            <div class="col">
+                <h3 class="mb-1 text-dark">Etykiety transportowe toreb</h3>
+                <p class="text-secondary small mb-0">QR prowadzi do publicznego podglądu torby, a kod pod QR służy do skanowania przy załadunku.</p>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary" onclick="window.print();">Drukuj widoczne etykiety</button>
+            </div>
+            <div class="col-auto">
+                @if (routeId > 0 && selectedDate.HasValue)
+                {
+                    <a asp-action="Route" asp-route-routeId="@routeId" asp-route-date="@selectedDate.Value.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">Wróć do dostawy</a>
+                }
+                else if (sessionId > 0)
+                {
+                    <a asp-controller="Packing" asp-action="Session" asp-route-sessionId="@sessionId" class="btn btn-outline-secondary">Wróć do torby</a>
+                }
+                else
+                {
+                    <a asp-action="Index" class="btn btn-outline-secondary">Wróć</a>
+                }
+            </div>
+        </div>
+
+        <div class="border-top mt-3 pt-3">
+            @if (routeId > 0 && selectedDate.HasValue)
+            {
+                <a asp-controller="Loading" asp-action="ReprintDeliveryLabelsForm" asp-route-routeId="@routeId" asp-route-date="@selectedDate.Value.ToString("yyyy-MM-dd")" class="btn btn-outline-danger">Otwórz formularz redruku trasy</a>
+                @*
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="date" value="@selectedDate.Value.ToString("yyyy-MM-dd")" />
+                    <div class="col-md-8">
+                        <label class="form-label">Powód redruku całej trasy</label>
+                        <input class="form-control" name="reprintReason" required maxlength="250" />
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-outline-danger w-100">Wygeneruj redruk trasy</button>
+                    </div>
+                </form>
+                *@
+            }
+            else if (sessionId > 0)
+            {
+                <a asp-controller="Packing" asp-action="ReprintLabelForm" asp-route-sessionId="@sessionId" class="btn btn-outline-danger">Otwórz formularz redruku etykiety</a>
+                @*
+                    @Html.AntiForgeryToken()
+                    <div class="col-md-8">
+                        <label class="form-label">Powód redruku etykiety</label>
+                        <input class="form-control" name="reprintReason" required maxlength="250" />
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-outline-danger w-100">Wygeneruj redruk</button>
+                    </div>
+                </form>
+                *@
+            }
+        </div>
+    </div>
+</div>
+
+<div class="printable-area">
+    <div class="row g-4">
+        @foreach (var label in Model)
+        {
+            var publicId = string.IsNullOrWhiteSpace(label.ClientPublicId)
+                ? "BRAK"
+                : label.ClientPublicId.Length > 8 ? label.ClientPublicId.Substring(0, 8) : label.ClientPublicId;
+            var isReprint = label.PrintNumber > 1;
+
+            <div class="col-md-6">
+                <section class="transport-label">
+                    <div class="d-flex justify-content-between gap-3 border-bottom pb-2 mb-3">
+                        <div>
+                            <div class="text-uppercase fw-bold small">Kuchnia u Cygana</div>
+                            <h2 class="h4 mb-0">Etykieta transportowa</h2>
+                        </div>
+                        <div class="text-end transport-label__meta">
+                            <div>Wydruk: <strong>#@label.PrintNumber</strong></div>
+                            <div>@(label.PrintedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "-")</div>
+                            <div class="fw-bold">@(isReprint ? "REDRUK" : "ORYGINAL")</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col">
+                            <div class="text-secondary small text-uppercase fw-bold">Public ID klienta</div>
+                            <div class="h2 mb-2">@publicId</div>
+                            <div class="transport-label__meta">
+                                <div><strong>Adres:</strong> @(label.Address ?? "-")</div>
+                                <div><strong>Okno:</strong> @(label.DeliveryWindow ?? "-")</div>
+                                <div><strong>Pudełka:</strong> @label.PackedBoxes/@label.TotalBoxes</div>
+                                <div><strong>DeliveryCalendarId:</strong> @(label.DeliveryCalendarId?.ToString() ?? "-")</div>
+                            </div>
+                        </div>
+                        <div class="col-auto text-center">
+                            <div class="transport-label__qr d-flex align-items-center justify-content-center text-center small fw-bold">
+                                @label.BagCode
+                            </div>
+                            <div class="transport-label__code mt-2">@label.BagCode</div>
+                        </div>
+                    </div>
+
+                    <div class="border-top mt-3 pt-2">
+                        <div class="text-secondary small text-uppercase fw-bold">Posilki w torbie</div>
+                        <div class="transport-label__meals">@(string.IsNullOrWhiteSpace(label.MealsList) ? "-" : label.MealsList)</div>
+                    </div>
+
+                    <div class="border-top mt-3 pt-2 transport-label__meta">
+                        <div><strong>Trasa:</strong> @(label.RouteInfo ?? "-")</div>
+                        <div><strong>Auto:</strong> @(label.VehicleRegistration ?? "-") | <strong>Stop:</strong> @(label.StopNumber?.ToString() ?? "-")</div>
+                        @if (isReprint)
+                        {
+                            <div><strong>Powód redruku:</strong> @label.ReprintReason</div>
+                        }
+                    </div>
+                </section>
+            </div>
+        }
+    </div>
+</div>

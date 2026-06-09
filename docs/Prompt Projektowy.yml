@@ -1,0 +1,354 @@
+# project_specification.yml
+# Kompletna specyfikacja projektu "Kuchnia u Cygana" zgodna z uniwersalnym szablonem promptu.
+# Odpowiada strukturze i zawartości rzeczywistego projektu .NET 8 / ASP.NET Core MVC.
+
+--- 
+PROJECT_ID: KUCHNIA_V3
+IDE / EDYTOR: Visual Studio 2022 / Rider / VS Code (z dodatkami C#)
+LANGUAGE: C# 12 (.NET 8 SDK)
+FRAMEWORK / STOS TECHNOLOGICZNY: 
+  - ASP.NET Core MVC 8.0
+  - Dapper 2.1.66 (micro‑ORM)
+  - SQL Server 2022 (lokalnie Docker lub Azure)
+  - FluentMigrator 8.0.1 (migracje schematu)
+  - AutoMapper 16.1.1
+  - FluentValidation 12.1.1
+  - Serilog 10.0.0 (logging)
+  - Stripe.net 51.0.0 (płatności)
+  - OpenAI 2.10.0 (generowanie opisów)
+  - QuestPDF 2026.2.4 (generowanie PDF)
+  - HTMX 2.x + Alpine.js 3.x (frontend)
+  - Bootstrap 5 / Tabler (UI)
+ROLE_DEF: Jesteś architektem kodu. Generujesz kompletny, gotowy do uruchomienia projekt zgodnie ze specyfikacją. Każdy plik/komponent musi zawierać komentarz odnoszący się do ID wymagań.
+
+# ============================================================
+# 1. KONFIGURACJA PODSTAWOWA
+# ============================================================
+Narzędzie budowania: dotnet CLI (MSBuild)
+Struktura projektu: 
+  - root: KuchniaUCygana.sln, Directory.Build.props, .editorconfig
+  - src/ – kod produkcyjny (4 projekty)
+  - tests/ – testy (1 projekt xUnit)
+  - docs/ – dokumentacja (HTML, MD)
+  - docker/ – Dockerfile
+  - .github/ – workflows CI/CD
+Pliki konfiguracyjne IDE: 
+  - .vs/ (automatycznie ignorowane)
+  - .idea/ (ignorowane)
+  - launchSettings.json (Properties/)
+Kodowanie: UTF-8
+Wersja języka: C# 12 (Nullable enable, ImplicitUsings)
+Dodatki/pluginy: 
+  - StyleCop.Analyzers (1.2.0-beta.556)
+  - Roslynator.Analyzers (4.12.4)
+  - SonarAnalyzer.CSharp (poprzez Directory.Build.props)
+  - Hot reload (wbudowane w .NET)
+
+# ============================================================
+# 2. DZIEDZINA (DOMAIN MODEL)
+# ============================================================
+Wymagane encje: minimum 3 klasy domenowe z relacjami kompozycji (@OneToMany). Wszystkie implementują BaseEntity lub AuditableEntity (ISoftDeletable). 
+Lista encji i pól (skrócona – pełna lista w kodzie):
+
+- **User** (BaseEntity)
+  - Id (int)
+  - Email (string, unique)
+  - PasswordHash (string)
+  - FirstName, LastName (string)
+  - Role (string, np. Client, Kitchen, Admin)
+- **Order** (AuditableEntity)
+  - CustomerId (int)
+  - OrderNumber (string)
+  - Status (OrderStatus)
+  - TotalPrice, DiscountAmount, FinalPrice (decimal)
+  - StartDate, EndDate (DateTime?)
+  - Items (List<OrderItem>)
+  - DeliveryDays (List<DeliveryCalendar>)
+- **OrderItem** (AuditableEntity) – powiązane z Order (ManyToOne)
+- **ProductionPlan** (AuditableEntity)
+  - ProductionDate (DateOnly)
+  - Status (ProductionPlanStatus)
+  - Items (List<ProductionPlanItem>)
+- **ProductionPlanItem** (AuditableEntity) – powiązane z ProductionPlan (ManyToOne)
+- **StockItem** (AuditableEntity)
+  - Name (string)
+  - DefaultUnitOfMeasureId (int)
+  - MinimumLevel (decimal)
+  - LeadTimeDays (int)
+- **Batch** (AuditableEntity) – powiązane z StockItem (ManyToOne)
+  - SupplierBatchNumber (string)
+  - CurrentQuantity (decimal)
+  - ExpiryDate (DateTimeOffset?)
+  - ReceivedDate (DateTimeOffset)
+- **PackingSession** (AuditableEntity)
+  - PackingDate (DateOnly)
+  - OrderId (int?)
+  - Status (PackingStatus)
+  - Items (List<PackingItem>)
+- **PackingItem** (AuditableEntity) – powiązane z PackingSession (ManyToOne)
+- **TemperatureLog** (AuditableEntity<long>)
+  - DeviceNameOrLocation (string)
+  - RecordedTemperatureCelsius (decimal)
+
+Atrybuty pochodne / wyliczeniowe:
+- `Order.FinalPrice = TotalPrice - DiscountAmount`
+- `StockItemDto.CurrentStock` – suma `Batch.CurrentQuantity` dla aktywnych partii
+- `FoodCostEntry.Shortage = TotalWeightGrams - AvailableInStock` (jeśli ujemny → 0)
+
+# ============================================================
+# 3. BEZPIECZEŃSTWO & KONTROLA DOSTĘPU
+# ============================================================
+Role: 
+  - Client (klient B2C)
+  - Kitchen (pracownik kuchni)
+  - KitchenManager (szef kuchni)
+  - Warehouse (magazynier)
+  - WarehouseManager (kierownik magazynu)
+  - Packing (pakowacz)
+  - PackingManager (kierownik kompletacji)
+  - Dietitian (dietetyk)
+  - Driver (kierowca)
+  - Admin (administrator)
+
+Uprawnienia (macierz – wybrane przykłady):
+
+| Zasób / Akcja | Client | Kitchen | KitchenManager | Warehouse | WarehouseManager | Packing | PackingManager | Admin |
+|---------------|--------|---------|----------------|-----------|------------------|---------|----------------|-------|
+| Podgląd planu produkcji | nie | tak | tak | nie | nie | nie | nie | tak |
+| Generowanie planu | nie | nie | tak | nie | nie | nie | nie | tak |
+| Zatwierdzenie gotowania | nie | nie | tak | nie | nie | nie | nie | tak |
+| Przyjęcie dostawy | nie | nie | nie | tak | tak | nie | nie | tak |
+| Raport HACCP | nie | nie | nie | nie | tak | nie | nie | tak |
+| Pakowanie toreb | nie | nie | nie | nie | nie | tak | tak | tak |
+| Zatwierdzenie wysyłki | nie | nie | nie | nie | nie | nie | tak | tak |
+| Edycja składników | nie | tak | tak | tak | tak | tak | tak | tak |
+| Zarządzanie użytkownikami | nie | nie | nie | nie | nie | nie | nie | tak |
+
+Uwierzytelnianie: 
+  - Cookie Authentication (ASP.NET Core Identity‑like) – HttpOnly cookie, sliding expiration 30 min.
+  - Hasła: BCrypt.Net-Next (BCrypt hash).
+  - W środowisku Development dostępny bypass (`/account/dev-login`) dla szybkiego testowania ról.
+
+Zasady sesji / tokena: 
+  - Cookie `KuchniaUCygana.Auth` z flagami HttpOnly, Secure (Always), SameSite=Lax.
+  - Logout usuwa ciasteczko.
+  - Brak JWT – standardowe cookie.
+
+# ============================================================
+# 4. API (REST/gRPC/GraphQL) – ENDPOINTY
+# ============================================================
+Prefiks bazowy: brak – standardowe routing MVC (kontrolery).
+Format odpowiedzi: HTML (widoki) lub JSON (dla wybranych endpointów, np. `/packing/manifest`).
+Paginacja i sortowanie: realizowane w widokach przez parametry zapytania.
+
+Lista kluczowych endpointów (zaznaczono HTTP, ścieżka, opis, uprawnienia):
+
+| Metoda | Ścieżka | Opis | Request Body | Response | Uprawnienia |
+|--------|---------|------|--------------|----------|--------------|
+| GET | /warehouse | Pulpit magazynu (stany, alerty) | – | View (Warehouse/Index) | Warehouse,WarehouseManager,Admin |
+| POST | /warehouse/receive | Przyjęcie dostawy – tworzy partię | ReceiveDeliveryRequest | Redirect do /warehouse | Warehouse,WarehouseManager,Admin |
+| POST | /warehouse/waste | Rejestracja odpadu (FEFO) | RegisterWasteRequest | Redirect do /warehouse | Warehouse,WarehouseManager,Admin |
+| GET | /production | Pulpit produkcji | – | View (Production/Index) | Kitchen,KitchenManager,Admin |
+| POST | /production/generate | Generowanie planu produkcji | CreateProductionPlanRequest | Redirect do /production | KitchenManager,Admin |
+| GET | /production/cooking-card/{planItemId} | Karta gotowania (receptura skalowana) | – | View (Production/CookingCard) | Kitchen,KitchenManager,Admin |
+| POST | /production/approve-cooking | Zatwierdzenie ugotowania | planItemId, actualQuantity | Redirect do /production | KitchenManager,Admin |
+| GET | /packing | Kompletacja toreb | – | View (Packing/Index) | Packing,PackingManager,Admin |
+| POST | /packing/start | Rozpoczęcie sesji pakowania | date, packedBy | Redirect | Packing,PackingManager,Admin |
+| POST | /packing/pack-client | Spakowanie zamówienia do torby | sessionId, orderId | Redirect | Packing,PackingManager,Admin |
+| POST | /packing/loading/{routeId}/manifest | Generowanie manifestu | date | Redirect | PackingManager,Admin |
+| GET | /packing/labels/{sessionId} | Etykiety transportowe (QR) | – | View (Packing/Labels) | Packing,PackingManager,Admin |
+| GET | /warehouse/haccp-report | Raport HACCP | from, to | View (HaccpReport) | WarehouseManager,Admin |
+| POST | /account/dev-login | Logowanie deweloperskie (bypass) | role, returnUrl | Redirect | tylko Development |
+| POST | /account/logout | Wylogowanie | – | Redirect do Home | publiczne |
+
+# ============================================================
+# 5. DTO (Data Transfer Objects)
+# ============================================================
+Stosować rekordy / klasy z właściwościami get/set. Mapowanie przez AutoMapper (Profile).
+
+Lista głównych DTO (nazwa + kluczowe pola):
+
+- **ReceiveDeliveryRequest**: StockItemId, SupplierBatchNumber, Quantity, ExpiryDate, Notes
+- **BatchDto**: Id, StockItemId, SupplierBatchNumber, CurrentQuantity, ExpiryDate, ReceivedDate, IsDepleted
+- **RegisterWasteRequest**: StockItemId, Quantity, Reason, BatchId (opcjonalny)
+- **InventoryAlertDto**: StockItemId, StockItemName, AlertType, Message, CurrentQuantity, MinimumLevel, DaysUntilExpiry
+- **StockItemDto**: Id, Name, CurrentStock, MinimumLevel, UnitSymbol, Status, StatusColor, EarliestExpiryDate
+- **ProductionPlanDto**: Id, ProductionDate, Status, Notes, Items (List<ProductionPlanItemDto>)
+- **ProductionPlanItemDto**: Id, MealName, PlannedQuantity, CookedQuantity, Status, ProductionGroup, EstimatedReadyTime
+- **CookingCardDto**: PlanItemId, MealName, PlannedQuantity, Ingredients (List<CookingCardIngredientDto>)
+- **PackingBoardDto**: PackingDate, TotalBags, PackedBags, Routes (List<PackingRouteDto>)
+- **PackingSessionDto**: Id, PackingDate, OrderId, ClientName, Status, Items
+- **PackingLabelDto**: Id, LabelType, QrCode, DishName, Allergens, Kcal, ClientName, RouteInfo
+- **PackingManifestDto**: Id, ManifestNumber, RouteId, VehicleRegistration, BagCount, IsVerified, PayloadJson
+- **CreateOrderRequest**: AddressId, StartDate, Items (List<CreateOrderItemRequest>)
+- **OrderDto**: Id, OrderNumber, Status, FinalPrice, Items, DeliveryDays
+- **UserDto**: Id, Email, FullName, Role
+- **LogTemperatureRequest**: DeviceNameOrLocation, TemperatureCelsius, Remarks
+- **HaccpReportDto**: DateFrom, DateTo, TotalReadings, OutOfRangeReadings, Readings
+
+# ============================================================
+# 6. WYMAGANIA FUNKCJONALNE (z ID)
+# ============================================================
+Każde ID mapuje się do konkretnej metody/komponentu.
+
+| ID | Opis | Komponent docelowy |
+|----|------|--------------------|
+| F1 | Rejestracja i logowanie użytkownika (Client) | AccountController.Register, Login |
+| F2 | Zarządzanie adresami (CRUD) | AddressController, AddressService |
+| F3 | Składanie zamówienia (koszyk, checkout, Stripe) | CartController, CheckoutController, OrderService, StripePaymentService |
+| F4 | Generowanie dziennego planu produkcji na podstawie zamówień i diet | ProductionPlanGenerator, ProductionService.GenerateDailyPlanAsync |
+| F5 | Zatwierdzanie ugotowania i odpis FEFO | ProductionService.ApproveCookingAsync, FefoService.DeductByFefoAsync |
+| F6 | Przyjęcie dostawy – tworzenie partii | WarehouseService.ReceiveDeliveryAsync |
+| F7 | Rejestracja straty/odpadu | WarehouseService.RegisterWasteAsync, FefoService.DeductByFefoAsync |
+| F8 | Inteligentne alerty (stany poniżej minimum, bliskie przeterminowanie) | SmartInventoryAnalyzer.AnalyzeAsync |
+| F9 | Kompletacja toreb (pakowanie pudełek do torby) | PackingService.PackClientDietAsync, PackingService.PackOrderBagAsync |
+| F10 | Generowanie etykiet transportowych (QR) | PackingService.GenerateTransportLabelsAsync |
+| F11 | Tworzenie manifestu załadunkowego i weryfikacja | PackingService.GeneratePackingManifestAsync, VerifyPackingManifestAsync |
+| F12 | Logowanie temperatur i raport HACCP | TemperatureService.LogTemperatureAsync, GetHaccpReportAsync |
+| F13 | Podgląd stanów magazynowych i alertów | WarehouseService.GetStockOverviewAsync, GetSmartAlertsAsync |
+| F14 | Inwentaryzacja (korekta stanów) | WarehouseService.PerformInventoryAsync |
+| F15 | Podgląd planu produkcji (dashboard) | ProductionService.GetDailyPlanByDateAsync |
+| F16 | Druk karty gotowania (PDF) | QuestPDF (w serwisie) – ProductionService.GetCookingCardAsync zwraca dane, PDF generowany w widoku? (W projekcie PDF nie jest jeszcze w pełni zaimplementowany dla karty gotowania, ale istnieje infrastruktura) |
+| F17 | Udostępnienie planu logistyce (Model B‑lite) | ProductionPlan.IsSharedWithLogistics, SharedAt |
+| F18 | Panel pracowniczy (staff) – nawigacja, wyszukiwarka widoków | StaffController, StaffNavigationCatalog |
+| F19 | Seeding danych demo (użytkownicy, składniki, partie, temperatury) | DatabaseSeeder.SeedAsync (profile MinimalRealistic, DemoData) |
+| F20 | Automatyczne migracje bazy danych przy starcie | MigrationRunner.RunMigrations |
+
+# ============================================================
+# 7. WYMAGANIA NIEFUNKCJONALNE & TECHNICZNE
+# ============================================================
+- **Walidacja:** co najmniej 6 różnych reguł – zaimplementowane w FluentValidation:
+  - `ReceiveDeliveryValidator`: StockItemId > 0, SupplierBatchNumber.NotEmpty(), Quantity.GreaterThan(0), ExpiryDate.GreaterThan(now) (jeśli podana), Notes.MaxLength(500).
+  - `RegisterWasteValidator`: StockItemId > 0, Quantity.GreaterThan(0), Reason.NotEmpty().MaxLength(250), BatchId.GreaterThan(0) gdy podany.
+  - `LogTemperatureValidator`: DeviceNameOrLocation.NotEmpty().MaxLength(50), TemperatureCelsius.InclusiveBetween(-50,50).
+  - `CreateProductionPlanValidator`: ProductionDate.GreaterThanOrEqualTo(today), Notes.MaxLength(500).
+  - `CreateOrderRequestValidator`: AddressId > 0, StartDate.GreaterThanOrEqualTo(DateTime.Today.AddDays(1)), Items.NotEmpty(), TotalDays 1-365, PricePerDay > 0.
+  - `CreateAddressRequestValidator`: Label.NotEmpty().MaxLength(50), Street.NotEmpty(), BuildingNumber.NotEmpty(), City.NotEmpty(), PostalCode.Matches(@"^\d{2}-\d{3}$").
+- **Edycja na bieżących danych:** formularze pre‑filled z bazy – np. `Receive` GET wypełnia listę składników, `Warehouse/Receive` POST przy błędzie zwraca ten sam widok z wprowadzonymi danymi.
+- **Udostępnianie danych (sharing):** generowanie tokena UUID dla manifestu (`PackingManifest.ManifestNumber`), widok publiczny manifestu JSON (`/packing/loading/{routeId}/manifest`).
+- **Sortowanie:** w widoku magazynu (`Warehouse/Index`) – tabela sortowalna przez kliknięcie nagłówków (za pomocą HTMX + parametry zapytania). Preferencje sortowania zapisywane w ciasteczku `sortPrefs` (JavaScript).
+- **Filtrowanie:** 
+  - Filtrowanie stanów magazynowych po kategorii – pole tekstowe (wyszukiwarka) w `Warehouse/Index`.
+  - Filtrowanie planu produkcji po dacie (kalendarz).
+  - Filtrowanie raportu HACCP po zakresie dat.
+- **Uwierzytelnianie / rejestracja:** formularze login/register (szkielety, pełna implementacja w kolejnych sprintach). Hasła haszowane BCrypt. Domyślna rola po rejestracji: `Client`.
+- **Zapis sesji do bazy:** nie dotyczy (brak głosowań). Stan koszyka przechowywany w ciasteczku (serializowany JSON) – `CartService`.
+- **Dodatkowe elementy:** 
+  - Strona główna publiczna (`Home/Index`).
+  - Panel administracyjny (`AdminController`) – zarządzanie użytkownikami, rolami, ustawieniami.
+  - Panel kierowcy (uproszczony, mobilny) – `DriverMobileController`.
+  - Globalna obsługa błędów: `ErrorController` (domyślnie) + middleware Serilog.
+
+# ============================================================
+# 8. WARSTWA PREZENTACJI (GUI)
+# ============================================================
+Silnik szablonów: Razor (.cshtml)
+Liczba formularzy z walidacją: minimum 3 (przyjęcie dostawy, rejestracja odpadu, log temperatury) – wszystkie używają `asp-validation-for` i jQuery Validation Unobtrusive.
+Użyte tagi / komponenty Razor:
+  - `@model`
+  - `@await Html.PartialAsync(...)`
+  - `@Html.AntiForgeryToken()`
+  - `asp-validation-for`, `asp-validation-summary`
+  - `asp-action`, `asp-controller`, `asp-route-*`
+  - `@RenderBody()`, `@RenderSection()`
+  - `@inject` (wstrzykiwanie zależności do widoków, np. `IAntiforgery`)
+Dostępność (WCAG): 
+  - Użycie `aria-label`, `alt` w obrazkach (np. ikony).
+  - Kontrast zapewniony przez Tabler/Bootstrap.
+  - Nawigacja klawiaturowa (domyślna dla linków i przycisków).
+
+Dodatkowo:
+  - Layouty: `_Layout` (kliencki), `_LayoutStaff` (Tabler), `_LayoutDriver` (uproszczony).
+  - Partiale globalne: `_SidebarPartial`, `_TopbarStaffPartial`, `_HeaderStaffPartial`, `_StaffAlertsPartial`, `_ValidationScriptsPartial`.
+  - HTMX: atrybuty `hx-get`, `hx-post`, `hx-target`, `hx-swap`, `hx-trigger`, `hx-indicator` (np. w `Packing/Index`).
+  - Alpine.js: `x-data`, `x-show`, `x-cloak`, `@click` (np. w `Production/FoilPrinting` – modal potwierdzenia).
+
+# ============================================================
+# 9. TESTOWANIE
+# ============================================================
+- **Testy jednostkowe (Unit):**
+  - `UserServiceTests` – sprawdza mapowanie User → UserDto.
+  - `BatchRepositoryTests` (mock) – testuje logikę sortowania FEFO i filtrowania.
+  - `ForbiddenPersistenceUsageTests` – wyszukuje zakazanych terminów (ServiceStack, License bypass).
+- **Testy integracyjne (Integration):**
+  - `SqlServerMigrationAndSeedingTests` – weryfikuje migracje i seeding na kontenerze SQL Server (Testcontainers).
+  - `WarehouseRepositoriesSqlServerTests` – testuje `BatchRepository`, `InventoryTransactionRepository`, `PackingSessionRepository`, `TemperatureLogRepository`, `M1OrderDataProvider` na prawdziwej bazie.
+  - `PackingService` – testy integracyjne całego flow kompletacji (tworzenie toreb, pakowanie, manifest).
+- **Testy bezpieczeństwa:** pośrednio przez `[Authorize]` i testy integracyjne (np. sprawdzenie, czy endpointy wymagają odpowiednich ról – do zaimplementowania).
+
+Uruchamianie: 
+  - Wszystkie testy: `dotnet test KuchniaUCygana.sln`
+  - Tylko jednostkowe: `dotnet test --filter "Category!=Integration"`
+  - Tylko integracyjne: `dotnet test --filter "Category=Integration"`
+
+# ============================================================
+# 10. INSTRUKCJE GENEROWANIA (dla AI)
+# ============================================================
+Fazy implementacji (dla asystenta – lista wymaganych plików na podstawie istniejącego projektu):
+
+**Faza 1 – infrastruktura i domain core:**
+  - `Directory.Build.props`, `.editorconfig`, `stylecop.json`
+  - `docker-compose.yml`, `Dockerfile`
+  - `KuchniaUCygana.sln`
+  - Projekty: Web, Application, Domain, Infrastructure, Tests
+  - `BaseEntity`, `AuditableEntity`, `ISoftDeletable`
+  - `IRepository<T>`, `BaseRepository<T>`
+  - `IDbConnectionFactory`, `SqlServerConnectionFactory`
+  - `MigrationRunner`, migracja 001_CreateUsersTable
+  - `Program.cs` (podstawowa konfiguracja)
+
+**Faza 2 – warstwa domenowa modułu 3 (magazyn, produkcja, kompletacja):**
+  - Encje: `StockItem`, `Batch`, `InventoryTransaction`, `TemperatureLog`, `UnitOfMeasure`, `ProductionPlan`, `ProductionPlanItem`, `ProductionBatch`, `PackingSession`, `PackingItem`, `PackingLabel`, `PackingManifest`, `InventoryAdjustment`
+  - Enumy: `InventoryTransactionType`, `ProductionPlanStatus`, `ProductionItemStatus`, `PackingStatus`, `PackingItemStatus`
+  - Interfejsy repozytoriów: `IBatchRepository`, `IInventoryTransactionRepository`, `IStockItemRepository`, `ITemperatureLogRepository`, `IProductionPlanRepository`, `IPackingSessionRepository`
+  - Migracje 002–009, 100–107 (zamówienia), 301–303 (menu)
+
+**Faza 3 – warstwa aplikacji (serwisy, DTO, AutoMapper, FluentValidation):**
+  - DTO dla Warehouse, Production, Packing, Orders, Menu
+  - Profile AutoMapper: `WarehouseProfile`, `ProductionProfile`, `OrderProfile`, `UserProfile`
+  - Validatory: `ReceiveDeliveryValidator`, `RegisterWasteValidator`, `LogTemperatureValidator`, `CreateProductionPlanValidator`, `CreateOrderRequestValidator`, itd.
+  - Interfejsy serwisów: `IWarehouseService`, `IProductionService`, `IPackingService`, `ITemperatureService`, `IOrderService`, `ICartService`, `ICheckoutService`, itd.
+  - Serwisy: `WarehouseService`, `ProductionService`, `PackingService`, `TemperatureService`, `OrderService`, `CartService`, `CheckoutService`, `AddressService`, `DiscountService`, `UserService`
+
+**Faza 4 – warstwa infrastruktury (repozytoria Dapper, adaptery, seeding):**
+  - Implementacje repozytoriów: `BatchRepository`, `StockItemRepository`, `InventoryTransactionRepository`, `TemperatureLogRepository`, `ProductionPlanRepository`, `PackingSessionRepository`
+  - Repozytoria dla zamówień: `OrderRepository`, `AddressRepository`, `DiscountCodeRepository`, `DeliveryCalendarRepository`, itd.
+  - Adaptery: `M1OrderDataProvider`, `DietDataAdapter`, `M4DeliveryManifestProvider` (mocki tylko test/dev)
+  - `DatabaseSeeder` (MinimalRealistic, DemoData)
+  - `DependencyInjection.cs` (rejestracja wszystkich serwisów)
+
+**Faza 5 – warstwa prezentacji (kontrolery, widoki, statyczne pliki):**
+  - Kontrolery: `WarehouseController`, `ProductionController`, `PackingController`, `OrderController`, `CartController`, `AccountController`, `StaffController`, `AdminController`, `LogisticsController`, `DriverMobileController`, `DietEditorController`, `IngredientController`, `MenuController`
+  - Widoki dla każdego kontrolera (wg struktury Views)
+  - Layouty (`_Layout`, `_LayoutStaff`, `_LayoutDriver`)
+  - Partiale: `_SidebarPartial`, `_TopbarStaffPartial`, `_HeaderStaffPartial`, `_StaffAlertsPartial`, `_ValidationScriptsPartial`, `_CustomerPlaceholder`, `_StaffPlaceholder`, `_DriverPlaceholder`
+  - Statyczne: CSS (`site.css`, `staff.css`, `staff-premium.css`), JS (`htmx-config.js`, `staff-shell.js`, `site.js`), biblioteki (jQuery, Bootstrap, Tabler, HTMX, Alpine)
+
+**Faza 6 – testy i dokumentacja:**
+  - Testy jednostkowe i integracyjne (pliki w `tests/`)
+  - Dokumentacja `README.md`, `Decisions_Log.md`, `PLAN_PROJEKTU.md`, `PLAN_MODUL_3.md`, diagramy, instrukcje.
+
+**Dla każdego wygenerowanego pliku dodaj komentarz z ID realizowanych wymagań** (w kodzie C# – komentarz XML lub `// REQ: F1`).
+
+Priorytet: działający, kompilowalny kod (bez placeholderów). Używaj nowoczesnych konstrukcji języka (recordy, pattern matching, `DateOnly`, `TimeOnly`). Globalna obsługa błędów – `app.UseExceptionHandler()`.
+
+**Seeder bazy danych:** uruchamiany raz (przy starcie lub komendą `seed`). Tworzy użytkowników z rolami, przykładowe składniki, partie, temperatury. Hasła dla admina: `Admin123!` (w seedingu).
+
+**Konfiguracja profili:** 
+  - Development (`appsettings.Development.json`) – lokalny SQL Server lub SQLite, seeding włączony.
+  - Production (`appsettings.json`) – brak seedingu, połączenie przez zmienne środowiskowe.
+
+# ============================================================
+# 11. DODATKOWE MATERIAŁY (dla prezentacji)
+# ============================================================
+- Dokumentacja `DOCUMENTATION.md` (w projekcie: `README.md`, `ARCHITEKTURA_KuchniaUCygana.html`, `PRZEWODNIK_NARZEDZIA_KuchniaUCygana.html`). Mapowanie wymagań na pliki znajduje się w komentarzach w kodzie.
+- Prezentacja `PREZENTACJA.md` – plan dwóch postępów:
+  - 20-30%: działająca baza, migracje, seed, podstawowe encje, autoryzacja, mockowe widoki staff.
+  - 60-70%: pełny flow magazynu (przyjęcia, odpady, alerty), plan produkcji (generowanie, karty gotowania, odpis FEFO), kompletacja toreb, etykiety, manifesty, raporty HACCP.
+- Instrukcja importu / uruchomienia: 
+  - `docker compose up --build` (wymaga .env z hasłem SA)
+  - lub `dotnet run --project src/KuchniaUCygana.Web` z `appsettings.Development.json` i lokalnym SQL Server.
+
+# ============================================================
+# KONIEC SPECYFIKACJI
+# ============================================================

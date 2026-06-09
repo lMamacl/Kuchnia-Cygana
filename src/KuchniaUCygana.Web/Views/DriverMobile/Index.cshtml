@@ -1,5 +1,154 @@
+@model DriverDashboardDto
 @{
     Layout = "_LayoutDriver";
+    var route = Model.Route;
 }
-@await Html.PartialAsync("_DriverPlaceholder")
 
+<section class="driver-stack">
+    <div class="driver-date-row">
+        <div>
+            <div class="text-secondary small">Dzisiaj</div>
+            <div class="fw-bold">@Model.DeliveryDate.ToString("dd.MM.yyyy")</div>
+        </div>
+        <div class="text-end">
+            <div class="text-secondary small">Kierowca</div>
+            <div class="fw-bold">@Model.DriverName</div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SetupMessage))
+    {
+        <div class="alert alert-info mb-0" role="alert">
+            <div class="d-flex gap-2">
+                @Html.Raw(StaffIconCatalog.Get("alert"))
+                <div>@Model.SetupMessage</div>
+            </div>
+        </div>
+    }
+
+    @if (Model.Vehicle is not null)
+    {
+        <div class="card driver-vehicle-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="driver-icon-box text-blue">@Html.Raw(StaffIconCatalog.Get("truck"))</div>
+                    <div>
+                        <div class="text-secondary small">Przypisany pojazd</div>
+                        <div class="h3 mb-0 font-monospace">@Model.Vehicle.RegistrationNumber</div>
+                        <div class="text-secondary">@Model.Vehicle.Model</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (route is not null)
+    {
+        <div class="card driver-route-card">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                    <div>
+                        <div class="text-secondary small">Dzisiejsza trasa</div>
+                        <h2 class="h2 mb-1">@route.Name</h2>
+                        <div class="text-secondary">@route.TotalDistanceKm.ToString("N1") km</div>
+                    </div>
+                    @RouteBadge(route.Status)
+                </div>
+                <div class="d-flex justify-content-between small mb-1">
+                    <span>Postep</span>
+                    <strong>@route.HandledStops / @route.TotalStops</strong>
+                </div>
+                <div class="progress progress-sm mb-3">
+                    <div class="progress-bar bg-blue" style="width: @(route.ProgressPercent)%" role="progressbar" aria-valuenow="@route.ProgressPercent" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <div class="text-secondary small">@route.ReadinessMessage</div>
+            </div>
+            @if (route.CanStart)
+            {
+                <div class="card-footer">
+                    <form asp-action="StartRoute" method="post">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-primary btn-lg w-100">
+                            @Html.Raw(StaffIconCatalog.Get("route"))
+                            Rozpocznij trase
+                        </button>
+                    </form>
+                </div>
+            }
+        </div>
+
+        var nextStop = route.Stops.FirstOrDefault(stop => stop.IsNext);
+        @if (nextStop is not null && route.Status == "InProgress")
+        {
+            <a asp-action="Stop" asp-route-id="@nextStop.Id" class="card driver-next-stop text-reset text-decoration-none">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between gap-3">
+                        <div>
+                            <div class="text-uppercase small fw-bold text-blue">Nastepny przystanek</div>
+                            <div class="h3 mb-1">#@nextStop.SequenceNumber</div>
+                            <div>@nextStop.FullAddress</div>
+                        </div>
+                        <div class="driver-icon-box bg-blue-lt text-blue">@Html.Raw(StaffIconCatalog.Get("route"))</div>
+                    </div>
+                </div>
+            </a>
+        }
+
+        <div class="driver-section-heading">
+            <h2 class="h3 mb-0">Przystanki</h2>
+            <span class="badge bg-secondary-lt text-secondary">@route.TotalStops</span>
+        </div>
+        <div class="driver-stop-list">
+            @foreach (var stop in route.Stops)
+            {
+                <a asp-action="Stop" asp-route-id="@stop.Id" class="card driver-stop-card text-reset text-decoration-none @(stop.IsNext ? "driver-stop-card-next" : string.Empty)">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="driver-stop-number">@stop.SequenceNumber</div>
+                            <div class="flex-fill min-w-0">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div class="fw-semibold driver-address">@stop.FullAddress</div>
+                                    @StopBadge(stop.Status)
+                                </div>
+                                <div class="text-secondary small mt-2">
+                                    @(stop.Bags.Count == 1 ? "1 torba" : $"{stop.Bags.Count} torby")
+                                    @if (!string.IsNullOrWhiteSpace(stop.OrderNumber))
+                                    {
+                                        <span> · @stop.OrderNumber</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            }
+        </div>
+    }
+</section>
+
+@functions {
+    private static Microsoft.AspNetCore.Html.IHtmlContent RouteBadge(string status)
+    {
+        var (css, label) = status switch
+        {
+            "Assigned" => ("bg-blue-lt text-blue", "Gotowa"),
+            "InProgress" => ("bg-yellow-lt text-yellow", "W trasie"),
+            "Completed" => ("bg-success-lt text-success", "Zakonczona"),
+            "Failed" => ("bg-danger-lt text-danger", "Z problemami"),
+            _ => ("bg-secondary-lt text-secondary", "Utworzona"),
+        };
+        return new Microsoft.AspNetCore.Html.HtmlString($"<span class=\"badge {css}\">{label}</span>");
+    }
+
+    private static Microsoft.AspNetCore.Html.IHtmlContent StopBadge(string status)
+    {
+        var (css, label) = status switch
+        {
+            "InProgress" => ("bg-yellow-lt text-yellow", "W toku"),
+            "Completed" => ("bg-success-lt text-success", "Dostarczono"),
+            "Failed" => ("bg-danger-lt text-danger", "Problem"),
+            _ => ("bg-secondary-lt text-secondary", "Oczekuje"),
+        };
+        return new Microsoft.AspNetCore.Html.HtmlString($"<span class=\"badge {css}\">{label}</span>");
+    }
+}

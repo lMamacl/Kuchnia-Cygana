@@ -1,0 +1,229 @@
+@model KuchniaUCygana.Web.Models.CheckoutIndexViewModel
+@{
+    ViewData["Title"] = "Realizacja zamówienia";
+}
+
+<style>
+    .checkout-shell {
+        color: #17211b;
+    }
+
+    .checkout-hero,
+    .checkout-card,
+    .checkout-summary {
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 24px;
+        background: #fff;
+        box-shadow: 0 16px 45px rgba(23, 33, 27, .08);
+    }
+
+    .checkout-hero {
+        background: linear-gradient(135deg, #edf8ef, #fff8ea);
+    }
+
+    .checkout-step {
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: #1f7a4d;
+        color: #fff;
+        font-weight: 800;
+    }
+
+    .option-row {
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 18px;
+        padding: 1rem;
+        transition: border-color .18s ease, background .18s ease;
+    }
+
+    .option-row:has(input:checked) {
+        border-color: rgba(31, 122, 77, .45);
+        background: #f3fbf4;
+    }
+
+    .checkout-summary {
+        position: sticky;
+        top: 1rem;
+        overflow: hidden;
+    }
+
+    .checkout-summary thead th {
+        color: #68756d;
+        font-size: .76rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+</style>
+
+<div class="checkout-shell">
+    <div class="checkout-hero p-4 p-md-5 mb-4">
+        <div class="text-success small fw-bold text-uppercase mb-2">Krok 1 z 3</div>
+        <h1 class="fw-bold mb-2">Realizacja zamówienia</h1>
+        <p class="text-muted mb-0">Wybierz adres, dzień startu i okno dostawy. Potem zobaczysz podsumowanie.</p>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <form asp-action="Index" method="post">
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+
+                <div class="checkout-card mb-3">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <span class="checkout-step">1</span>
+                            <div>
+                                <h2 class="h5 fw-bold mb-0">Adres dostawy</h2>
+                                <p class="text-muted small mb-0">Wybierz miejsce, do którego ma trafić catering.</p>
+                            </div>
+                        </div>
+
+                        @if (!Model.Addresses.Any())
+                        {
+                            <div class="alert alert-warning mb-0">
+                                Nie masz jeszcze żadnego adresu.
+                                <a asp-controller="Address" asp-action="Create" class="alert-link">Dodaj adres</a> przed złożeniem zamówienia.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="d-grid gap-2">
+                                @foreach (var address in Model.Addresses)
+                                {
+                                    <label class="option-row" for="addr_@address.Id">
+                                        <span class="d-flex gap-3">
+                                            <input class="form-check-input mt-1" type="radio"
+                                                   name="SelectedAddressId"
+                                                   id="addr_@address.Id"
+                                                   value="@address.Id"
+                                                   @(Model.SelectedAddressId == address.Id ? "checked" : "") />
+                                            <span>
+                                                <span class="fw-bold">@address.Label</span>
+                                                @if (address.IsDefault)
+                                                {
+                                                    <span class="badge bg-success text-white ms-1">Domyślny</span>
+                                                }
+                                                <span class="text-muted d-block small">@address.FullAddress</span>
+                                            </span>
+                                        </span>
+                                    </label>
+                                }
+                            </div>
+                            <span asp-validation-for="SelectedAddressId" class="text-danger small"></span>
+                            <a asp-controller="Address" asp-action="Create" class="btn btn-sm btn-outline-success mt-3">
+                                Dodaj nowy adres
+                            </a>
+                        }
+                    </div>
+                </div>
+
+                <div class="checkout-card mb-3">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <span class="checkout-step">2</span>
+                            <div>
+                                <h2 class="h5 fw-bold mb-0">Termin dostawy</h2>
+                                <p class="text-muted small mb-0">Ustal start planu i preferowane okno czasowe.</p>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="StartDate" class="form-label fw-semibold">Data rozpoczęcia</label>
+                            <input asp-for="StartDate" type="date" class="form-control form-control-lg"
+                                   min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")"
+                                   value="@Model.StartDate.ToString("yyyy-MM-dd")" />
+                            <span asp-validation-for="StartDate" class="text-danger small"></span>
+                            <div class="form-text">Dostawa nie jest realizowana w niedziele.</div>
+                        </div>
+
+                        @if (Model.Windows.Any())
+                        {
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Okno czasowe dostawy</label>
+                                <div class="d-grid gap-2">
+                                    @foreach (var window in Model.Windows)
+                                    {
+                                        <label class="option-row" for="win_@window.Id">
+                                            <span class="d-flex gap-3">
+                                                <input class="form-check-input mt-1" type="radio"
+                                                       name="SelectedWindowId"
+                                                       id="win_@window.Id"
+                                                       value="@window.Id"
+                                                       @(Model.SelectedWindowId == window.Id ? "checked" : "") />
+                                                <span class="fw-semibold">@window.Name</span>
+                                            </span>
+                                        </label>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <div class="mb-0">
+                            <label asp-for="Notes" class="form-label fw-semibold">Uwagi do zamówienia</label>
+                            <textarea asp-for="Notes" class="form-control" rows="3"
+                                      placeholder="Np. zostawić przy recepcji, nie dzwonić domofonem..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-success btn-lg w-100"
+                        @(!Model.Addresses.Any() ? "disabled" : "")>
+                    Przejdź do podsumowania
+                </button>
+            </form>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="checkout-summary">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <span class="checkout-step">3</span>
+                        <div>
+                            <h2 class="h5 fw-bold mb-0">Twoje diety</h2>
+                            <p class="text-muted small mb-0">Pozycje pobrane z koszyka.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Dieta</th>
+                                <th class="text-end">Kwota</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Cart.Items)
+                            {
+                                <tr>
+                                    <td class="ps-4">
+                                        <strong>@item.DietName</strong>
+                                        <small class="text-muted d-block">@item.VariantName · @item.CaloriesPerDay kcal · @item.TotalDays dni</small>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        @item.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <td class="fw-bold ps-4">Razem</td>
+                                <td class="text-end fw-bold pe-4">
+                                    @Model.Cart.TotalPrice.ToString("C", new System.Globalization.CultureInfo("pl-PL"))
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

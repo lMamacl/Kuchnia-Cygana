@@ -1,0 +1,255 @@
+@model KuchniaUCygana.Application.DTOs.Menu.MealVariantResultDto
+
+@functions {
+    string FormatDecimal(decimal? value, string suffix = "") => value.HasValue ? $"{value.Value:0.##}{suffix}" : "-";
+
+    string FormatNutrition(decimal? value) => value.HasValue ? value.Value.ToString("0.##") : "-";
+}
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="border rounded p-2 h-100">
+            <div class="text-secondary small">Finalna gramatura</div>
+            <div class="h3 mb-1">@FormatDecimal(Model.FinalWeightGrams, " g")</div>
+            <div class="text-secondary small">raw: @FormatDecimal(Model.FinalRawWeightGrams, " g") / cooked: @FormatDecimal(Model.FinalCookedWeightGrams, " g")</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="border rounded p-2 h-100">
+            <div class="text-secondary small">Kompletnosc</div>
+            <div class="h3 mb-1 @(Model.IsComplete ? "text-success" : "text-warning")">@Model.CompletenessStatus</div>
+            <div class="text-secondary small">Zrodlo: @Model.NutritionSource @(Model.IsAggregated ? "/ agregacja" : "/ override")</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="border rounded p-2 h-100">
+            <div class="text-secondary small">Override</div>
+            <div>@(string.IsNullOrWhiteSpace(Model.OverrideReason) ? "-" : Model.OverrideReason)</div>
+        </div>
+    </div>
+</div>
+
+@if (Model.ValidationWarnings.Any())
+{
+    <div class="alert alert-warning mt-3 mb-0">
+        <div class="fw-bold mb-1">Blokery publikacji</div>
+        <ul class="mb-0">
+            @foreach (var warning in Model.ValidationWarnings)
+            {
+                <li>@warning</li>
+            }
+        </ul>
+    </div>
+}
+
+<div class="row g-3 mt-1">
+    <div class="col-lg-6">
+        <h4 class="mt-3">Nutrition</h4>
+        <div class="table-responsive">
+            <table class="table table-sm table-vcenter">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th class="text-end">kcal</th>
+                        <th class="text-end">bialko</th>
+                        <th class="text-end">wegle</th>
+                        <th class="text-end">tluszcz</th>
+                        <th class="text-end">blonnik</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>per 100 g</td>
+                        <td class="text-end">@FormatNutrition(Model.NutritionPer100g?.Calories)</td>
+                        <td class="text-end">@FormatNutrition(Model.NutritionPer100g?.Protein)</td>
+                        <td class="text-end">@FormatNutrition(Model.NutritionPer100g?.Carbohydrates)</td>
+                        <td class="text-end">@FormatNutrition(Model.NutritionPer100g?.Fat)</td>
+                        <td class="text-end">@FormatNutrition(Model.NutritionPer100g?.Fiber)</td>
+                    </tr>
+                    <tr>
+                        <td>per porcja</td>
+                        <td class="text-end">@FormatNutrition(Model.NutritionPerServing?.Calories)</td>
+                        <td class="text-end">@FormatNutrition(Model.NutritionPerServing?.Protein)</td>
+                        <td class="text-end">@FormatNutrition(Model.NutritionPerServing?.Carbohydrates)</td>
+                        <td class="text-end">@FormatNutrition(Model.NutritionPerServing?.Fat)</td>
+                        <td class="text-end">@FormatNutrition(Model.NutritionPerServing?.Fiber)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <h4 class="mt-3">Alergeny</h4>
+        @if (!Model.Allergens.Any())
+        {
+            <div class="text-secondary">Brak alergenow w wyniku.</div>
+        }
+        else
+        {
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var allergen in Model.Allergens)
+                {
+                    <span class="badge @(allergen.IsTrace ? "bg-yellow-lt text-yellow" : "bg-red-lt text-red")" title="@string.Join("; ", allergen.Sources)">
+                        @allergen.Name @(allergen.IsTrace ? "(trace)" : "")
+                    </span>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<h4 class="mt-4">Skladniki zbiorcze</h4>
+<div class="table-responsive">
+    <table class="table table-sm table-vcenter">
+        <thead>
+            <tr>
+                <th>Skladnik</th>
+                <th>Mapowanie</th>
+                <th>Zrodla</th>
+                <th class="text-end">Netto</th>
+                <th class="text-end">Brutto</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (!Model.Ingredients.Any())
+            {
+                <tr><td colspan="5" class="text-center text-secondary">Brak skladnikow.</td></tr>
+            }
+            @foreach (var ingredient in Model.Ingredients)
+            {
+                <tr>
+                    <td class="fw-bold">@ingredient.IngredientName</td>
+                    <td>
+                        @if (ingredient.WarehouseCategoryId.HasValue)
+                        {
+                            <span class="badge bg-green-lt text-green">WC: @(ingredient.WarehouseCategoryName ?? ingredient.WarehouseCategoryId.ToString())</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-red-lt text-red">brak WC</span>
+                        }
+                        @if (ingredient.StockItemId.HasValue)
+                        {
+                            <span class="badge bg-blue-lt text-blue">Stock: @ingredient.StockItemId</span>
+                        }
+                    </td>
+                    <td class="small text-secondary">@string.Join(", ", ingredient.SourceComponentNames)</td>
+                    <td class="text-end">@ingredient.NetWeightInGrams.ToString("0.##") g</td>
+                    <td class="text-end">@ingredient.GrossWeightInGrams.ToString("0.##") g</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<h4 class="mt-4">Opakowania</h4>
+<div class="table-responsive">
+    <table class="table table-sm table-vcenter">
+        <thead>
+            <tr>
+                <th>Opakowanie</th>
+                <th>Wlasciciel</th>
+                <th>Mapowanie</th>
+                <th class="text-end">Ilosc</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (!Model.PackagingRequirements.Any())
+            {
+                <tr><td colspan="4" class="text-center text-secondary">Brak opakowan.</td></tr>
+            }
+            @foreach (var packaging in Model.PackagingRequirements)
+            {
+                <tr>
+                    <td>
+                        <div class="fw-bold">@packaging.ResourceName</div>
+                        <div class="small text-secondary">@packaging.ContainerRole</div>
+                    </td>
+                    <td>@packaging.OwnerType</td>
+                    <td>
+                        @if (packaging.WarehouseCategoryId.HasValue)
+                        {
+                            <span class="badge bg-green-lt text-green">WC: @packaging.WarehouseCategoryId</span>
+                        }
+                        @if (packaging.StockItemId.HasValue)
+                        {
+                            <span class="badge bg-blue-lt text-blue">Stock: @packaging.StockItemId</span>
+                        }
+                    </td>
+                    <td class="text-end">@packaging.Quantity.ToString("0.###") @packaging.Unit</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<h4 class="mt-4">Skladniki per skladowa</h4>
+<div class="accordion" id="result-components-@(Model.MealVariantId?.ToString() ?? "base")">
+    @foreach (var component in Model.Components.OrderBy(component => component.SortOrder))
+    {
+        var collapseId = $"result-component-{Model.MealVariantId?.ToString() ?? "base"}-{component.RecipeComponentVersionId}";
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="heading-@collapseId">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="false" aria-controls="@collapseId">
+                    <span class="me-2 fw-bold">@component.ComponentName</span>
+                    <span class="badge bg-blue-lt text-blue me-2">v@component.VersionNumber</span>
+                    <span class="badge @(component.IsComplete ? "bg-success-lt text-success" : "bg-warning-lt text-warning") me-2">
+                        @(component.IsComplete ? "OK" : $"{component.ValidationWarnings.Count} brakow")
+                    </span>
+                    <span class="text-secondary small">@component.QuantityPerServing.ToString("0.###") @component.Unit / @FormatDecimal(component.FinalWeightGrams, " g")</span>
+                </button>
+            </h2>
+            <div id="@collapseId" class="accordion-collapse collapse" aria-labelledby="heading-@collapseId">
+                <div class="accordion-body">
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        <a asp-controller="RecipeComponents"
+                           asp-action="Version"
+                           asp-route-componentId="@component.RecipeComponentId"
+                           asp-route-versionId="@component.RecipeComponentVersionId"
+                           class="btn btn-sm btn-outline-primary">Wersja skladowej</a>
+                        <span class="badge bg-secondary-lt text-secondary">raw @FormatDecimal(component.RawWeightGrams, " g")</span>
+                        <span class="badge bg-secondary-lt text-secondary">cooked @FormatDecimal(component.CookedWeightGrams, " g")</span>
+                    </div>
+                    @if (component.ValidationWarnings.Any())
+                    {
+                        <div class="alert alert-warning">
+                            @string.Join("; ", component.ValidationWarnings)
+                        </div>
+                    }
+                    <div class="table-responsive">
+                        <table class="table table-sm table-vcenter">
+                            <thead>
+                                <tr>
+                                    <th>Skladnik</th>
+                                    <th>Mapowanie</th>
+                                    <th class="text-end">Netto</th>
+                                    <th class="text-end">Brutto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var ingredient in component.Ingredients)
+                                {
+                                    <tr>
+                                        <td>@ingredient.IngredientName</td>
+                                        <td>
+                                            @if (ingredient.WarehouseCategoryId.HasValue)
+                                            {
+                                                <span class="badge bg-green-lt text-green">WC: @(ingredient.WarehouseCategoryName ?? ingredient.WarehouseCategoryId.ToString())</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-red-lt text-red">brak WC</span>
+                                            }
+                                        </td>
+                                        <td class="text-end">@ingredient.NetWeightInGrams.ToString("0.##") g</td>
+                                        <td class="text-end">@ingredient.GrossWeightInGrams.ToString("0.##") g</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>

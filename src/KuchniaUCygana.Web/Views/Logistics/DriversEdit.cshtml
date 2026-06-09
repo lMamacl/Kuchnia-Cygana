@@ -1,0 +1,52 @@
+@model DriverEditViewModel
+@{
+    Layout = "_LayoutStaff";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Edycja profilu kierowcy</h3>
+            </div>
+            <div class="card-body">
+                <form asp-action="EditDriver" asp-route-id="@Model.Driver.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="Driver.Id" />
+                    <input type="hidden" asp-for="Driver.UserId" />
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-3"></div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Konto użytkownika</label>
+                        <input class="form-control" value="@Model.FullName" disabled />
+                        <div class="form-hint">@Model.Email</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Driver.LicenseNumber" class="form-label required">Numer prawa jazdy</label>
+                        <input asp-for="Driver.LicenseNumber" class="form-control font-monospace"
+                               maxlength="50" required />
+                        <span asp-validation-for="Driver.LicenseNumber" class="text-danger small mt-1 d-block"></span>
+                    </div>
+
+                    <label class="form-check form-switch mb-3">
+                        <input asp-for="Driver.IsActive" class="form-check-input" />
+                        <span class="form-check-label">Profil aktywny</span>
+                    </label>
+
+                    <div class="form-footer d-flex align-items-center justify-content-between">
+                        <a asp-action="Drivers" class="btn btn-link text-secondary">Anuluj i wróć</a>
+                        <button type="submit" class="btn btn-primary">
+                            @Html.Raw(StaffIconCatalog.Get("clipboard-check"))
+                            Zapisz zmiany
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}

@@ -1,0 +1,155 @@
+@model HumanResourcesDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+    var leaveRequestsPage = Model.LeaveRequestsPage;
+    var filter = Model.LeaveRequestsFilter;
+
+    string LeaveTypeName(int value) => value switch
+    {
+        0 => "Wypoczynkowy",
+        1 => "Chorobowy",
+        2 => "Okolicznościowy",
+        _ => $"Typ {value}",
+    };
+
+    string LeaveStatusName(int value) => value switch
+    {
+        0 => "Oczekuje",
+        1 => "Zaakceptowany",
+        2 => "Odrzucony",
+        _ => $"Status {value}",
+    };
+
+    string LeaveStatusClass(int value) => value switch
+    {
+        1 => "bg-green-lt text-green",
+        2 => "bg-red-lt text-red",
+        _ => "bg-blue-lt text-blue",
+    };
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Wnioski urlopowe</h3>
+                <a class="btn btn-primary btn-sm" asp-controller="HumanResources" asp-action="NewLeaveRequest">Nowy wniosek</a>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" asp-controller="HumanResources" asp-action="Leaves">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label" for="Search">Szukaj</label>
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Pracownik, decyzja, powód..." />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="Status">Status</label>
+                            <select class="form-select" id="Status" name="Status">
+                                <option value="">Wszystkie</option>
+                                @foreach (var status in new[] { 0, 1, 2 })
+                                {
+                                    <option value="@status" selected="@(filter.Status == status)">@LeaveStatusName(status)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="LeaveType">Typ</label>
+                            <select class="form-select" id="LeaveType" name="LeaveType">
+                                <option value="">Wszystkie</option>
+                                @foreach (var leaveType in new[] { 0, 1, 2 })
+                                {
+                                    <option value="@leaveType" selected="@(filter.LeaveType == leaveType)">@LeaveTypeName(leaveType)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="PageSize">Na stronie</label>
+                            <select class="form-select" id="PageSize" name="PageSize">
+                                @foreach (var size in new[] { 10, 25, 50, 100 })
+                                {
+                                    <option value="@size" selected="@(filter.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex justify-content-md-end gap-2">
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Leaves">Wyczyść</a>
+                            <button class="btn btn-primary" type="submit">Filtruj</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Pracownik</th>
+                            <th>Zakres</th>
+                            <th>Typ</th>
+                            <th>Status</th>
+                            <th>Decyzja</th>
+                            <th class="text-end">Akcja</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var leave in leaveRequestsPage.Items)
+                        {
+                            <tr>
+                                <td>@(leave.EmployeeFullName ?? $"#{leave.EmployeeId}")</td>
+                                <td class="text-nowrap">@leave.StartDate.ToString("dd.MM.yyyy") - @leave.EndDate.ToString("dd.MM.yyyy")</td>
+                                <td>@LeaveTypeName(leave.LeaveType)</td>
+                                <td><span class="badge @LeaveStatusClass(leave.Status)">@LeaveStatusName(leave.Status)</span></td>
+                                <td>
+                                    @if (leave.ApprovedByEmployeeId.HasValue)
+                                    {
+                                        <span>@(leave.ApprovedByEmployeeFullName ?? $"#{leave.ApprovedByEmployeeId}")</span>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(leave.RejectionReason))
+                                    {
+                                        <span class="text-secondary">@leave.RejectionReason</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-secondary">-</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    @if (User.IsInRole("HRManager") || User.IsInRole("Admin"))
+                                    {
+                                        <form asp-action="ReviewLeaveRequest" asp-route-id="@leave.Id" method="post" class="d-inline-flex gap-2 justify-content-end">
+                                            @Html.AntiForgeryToken()
+                                            <select class="form-select form-select-sm" name="approvedByEmployeeId">
+                                                <option value="">Bez osoby</option>
+                                                @foreach (var employee in Model.Employees.Where(x => x.IsActive).OrderBy(x => x.FullName))
+                                                {
+                                                    <option value="@employee.Id">@employee.FullName</option>
+                                                }
+                                            </select>
+                                            <button class="btn btn-sm btn-outline-success" name="status" value="1" type="submit">Akceptuj</button>
+                                            <button class="btn btn-sm btn-outline-danger" name="status" value="2" type="submit">Odrzuć</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @if (leaveRequestsPage.TotalCount == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="text-secondary text-center py-4">
+                                    @(filter.HasActiveCriteria
+                                        ? "Brak wniosków urlopowych dla wybranych filtrów."
+                                        : "Brak wniosków urlopowych. Seeder dodaje przykładowe pozycje, gdy baza jest pusta.")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                leaveRequestsPage,
+                "HumanResources",
+                "Leaves",
+                filter.ToRouteValues()))
+        </div>
+    </div>
+</div>

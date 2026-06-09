@@ -1,0 +1,15 @@
+@model KuchniaUCygana.Domain.Entities.Menu.Category
+
+<div class="mb-3">
+    <label asp-for="Name" class="form-label required">Nazwa</label>
+    <input asp-for="Name" class="form-control" />
+    <span asp-validation-for="Name" class="text-danger small"></span>
+</div>
+<div class="mb-3">
+    <label asp-for="Description" class="form-label">Opis</label>
+    <textarea asp-for="Description" class="form-control" rows="3"></textarea>
+</div>
+<div class="mb-4">
+    <label asp-for="SortOrder" class="form-label">Kolejność</label>
+    <input asp-for="SortOrder" type="number" class="form-control" />
+</div>

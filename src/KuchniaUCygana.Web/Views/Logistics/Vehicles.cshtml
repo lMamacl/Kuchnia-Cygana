@@ -1,5 +1,174 @@
+@model VehicleListViewModel
 @{
     Layout = "_LayoutStaff";
+    var vehicles = Model.Vehicles;
+    var filter = Model.Filter;
+    var listPage = Model.Page;
+    var pagination = StaffPaginationViewModel.Create(
+        "Logistics",
+        "Vehicles",
+        listPage.Page,
+        listPage.PageSize,
+        listPage.TotalCount,
+        filter.ToRouteValues());
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row row-deck row-cards mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Flota og&oacute;&lstrok;em</div>
+                <div class="h1 mb-3">@listPage.TotalFleetCount</div>
+                <div class="text-secondary">Wszystkie pasuj&aogon;ce pojazdy</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-success">Aktywne</div>
+                <div class="h1 mb-3 text-success">@listPage.ActiveCount</div>
+                <div class="text-secondary">Pojazdy gotowe do drogi</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-warning">W serwisie</div>
+                <div class="h1 mb-3 text-warning">@listPage.MaintenanceCount</div>
+                <div class="text-secondary">Wymagaj&aogon;ce przegl&aogon;du</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Dost&eogon;pna &lstrok;adowno&sacute;&cacute;</div>
+                <div class="h1 mb-3 text-indigo">@listPage.ActiveCapacityKg.ToString("N0") kg</div>
+                <div class="text-secondary">Suma aktywnych pojazd&oacute;w</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-premium">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h3 class="card-title">Wykaz pojazd&oacute;w</h3>
+        <div class="card-actions">
+            <a asp-action="CreateVehicle" class="btn btn-primary d-none d-sm-inline-block">
+                @Html.Raw(StaffIconCatalog.Get("plus"))
+                Dodaj nowy pojazd
+            </a>
+        </div>
+    </div>
+    <div class="card-body border-bottom">
+        <form asp-action="Vehicles" method="get" class="row g-3 align-items-end">
+            <input type="hidden" name="Page" value="1" />
+            <div class="col-md-5">
+                <label asp-for="Filter.Search" class="form-label">Szukaj</label>
+                <input asp-for="Filter.Search" name="Search" class="form-control" placeholder="Rejestracja, model albo ID" />
+            </div>
+            <div class="col-md-3">
+                <label asp-for="Filter.Status" class="form-label">Status</label>
+                <select asp-for="Filter.Status" name="Status" class="form-select">
+                    <option value="">Wszystkie</option>
+                    <option value="Active">Aktywne</option>
+                    <option value="Maintenance">W serwisie</option>
+                    <option value="Retired">Wycofane</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label asp-for="Filter.PageSize" class="form-label">Na stronie</label>
+                <select asp-for="Filter.PageSize" name="PageSize" class="form-select">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary w-100">Filtruj</button>
+                @if (filter.HasActiveCriteria)
+                {
+                    <a asp-action="Vehicles" class="btn btn-outline-secondary">Wyczy&sacute;&cacute;</a>
+                }
+            </div>
+        </form>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter table-premium card-table table-striped">
+            <thead>
+                <tr>
+                    <th>Rejestracja</th>
+                    <th>Model / typ</th>
+                    <th>Maks. &lstrok;adowno&sacute;&cacute;</th>
+                    <th>Status</th>
+                    <th class="w-1">Akcje</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (vehicles.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="text-center text-secondary py-4">
+                            Brak pojazd&oacute;w pasuj&aogon;cych do filtr&oacute;w.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var vehicle in vehicles)
+                    {
+                        <tr>
+                            <td>
+                                <span class="badge bg-blue text-blue-fg p-2 font-monospace">
+                                    @vehicle.RegistrationNumber
+                                </span>
+                            </td>
+                            <td class="td-truncate fw-bold">@vehicle.Model</td>
+                            <td>
+                                <div class="fw-semibold">@vehicle.MaxLoadKg.ToString("N0") kg</div>
+                            </td>
+                            <td>
+                                @if (vehicle.Status == "Active")
+                                {
+                                    <span class="badge bg-success-lt text-success d-inline-flex align-items-center gap-2 py-1 px-2">
+                                        <span class="status-dot-pulse bg-success"></span>
+                                        Aktywny
+                                    </span>
+                                }
+                                else if (vehicle.Status == "Maintenance")
+                                {
+                                    <span class="badge bg-warning-lt text-warning d-inline-flex align-items-center gap-2 py-1 px-2">
+                                        <span class="status-dot-pulse bg-warning"></span>
+                                        W serwisie
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-lt text-secondary d-inline-flex align-items-center gap-2 py-1 px-2">
+                                        <span class="status-dot bg-secondary"></span>
+                                        Wycofany
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                <div class="btn-list flex-nowrap">
+                                    <a asp-action="EditVehicle" asp-route-id="@vehicle.Id" class="btn btn-sm btn-outline-primary">
+                                        Edytuj
+                                    </a>
+                                    <form asp-action="DeleteVehicle" asp-route-id="@vehicle.Id" method="post" onsubmit="return confirm('Czy na pewno chcesz usunac pojazd @vehicle.RegistrationNumber?');" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Usu&nacute;</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    @await Html.PartialAsync("_StaffPagination", pagination)
+</div>

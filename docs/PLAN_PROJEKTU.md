@@ -77,7 +77,7 @@ Ten dokument definiuje **kolejność realizacji komponentów** — od infrastruk
 
 | # | Zadanie | Status |
 |---|---------|--------|
-| 0.1 | Docker: Dockerfile + docker-compose z named volumes (SQLite + uploads) | ✅ |
+| 0.1 | Docker: Dockerfile + docker-compose z named volumes (MSSQL + uploads) | ✅ |
 | 0.2 | `.editorconfig`, `stylecop.json`, `Directory.Build.props` — jakość kodu | ✅ |
 | 0.3 | GitHub Actions CI (`ci.yml`): build + test + coverage | ✅ (XPlat Code Coverage + artifact upload) |
 | 0.4 | `.env` / `user-secrets` — zarządzanie sekretami | ✅ (UserSecretsId + .env.example + appsettings.Development.json.example) |
@@ -121,7 +121,7 @@ Moduły 1, 2 i 5 mogą być rozwijane **równolegle**, ponieważ mają minimalne
 |---|---------|
 | 2.2.1 | Encje: `Diet`, `DietVariant`, `Meal`, `Ingredient`, `Recipe`, `Allergen`, `MealAllergen`, `DietVariantMeal` |
 | 2.2.2 | Migracje (ManyToMany: Recipe, MealAllergen, DietVariantMeal) |
-| 2.2.3 | Repozytoria z JOINami (jawne JOINy w Dapperze) |
+| 2.2.3 | Repozytoria z JOINami (Dapper explicit loading) |
 | 2.2.4 | DTOs + AutoMapper (`DietProfile`) |
 | 2.2.5 | Serwisy: `IDietService`, `IMealService` |
 | 2.2.6 | OpenAI: `IAiDescriptionService` → generowanie opisów posiłków |
@@ -145,12 +145,12 @@ Moduły 1, 2 i 5 mogą być rozwijane **równolegle**, ponieważ mają minimalne
 
 | # | Zadanie | Status |
 |---|---------|--------|
-| 3.1 | Encje magazynowe: `StockItem`, `Batch`, `InventoryTransaction`, `TemperatureLog`, `UnitOfMeasure` | 🔨 |
-| 3.2 | Migration `002_CreateWarehouseTables` | 🔨 |
-| 3.3 | Repozytoria: `IBatchRepository`, `IInventoryTransactionRepository` | 🔨 |
-| 3.4 | Encje produkcyjne: `ProductionPlan`, `ProductionPlanItem`, `ProductionBatch` | ⬜ |
-| 3.5 | Encje kompletacji: `PackingSession`, `PackingItem`, `PackingLabel` | ⬜ |
-| 3.6 | Serwisy domenowe: FEFO, Food Cost, Smart Inventory | ⬜ |
+| 3.1 | Encje magazynowe: `StockItem`, `Batch`, `InventoryTransaction`, `TemperatureLog`, `UnitOfMeasure` | ✅ |
+| 3.2 | Migration `002_CreateWarehouseTables` | ✅ |
+| 3.3 | Repozytoria: `IBatchRepository`, `IInventoryTransactionRepository` | ✅ |
+| 3.4 | Encje produkcyjne: `ProductionPlan`, `ProductionPlanItem`, `ProductionBatch` | ✅ |
+| 3.5 | Encje kompletacji: `PackingSession`, `PackingItem`, `PackingLabel` | ✅ |
+| 3.6 | Serwisy domenowe: FEFO, Food Cost, Smart Inventory | ✅ |
 | 3.7 | DTOs + AutoMapper (`ProductionProfile`, `WarehouseProfile`) | ⬜ |
 | 3.8 | Serwisy aplikacyjne: `IProductionService`, `IWarehouseService` | ⬜ |
 | 3.9 | QuestPDF: Karta Produkcyjna (PDF) | ⬜ |
@@ -240,7 +240,7 @@ Moduły 1, 2 i 5 mogą być rozwijane **równolegle**, ponieważ mają minimalne
 |--------|-----------|
 | Moduł 3 zaczyna pracę bez gotowych M1/M2 | Mocki/interfejsy w Domain (obecne podejście) |
 | SQLite write-lock przy testach równoległych | In-memory SQLite per test, osobne bazy |
-| OrmLite brak lazy loading | Jawne JOINy, dokumentacja zapytań przed implementacją |
+| Dapper brak lazy loading | Jawne JOINy, dokumentacja zapytań przed implementacją |
 | Braki w pokryciu testami | CI blokuje merge poniżej 70% |
 
 ---

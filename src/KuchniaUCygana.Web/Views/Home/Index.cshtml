@@ -1,8 +1,235 @@
-﻿@{
-    ViewData["Title"] = "Home Page";
+@{
+    ViewData["Title"] = "Kuchnia u Cygana";
+    var isLoggedIn = User.Identity?.IsAuthenticated == true;
+    var userName = User.Identity?.Name;
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<style>
+    .customer-home {
+        --kc-ink: #17211b;
+        --kc-muted: #68756d;
+        --kc-green: #1f7a4d;
+        --kc-mint: #edf8ef;
+        --kc-cream: #fff8ea;
+        --kc-line: rgba(23, 33, 27, .1);
+        color: var(--kc-ink);
+    }
+
+    .home-hero {
+        overflow: hidden;
+        border: 1px solid var(--kc-line);
+        border-radius: 24px;
+        background:
+            linear-gradient(135deg, rgba(31, 122, 77, .95), rgba(23, 33, 27, .92)),
+            url('@Url.Content("~/img/chicken_teriyaki.png")') center/cover;
+        box-shadow: 0 20px 60px rgba(23, 33, 27, .16);
+    }
+
+    .hero-copy {
+        min-height: 430px;
+        padding: clamp(2rem, 5vw, 4.5rem);
+    }
+
+    .hero-kicker,
+    .section-kicker {
+        color: rgba(255, 255, 255, .74);
+        font-size: .75rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+
+    .section-kicker.text-success {
+        color: var(--kc-green) !important;
+    }
+
+    .hero-title {
+        max-width: 760px;
+        font-size: clamp(2.4rem, 6vw, 5rem);
+        line-height: .98;
+        letter-spacing: 0;
+    }
+
+    .hero-text {
+        max-width: 640px;
+        color: rgba(255, 255, 255, .8);
+        font-size: 1.08rem;
+    }
+
+    .home-panel,
+    .quick-card,
+    .catalog-band {
+        border: 1px solid var(--kc-line);
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 14px 36px rgba(23, 33, 27, .08);
+    }
+
+    .home-panel {
+        background: rgba(255, 255, 255, .94);
+    }
+
+    .food-shot {
+        width: 100%;
+        height: 210px;
+        object-fit: cover;
+        border-radius: 12px;
+    }
+
+    .quick-card {
+        height: 100%;
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+    .quick-card:hover {
+        transform: translateY(-3px);
+        border-color: rgba(31, 122, 77, .28);
+        box-shadow: 0 18px 45px rgba(23, 33, 27, .12);
+    }
+
+    .quick-icon {
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: var(--kc-mint);
+        color: var(--kc-green);
+        font-weight: 900;
+    }
+
+    .catalog-band {
+        background: linear-gradient(135deg, #fff, var(--kc-cream));
+    }
+
+    .catalog-img {
+        width: 100%;
+        height: 100%;
+        min-height: 260px;
+        object-fit: cover;
+        border-radius: 12px;
+    }
+
+    .btn-customer {
+        border: 0;
+        background: var(--kc-green);
+        color: #fff;
+        box-shadow: 0 12px 24px rgba(31, 122, 77, .22);
+    }
+
+    .btn-customer:hover {
+        background: #17623d;
+        color: #fff;
+    }
+
+    .home-stat {
+        border-top: 1px solid rgba(255, 255, 255, .18);
+        color: rgba(255, 255, 255, .8);
+    }
+</style>
+
+<div class="customer-home">
+    <section class="home-hero mb-4">
+        <div class="row g-0 align-items-stretch">
+            <div class="col-lg-7">
+                <div class="hero-copy d-flex flex-column justify-content-center">
+                    <div class="hero-kicker mb-3">Catering gotowy do zamówienia</div>
+                    <h1 class="hero-title text-white fw-black mb-4">Diety pudełkowe z aktualnego katalogu.</h1>
+                    <p class="hero-text mb-4">
+                        Przeglądaj opublikowane diety z modułu menu, wybierz wariant kaloryczny, dodaj go do koszyka
+                        i przejdź przez adres, podsumowanie oraz płatność online.
+                    </p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a asp-controller="Menu" asp-action="Index" class="btn btn-light btn-lg px-4 fw-bold">Przeglądaj diety</a>
+                        @if (isLoggedIn)
+                        {
+                            <a asp-controller="Cart" asp-action="Index" class="btn btn-outline-light btn-lg px-4">Koszyk</a>
+                            <a asp-controller="Order" asp-action="Index" class="btn btn-outline-light btn-lg px-4">Moje zamówienia</a>
+                        }
+                        else
+                        {
+                            <a asp-controller="Account" asp-action="Login" class="btn btn-outline-light btn-lg px-4">Zaloguj się</a>
+                        }
+                    </div>
+                    <div class="home-stat d-flex flex-wrap gap-4 mt-5 pt-4">
+                        <span><strong class="text-white">M2</strong> katalog diet</span>
+                        <span><strong class="text-white">M1</strong> koszyk i checkout</span>
+                        <span><strong class="text-white">Stripe</strong> płatność online</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5 p-3 p-lg-4 d-flex align-items-center">
+                <div class="home-panel p-3 w-100">
+                    <img src="~/img/chicken_teriyaki.png" class="food-shot mb-3" alt="Dieta pudełkowa" />
+                    <div class="section-kicker text-success mb-1">Aktualne źródło danych</div>
+                    <h2 class="h4 fw-bold mb-2">Katalog diet modułu menu</h2>
+                    <p class="text-muted small mb-3">
+                        Formularze testowe zostały zastąpione ścieżką przez realne warianty diet z bazy.
+                    </p>
+                    <a asp-controller="Menu" asp-action="Index" class="btn btn-customer w-100">Otwórz katalog</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    @if (isLoggedIn)
+    {
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <div class="section-kicker text-success mb-1">Panel klienta</div>
+                <h2 class="h3 fw-bold mb-0">Witaj, @(string.IsNullOrWhiteSpace(userName) ? "kliencie" : userName)</h2>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a asp-controller="Address" asp-action="Index" class="btn btn-outline-success">Adresy dostawy</a>
+                <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-danger">Wyloguj</button>
+                </form>
+            </div>
+        </div>
+    }
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <a asp-controller="Menu" asp-action="Index" class="quick-card d-block text-decoration-none p-4">
+                <span class="quick-icon mb-3">01</span>
+                <h3 class="h5 text-dark fw-bold">Katalog diet</h3>
+                <p class="text-muted small mb-0">Wybierz dietę i wariant kaloryczny pobrany z modułu menu.</p>
+            </a>
+        </div>
+        <div class="col-md-4">
+            <a asp-controller="Cart" asp-action="Index" class="quick-card d-block text-decoration-none p-4">
+                <span class="quick-icon mb-3">02</span>
+                <h3 class="h5 text-dark fw-bold">Koszyk</h3>
+                <p class="text-muted small mb-0">Sprawdź pozycje przed wyborem adresu i terminu dostawy.</p>
+            </a>
+        </div>
+        <div class="col-md-4">
+            <a asp-controller="Order" asp-action="Index" class="quick-card d-block text-decoration-none p-4">
+                <span class="quick-icon mb-3">03</span>
+                <h3 class="h5 text-dark fw-bold">Zamówienia</h3>
+                <p class="text-muted small mb-0">Status płatności, kalendarz dostaw i historia zamówień.</p>
+            </a>
+        </div>
+    </div>
+
+    <section class="catalog-band p-3 p-lg-4">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-5">
+                <img src="~/img/baked_salmon.png" class="catalog-img" alt="Zestaw diety cateringowej" />
+            </div>
+            <div class="col-lg-7">
+                <div class="section-kicker text-success mb-2">Proces zamówienia</div>
+                <h2 class="fw-bold mb-3">Od katalogu diet do płatności.</h2>
+                <p class="text-muted mb-4">
+                    Moduł klienta korzysta teraz z adapterów katalogu menu, a koszyk zapisuje pozycje na podstawie
+                    prawdziwego wariantu diety. Dalej działa ten sam checkout: adres, start dostaw, podsumowanie i Stripe.
+                </p>
+                <div class="d-flex flex-wrap gap-2">
+                    <a asp-controller="Menu" asp-action="Index" class="btn btn-customer btn-lg px-4">Wybierz dietę</a>
+                    <a asp-controller="Cart" asp-action="Index" class="btn btn-outline-secondary btn-lg px-4">Podejrzyj koszyk</a>
+                </div>
+            </div>
+        </div>
+    </section>
 </div>

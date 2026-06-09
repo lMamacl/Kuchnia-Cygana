@@ -1,0 +1,172 @@
+namespace KuchniaUCygana.Application.DTOs.Packing;
+
+public sealed class PackingBoardDto
+{
+    public DateOnly PackingDate { get; set; }
+
+    public int TotalBags { get; set; }
+
+    public int PackedBags { get; set; }
+
+    public int LoadedBags { get; set; }
+
+    public List<PackingRouteDto> Routes { get; set; } = new();
+}
+
+public sealed class PackingBoardQueryDto
+{
+    public DateOnly Date { get; set; }
+
+    public string? Search { get; set; }
+
+    public int? RouteId { get; set; }
+
+    public string? LabelStatus { get; set; }
+
+    public string? BagStatus { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 20;
+
+    public string? Mode { get; set; }
+}
+
+public sealed class PackingBoardPageDto
+{
+    public PackingBoardDto Board { get; set; } = new();
+
+    public IReadOnlyList<PackingRouteDto> AllRoutes { get; set; } = Array.Empty<PackingRouteDto>();
+
+    public int TotalBags { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public int PageSize { get; set; } = 20;
+}
+
+public sealed class PackingRouteDto
+{
+    public int RouteId { get; set; }
+
+    public string RouteName { get; set; } = string.Empty;
+
+    public int VehicleId { get; set; }
+
+    public string VehicleRegistration { get; set; } = string.Empty;
+
+    public int TotalBags { get; set; }
+
+    public int PackedBags { get; set; }
+
+    public int LoadedBags { get; set; }
+
+    public int DispatchedBags { get; set; }
+
+    public int MissingLabelBags { get; set; }
+
+    public int UnattachedLabelBags { get; set; }
+
+    public bool AllBagsPacked { get; set; }
+
+    public bool AllBagsLoaded { get; set; }
+
+    public bool HasManifest { get; set; }
+
+    public bool IsManifestVerified { get; set; }
+
+    public int? ManifestId { get; set; }
+
+    public string? ManifestNumber { get; set; }
+
+    public DateTimeOffset? ManifestGeneratedAt { get; set; }
+
+    public DateTimeOffset? ManifestVerifiedAt { get; set; }
+
+    public DateTimeOffset? ManifestWorkerApprovedAt { get; set; }
+
+    public DateTimeOffset? ManifestSentToLogisticsAt { get; set; }
+
+    public bool ManifestRequiresRegeneration { get; set; }
+
+    public string? ManifestRequiresRegenerationReason { get; set; }
+
+    public bool CanGenerateManifest { get; set; }
+
+    public bool CanVerifyManifest { get; set; }
+
+    public bool CanWorkerApproveManifest { get; set; }
+
+    public bool CanSupervisorApproveManifest { get; set; }
+
+    public bool CanLoadBags { get; set; }
+
+    public bool CanDispatchDelivery { get; set; }
+
+    public List<PackingBagDto> Bags { get; set; } = new();
+}
+
+public sealed class PackingBagDto
+{
+    public int PackingBagId { get; set; }
+
+    public int PackingSessionId { get; set; }
+
+    public int? DeliveryCalendarId { get; set; }
+
+    public int BagNumber { get; set; }
+
+    public string BagCode { get; set; } = string.Empty;
+
+    public int OrderId { get; set; }
+
+    public string ClientName { get; set; } = string.Empty;
+
+    public string? ClientPublicId { get; set; }
+
+    public string DietType { get; set; } = string.Empty;
+
+    public string Address { get; set; } = string.Empty;
+
+    public int RouteId { get; set; }
+
+    public string RouteName { get; set; } = string.Empty;
+
+    public int VehicleId { get; set; }
+
+    public string VehicleRegistration { get; set; } = string.Empty;
+
+    public int StopNumber { get; set; }
+
+    public string DeliveryWindow { get; set; } = string.Empty;
+
+    public string Status { get; set; } = string.Empty;
+
+    public string StatusText { get; set; } = string.Empty;
+
+    public string StatusColor { get; set; } = string.Empty;
+
+    public int TotalBoxes { get; set; }
+
+    public int PackedBoxes { get; set; }
+
+    public bool HasLabels { get; set; }
+
+    public int? TransportLabelId { get; set; }
+
+    public int TransportLabelPrintNumber { get; set; }
+
+    public bool IsTransportLabelAttached { get; set; }
+
+    public DateTimeOffset? TransportLabelAttachedAt { get; set; }
+
+    public string? TransportLabelAttachedBy { get; set; }
+
+    public bool CanPackBag { get; set; }
+
+    public bool CanLoad { get; set; }
+
+    public bool CanGenerateTransportLabel { get; set; }
+
+    public bool CanConfirmTransportLabelAttached { get; set; }
+}

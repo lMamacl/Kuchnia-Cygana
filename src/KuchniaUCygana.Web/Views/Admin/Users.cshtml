@@ -1,5 +1,143 @@
+@model AdminDashboardViewModel
 @{
     Layout = "_LayoutStaff";
+
+    var roles = Model.AvailableRoles.OrderBy(role => role).ToArray();
+    var usersPage = Model.UsersPage;
+    var users = usersPage.Items;
+    var filter = Model.UsersFilter;
+
+    string NameOrEmail(KuchniaUCygana.Application.DTOs.UserDto user)
+    {
+        return string.IsNullOrWhiteSpace(user.FullName) ? user.Email : user.FullName;
+    }
 }
-@await Html.PartialAsync("_StaffPlaceholder")
+
+<div class="row row-cards">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Użytkownicy</h3>
+                <a class="btn btn-primary btn-sm" asp-controller="Admin" asp-action="NewUser">Nowy użytkownik</a>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" asp-controller="Admin" asp-action="Users">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-5">
+                            <label class="form-label" for="Search">Szukaj</label>
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Imię, nazwisko, email..." />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="Role">Rola</label>
+                            <select class="form-select" id="Role" name="Role">
+                                <option value="">Wszystkie</option>
+                                @foreach (var role in roles)
+                                {
+                                    <option value="@role" selected="@(string.Equals(filter.Role, role, StringComparison.OrdinalIgnoreCase))">@role</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="PageSize">Na stronie</label>
+                            <select class="form-select" id="PageSize" name="PageSize">
+                                @foreach (var size in new[] { 10, 25, 50, 100 })
+                                {
+                                    <option value="@size" selected="@(filter.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex justify-content-md-end gap-2">
+                            <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Users">Wyczyść</a>
+                            <button class="btn btn-primary" type="submit">Filtruj</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Konto</th>
+                            <th>Rola</th>
+                            <th>Edycja</th>
+                            <th>Hasło</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in users)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@NameOrEmail(user)</div>
+                                    <div class="text-secondary small">@user.Email</div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-blue-lt text-blue">@user.Role</span>
+                                </td>
+                                <td style="min-width: 360px;">
+                                    <form class="row g-2 align-items-end" method="post" asp-controller="Admin" asp-action="UpdateUser" asp-route-id="@user.Id">
+                                        <input type="hidden" name="Id" value="@user.Id" />
+                                        <div class="col-md-6">
+                                            <label class="form-label small" for="FirstName_@user.Id">Imię</label>
+                                            <input class="form-control form-control-sm" id="FirstName_@user.Id" name="FirstName" value="@user.FirstName" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small" for="LastName_@user.Id">Nazwisko</label>
+                                            <input class="form-control form-control-sm" id="LastName_@user.Id" name="LastName" value="@user.LastName" />
+                                        </div>
+                                        <div class="col-md-7">
+                                            <label class="form-label small" for="Email_@user.Id">Email</label>
+                                            <input class="form-control form-control-sm" id="Email_@user.Id" name="Email" type="email" value="@user.Email" required />
+                                        </div>
+                                        <div class="col-md-5">
+                                            <label class="form-label small" for="Role_@user.Id">Rola</label>
+                                            <select class="form-select form-select-sm" id="Role_@user.Id" name="Role" required>
+                                                @foreach (var role in roles)
+                                                {
+                                                    <option value="@role" selected="@(role == user.Role)">@role</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-12 text-end">
+                                            <button class="btn btn-sm btn-outline-primary" type="submit">Zapisz</button>
+                                        </div>
+                                    </form>
+                                </td>
+                                <td style="min-width: 210px;">
+                                    <form class="d-flex gap-2" method="post" asp-controller="Admin" asp-action="ResetUserPassword" asp-route-id="@user.Id">
+                                        <input type="hidden" name="Id" value="@user.Id" />
+                                        <input class="form-control form-control-sm" name="NewPassword" type="password" minlength="6" autocomplete="new-password" placeholder="Nowe hasło" required />
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Reset</button>
+                                    </form>
+                                </td>
+                                <td class="text-end">
+                                    <form method="post" asp-controller="Admin" asp-action="DeleteUser" asp-route-id="@user.Id">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Czy na pewno chcesz usunąć to konto?');">Usuń</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        @if (usersPage.TotalCount == 0)
+                        {
+                            <tr>
+                                <td colspan="5" class="text-secondary text-center py-4">
+                                    @(filter.HasActiveCriteria
+                                        ? "Brak kont użytkowników dla wybranych filtrów."
+                                        : "Brak kont użytkowników. Seeder tworzy podstawowe konta dla HR, BOK, Admin i pozostałych ról.")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                usersPage,
+                "Admin",
+                "Users",
+                filter.ToRouteValues()))
+        </div>
+    </div>
+</div>
 

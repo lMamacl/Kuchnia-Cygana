@@ -1,0 +1,118 @@
+@model MenuDietDetailsViewModel
+@using System.Globalization
+@{
+    ViewData["Title"] = $"Jadłospis - {Model.Diet.Name}";
+    var culture = new CultureInfo("pl-PL");
+    var groupedPlan = Model.WeekPlan
+        .GroupBy(item => item.PlanDate)
+        .OrderBy(group => group.Key)
+        .ToList();
+}
+
+<style>
+    .week-shell {
+        color: #17211b;
+    }
+
+    .week-hero,
+    .week-day {
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 14px 36px rgba(23, 33, 27, .08);
+    }
+
+    .week-hero {
+        background: linear-gradient(135deg, #edf8ef, #fff8ea);
+    }
+
+    .week-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+    }
+
+    .meal-item {
+        border-top: 1px solid rgba(23, 33, 27, .08);
+    }
+
+    .meal-category-pill {
+        display: inline-flex;
+        max-width: 100%;
+        min-height: 22px;
+        align-items: center;
+        padding: .2rem .55rem;
+        border: 1px solid rgba(31, 122, 77, .28);
+        border-radius: 999px;
+        background: #e9f7ef;
+        color: #145236;
+        font-size: .75rem;
+        font-weight: 700;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+    }
+</style>
+
+<div class="week-shell">
+    <a asp-controller="Menu" asp-action="Diet" asp-route-id="@Model.Diet.DietId" asp-route-variantId="@Model.SelectedVariant?.DietVariantId" class="btn btn-link px-0 mb-3">
+        Wróć do diety
+    </a>
+
+    <section class="week-hero p-4 p-md-5 mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
+            <div>
+                <div class="text-success small fw-bold text-uppercase mb-2">Plan tygodniowy M2</div>
+                <h1 class="fw-bold mb-2">@Model.Diet.Name</h1>
+                <p class="text-muted mb-0">
+                    @(Model.SelectedVariant is null
+                        ? "Wybierz aktywny wariant diety."
+                        : $"{Model.SelectedVariant.Name}, {Model.SelectedVariant.TargetCalories} kcal, {Model.SelectedVariant.PricePerDay.ToString("C", culture)} / dzień")
+                </p>
+            </div>
+            @if (Model.SelectedVariant is not null)
+            {
+                <form asp-controller="Cart" asp-action="Add" method="post" class="d-flex flex-wrap align-items-end gap-2">
+                    <input type="hidden" name="dietVariantId" value="@Model.SelectedVariant.DietVariantId" />
+                    <div>
+                        <label class="form-label fw-semibold">Dni</label>
+                        <input type="number" name="totalDays" value="5" min="1" max="365" class="form-control" />
+                    </div>
+                    <button type="submit" class="btn btn-success">Dodaj do koszyka</button>
+                </form>
+            }
+        </div>
+    </section>
+
+    @if (!groupedPlan.Any())
+    {
+        <div class="week-day p-5 text-center">
+            <div class="text-success small fw-bold text-uppercase mb-2">Brak planu</div>
+            <h2 class="h5 fw-bold">Nie znaleziono opublikowanego jadłospisu</h2>
+            <p class="text-muted mb-0">Moduł menu musi opublikować plan dla wybranego wariantu i zakresu dat.</p>
+        </div>
+    }
+    else
+    {
+        <div class="week-grid">
+            @foreach (var day in groupedPlan)
+            {
+                <section class="week-day">
+                    <div class="p-3 border-bottom">
+                        <h2 class="h6 fw-bold mb-0">@day.Key.ToString("dddd, dd.MM", culture)</h2>
+                    </div>
+                    @foreach (var meal in day.OrderBy(item => item.SortOrder).ThenBy(item => item.MealSlot))
+                    {
+                        <div class="meal-item p-3">
+                            <div class="fw-semibold">@meal.MealName</div>
+                            <div class="text-muted small">@meal.MealSlot</div>
+                            @if (!string.IsNullOrWhiteSpace(meal.CategoryName))
+                            {
+                                <span class="meal-category-pill mt-2">@meal.CategoryName</span>
+                            }
+                        </div>
+                    }
+                </section>
+            }
+        </div>
+    }
+</div>

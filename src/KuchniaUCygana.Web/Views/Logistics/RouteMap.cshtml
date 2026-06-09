@@ -1,5 +1,298 @@
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@model RouteMapViewModel
 @{
     Layout = "_LayoutStaff";
+    var selectedDate = Model.SelectedDate.ToString("yyyy-MM-dd");
+    var jsonOptions = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+    var mapRoutes = Model.Routes.Select(route => new
+    {
+        route.Id,
+        route.Name,
+        route.Status,
+        route.VehicleRegistration,
+        route.TotalDistanceKm,
+        Stops = route.Stops
+            .OrderBy(stop => stop.SequenceNumber)
+            .Select(stop => new
+            {
+                stop.Id,
+                stop.DeliveryCalendarId,
+                stop.SequenceNumber,
+                stop.FullAddress,
+                stop.Latitude,
+                stop.Longitude,
+                stop.Status,
+                stop.PlannedArrivalTime,
+            }),
+    });
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+@if (!Model.IsSingleRoute)
+{
+    <div class="card card-premium mb-4">
+        <div class="card-body">
+            <form asp-action="RouteMap" method="get" class="row g-3 align-items-end">
+                <div class="col-md-5 col-lg-4">
+                    <label class="form-label">Dzień dostaw</label>
+                    <input type="date" name="date" value="@selectedDate" class="form-control" />
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">
+                        @Html.Raw(StaffIconCatalog.Get("search"))
+                        Pokaż trasy
+                    </button>
+                </div>
+                <div class="col-auto ms-md-auto">
+                    <a asp-action="Routes" asp-route-date="@selectedDate" class="btn btn-outline-secondary">
+                        Lista tras
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+}
+else
+{
+    <div class="mb-4 d-flex flex-wrap gap-2">
+        <a asp-action="RouteDetails" asp-route-id="@Model.SelectedRouteId" class="btn btn-outline-secondary">
+            Szczegóły trasy
+        </a>
+        <a asp-action="RouteMap" asp-route-date="@selectedDate" class="btn btn-outline-primary">
+            @Html.Raw(StaffIconCatalog.Get("map"))
+            Wszystkie trasy dnia
+        </a>
+    </div>
+}
+
+<div class="row row-deck row-cards mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Trasy</div>
+                <div class="h1 mb-3">@Model.Routes.Count</div>
+                <div class="text-secondary">Plan na @Model.SelectedDate.ToString("dd.MM.yyyy")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-indigo">Przystanki</div>
+                <div class="h1 mb-3 text-indigo">@Model.TotalStops</div>
+                <div class="text-secondary">W kolejności dostaw</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-success">Na mapie</div>
+                <div class="h1 mb-3 text-success">@Model.GeocodedStops</div>
+                <div class="text-secondary">Punkty ze współrzędnymi</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Dystans</div>
+                <div class="h1 mb-3">@Model.TotalDistanceKm.ToString("N1") km</div>
+                <div class="text-secondary">Szacunek dla widocznych tras</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.MissingCoordinatesStops > 0)
+{
+    <div class="alert alert-warning alert-premium-smart" role="alert">
+        @Html.Raw(StaffIconCatalog.Get("alert"))
+        @Model.MissingCoordinatesStops przystanków pominięto na mapie z powodu braku współrzędnych.
+    </div>
+}
+
+@if (Model.Routes.Count == 0)
+{
+    <div class="alert alert-info" role="alert">
+        Brak tras dla wybranego dnia. Wygeneruj plan dnia albo wybierz inną datę.
+    </div>
+}
+
+<div class="row g-4">
+    <div class="col-xl-9">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Przebieg tras</h3>
+            </div>
+            <div class="card-body p-0">
+                <div id="route-map" class="logistics-route-map" aria-label="Mapa tras dostaw"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Legenda tras</h3>
+            </div>
+            <div class="list-group list-group-flush">
+                @if (Model.Routes.Count == 0)
+                {
+                    <div class="list-group-item text-secondary">Brak tras do wyświetlenia.</div>
+                }
+                else
+                {
+                    @foreach (var route in Model.Routes.Select((value, index) => new { value, index }))
+                    {
+                        <div class="list-group-item">
+                            <div class="d-flex align-items-start gap-2">
+                                <span class="route-color-swatch mt-1" data-route-index="@route.index"></span>
+                                <div class="flex-fill">
+                                    <div class="fw-semibold">@route.value.Name</div>
+                                    <div class="text-secondary small">
+                                        @(route.value.VehicleRegistration ?? "Bez pojazdu") · @route.value.Stops.Count stopów · @route.value.TotalDistanceKm.ToString("N1") km
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<script id="route-map-data" type="application/json">
+    @Html.Raw(JsonSerializer.Serialize(mapRoutes, jsonOptions))
+</script>
+
+@section Styles {
+    <link rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+    <style>
+        .logistics-route-map {
+            width: 100%;
+            height: min(68vh, 700px);
+            min-height: 460px;
+            background: #eef2f6;
+        }
+
+        .route-stop-marker {
+            display: grid;
+            width: 30px;
+            height: 30px;
+            place-items: center;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
+        }
+
+        .route-color-swatch {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            flex: 0 0 12px;
+            border-radius: 50%;
+        }
+
+        .leaflet-popup-content {
+            margin: 12px 14px;
+        }
+
+        @@media (max-width: 767.98px) {
+            .logistics-route-map {
+                height: 56vh;
+                min-height: 400px;
+            }
+        }
+    </style>
+}
+
+@section Scripts {
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <script>
+        (() => {
+            const routeColors = ["#206bc4", "#2fb344", "#f59f00", "#d63939", "#ae3ec9", "#0ca678", "#f76707", "#4263eb"];
+            const routes = JSON.parse(document.getElementById("route-map-data").textContent);
+            const map = L.map("route-map", { scrollWheelZoom: false }).setView([52.13, 21.0], 10);
+            const visiblePoints = [];
+            const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#039;",
+            })[character]);
+
+            L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            }).addTo(map);
+
+            document.querySelectorAll("[data-route-index]").forEach((swatch) => {
+                swatch.style.backgroundColor = routeColors[Number(swatch.dataset.routeIndex) % routeColors.length];
+            });
+
+            routes.forEach((route, routeIndex) => {
+                const color = routeColors[routeIndex % routeColors.length];
+                const points = [];
+
+                route.stops.forEach((stop) => {
+                    if (stop.latitude == null || stop.longitude == null) {
+                        return;
+                    }
+
+                    const point = [stop.latitude, stop.longitude];
+                    const markerIcon = L.divIcon({
+                        className: "",
+                        html: `<span class="route-stop-marker" style="background:${color}">${stop.sequenceNumber}</span>`,
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15],
+                        popupAnchor: [0, -15],
+                    });
+                    const plannedArrival = stop.plannedArrivalTime
+                        ? `<div class="text-secondary small mt-1">Plan: ${new Date(stop.plannedArrivalTime).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}</div>`
+                        : "";
+                    const address = escapeHtml(stop.fullAddress || "Brak adresu");
+                    const routeName = escapeHtml(route.name);
+
+                    L.marker(point, { icon: markerIcon })
+                        .addTo(map)
+                        .bindPopup(`
+                            <div class="fw-semibold">${routeName} · stop ${stop.sequenceNumber}</div>
+                            <div class="mt-1">${address}</div>
+                            <div class="text-secondary small mt-1">DeliveryCalendarId: ${stop.deliveryCalendarId}</div>
+                            ${plannedArrival}
+                        `);
+
+                    points.push(point);
+                    visiblePoints.push(point);
+                });
+
+                if (points.length > 1) {
+                    L.polyline(points, {
+                        color,
+                        weight: 4,
+                        opacity: 0.8,
+                    }).addTo(map);
+                }
+            });
+
+            if (visiblePoints.length > 0) {
+                map.fitBounds(visiblePoints, { padding: [32, 32], maxZoom: 15 });
+            }
+        })();
+    </script>
+}

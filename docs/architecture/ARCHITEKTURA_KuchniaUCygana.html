@@ -858,7 +858,7 @@
         <div class="arch-arrow">↓ &nbsp; implementuje Interfejsy</div>
         <div class="arch-layer layer-infra">
           <div class="arch-layer-title">KuchniaUCygana.Infrastructure &nbsp;·&nbsp; DAL + Zewnętrzne</div>
-          <div class="arch-layer-desc">Repositories · DB (OrmLite) · Migrations · External APIs: Stripe, Maps, OpenAI · File Storage · PDF Generator · Cache</div>
+          <div class="arch-layer-desc">Repositories · DB (Dapper) · Migrations · External APIs: Stripe, Maps, OpenAI · File Storage · PDF Generator · Cache</div>
         </div>
       </div>
 
@@ -1051,7 +1051,7 @@ Ticket (1) ──────────────────── (1) User
           <thead><tr><th>Zadanie</th><th>Narzędzie</th><th>Powód</th></tr></thead>
           <tbody>
             <tr><td>Schemat bazy (DDL)</td><td><strong>FluentMigrator</strong></td><td>Wersjonowane migracje, niezależne od ORM</td></tr>
-            <tr><td>Odczyt/zapis danych (DML)</td><td><strong>ServiceStack OrmLite</strong></td><td>Lekki, szybki, bliżej SQL niż EF Core</td></tr>
+            <tr><td>Odczyt/zapis danych (DML)</td><td><strong>Dapper</strong></td><td>Lekki, szybki, bliżej SQL niż EF Core</td></tr>
             <tr><td>Seedowanie testowe</td><td><strong>Bogus</strong></td><td>Deterministyczne, realistyczne dane</td></tr>
           </tbody>
         </table>
@@ -1059,7 +1059,7 @@ Ticket (1) ──────────────────── (1) User
 
       <div class="callout callout-warn">
         <span class="callout-icon">⚠️</span>
-        <div class="callout-body"><strong>Uwaga:</strong> OrmLite ma wbudowane <code>db.CreateTableIfNotExists&lt;T&gt;()</code> — <strong>nie używaj tej metody</strong>. Całość DDL zarządza FluentMigrator — jest to świadoma decyzja architektoniczna, zapewniająca audyt zmian schematu przez Git.</div>
+        <div class="callout-body"><strong>Uwaga:</strong> całość DDL zarządza FluentMigrator. Nie tworzymy tabel z poziomu kodu repozytoriów, dzięki czemu Git zachowuje audyt zmian schematu.</div>
       </div>
 
       <h3>5.1 Connection Factory</h3>
@@ -1087,8 +1087,7 @@ Ticket (1) ──────────────────── (1) User
 
     <span class="kw">public</span> <span class="cls">IDbConnection</span> <span class="prop">CreateConnection</span>()
     {
-        <span class="kw">var</span> ormFactory = <span class="kw">new</span> <span class="cls">OrmLiteConnectionFactory</span>(_connectionString, SqliteDialect.Provider);
-        <span class="kw">return</span> ormFactory.OpenDbConnection();
+        <span class="kw">return</span> <span class="kw">new</span> <span class="cls">SqlConnection</span>(_connectionString);
     }
 }</code></pre>
       </div>
@@ -1674,7 +1673,7 @@ volumes:
       <h3>KuchniaUCygana.Infrastructure</h3>
       <div class="pkg-grid">
         <div class="pkg-item">
-          <div><div class="pkg-name">Dapper</div><span class="pkg-version">8.x</span><span class="pkg-desc">ORM + SQLite provider</span></div>
+          <div><div class="pkg-name">Dapper</div><span class="pkg-version">2.x</span><span class="pkg-desc">Micro-ORM for explicit SQL</span></div>
         </div>
         <div class="pkg-item">
           <div><div class="pkg-name">Microsoft.Data.Sqlite</div><span class="pkg-version">8.x</span><span class="pkg-desc">ADO.NET SQLite driver</span></div>
@@ -1988,7 +1987,7 @@ jobs:
       <h3>Ważne kwestie do omówienia z zespołem</h3>
       <div class="callout callout-warn" style="margin-bottom:12px">
         <span class="callout-icon">1️⃣</span>
-        <div class="callout-body"><strong>ServiceStack OrmLite vs EF Core</strong> — OrmLite nie ma lazy loadingu. Przy ManyToMany trzeba jawnie ładować dane przez JOIN lub dodatkowe zapytania. Napiszcie te zapytania "na papierze" przed implementacją modułu produkcyjnego.</div>
+        <div class="callout-body"><strong>Dapper vs EF Core</strong> — Dapper nie ma lazy loadingu. Przy ManyToMany trzeba jawnie ładować dane przez JOIN lub dodatkowe zapytania. Napiszcie te zapytania "na papierze" przed implementacją modułu produkcyjnego.</div>
       </div>
       <div class="callout callout-warn" style="margin-bottom:12px">
         <span class="callout-icon">2️⃣</span>
@@ -1996,7 +1995,7 @@ jobs:
       </div>
       <div class="callout callout-warn" style="margin-bottom:12px">
         <span class="callout-icon">3️⃣</span>
-        <div class="callout-body"><strong>FluentMigrator jako jedyne źródło DDL</strong> — atrybuty OrmLite (<code>[AutoIncrement]</code>, <code>[References]</code>) wpływają tylko na DML, nie tworzą tabel. Migracje to JEDYNE miejsce DDL.</div>
+        <div class="callout-body"><strong>FluentMigrator jako jedyne źródło DDL</strong> — atrybuty encji nie tworzą tabel. Migracje to JEDYNE miejsce DDL.</div>
       </div>
       <div class="callout callout-info" style="margin-bottom:12px">
         <span class="callout-icon">4️⃣</span>
@@ -2029,7 +2028,7 @@ jobs:
       </div>
       <div class="glossary-item">
         <div class="glossary-term">BaseRepository&lt;T&gt;</div>
-        <div class="glossary-def">Implementacja generyczna oparta na OrmLite — dziedziczy po niej każde konkretne repozytorium.</div>
+        <div class="glossary-def">Implementacja generyczna oparta na Dapper — dziedziczy po niej każde konkretne repozytorium.</div>
       </div>
       <div class="glossary-item">
         <div class="glossary-term">IDbConnectionFactory</div>

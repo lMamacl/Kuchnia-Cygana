@@ -1,0 +1,49 @@
+@model AdminDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+    var roles = Model.AvailableRoles.OrderBy(role => role).ToArray();
+}
+
+<div class="row row-cards">
+    <div class="col-xl-6">
+        <form class="card" method="post" asp-controller="Admin" asp-action="CreateUser">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Nowe konto</h3>
+                <a class="btn btn-outline-secondary btn-sm" asp-controller="Admin" asp-action="Users">Użytkownicy</a>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label" for="CreateEmail">Email</label>
+                    <input class="form-control" id="CreateEmail" name="Email" type="email" autocomplete="email" value="@Model.NewUser.Email" required />
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="CreateFirstName">Imię</label>
+                        <input class="form-control" id="CreateFirstName" name="FirstName" autocomplete="given-name" value="@Model.NewUser.FirstName" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="CreateLastName">Nazwisko</label>
+                        <input class="form-control" id="CreateLastName" name="LastName" autocomplete="family-name" value="@Model.NewUser.LastName" />
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label" for="CreateRole">Rola</label>
+                    <select class="form-select" id="CreateRole" name="Role" required>
+                        <option value="" selected="@(string.IsNullOrWhiteSpace(Model.NewUser.Role))" disabled>Wybierz rolę</option>
+                        @foreach (var role in roles)
+                        {
+                            <option value="@role" selected="@(role == Model.NewUser.Role)">@role</option>
+                        }
+                    </select>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label" for="CreatePassword">Hasło startowe</label>
+                    <input class="form-control" id="CreatePassword" name="Password" type="password" minlength="6" autocomplete="new-password" required />
+                </div>
+            </div>
+            <div class="card-footer text-end">
+                <button class="btn btn-primary" type="submit">Utwórz konto</button>
+            </div>
+        </form>
+    </div>
+</div>

@@ -97,9 +97,11 @@
     0% {
         box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7);
     }
+
     70% {
         box-shadow: 0 0 0 8px rgba(46, 204, 113, 0);
     }
+
     100% {
         box-shadow: 0 0 0 0 rgba(46, 204, 113, 0);
     }
@@ -109,9 +111,11 @@
     0% {
         box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7);
     }
+
     70% {
         box-shadow: 0 0 0 8px rgba(241, 196, 15, 0);
     }
+
     100% {
         box-shadow: 0 0 0 0 rgba(241, 196, 15, 0);
     }
@@ -121,9 +125,11 @@
     0% {
         box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7);
     }
+
     70% {
         box-shadow: 0 0 0 8px rgba(231, 76, 60, 0);
     }
+
     100% {
         box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
     }
@@ -178,3 +184,239 @@
     background: color-mix(in srgb, var(--tblr-success) 8%, var(--tblr-bg-surface));
 }
 
+/* Usuń podwójne ikony kalendarza z pól typu date (pochodzące z Tabler/Bootstrap) */
+input[type="date"] {
+    background-image: none !important;
+    padding-left: 0.75rem !important;
+}
+
+/* Ukryty blok z wykresami na ekranie (ale wyrenderowany dla Chart.js), widoczny przy druku */
+.print-only-block {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+    width: 1000px;
+    height: auto;
+    overflow: hidden;
+}
+
+/* ── Reguły Drukowania (A4 Portrait, Excel-like Grid, Compact) ─────────────────── */
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 1.2cm;
+    }
+
+    /* Ukrycie elementów nawigacyjnych i zbędnych dla Sanepidu */
+    aside.navbar,
+    .staff-topbar,
+    .page-header,
+    .d-print-none,
+    .btn,
+    .breadcrumb,
+    form,
+    .card-premium.d-print-none,
+    .alert {
+        display: none !important;
+    }
+
+    /* Reset marginesów kontenera */
+    body,
+    .page,
+    .page-wrapper,
+    .page-body,
+    .container-xl {
+        background: #fff !important;
+        color: #000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+    }
+
+    /* Usunięcie ujemnych marginesów wierszy, aby nic nie wychodziło poza stronę */
+    .row {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    /* Płaska i czytelna karta raportu bez cieni/obramowań na ekranie */
+    .card {
+        border: none !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+    }
+
+    .card-body {
+        padding: 0 !important;
+    }
+
+    /* Kompaktowa tabela w stylu Excela */
+    table,
+    .table {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-collapse: collapse !important;
+        margin-bottom: 1.5rem !important;
+        table-layout: fixed !important;
+    }
+
+    thead {
+        display: table-header-group !important;
+    }
+
+    tbody {
+        display: table-row-group !important;
+    }
+
+    tr {
+        display: table-row !important;
+    }
+
+    /* Wybór selektorów o wysokiej specyficzności, aby nadpisać potencjalny white-space: nowrap z Tablera */
+    table.table-premium thead th,
+    table.table-premium tbody td,
+    table.table-bordered thead th,
+    table.table-bordered tbody td,
+    th,
+    td {
+        display: table-cell !important;
+        padding: 5px 6px !important;
+        font-size: 8.5pt !important;
+        border: 1px solid #1a1a1a !important;
+        color: #000 !important;
+        background: transparent !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        word-break: break-word !important;
+        white-space: normal !important;
+        vertical-align: middle !important;
+        line-height: 1.25 !important;
+    }
+
+    th {
+        font-weight: bold !important;
+        background-color: #f2f2f2 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Dopasowanie statusów w druku */
+    .table-danger {
+        background-color: #f8d7da !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .table-warning {
+        background-color: #fff3cd !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .badge {
+        border: 1px solid #1a1a1a !important;
+        background: transparent !important;
+        color: #000 !important;
+    }
+
+    /* Wymuszenie 100% szerokości dla głównej kolumny raportu */
+    .col-100-print {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* Nagłówki na wydruku */
+    h1,
+    .h1,
+    h2,
+    .h2,
+    h3,
+    .h3 {
+        color: #000 !important;
+        font-weight: bold !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        line-height: 1.3 !important;
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    h1,
+    .h1 {
+        font-size: 15pt !important;
+    }
+
+    h2,
+    .h2 {
+        font-size: 12pt !important;
+    }
+
+    h3,
+    .h3 {
+        font-size: 10pt !important;
+    }
+
+    /* Wykres na wydruku - czytelna wielkość */
+    .chart-container-print {
+        height: 280px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        page-break-inside: avoid !important;
+        overflow: visible !important;
+    }
+
+    /* Wymuszenie nowej strony dla wykresu */
+    .page-break-before {
+        page-break-before: always !important;
+        margin-top: 0.8cm !important;
+    }
+
+    /* Przywrócenie wyświetlania wykresów na wydruku */
+    .print-only-block {
+        position: static !important;
+        left: auto !important;
+        top: auto !important;
+        width: 100% !important;
+        display: block !important;
+    }
+
+    /* Procentowe szerokości kolumn w tabeli HACCP na wydruku, aby nic się nie rozjeżdżało */
+    table.table-bordered th:nth-child(1),
+    table.table-bordered td:nth-child(1) {
+        width: 32% !important;
+    }
+
+    table.table-bordered th:nth-child(2),
+    table.table-bordered td:nth-child(2),
+    table.table-bordered th:nth-child(3),
+    table.table-bordered td:nth-child(3) {
+        width: 10% !important;
+    }
+
+    table.table-bordered th:nth-child(4),
+    table.table-bordered td:nth-child(4),
+    table.table-bordered th:nth-child(5),
+    table.table-bordered td:nth-child(5),
+    table.table-bordered th:nth-child(6),
+    table.table-bordered td:nth-child(6) {
+        width: 11% !important;
+    }
+
+    table.table-bordered th:nth-child(7),
+    table.table-bordered td:nth-child(7) {
+        width: 15% !important;
+    }
+
+    /* Wyłączenie pasków przewijania w druku */
+    .table-responsive {
+        overflow: visible !important;
+        display: block !important;
+        width: 100% !important;
+    }
+}

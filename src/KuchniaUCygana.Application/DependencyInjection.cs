@@ -1,6 +1,8 @@
 using FluentValidation;
 using KuchniaUCygana.Application.Interfaces;
+using KuchniaUCygana.Application.Interfaces.Menu;
 using KuchniaUCygana.Application.Services;
+using KuchniaUCygana.Application.Services.Menu;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 
@@ -12,8 +14,21 @@ public static class DependencyInjection
     {
         services.AddAutoMapper(cfg => cfg.AddMaps(Assembly.GetExecutingAssembly()));
         services.AddValidatorsFromAssemblyContaining(typeof(DependencyInjection));
-        
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<ICartService, CartService>();
+        services.AddScoped<IDietOrderingService, DietOrderingService>();
+        services.AddScoped<ICheckoutService, CheckoutService>();
+        services.AddScoped<IAddressService, AddressService>();
+        services.AddScoped<IDeliveryCalendarService, DeliveryCalendarService>();
+        services.AddScoped<IDiscountService, DiscountService>();
+        services.AddScoped<ICustomerProfileService, CustomerProfileService>();
+        services.AddScoped<IHumanResourcesService, HumanResourcesService>();
+        services.AddScoped<ICustomerSupportService, CustomerSupportService>();
+        services.AddScoped<IAuditLogService, AuditLogService>();
+        services.AddScoped<IMealVariantResultCalculator, MealVariantResultCalculator>();
+        services.AddScoped<IStaffActivityService, StaffActivityService>();
+        services.AddScoped<IStaffShiftAccessService, StaffShiftAccessService>();
         return services;
     }
 }

@@ -1,5 +1,136 @@
+@model DeliveryRouteDto
 @{
     Layout = "_LayoutStaff";
 }
-@await Html.PartialAsync("_StaffPlaceholder")
 
+<div class="row row-deck row-cards mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Trasa</div>
+                <div class="h2 mb-3">@Model.Name</div>
+                <div class="text-secondary">@Model.RouteDate.ToString("dd.MM.yyyy")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader text-indigo">Przystanki</div>
+                <div class="h1 mb-3 text-indigo">@Model.Stops.Count</div>
+                <div class="text-secondary">Kolejnosc dostawy kierowcy</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Pojazd</div>
+                <div class="h2 mb-3">@(Model.VehicleRegistration ?? "Brak")</div>
+                <div class="text-secondary">
+                    Kierowca: @(string.IsNullOrWhiteSpace(Model.DriverName) ? "nie dopisano" : Model.DriverName)
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-premium">
+            <div class="card-body">
+                <div class="subheader">Dystans</div>
+                <div class="h1 mb-3">@Model.TotalDistanceKm.ToString("N1") km</div>
+                <div class="text-secondary">Szacunek po punktach</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-premium">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h3 class="card-title">Przystanki trasy</h3>
+        <div class="card-actions">
+            <a asp-action="Routes" asp-route-date="@Model.RouteDate.ToString("yyyy-MM-dd")" class="btn btn-outline-secondary">
+                Wroc
+            </a>
+            <a asp-action="EditRoute" asp-route-id="@Model.Id" class="btn btn-outline-primary">
+                Edytuj
+            </a>
+            <form asp-action="DeleteRoute" asp-route-id="@Model.Id" asp-route-date="@Model.RouteDate.ToString("yyyy-MM-dd")" method="post" onsubmit="return confirm('Czy na pewno chcesz usunac trase @Model.Name?');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-danger">Usun</button>
+            </form>
+            <a asp-action="RouteMap" asp-route-id="@Model.Id" class="btn btn-primary">
+                @Html.Raw(StaffIconCatalog.Get("map"))
+                Mapa
+            </a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter table-premium card-table table-striped">
+            <thead>
+                <tr>
+                    <th class="w-1">#</th>
+                    <th>DeliveryCalendarId</th>
+                    <th>Adres</th>
+                    <th>Wspolrzedne</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Stops.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="text-center text-secondary py-4">
+                            Ta trasa nie ma jeszcze przystankow.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var stop in Model.Stops.OrderBy(s => s.SequenceNumber))
+                    {
+                        <tr>
+                            <td>
+                                <span class="badge bg-blue text-blue-fg">@stop.SequenceNumber</span>
+                            </td>
+                            <td class="font-monospace">@stop.DeliveryCalendarId</td>
+                            <td>
+                                <div class="fw-semibold">@stop.FullAddress</div>
+                                @if (stop.PlannedArrivalTime.HasValue)
+                                {
+                                    <div class="text-secondary small">Plan: @stop.PlannedArrivalTime.Value.ToString("HH:mm")</div>
+                                }
+                            </td>
+                            <td class="font-monospace small">
+                                @if (stop.Latitude.HasValue && stop.Longitude.HasValue)
+                                {
+                                    <span>@stop.Latitude.Value.ToString("N5"), @stop.Longitude.Value.ToString("N5")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-warning">Brak</span>
+                                }
+                            </td>
+                            <td>@StopStatusBadge(stop.Status)</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@functions {
+    private static Microsoft.AspNetCore.Html.IHtmlContent StopStatusBadge(string status)
+    {
+        var (css, label) = status switch
+        {
+            "Assigned" => ("bg-blue-lt text-blue", "Przypisany"),
+            "InProgress" => ("bg-warning-lt text-warning", "W realizacji"),
+            "Completed" => ("bg-success-lt text-success", "Dostarczony"),
+            "Failed" => ("bg-danger-lt text-danger", "Problem"),
+            _ => ("bg-secondary-lt text-secondary", "Utworzony"),
+        };
+
+        return new Microsoft.AspNetCore.Html.HtmlString($"<span class=\"badge {css}\">{label}</span>");
+    }
+}

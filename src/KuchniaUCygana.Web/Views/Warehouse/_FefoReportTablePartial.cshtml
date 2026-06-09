@@ -1,0 +1,185 @@
+@model KuchniaUCygana.Application.DTOs.Warehouse.PagedResultDto<KuchniaUCygana.Application.DTOs.Warehouse.FefoReportItemDto>
+@{
+    var items = Model.Items ?? Array.Empty<KuchniaUCygana.Application.DTOs.Warehouse.FefoReportItemDto>();
+    var currentPage = Model.Page;
+    var pageSize = Model.PageSize;
+    var totalCount = Model.TotalCount;
+    var totalPages = Model.TotalPages;
+    var firstItem = totalCount == 0 ? 0 : ((currentPage - 1) * pageSize) + 1;
+    var lastItem = totalCount == 0 ? 0 : Math.Min(currentPage * pageSize, totalCount);
+    var startPage = Math.Max(1, currentPage - 2);
+    var endPage = Math.Min(totalPages, currentPage + 2);
+    var hasPrevious = currentPage > 1;
+    var hasNext = currentPage < totalPages;
+}
+
+@if (Context.Request.Headers.ContainsKey("HX-Request"))
+{
+    <strong id="fefo-count" hx-swap-oob="true">@totalCount</strong>
+}
+
+<!-- Tabela Raportu -->
+<div class="card card-premium card-print-plain">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-vcenter table-bordered card-table table-premium" id="FefoTable">
+                <thead>
+                    <tr>
+                        <th>Składnik</th>
+                        <th>Partia Magazynowa</th>
+                        <th class="text-end">Ilość</th>
+                        <th>Data Ważności</th>
+                        <th>Dni do końca</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!items.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-secondary py-4">
+                                Brak aktywnych partii w magazynie.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var item in items)
+                        {
+                            var statusColor = item.Status switch
+                            {
+                                "Expired" => "danger",
+                                "Critical" => "danger",
+                                "Warning" => "warning",
+                                "Safe" => "success",
+                                _ => "secondary"
+                            };
+
+                            var statusName = item.Status switch
+                            {
+                                "Expired" => "Przeterminowana",
+                                "Critical" => "Pilna ważność",
+                                "Warning" => "Krótka ważność",
+                                "Safe" => "Bezpieczna",
+                                _ => item.Status
+                            };
+
+                            var rowClass = item.Status switch
+                            {
+                                "Expired" => "table-danger fw-bold",
+                                "Critical" => "table-warning fw-bold",
+                                _ => ""
+                            };
+
+                            <tr class="@rowClass" data-status="@item.Status">
+                                <td class="fw-bold text-dark">
+                                    <a asp-action="BatchDetails" asp-route-stockItemId="@item.StockItemId" class="text-reset d-print-none">@item.StockItemName</a>
+                                    <span class="d-none d-print-inline">@item.StockItemName</span>
+                                </td>
+                                <td class="font-weight-medium">Partia #@item.BatchId (@(string.IsNullOrEmpty(item.BatchNumber) ? "BRAK" : item.BatchNumber))</td>
+                                <td class="text-end fw-bold text-dark">@item.Quantity.ToString("F2")</td>
+                                <td>@(item.ExpiryDate?.ToString("dd.MM.yyyy") ?? "Bezterminowo")</td>
+                                <td>
+                                    @if (item.DaysToExpiry.HasValue)
+                                    {
+                                        if (item.DaysToExpiry.Value < 0)
+                                        {
+                                            <span class="text-danger fw-bold">Przeterminowana (@Math.Abs(item.DaysToExpiry.Value) dni)</span>
+                                        }
+                                        else
+                                        {
+                                            <span>@item.DaysToExpiry.Value dni</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">Brak</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge bg-@statusColor-lt text-@statusColor">@statusName</span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer bg-transparent d-flex align-items-center d-print-none">
+        <p class="m-0 text-secondary">Pokazano <strong>@firstItem-@lastItem</strong> z łącznie <strong>@totalCount</strong> wyników</p>
+
+        @if (totalPages > 1)
+        {
+            <ul class="pagination m-0 ms-auto">
+                <li class="page-item @(hasPrevious ? "" : "disabled")">
+                    <a class="page-link"
+                       href="javascript:void(0)"
+                       @if (hasPrevious)
+                       {
+                           <text>hx-get="/warehouse/fefo-report?Page=@(currentPage - 1)&PageSize=@pageSize" hx-target="#fefo-table-container" hx-include="#fefo-filter-form"</text>
+                       }
+                       tabindex="-1"
+                       aria-disabled="@(!hasPrevious)">
+                        Poprzednia
+                    </a>
+                </li>
+
+                @if (startPage > 1)
+                {
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="javascript:void(0)"
+                           hx-get="/warehouse/fefo-report?Page=1&PageSize=@pageSize"
+                           hx-target="#fefo-table-container"
+                           hx-include="#fefo-filter-form">1</a>
+                    </li>
+                    @if (startPage > 2)
+                    {
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    }
+                }
+
+                @for (int p = startPage; p <= endPage; p++)
+                {
+                    <li class="page-item @(p == currentPage ? "active" : "")">
+                        <a class="page-link"
+                           href="javascript:void(0)"
+                           hx-get="/warehouse/fefo-report?Page=@p&PageSize=@pageSize"
+                           hx-target="#fefo-table-container"
+                           hx-include="#fefo-filter-form">
+                            @p
+                        </a>
+                    </li>
+                }
+
+                @if (endPage < totalPages)
+                {
+                    @if (endPage < totalPages - 1)
+                    {
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    }
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="javascript:void(0)"
+                           hx-get="/warehouse/fefo-report?Page=@totalPages&PageSize=@pageSize"
+                           hx-target="#fefo-table-container"
+                           hx-include="#fefo-filter-form">@totalPages</a>
+                    </li>
+                }
+
+                <li class="page-item @(hasNext ? "" : "disabled")">
+                    <a class="page-link"
+                       href="javascript:void(0)"
+                       @if (hasNext)
+                       {
+                           <text>hx-get="/warehouse/fefo-report?Page=@(currentPage + 1)&PageSize=@pageSize" hx-target="#fefo-table-container" hx-include="#fefo-filter-form"</text>
+                       }
+                       aria-disabled="@(!hasNext)">
+                        Następna
+                    </a>
+                </li>
+            </ul>
+        }
+    </div>
+</div>

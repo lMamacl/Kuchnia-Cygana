@@ -1,0 +1,151 @@
+@model KuchniaUCygana.Application.DTOs.Orders.CheckoutSummaryDto
+@{
+    ViewData["Title"] = "Podsumowanie zamówienia";
+    var culture = new System.Globalization.CultureInfo("pl-PL");
+}
+
+<style>
+    .summary-shell {
+        color: #17211b;
+    }
+
+    .summary-hero,
+    .summary-card,
+    .payment-panel {
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 24px;
+        background: #fff;
+        box-shadow: 0 16px 45px rgba(23, 33, 27, .08);
+    }
+
+    .summary-hero {
+        background: linear-gradient(135deg, #edf8ef, #fff8ea);
+    }
+
+    .summary-card {
+        overflow: hidden;
+    }
+
+    .summary-card thead th {
+        color: #68756d;
+        font-size: .76rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+
+    .payment-panel {
+        position: sticky;
+        top: 1rem;
+        overflow: hidden;
+    }
+
+    .payment-total {
+        border-radius: 20px;
+        background: #f3fbf4;
+    }
+</style>
+
+<div class="summary-shell">
+    <div class="summary-hero p-4 p-md-5 mb-4">
+        <div class="text-success small fw-bold text-uppercase mb-2">Krok 2 z 3</div>
+        <h1 class="fw-bold mb-2">Podsumowanie zamówienia</h1>
+        <p class="text-muted mb-0">Sprawdź pozycje, adres i kwotę przed przejściem do płatności.</p>
+    </div>
+
+    @if (TempData["ErrorMessage"] is string errorMessage)
+    {
+        <div class="alert alert-danger border-0 shadow-sm" role="alert">@errorMessage</div>
+    }
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="summary-card mb-3">
+                <div class="card-body p-4">
+                    <h2 class="h5 fw-bold mb-1">Diety w zamówieniu</h2>
+                    <p class="text-muted small mb-0">Pozycje zostaną przekazane do realizacji po płatności.</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Dieta</th>
+                                <th class="text-center">Dni</th>
+                                <th class="text-end pe-4">Kwota</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Items)
+                            {
+                                <tr>
+                                    <td class="ps-4">
+                                        <strong>@item.DietName</strong>
+                                        <small class="text-muted d-block">@item.VariantName · @item.CaloriesPerDay kcal</small>
+                                    </td>
+                                    <td class="text-center fw-semibold">@item.TotalDays</td>
+                                    <td class="text-end pe-4 fw-semibold">@item.TotalPrice.ToString("C", culture)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @if (Model.SelectedAddress is not null)
+            {
+                <div class="summary-card mb-3">
+                    <div class="card-body p-4">
+                        <div class="text-success small fw-bold text-uppercase mb-2">Adres dostawy</div>
+                        <h2 class="h5 fw-bold mb-1">@Model.SelectedAddress.Label</h2>
+                        <p class="text-muted mb-0">@Model.SelectedAddress.FullAddress</p>
+                    </div>
+                </div>
+            }
+
+            <div id="discount-section">
+                <partial name="_DiscountPartial" model='new KuchniaUCygana.Web.Models.DiscountPartialViewModel
+                                                 {
+                                                     OrderId = Model.OrderId,
+                                                     TotalPrice = Model.TotalPrice,
+                                                     DiscountAmount = Model.DiscountAmount,
+                                                     FinalPrice = Model.FinalPrice,
+                                                     WasApplied = Model.DiscountAmount > 0
+                                                 }' />
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="payment-panel">
+                <div class="card-body p-4">
+                    <div class="text-success small fw-bold text-uppercase mb-2">Krok 3 z 3</div>
+                    <h2 class="h4 fw-bold mb-4">Razem do zapłaty</h2>
+
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Wartość zamówienia</span>
+                        <span class="fw-semibold">@Model.TotalPrice.ToString("C", culture)</span>
+                    </div>
+                    @if (Model.DiscountAmount > 0)
+                    {
+                        <div class="d-flex justify-content-between mb-2 text-success">
+                            <span>Rabat</span>
+                            <span>-@Model.DiscountAmount.ToString("C", culture)</span>
+                        </div>
+                    }
+
+                    <div class="payment-total p-3 my-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>Do zapłaty</strong>
+                            <strong class="fs-4 text-success">@Model.FinalPrice.ToString("C", culture)</strong>
+                        </div>
+                    </div>
+
+                    <form asp-action="Payment" method="post">
+                        <input type="hidden" name="orderId" value="@Model.OrderId" />
+                        <button type="submit" class="btn btn-success btn-lg w-100">
+                            Przejdź do płatności
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,132 @@
+@model HumanResourcesDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+    var departmentsPage = Model.DepartmentsPage;
+    var filter = Model.DepartmentsFilter;
+    var summariesByDepartmentId = Model.DepartmentSummaries.ToDictionary(summary => summary.DepartmentId);
+}
+
+<div class="row row-cards">
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Nowy dział</h3>
+            </div>
+            <form asp-action="CreateDepartment" method="post">
+                @Html.AntiForgeryToken()
+                <div class="card-body">
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                    <div class="mb-3">
+                        <label class="form-label" for="department-name">Nazwa</label>
+                        <input id="department-name" class="form-control" name="Name" value="@Model.NewDepartment.Name" maxlength="50" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="department-description">Opis</label>
+                        <textarea id="department-description" class="form-control" name="Description" rows="3" maxlength="200">@Model.NewDepartment.Description</textarea>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label" for="department-head">Kierownik</label>
+                        <select id="department-head" class="form-select" name="HeadEmployeeId">
+                            <option value="">Bez przypisania</option>
+                            @foreach (var employee in Model.Employees.Where(x => x.IsActive).OrderBy(x => x.FullName))
+                            {
+                                <option value="@employee.Id" selected="@(Model.NewDepartment.HeadEmployeeId == employee.Id)">@employee.FullName</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="card-footer text-end">
+                    <button class="btn btn-primary" type="submit">Dodaj dział</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Działy</h3>
+            </div>
+            <div class="card-body border-bottom">
+                <form method="get" asp-controller="HumanResources" asp-action="Departments">
+                    <input type="hidden" name="Page" value="1" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label" for="Search">Szukaj</label>
+                            <input class="form-control" id="Search" name="Search" type="search" value="@filter.Search" placeholder="Nazwa, opis, kierownik..." />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="PageSize">Na stronie</label>
+                            <select class="form-select" id="PageSize" name="PageSize">
+                                @foreach (var size in new[] { 10, 25, 50, 100 })
+                                {
+                                    <option value="@size" selected="@(filter.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex justify-content-md-end gap-2">
+                            <a class="btn btn-outline-secondary" asp-controller="HumanResources" asp-action="Departments">Wyczyść</a>
+                            <button class="btn btn-primary" type="submit">Filtruj</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Nazwa</th>
+                            <th>Opis</th>
+                            <th>Kierownik</th>
+                            <th>Pracownicy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var department in departmentsPage.Items)
+                        {
+                            summariesByDepartmentId.TryGetValue(department.Id, out var departmentSummary);
+                            var totalEmployees = departmentSummary?.TotalEmployeeCount ?? 0;
+                            var sampleEmployeeNames = departmentSummary?.SampleEmployeeNames ?? string.Empty;
+                            <tr>
+                                <td class="fw-semibold">@department.Name</td>
+                                <td class="text-secondary">@department.Description</td>
+                                <td>@(department.HeadEmployeeFullName ?? "-")</td>
+                                <td>
+                                    <div class="fw-semibold">@totalEmployees</div>
+                                    <div class="text-secondary small">
+                                        @if (string.IsNullOrWhiteSpace(sampleEmployeeNames))
+                                        {
+                                            <span>Brak przypisanych osób</span>
+                                        }
+                                        else
+                                        {
+                                            @sampleEmployeeNames
+                                            @if (totalEmployees > 3)
+                                            {
+                                                <span> +@(totalEmployees - 3)</span>
+                                            }
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        @if (departmentsPage.TotalCount == 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-secondary text-center py-4">
+                                    @(filter.HasActiveCriteria
+                                        ? "Brak działów dla wybranych filtrów."
+                                        : "Brak działów w bazie. Seeder powinien utworzyć podstawową strukturę firmy.")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.FromPagedList(
+                departmentsPage,
+                "HumanResources",
+                "Departments",
+                filter.ToRouteValues()))
+        </div>
+    </div>
+</div>

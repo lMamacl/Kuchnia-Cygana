@@ -1,0 +1,149 @@
+@model AdminDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+
+    var auditPage = Model.AuditPage;
+    var filter = Model.AuditFilter;
+    var logs = auditPage.Items;
+    var fromValue = filter.From?.ToString("yyyy-MM-dd");
+    var toValue = filter.To?.ToString("yyyy-MM-dd");
+
+    string ShortJson(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "-";
+        }
+
+        return value.Length > 180 ? value[..180] + "..." : value;
+    }
+}
+
+<div class="row row-cards">
+    <div class="col-12">
+        <form class="card" method="get" asp-controller="Admin" asp-action="Logs">
+            <div class="card-header">
+                <h3 class="card-title">Filtry audytu</h3>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label" for="Search">Szukaj</label>
+                        <input class="form-control" id="Search" name="Search" value="@filter.Search" placeholder="Akcja, obiekt, JSON, IP..." />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="UserId">Użytkownik</label>
+                        <input class="form-control" id="UserId" name="UserId" type="number" min="1" value="@filter.UserId" placeholder="ID użytkownika" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="Action">Akcja</label>
+                        <select class="form-select" id="Action" name="Action">
+                            <option value="">Wszystkie</option>
+                            @foreach (var action in auditPage.Actions)
+                            {
+                                <option value="@action" selected="@(string.Equals(filter.Action, action, StringComparison.OrdinalIgnoreCase))">@action</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="TargetEntity">Encja</label>
+                        <select class="form-select" id="TargetEntity" name="TargetEntity">
+                            <option value="">Wszystkie</option>
+                            @foreach (var entity in auditPage.TargetEntities)
+                            {
+                                <option value="@entity" selected="@(string.Equals(filter.TargetEntity, entity, StringComparison.OrdinalIgnoreCase))">@entity</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="From">Od</label>
+                        <input class="form-control" id="From" name="From" type="date" value="@fromValue" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="To">Do</label>
+                        <input class="form-control" id="To" name="To" type="date" value="@toValue" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="PageSize">Na stronie</label>
+                        <select class="form-select" id="PageSize" name="PageSize">
+                            @foreach (var size in new[] { 10, 25, 50, 100 })
+                            {
+                                <option value="@size" selected="@(auditPage.PageSize == size)">@size</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <label class="form-check mb-2" for="IncludeArchived">
+                            <input class="form-check-input" id="IncludeArchived" name="IncludeArchived" type="checkbox" value="true" checked="@filter.IncludeArchived" />
+                            <span class="form-check-label">Archiwum</span>
+                        </label>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end justify-content-md-end gap-2">
+                        <input type="hidden" name="Page" value="1" />
+                        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Logs">Wyczyść</a>
+                        <button class="btn btn-primary" type="submit">Filtruj</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h3 class="card-title">Logi systemowe</h3>
+                <div class="text-secondary small">
+                    Wyniki @logs.Count z @auditPage.TotalCount - strona @auditPage.Page / @auditPage.TotalPages
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Czas</th>
+                            <th>Użytkownik</th>
+                            <th>Akcja</th>
+                            <th>Obiekt</th>
+                            <th>Stara wartość</th>
+                            <th>Nowa wartość</th>
+                            <th>IP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in logs)
+                        {
+                            <tr>
+                                <td class="text-nowrap">
+                                    <div>@log.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                    @if (log.IsArchived)
+                                    {
+                                        <span class="badge bg-secondary-lt text-secondary">Archiwum</span>
+                                    }
+                                </td>
+                                <td>@(log.UserFullName ?? $"#{log.UserId}")</td>
+                                <td><span class="badge bg-blue-lt text-blue">@log.Action</span></td>
+                                <td>@log.TargetEntity #@log.TargetId</td>
+                                <td class="text-secondary small audit-json-cell">@ShortJson(log.OldValue)</td>
+                                <td class="text-secondary small audit-json-cell">@ShortJson(log.NewValue)</td>
+                                <td class="text-secondary text-nowrap">@(log.IPAddress ?? "-")</td>
+                            </tr>
+                        }
+                        @if (!logs.Any())
+                        {
+                            <tr>
+                                <td colspan="7" class="text-secondary text-center py-4">Brak logów dla wybranych filtrów.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @await Html.PartialAsync("_StaffPagination", StaffPaginationViewModel.Create(
+                "Admin",
+                "Logs",
+                auditPage.Page,
+                auditPage.PageSize,
+                auditPage.TotalCount,
+                filter.ToRouteValues()))
+        </div>
+    </div>
+</div>

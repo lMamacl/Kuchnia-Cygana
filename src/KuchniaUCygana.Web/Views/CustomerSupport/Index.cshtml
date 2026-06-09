@@ -1,0 +1,134 @@
+@model CustomerSupportDashboardViewModel
+@{
+    Layout = "_LayoutStaff";
+    var summary = Model.Summary;
+    var waitingTickets = Model.Tickets.ToArray();
+    var unassignedTickets = Model.OpenTickets.ToArray();
+
+    string PriorityClass(string priority) => priority switch
+    {
+        "Critical" => "bg-red-lt text-red",
+        "High" => "bg-orange-lt text-orange",
+        "Medium" => "bg-blue-lt text-blue",
+        _ => "bg-secondary-lt text-secondary",
+    };
+}
+
+<div class="row row-cards">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Oczekujące</div>
+                <div class="h1 mb-0">@summary.WaitingCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Nieprzypisane</div>
+                <div class="h1 mb-0">@summary.UnassignedCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Wysoki priorytet</div>
+                <div class="h1 mb-0">@summary.HighPriorityCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card staff-metric-card">
+            <div class="card-body">
+                <div class="text-secondary">Zamknięte dzisiaj</div>
+                <div class="h1 mb-0">@summary.ClosedTodayCount</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Kolejka BOK</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                        <tr>
+                            <th>Zgłoszenie</th>
+                            <th>Klient</th>
+                            <th>Status</th>
+                            <th>Priorytet</th>
+                            <th>Przypisane</th>
+                            <th class="text-end">Akcja</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ticket in waitingTickets.Take(10))
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@ticket.Title</div>
+                                    <div class="text-secondary small">@ticket.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</div>
+                                    @if (ticket.OrderId.HasValue || ticket.DeliveryCalendarId.HasValue)
+                                    {
+                                        <div class="small text-primary">
+                                            Zamówienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
+                                        </div>
+                                    }
+                                </td>
+                                <td>@(ticket.ClientFullName ?? $"#{ticket.ClientUserId}")</td>
+                                <td><span class="badge bg-blue-lt text-blue">@EnumDisplayNames.TicketStatusName(ticket.Status)</span></td>
+                                <td><span class="badge @PriorityClass(ticket.Priority)">@EnumDisplayNames.TicketPriorityName(ticket.Priority)</span></td>
+                                <td>@(ticket.AssignedToFullName ?? "Nieprzypisane")</td>
+                                <td class="text-end">
+                                    <a class="btn btn-sm btn-outline-primary" asp-controller="CustomerSupport" asp-action="Tickets">Obsłuż</a>
+                                </td>
+                            </tr>
+                        }
+                        @if (waitingTickets.Length == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="text-secondary text-center py-4">Brak aktywnych zgłoszeń.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Nieprzypisane zgłoszenia</h3>
+            </div>
+            <div class="list-group list-group-flush">
+                @foreach (var ticket in unassignedTickets.Take(8))
+                {
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between gap-3">
+                            <div class="fw-semibold">@ticket.Title</div>
+                            <span class="badge @PriorityClass(ticket.Priority)">@EnumDisplayNames.TicketPriorityName(ticket.Priority)</span>
+                        </div>
+                        <div class="text-secondary small">
+                            @(ticket.ClientFullName ?? $"Klient #{ticket.ClientUserId}") - @ticket.CreatedAt.ToLocalTime().ToString("dd.MM HH:mm")
+                        </div>
+                        @if (ticket.OrderId.HasValue || ticket.DeliveryCalendarId.HasValue)
+                        {
+                            <div class="small text-primary">
+                                Zamówienie @(ticket.OrderId?.ToString() ?? "-") / Dostawa @(ticket.DeliveryCalendarId?.ToString() ?? "-")
+                            </div>
+                        }
+                    </div>
+                }
+                @if (unassignedTickets.Length == 0)
+                {
+                    <div class="list-group-item text-secondary">Brak nieprzypisanych zgłoszeń.</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

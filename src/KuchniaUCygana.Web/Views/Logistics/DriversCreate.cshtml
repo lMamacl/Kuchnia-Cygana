@@ -1,0 +1,71 @@
+@model DriverCreateViewModel
+@{
+    Layout = "_LayoutStaff";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card card-premium">
+            <div class="card-header">
+                <h3 class="card-title">Nowy profil kierowcy</h3>
+            </div>
+            <div class="card-body">
+                @if (Model.AvailableUsers.Count == 0)
+                {
+                    <div class="alert alert-warning mb-0" role="alert">
+                        Brak wolnych kont z rolą Driver. Najpierw dodaj użytkownika lub przypisz mu odpowiednią rolę.
+                    </div>
+                }
+                else
+                {
+                    <form asp-action="CreateDriver" method="post">
+                        @Html.AntiForgeryToken()
+                        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-3"></div>
+
+                        <div class="mb-3">
+                            <label asp-for="Driver.UserId" class="form-label required">Konto użytkownika</label>
+                            <select asp-for="Driver.UserId" class="form-select" required>
+                                <option value="">Wybierz kierowcę...</option>
+                                @foreach (var user in Model.AvailableUsers)
+                                {
+                                    <option value="@user.UserId">@user.FullName (@user.Email)</option>
+                                }
+                            </select>
+                            <span asp-validation-for="Driver.UserId" class="text-danger small mt-1 d-block"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Driver.LicenseNumber" class="form-label required">Numer prawa jazdy</label>
+                            <input asp-for="Driver.LicenseNumber" class="form-control font-monospace"
+                                   maxlength="50" placeholder="np. 12345/67/8901" required />
+                            <span asp-validation-for="Driver.LicenseNumber" class="text-danger small mt-1 d-block"></span>
+                        </div>
+
+                        <label class="form-check form-switch mb-3">
+                            <input asp-for="Driver.IsActive" class="form-check-input" />
+                            <span class="form-check-label">Profil aktywny</span>
+                        </label>
+
+                        <div class="form-footer d-flex align-items-center justify-content-between">
+                            <a asp-action="Drivers" class="btn btn-link text-secondary">Anuluj i wróć</a>
+                            <button type="submit" class="btn btn-primary">
+                                @Html.Raw(StaffIconCatalog.Get("plus"))
+                                Dodaj kierowcę
+                            </button>
+                        </div>
+                    </form>
+                }
+            </div>
+            @if (Model.AvailableUsers.Count == 0)
+            {
+                <div class="card-footer">
+                    <a asp-action="Drivers" class="btn btn-link text-secondary px-0">Wróć do listy kierowców</a>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}

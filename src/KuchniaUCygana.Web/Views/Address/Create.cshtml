@@ -1,0 +1,107 @@
+@model KuchniaUCygana.Application.DTOs.Orders.CreateAddressRequest
+@{
+    ViewData["Title"] = "Nowy adres";
+}
+
+<style>
+    .address-form-card {
+        overflow: hidden;
+        border: 1px solid rgba(23, 33, 27, .1);
+        border-radius: 26px;
+        background: #fff;
+        box-shadow: 0 24px 70px rgba(23, 33, 27, .1);
+    }
+
+    .address-form-head {
+        background: linear-gradient(135deg, #edf8ef, #fff8ea);
+        border-bottom: 1px solid rgba(23, 33, 27, .08);
+    }
+
+    .address-form-card .form-control,
+    .address-form-card .form-check-input {
+        border-color: rgba(23, 33, 27, .14);
+    }
+
+    .address-form-card .form-control {
+        min-height: 46px;
+        border-radius: 14px;
+    }
+
+    .address-form-card textarea.form-control {
+        min-height: 96px;
+    }
+</style>
+
+<div class="row justify-content-center py-4">
+    <div class="col-lg-8">
+        <div class="address-form-card">
+            <div class="address-form-head p-4 p-md-5">
+                <div class="text-success small fw-bold text-uppercase mb-2">Nowe miejsce dostawy</div>
+                <h1 class="fw-bold mb-2">Dodaj adres dostawy</h1>
+                <p class="text-muted mb-0">Ten adres będzie dostępny podczas składania zamówienia.</p>
+            </div>
+
+            <div class="p-4 p-md-5">
+                <form asp-action="Create" method="post">
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+
+                    <div class="mb-3">
+                        <label asp-for="Label" class="form-label fw-semibold">Nazwa adresu</label>
+                        <input asp-for="Label" class="form-control" placeholder="Dom, praca, recepcja" />
+                        <span asp-validation-for="Label" class="text-danger small"></span>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label asp-for="Street" class="form-label fw-semibold">Ulica</label>
+                            <input asp-for="Street" class="form-control" placeholder="ul. Przykładowa" />
+                            <span asp-validation-for="Street" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label asp-for="BuildingNumber" class="form-label fw-semibold">Budynek</label>
+                            <input asp-for="BuildingNumber" class="form-control" placeholder="12" />
+                            <span asp-validation-for="BuildingNumber" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label asp-for="ApartmentNumber" class="form-label fw-semibold">Lokal</label>
+                            <input asp-for="ApartmentNumber" class="form-control" placeholder="5" />
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label asp-for="PostalCode" class="form-label fw-semibold">Kod pocztowy</label>
+                            <input asp-for="PostalCode" class="form-control" placeholder="00-000" />
+                            <span asp-validation-for="PostalCode" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-8 mb-3">
+                            <label asp-for="City" class="form-label fw-semibold">Miasto</label>
+                            <input asp-for="City" class="form-control" placeholder="Warszawa" />
+                            <span asp-validation-for="City" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="DeliveryNotes" class="form-label fw-semibold">Uwagi dla kuriera</label>
+                        <textarea asp-for="DeliveryNotes" class="form-control" rows="3"
+                                  placeholder="Domofon, piętro, recepcja, godziny dostępu..."></textarea>
+                    </div>
+
+                    <div class="mb-4 form-check">
+                        <input asp-for="IsDefault" class="form-check-input" type="checkbox" />
+                        <label asp-for="IsDefault" class="form-check-label">Ustaw jako domyślny adres dostawy</label>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="submit" class="btn btn-success btn-lg px-4">Zapisz adres</button>
+                        <a asp-action="Index" class="btn btn-outline-secondary btn-lg px-4">Anuluj</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
