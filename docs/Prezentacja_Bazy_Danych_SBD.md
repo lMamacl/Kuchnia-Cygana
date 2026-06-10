@@ -103,7 +103,7 @@ Te rzeczywiste przykłady dowodzą, że Dapper w naszym projekcie pełni rolę k
 Zamiast przenosić całą logikę relacyjną do kodu aplikacji, krytyczne operacje relacyjne i systemowe zaimplementowano bezpośrednio na silniku MS SQL Server.
 
 ### Konkretny plik w projekcie:
-Wszystkie obiekty bazodanowe są wdrażane przez system migracji w pliku [507_AddSbdSqlObjectsAndIndexes.cs](../src/KuchniaUCygana.Infrastructure/Persistence/Migrations/507_AddSbdSqlObjectsAndIndexes.cs).
+Podstawowe obiekty bazodanowe są wdrażane przez system migracji w pliku [507_AddSbdSqlObjectsAndIndexes.cs](../src/KuchniaUCygana.Infrastructure/Persistence/Migrations/507_AddSbdSqlObjectsAndIndexes.cs). Logiczny pakiet raportowy dla logistyki znajduje się w migracji [519_AddLogisticsSbdPackage.cs](../src/KuchniaUCygana.Infrastructure/Persistence/Migrations/519_AddLogisticsSbdPackage.cs).
 
 ### 3.1. Wyzwalacz (Trigger) — Automatyczne oznaczanie partii jako wyczerpanej
 *   **Nazwa:** `[dbo].[tr_Batches_UpdateIsDepleted]`
@@ -124,6 +124,30 @@ Wszystkie obiekty bazodanowe są wdrażane przez system migracji w pliku [507_Ad
 *   **Lokalizacja w kodzie:** [507_AddSbdSqlObjectsAndIndexes.cs:L149-L172](../src/KuchniaUCygana.Infrastructure/Persistence/Migrations/507_AddSbdSqlObjectsAndIndexes.cs#L149-L172)
 *   **Jak działa:** Dla wybranego `@MealId` zwraca wirtualną tabelę zawierającą sumaryczny koszt surowców (wyliczony na podstawie wag składników i cen jednostkowych z tabeli `Ingredients`) oraz zsumowane makroskładniki (białko, tłuszcze, węglowodany, kalorie, błonnik) z tabeli `NutritionFacts`.
 *   **Uzasadnienie (Rationale):** Użycie funkcji typu "Inline" zamiast skalarnej pozwala optymalizatorowi MS SQL Server na zintegrowanie kodu funkcji z planem zapytania nadrzędnego, co znacząco skraca czas wykonania.
+
+### 3.4. Logiczny pakiet SQL Server — Raport dyspozytorski logistyki
+*   **Nazwa schematu:** `[logistics_pkg]`
+*   **Lokalizacja w kodzie:** [519_AddLogisticsSbdPackage.cs](../src/KuchniaUCygana.Infrastructure/Persistence/Migrations/519_AddLogisticsSbdPackage.cs)
+*   **Dlaczego tak:** MS SQL Server nie posiada konstrukcji `CREATE PACKAGE` z Oracle PL/SQL. Zastosowano więc naturalny odpowiednik w SQL Server: dedykowany schemat grupujący powiązane procedury i funkcje jednego obszaru biznesowego.
+*   **Zawartość pakietu:**
+    *   `[logistics_pkg].[fn_RouteLoadSummary]` — funkcja tabelaryczna inline zwracająca dzienne podsumowanie tras, przystanków, kierowców, pojazdów, obciążenia auta i statusu manifestu.
+    *   `[logistics_pkg].[usp_GetDailyDispatchBoard]` — procedura raportowa dla dyspozytora, zwracająca szczegóły tras oraz zbiorcze podsumowanie dnia.
+*   **Uzasadnienie biznesowe:** Procedura łączy dane modułów M1/M3/M4: kalendarz dostaw i adresy, trasy i pojazdy, kierowców oraz manifesty kompletacji. Dzięki temu raport jest realnym punktem integracyjnym, a nie sztucznym przykładem do spełnienia wymagania.
+
+Przykładowe zapytania do pokazania:
+```sql
+SELECT 
+    s.name AS SchemaName,
+    o.name AS ObjectName,
+    o.type_desc AS ObjectType
+FROM sys.objects o
+JOIN sys.schemas s ON s.schema_id = o.schema_id
+WHERE s.name = N'logistics_pkg';
+
+EXEC logistics_pkg.usp_GetDailyDispatchBoard
+    @DeliveryDate = '2026-06-09',
+    @EstimatedDeliveryWeightKg = 1.20;
+```
 
 ---
 
@@ -179,6 +203,8 @@ Podczas obrony projektu przed komisją wykonaj następujące kroki:
 2.  Pokaż wyzwalacz `tr_Batches_UpdateIsDepleted` i wyjaśnij, że odpowiada za automatyczną spójność flagi `IsDepleted` przy zmianie stanu partii.
 3.  Pokaż funkcję `fn_MealNutritionCost`. Zademonstruj, jak wylicza dynamicznie makro i koszt dania na podstawie receptury.
 4.  Pokaż procedurę `usp_ArchiveSystemLogs` – zwróć uwagę na użycie transakcji bazodanowej oraz podpowiedzi blokad `WITH (READPAST, UPDLOCK)`.
+5.  Otwórz migrację [519_AddLogisticsSbdPackage.cs](../src/KuchniaUCygana.Infrastructure/Persistence/Migrations/519_AddLogisticsSbdPackage.cs) i pokaż schemat `logistics_pkg` jako odpowiednik pakietu w SQL Server.
+6.  Wykonaj `EXEC logistics_pkg.usp_GetDailyDispatchBoard @DeliveryDate = '2026-06-09';` i wskaż, że procedura zwraca raport dzienny łączący trasy, pojazdy, kierowców, przystanki i manifesty magazynu.
 
 ### Krok 4: Optymalizacja i Indeksy
 1.  Wskaż indeks pokrywający `IX_Batches_StockItem_Active_Expiry` w pliku migracji i wyjaśnij, w jaki sposób optymalizuje on wyszukiwanie partii w algorytmie FEFO (Index Seek zamiast Table Scan).

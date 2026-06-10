@@ -27,6 +27,8 @@ public sealed class SqlServerSbdAuditTests
             ("tr_Batches_UpdateIsDepleted", "TR"),
             ("usp_ArchiveSystemLogs", "P"),
             ("fn_MealNutritionCost", "IF"),
+            ("usp_GetDailyDispatchBoard", "P"),
+            ("fn_RouteLoadSummary", "IF"),
         };
 
         foreach (var dbObject in objects)
@@ -39,6 +41,12 @@ public sealed class SqlServerSbdAuditTests
 
             exists.Should().Be(1, $"{dbObject.Type} {dbObject.Name} should exist");
         }
+
+        var logisticsPackageSchemaExists = await CountAsync(
+            connection,
+            "SELECT COUNT(1) FROM sys.schemas WHERE [name] = N'logistics_pkg';");
+
+        logisticsPackageSchemaExists.Should().Be(1, "SQL Server package equivalent should be grouped under logistics_pkg schema");
 
         var indexes = new (string TableName, string IndexName)[]
         {
@@ -336,6 +344,26 @@ public sealed class SqlServerSbdAuditTests
         {
             await ExecuteAsync(setupConnection, $"DROP TABLE IF EXISTS [dbo].[{probeTable}];");
         }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task RuntimeLogin_Should_Execute_LogisticsPackage_Report()
+    {
+        await using var runtimeConnection = new SqlConnection(this.fixture.RuntimeConnectionString);
+        await runtimeConnection.OpenAsync();
+
+        await using var command = runtimeConnection.CreateCommand();
+        command.CommandText = "EXEC [logistics_pkg].[usp_GetDailyDispatchBoard] @DeliveryDate = @deliveryDate;";
+        command.Parameters.AddWithValue("@deliveryDate", DateTime.UtcNow.Date);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        reader.FieldCount.Should().BeGreaterThan(0);
+        reader.GetName(0).Should().Be("RouteDate");
+
+        (await reader.NextResultAsync()).Should().BeTrue();
+        reader.FieldCount.Should().BeGreaterThan(0);
+        reader.GetName(0).Should().Be("DeliveryDate");
     }
 
     private static async Task<int> InsertAuditUserAsync(SqlConnection connection)

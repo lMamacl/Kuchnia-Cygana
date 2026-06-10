@@ -1370,13 +1370,26 @@ W celu spełnienia wymagań niefunkcjonalnych wydajności i bezpieczeństwa zaim
     CREATE FUNCTION [dbo].[fn_MealNutritionCost] (@MealId int) RETURNS TABLE AS ...
     ```
 
-#### 4. Widoki Bazodanowe (Database Views)
+#### 4. Logiczny pakiet SQL Server dla logistyki
+Silnik MS SQL Server nie udostępnia konstrukcji `CREATE PACKAGE` znanej z Oracle PL/SQL, dlatego w projekcie zastosowano równoważne rozwiązanie organizacyjne: dedykowany schemat `logistics_pkg`, który grupuje powiązane procedury i funkcje obszaru logistyki. Obiekty te są wdrażane migracją `519_AddLogisticsSbdPackage`.
+
+*   `logistics_pkg.fn_RouteLoadSummary`: Funkcja tabelaryczna inline zwracająca podsumowanie tras dla wybranego dnia. Łączy dane z tras, przystanków, pojazdów, przypisań kierowców, kalendarza dostaw, adresów oraz manifestów kompletacji. Zwraca m.in. liczbę przystanków, liczbę zrealizowanych/nieudanych dostaw, liczbę brakujących współrzędnych, szacowane obciążenie pojazdu oraz status manifestu.
+*   `logistics_pkg.usp_GetDailyDispatchBoard`: Procedura raportowa dla dyspozytora. Zwraca dwa zbiory wyników: szczegółową listę tras danego dnia oraz zbiorcze podsumowanie operacyjne. Procedura stanowi stabilny interfejs raportowy między modułami M1/M3/M4 bez konieczności powielania złożonych złączeń SQL w aplikacji lub raportach.
+
+Przykładowe użycie:
+```sql
+EXEC logistics_pkg.usp_GetDailyDispatchBoard
+    @DeliveryDate = '2026-06-09',
+    @EstimatedDeliveryWeightKg = 1.20;
+```
+
+#### 5. Widoki Bazodanowe (Database Views)
 W celu uproszczenia zapytań raportowych oraz odizolowania warstwy prezentacji od złożonych złączeń tabel zaimplementowano/przewidziano następujące widoki:
 *   `v_ActiveProductionPlans`: Agreguje aktywne plany produkcji na dany dzień (`ProductionPlans` + `ProductionPlanItems` + `Meals` + `DietVariants`), wyświetlając zsumowane liczby posiłków do ugotowania z podziałem na grupy produkcyjne.
 *   `v_DeliveryManifests`: Łączy dane tras dostaw, kierowców, przypisanych pojazdów, przystanków oraz adresów klientów (`DeliveryRoutes` + `DeliveryRouteStops` + `Addresses` + `CustomerProfiles`), służąc jako źródło danych do generowania PDF manifestów spedycyjnych.
 *   `v_HaccpTemperatureAlertsActive`: Łączy odczyty temperatur lodówek z lokalizacjami i alertami HACCP (`TemperatureLogs` + `HaccpLocations` + `HaccpTemperatureAlerts`), wyświetlając wyłącznie aktywne przekroczenia norm, które nie zostały jeszcze zamknięte przez personel (brak wpisu w `ActionTaken`).
 
-#### 5. Krytyczne Indeksy Wydajnościowe (Zrealizowane w migracjach)
+#### 6. Krytyczne Indeksy Wydajnościowe (Zrealizowane w migracjach)
 *   `IX_Batches_StockItem_Active_Expiry` na tabeli `Batches` (kolumny: `StockItemId`, `IsDeleted`, `IsDepleted`, `CurrentQuantity`, `ExpiryDate`): Kluczowy dla wydajnego działania algorytmu FEFO.
 *   `IX_SystemLogs_Timestamp_Action_TargetEntity_UserId` na tabeli `SystemLogs`: Pozwala na błyskawiczne filtrowanie i generowanie raportów audytowych.
 *   `IX_Meals_Category_Status_Name` na tabeli `Meals` oraz `IX_RecipeComponentVersions_Status_Component` na wersjach przepisów: Optymalizują odczyty podczas pobierania menu dla klientów i generowania zapotrzebowania.
