@@ -7,10 +7,10 @@ Ten dokument zbiera dzisiejsze zmiany w projekcie, stan gotowości pod większą
 **Infrastruktura SQL Server**
 
 - Runtime aplikacji nie używa już loginu `sa`.
-- Docker tworzy loginy SQL Server `admin`, `pracownik` i `klient`.
+- Docker tworzy loginy SQL Server `admin` i `pracownik`.
 - `admin` jest kontem migracyjnym z `db_owner` w bazie docelowej.
 - `pracownik` jest domyślnym runtime Dappera z rolami `db_datareader` i `db_datawriter`.
-- `klient` jest przygotowany jako ograniczony runtime DML pod przyszły osobny kontekst klienta.
+- Klient B2C nie ma bezpośredniego loginu SQL Server; dostęp klienta przechodzi przez aplikację, konto w tabeli `Users` i autoryzację webową.
 - Dodano `ConnectionStrings:MigrationConnection`; FluentMigrator i `MigrationRunner` używają go dla migracji.
 - `DefaultConnection` zostaje runtime dla repozytoriów Dapper i w Dockerze wskazuje login `pracownik`.
 - Dodano `docker/sqlserver-init.sql` i service `sqlserver-init` w `docker-compose.yml`.
@@ -79,14 +79,14 @@ To jest solidny etap pod średnią bazę demo i dalszy rozwój. Projekt ma indek
 - Brak materiału z execution plan przed/po, `STATISTICS IO`, `STATISTICS TIME` i logical reads.
 - Brak pełnego produkcyjnego `Login/Register` z realną weryfikacją haseł.
 - Brak automatycznej usługi zapisującej wszystkie zmiany biznesowe do `SystemLogs`.
-- Brak per-request przełączania SQL loginu na `klient`.
+- Brak per-request przełączania SQL loginu na klienta B2C, ponieważ projekt świadomie nie wystawia klientom bezpośredniego dostępu do bazy.
 - Brak harmonogramu/job dla `usp_ArchiveSystemLogs`.
 - Brak pełnego audytu wszystkich zapytań pod duże wolumeny i konkretne plany wykonania.
 
 ## Wprowadzone, ale jeszcze niedopracowane
 
 - Auth jest świadomie w trybie preview: formularze `Login` i `Register` nie są jeszcze produkcyjne, a szybkie logowanie rolami działa tylko w `Development`.
-- SQL login `klient` istnieje infrastrukturalnie, ale aplikacja nie używa go jeszcze osobno dla requestów klienta.
+- SQL login `klient` został usunięty z infrastruktury; klienci B2C są modelowani jako użytkownicy aplikacji.
 - `SystemLogsArchive` i procedura archiwizacji istnieją, ale nie ma automatycznego procesu archiwizacji.
 - Starsze dokumenty HTML w `docs/architecture` i `docs/guides` mogą zawierać historyczne wzmianki o SQLite albo starszej konfiguracji.
 - Docker wymaga poprawnej konfiguracji `.env`, portów i uprawnień do Docker engine na każdym urządzeniu.
@@ -123,7 +123,7 @@ Scenariusz demo:
 Najlepsza kolejność pokazu w kodzie:
 
 1. `docker-compose.yml` - kolejność startu `sqlserver -> sqlserver-init -> web`.
-2. `docker/sqlserver-init.sql` - tworzenie loginów `admin`, `pracownik`, `klient`.
+2. `docker/sqlserver-init.sql` - tworzenie loginów `admin`, `pracownik` oraz usunięcie ewentualnego starego loginu `klient`.
 3. `src/KuchniaUCygana.Infrastructure/DependencyInjection.cs` - `DefaultConnection` dla runtime i `MigrationConnection` dla migracji.
 4. `src/KuchniaUCygana.Infrastructure/Persistence/Migrations/MigrationRunner.cs` - migracje przez `MigrationConnection`.
 5. `src/KuchniaUCygana.Infrastructure/Persistence/Migrations/507_AddSbdSqlObjectsAndIndexes.cs` - trigger, procedura, funkcja i indeksy SBD.

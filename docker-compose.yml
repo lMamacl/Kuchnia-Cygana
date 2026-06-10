@@ -36,7 +36,6 @@ services:
       - MSSQL_DB_NAME=${MSSQL_DB_NAME:?MSSQL_DB_NAME is required}
       - MSSQL_ADMIN_PASSWORD=${MSSQL_ADMIN_PASSWORD:?MSSQL_ADMIN_PASSWORD is required}
       - MSSQL_PRACOWNIK_PASSWORD=${MSSQL_PRACOWNIK_PASSWORD:?MSSQL_PRACOWNIK_PASSWORD is required}
-      - MSSQL_KLIENT_PASSWORD=${MSSQL_KLIENT_PASSWORD:?MSSQL_KLIENT_PASSWORD is required}
     volumes:
       - ./docker/sqlserver-init.sql:/init/sqlserver-init.sql:ro
     command: >
@@ -48,7 +47,6 @@ services:
           -v DbName="$$MSSQL_DB_NAME" \
              AdminPassword="$$MSSQL_ADMIN_PASSWORD" \
              PracownikPassword="$$MSSQL_PRACOWNIK_PASSWORD" \
-             KlientPassword="$$MSSQL_KLIENT_PASSWORD" \
           -i /init/sqlserver-init.sql
       '
     restart: "no"

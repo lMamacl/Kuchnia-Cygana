@@ -87,9 +87,10 @@ rejestracji; do testów korzystają z kont seedowanych poniżej.
 | `Driver` | `driver2@kuchnia.local` | `Driver123!` | Dodatkowy kierowca scenariusza tras M4 |
 | `Driver` | `driver3@kuchnia.local` | `Driver123!` | Dodatkowy kierowca scenariusza tras M4 |
 
-Loginy SQL Server nie są kontami aplikacji. Docker tworzy loginy `admin`, `pracownik` i `klient`
-z hasłami z `.env`; testy integracyjne Testcontainers używają odpowiednio `Admin123!Integration`,
-`Pracownik123!Integration` i `Klient123!Integration`.
+Loginy SQL Server nie są kontami aplikacji. Docker tworzy tylko loginy `admin` i `pracownik`
+z hasłami z `.env`; testy integracyjne Testcontainers używają odpowiednio `Admin123!Integration`
+i `Pracownik123!Integration`. Klienci B2C istnieją wyłącznie jako konta aplikacyjne w tabeli `Users`
+i nie mają bezpośredniego loginu do SQL Server.
 
 ---
 
@@ -214,14 +215,14 @@ dotnet run --project src/KuchniaUCygana.Web
 - W `Production` startup seeding jest wyłączony.
 - `ConnectionStrings:DefaultConnection` jest runtime Dappera i powinien używać ograniczonego loginu `pracownik`.
 - `ConnectionStrings:MigrationConnection` jest używany przez FluentMigrator i powinien używać loginu `admin`.
-- Docker tworzy loginy SQL Server `admin`, `pracownik` i `klient` przez `docker/sqlserver-init.sql`; uzupełnij hasła w `.env` na bazie `.env.example`.
+- Docker tworzy loginy SQL Server `admin` i `pracownik` przez `docker/sqlserver-init.sql`; uzupełnij hasła w `.env` na bazie `.env.example`.
 - Seed wydajnościowy 100k+ oraz dokument/prezentacja z porównaniem zapytania przed/po optymalizacji są poza bieżącym zakresem.
 
 ### Status SBD po domknięciu audytu
 
 - Runtime aplikacji nie używa już `sa`; `sa` zostaje wyłącznie do bootstrapu SQL Server w Dockerze/Testcontainers.
 - Migracje używają `MigrationConnection` (`admin`), a runtime Dappera używa `DefaultConnection` (`pracownik`).
-- Login `klient` jest tworzony z ograniczonym DML jako przygotowanie infrastrukturalne, ale nie jest jeszcze przełączany per request.
+- Klienci B2C nie mają bezpośredniego loginu SQL Server; dostęp do danych klientów przechodzi przez aplikację, jej role i walidację.
 - Fizyczne obiekty T-SQL dla SBD są w migracji `507_AddSbdSqlObjectsAndIndexes`: `tr_Batches_UpdateIsDepleted`, `usp_ArchiveSystemLogs`, `fn_MealNutritionCost` i `SystemLogsArchive`.
 - Auth jest świadomie w trybie preview: `Login` i `Register` nie wykonują pełnego produkcyjnego uwierzytelniania, a pracowniczy dev-login jest wydzielony pod `/staff/login` tylko dla `Development`.
 

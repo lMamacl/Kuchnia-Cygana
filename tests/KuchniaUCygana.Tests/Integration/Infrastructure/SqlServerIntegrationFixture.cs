@@ -12,15 +12,12 @@ namespace KuchniaUCygana.Tests.Integration.Infrastructure;
 public sealed class SqlServerIntegrationFixture : IAsyncLifetime
 {
     private const string AdminPassword = "Admin123!Integration";
-    private const string ClientPassword = "Klient123!Integration";
     private const string RuntimePassword = "Pracownik123!Integration";
 
     private readonly MsSqlContainer container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
         .Build();
 
     public string DatabaseName { get; } = $"KuchniaUCygana_Int_{Guid.NewGuid():N}";
-
-    public string ClientConnectionString { get; private set; } = string.Empty;
 
     public string AppConnectionString { get; private set; } = string.Empty;
 
@@ -38,7 +35,6 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
         SaConnectionString = AppConnectionString;
         MigrationConnectionString = BuildLoginConnectionString(container.GetConnectionString(), DatabaseName, "admin", AdminPassword);
         RuntimeConnectionString = BuildLoginConnectionString(container.GetConnectionString(), DatabaseName, "pracownik", RuntimePassword);
-        ClientConnectionString = BuildLoginConnectionString(container.GetConnectionString(), DatabaseName, "klient", ClientPassword);
 
         await BootstrapDatabaseLoginsAsync(container.GetConnectionString());
 
@@ -124,7 +120,6 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
             DECLARE @targetDbName sysname = @BootstrapDbName;
             DECLARE @adminPwd nvarchar(256) = @BootstrapAdminPassword;
             DECLARE @runtimePwd nvarchar(256) = @BootstrapRuntimePassword;
-            DECLARE @clientPwd nvarchar(256) = @BootstrapClientPassword;
 
             IF DB_ID(@targetDbName) IS NULL
             BEGIN
@@ -134,7 +129,6 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
 
             DECLARE @adminPasswordSql nvarchar(512) = REPLACE(@adminPwd, N'''', N'''''');
             DECLARE @runtimePasswordSql nvarchar(512) = REPLACE(@runtimePwd, N'''', N'''''');
-            DECLARE @clientPasswordSql nvarchar(512) = REPLACE(@clientPwd, N'''', N'''''');
             DECLARE @loginSql nvarchar(max);
 
             IF SUSER_ID(N'admin') IS NULL
@@ -147,12 +141,6 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
                 SET @loginSql = N'CREATE LOGIN [pracownik] WITH PASSWORD = N''' + @runtimePasswordSql + N''', CHECK_POLICY = OFF, CHECK_EXPIRATION = OFF, DEFAULT_DATABASE = ' + QUOTENAME(@targetDbName) + N';';
             ELSE
                 SET @loginSql = N'ALTER LOGIN [pracownik] WITH PASSWORD = N''' + @runtimePasswordSql + N''', CHECK_POLICY = OFF, CHECK_EXPIRATION = OFF, DEFAULT_DATABASE = ' + QUOTENAME(@targetDbName) + N';';
-            EXEC(@loginSql);
-
-            IF SUSER_ID(N'klient') IS NULL
-                SET @loginSql = N'CREATE LOGIN [klient] WITH PASSWORD = N''' + @clientPasswordSql + N''', CHECK_POLICY = OFF, CHECK_EXPIRATION = OFF, DEFAULT_DATABASE = ' + QUOTENAME(@targetDbName) + N';';
-            ELSE
-                SET @loginSql = N'ALTER LOGIN [klient] WITH PASSWORD = N''' + @clientPasswordSql + N''', CHECK_POLICY = OFF, CHECK_EXPIRATION = OFF, DEFAULT_DATABASE = ' + QUOTENAME(@targetDbName) + N';';
             EXEC(@loginSql);
 
             DECLARE @grantDatabaseAccessSql nvarchar(max) = N'
@@ -168,31 +156,17 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
             ELSE
                 ALTER USER [pracownik] WITH LOGIN = [pracownik];
 
-            IF USER_ID(N''klient'') IS NULL
-                CREATE USER [klient] FOR LOGIN [klient];
-            ELSE
-                ALTER USER [klient] WITH LOGIN = [klient];
-
             IF ISNULL(IS_ROLEMEMBER(N''db_owner'', N''admin''), 0) <> 1
                 ALTER ROLE [db_owner] ADD MEMBER [admin];
 
             IF ISNULL(IS_ROLEMEMBER(N''db_owner'', N''pracownik''), 0) = 1
                 ALTER ROLE [db_owner] DROP MEMBER [pracownik];
 
-            IF ISNULL(IS_ROLEMEMBER(N''db_owner'', N''klient''), 0) = 1
-                ALTER ROLE [db_owner] DROP MEMBER [klient];
-
             IF ISNULL(IS_ROLEMEMBER(N''db_datareader'', N''pracownik''), 0) <> 1
                 ALTER ROLE [db_datareader] ADD MEMBER [pracownik];
 
             IF ISNULL(IS_ROLEMEMBER(N''db_datawriter'', N''pracownik''), 0) <> 1
                 ALTER ROLE [db_datawriter] ADD MEMBER [pracownik];
-
-            IF ISNULL(IS_ROLEMEMBER(N''db_datareader'', N''klient''), 0) <> 1
-                ALTER ROLE [db_datareader] ADD MEMBER [klient];
-
-            IF ISNULL(IS_ROLEMEMBER(N''db_datawriter'', N''klient''), 0) <> 1
-                ALTER ROLE [db_datawriter] ADD MEMBER [klient];
             ';
 
             EXEC(@grantDatabaseAccessSql);
@@ -200,7 +174,6 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
         command.Parameters.AddWithValue("@BootstrapDbName", DatabaseName);
         command.Parameters.AddWithValue("@BootstrapAdminPassword", AdminPassword);
         command.Parameters.AddWithValue("@BootstrapRuntimePassword", RuntimePassword);
-        command.Parameters.AddWithValue("@BootstrapClientPassword", ClientPassword);
 
         await command.ExecuteNonQueryAsync();
     }

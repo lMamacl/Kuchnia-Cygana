@@ -137,7 +137,7 @@ Warstwa Web wywołuje serwisy aplikacyjne i renderuje widoki. Warstwa Applicatio
 
 W środowisku lokalnym system uruchamiany jest w architekturze kontenerowej składającej się z:
 1.  **`sqlserver`** – SQL Server 2022 Developer z wolumenem danych `mssql_data`. Port zewnętrzny: `1433`.
-2.  **`sqlserver-init`** – Kontener inicjalizujący loginy bazodanowe (`admin`, `pracownik`, `klient`) oraz bazę danych zgodnie ze skryptem inicjalizacyjnym.
+2.  **`sqlserver-init`** – Kontener inicjalizujący loginy bazodanowe (`admin`, `pracownik`) oraz bazę danych zgodnie ze skryptem inicjalizacyjnym. Klienci B2C nie otrzymują osobnego loginu SQL Server; korzystają wyłącznie z kont aplikacyjnych i autoryzacji w warstwie webowej.
 3.  **`web`** – Aplikacja webowa ASP.NET Core wystawiona na porcie 8080 z wolumenem uploadów `uploads_data`.
 
 ### Limity zasobów (Resource Constraints)
@@ -465,7 +465,7 @@ Uruchom cały stos aplikacji i bazy danych za pomocą Docker Compose:
 ```bash
 docker compose up --build
 ```
-Aplikacja zostanie automatycznie skompilowana, baza danych zainicjalizowana loginami `admin`/`pracownik`/`klient`, zostaną wdrożone migracje oraz seed danych testowych. Portal będzie dostępny pod adresem: **`http://localhost:8080`**.
+Aplikacja zostanie automatycznie skompilowana, baza danych zainicjalizowana loginami `admin`/`pracownik`, zostaną wdrożone migracje oraz seed danych testowych. Portal będzie dostępny pod adresem: **`http://localhost:8080`**.
 
 ---
 

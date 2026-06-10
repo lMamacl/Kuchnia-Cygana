@@ -277,7 +277,7 @@ public sealed class SqlServerSbdAuditTests
         await using var connection = new SqlConnection(this.fixture.SaConnectionString);
         await connection.OpenAsync();
 
-        foreach (var login in new[] { "admin", "pracownik", "klient" })
+        foreach (var login in new[] { "admin", "pracownik" })
         {
             var loginExists = await CountAsync(
                 connection,
@@ -287,13 +287,15 @@ public sealed class SqlServerSbdAuditTests
             loginExists.Should().Be(1, $"login {login} should exist");
         }
 
+        var clientLoginExists = await CountAsync(
+            connection,
+            "SELECT COUNT(1) FROM sys.server_principals WHERE [name] = N'klient';");
+        clientLoginExists.Should().Be(0, "B2C clients should authenticate through the application, not through a direct SQL login");
+
         (await IsRoleMemberAsync(connection, "admin", "db_owner")).Should().BeTrue();
         (await IsRoleMemberAsync(connection, "pracownik", "db_datareader")).Should().BeTrue();
         (await IsRoleMemberAsync(connection, "pracownik", "db_datawriter")).Should().BeTrue();
         (await IsRoleMemberAsync(connection, "pracownik", "db_owner")).Should().BeFalse();
-        (await IsRoleMemberAsync(connection, "klient", "db_datareader")).Should().BeTrue();
-        (await IsRoleMemberAsync(connection, "klient", "db_datawriter")).Should().BeTrue();
-        (await IsRoleMemberAsync(connection, "klient", "db_owner")).Should().BeFalse();
     }
 
     [Fact]
