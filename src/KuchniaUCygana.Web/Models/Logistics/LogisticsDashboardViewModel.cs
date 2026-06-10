@@ -11,6 +11,8 @@ public sealed class LogisticsDashboardViewModel
 
     public IReadOnlyList<DeliveryRouteDto> Routes { get; init; } = [];
 
+    public LogisticsDailyDispatchBoardReport SbdDispatchReport { get; init; } = new();
+
     public int PendingAddressesCount { get; init; }
 
     public int ActiveVehiclesCount { get; init; }

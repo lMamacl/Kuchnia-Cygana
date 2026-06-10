@@ -133,6 +133,7 @@ Podstawowe obiekty bazodanowe są wdrażane przez system migracji w pliku [507_A
     *   `[logistics_pkg].[fn_RouteLoadSummary]` — funkcja tabelaryczna inline zwracająca dzienne podsumowanie tras, przystanków, kierowców, pojazdów, obciążenia auta i statusu manifestu.
     *   `[logistics_pkg].[usp_GetDailyDispatchBoard]` — procedura raportowa dla dyspozytora, zwracająca szczegóły tras oraz zbiorcze podsumowanie dnia.
 *   **Uzasadnienie biznesowe:** Procedura łączy dane modułów M1/M3/M4: kalendarz dostaw i adresy, trasy i pojazdy, kierowców oraz manifesty kompletacji. Dzięki temu raport jest realnym punktem integracyjnym, a nie sztucznym przykładem do spełnienia wymagania.
+*   **Użycie w aplikacji:** Pakiet jest wywoływany przez [LogisticsSbdReportRepository.cs](../src/KuchniaUCygana.Infrastructure/Persistence/Repositories/LogisticsSbdReportRepository.cs), które używa Dappera i metody `QueryMultipleAsync` do odczytu dwóch zestawów wyników procedury. Dane są następnie przekazywane przez [LogisticsController.cs](../src/KuchniaUCygana.Web/Controllers/LogisticsController.cs) do dashboardu logistyki i renderowane w sekcji „Raport SBD z pakietu SQL” w [Index.cshtml](../src/KuchniaUCygana.Web/Views/Logistics/Index.cshtml). Dzięki temu można pokazać zarówno ręczne wykonanie procedury w SQL Server, jak i jej praktyczne wykorzystanie przez aplikację.
 
 Przykładowe zapytania do pokazania:
 ```sql
@@ -205,6 +206,7 @@ Podczas obrony projektu przed komisją wykonaj następujące kroki:
 4.  Pokaż procedurę `usp_ArchiveSystemLogs` – zwróć uwagę na użycie transakcji bazodanowej oraz podpowiedzi blokad `WITH (READPAST, UPDLOCK)`.
 5.  Otwórz migrację [519_AddLogisticsSbdPackage.cs](../src/KuchniaUCygana.Infrastructure/Persistence/Migrations/519_AddLogisticsSbdPackage.cs) i pokaż schemat `logistics_pkg` jako odpowiednik pakietu w SQL Server.
 6.  Wykonaj `EXEC logistics_pkg.usp_GetDailyDispatchBoard @DeliveryDate = '2026-06-09';` i wskaż, że procedura zwraca raport dzienny łączący trasy, pojazdy, kierowców, przystanki i manifesty magazynu.
+7.  Otwórz dashboard logistyki (`/logistics`) i pokaż kartę „Raport SBD z pakietu SQL”. Wyjaśnij, że ta sekcja nie buduje raportu własnym SQL-em w widoku, tylko korzysta z repozytorium Dappera wywołującego procedurę z pakietu `logistics_pkg`.
 
 ### Krok 4: Optymalizacja i Indeksy
 1.  Wskaż indeks pokrywający `IX_Batches_StockItem_Active_Expiry` w pliku migracji i wyjaśnij, w jaki sposób optymalizuje on wyszukiwanie partii w algorytmie FEFO (Index Seek zamiast Table Scan).

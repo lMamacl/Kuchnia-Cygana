@@ -1376,6 +1376,8 @@ Silnik MS SQL Server nie udostępnia konstrukcji `CREATE PACKAGE` znanej z Oracl
 *   `logistics_pkg.fn_RouteLoadSummary`: Funkcja tabelaryczna inline zwracająca podsumowanie tras dla wybranego dnia. Łączy dane z tras, przystanków, pojazdów, przypisań kierowców, kalendarza dostaw, adresów oraz manifestów kompletacji. Zwraca m.in. liczbę przystanków, liczbę zrealizowanych/nieudanych dostaw, liczbę brakujących współrzędnych, szacowane obciążenie pojazdu oraz status manifestu.
 *   `logistics_pkg.usp_GetDailyDispatchBoard`: Procedura raportowa dla dyspozytora. Zwraca dwa zbiory wyników: szczegółową listę tras danego dnia oraz zbiorcze podsumowanie operacyjne. Procedura stanowi stabilny interfejs raportowy między modułami M1/M3/M4 bez konieczności powielania złożonych złączeń SQL w aplikacji lub raportach.
 
+Pakiet jest również używany przez aplikację webową, a nie wyłącznie przez ręczne zapytania SQL. Repozytorium `LogisticsSbdReportRepository` wykonuje procedurę `logistics_pkg.usp_GetDailyDispatchBoard` przez Dappera i mapuje oba zbiory wyników na obiekty C#. Wynik jest wyświetlany na dashboardzie logistyki w sekcji „Raport SBD z pakietu SQL”, dzięki czemu dyspozytor widzi dane z tego samego interfejsu bazodanowego bez konieczności znajomości złożonych złączeń tabel.
+
 Przykładowe użycie:
 ```sql
 EXEC logistics_pkg.usp_GetDailyDispatchBoard

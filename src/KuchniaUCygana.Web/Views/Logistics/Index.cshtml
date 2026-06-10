@@ -3,6 +3,8 @@
     Layout = "_LayoutStaff";
     var selectedDate = Model.SelectedDate.ToString("yyyy-MM-dd");
     var missingGeocoding = Model.MissingGeocodingDeliveries;
+    var sbdReport = Model.SbdDispatchReport;
+    var sbdSummary = sbdReport.Summary;
 }
 
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
@@ -65,6 +67,108 @@
             </div>
         </div>
     </div>
+</div>
+
+<div class="card card-premium mb-4">
+    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+            <h3 class="card-title mb-1">Raport SBD z pakietu SQL</h3>
+            <div class="text-secondary small">
+                Dane pobrane przez Dappera z <span class="font-monospace">logistics_pkg.usp_GetDailyDispatchBoard</span>.
+            </div>
+        </div>
+        <span class="badge bg-indigo-lt text-indigo">logistics_pkg</span>
+    </div>
+    <div class="card-body border-bottom">
+        <div class="row g-3">
+            <div class="col-6 col-lg-3">
+                <div class="subheader">Trasy w raporcie</div>
+                <div class="h2 mb-0">@sbdSummary.RouteCount</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="subheader">Przystanki</div>
+                <div class="h2 mb-0">@sbdSummary.StopCount</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="subheader">Manifesty gotowe</div>
+                <div class="h2 mb-0">@sbdSummary.RoutesSentToLogistics / @sbdSummary.RouteCount</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="subheader">Szac. obci&aogon;&zdot;enie</div>
+                <div class="h2 mb-0">@sbdSummary.EstimatedLoadKg.ToString("N1") kg</div>
+            </div>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter table-premium card-table">
+            <thead>
+                <tr>
+                    <th>Trasa</th>
+                    <th>Pojazd</th>
+                    <th>Kierowca</th>
+                    <th>Przystanki</th>
+                    <th>Obci&aogon;&zdot;enie</th>
+                    <th>Manifest</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (sbdReport.Routes.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="text-center text-secondary py-4">
+                            Pakiet SQL nie zwr&oacute;ci&lstrok; tras dla wybranego dnia.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var route in sbdReport.Routes.Take(5))
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">@route.RouteName</div>
+                                <div class="small text-secondary">@RouteStatusLabel(route.RouteStatusName)</div>
+                            </td>
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(route.VehicleRegistrationNumber))
+                                {
+                                    <span class="text-secondary">Brak</span>
+                                }
+                                else
+                                {
+                                    <div class="font-monospace">@route.VehicleRegistrationNumber</div>
+                                    <div class="small text-secondary">@route.VehicleModel</div>
+                                }
+                            </td>
+                            <td>@route.DriverDisplayName</td>
+                            <td>
+                                <span class="fw-semibold">@route.StopCount</span>
+                                <span class="text-secondary small">/@route.CompletedStopCount zako&nacute;cz.</span>
+                            </td>
+                            <td>
+                                <div>@route.EstimatedLoadKg.ToString("N1") kg</div>
+                                @if (route.EstimatedLoadPercent.HasValue)
+                                {
+                                    <div class="small text-secondary">@route.EstimatedLoadPercent.Value.ToString("N1")% auta</div>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge @(route.ManifestStatusName == "SentToLogistics" ? "bg-success-lt text-success" : "bg-warning-lt text-warning")">
+                                    @ManifestStatusLabel(route.ManifestStatusName)
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (sbdReport.Routes.Count > 5)
+    {
+        <div class="card-footer text-secondary small">
+            Pokazano 5 z @sbdReport.Routes.Count tras zwr&oacute;conych przez procedur&eogon;.
+        </div>
+    }
 </div>
 
 <div class="row row-cards mb-4">
@@ -283,6 +387,18 @@
             "Completed" => "Zakonczona",
             "Failed" => "Problem",
             _ => "Utworzona",
+        };
+    }
+
+    private static string ManifestStatusLabel(string status)
+    {
+        return status switch
+        {
+            "SentToLogistics" => "Przekazany",
+            "Approved" => "Zatwierdzony",
+            "RequiresRegeneration" => "Do regeneracji",
+            "Missing" => "Brak",
+            _ => "Utworzony",
         };
     }
 }

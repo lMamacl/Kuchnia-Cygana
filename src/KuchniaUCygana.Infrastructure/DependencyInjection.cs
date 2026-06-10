@@ -118,6 +118,7 @@ public static class DependencyInjection
         services.AddScoped<IDriverVehicleAssignmentRepository, DriverVehicleAssignmentRepository>();
         services.AddScoped<IThermalBagRepository, ThermalBagRepository>();
         services.AddScoped<IVehicleRepository, VehicleRepository>();
+        services.AddScoped<ILogisticsSbdReportRepository, LogisticsSbdReportRepository>();
 
         // Module 5 (HR / Admin) repositories.
         services.AddScoped<IHumanResourcesReadRepository, HumanResourcesReadRepository>();

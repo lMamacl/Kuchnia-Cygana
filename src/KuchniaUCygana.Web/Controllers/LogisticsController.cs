@@ -26,6 +26,7 @@ public sealed class LogisticsController : Controller
     private readonly IAddressRepository _addressRepository;
     private readonly IDeliveryRouteService _deliveryRouteService;
     private readonly IPackingSynchronizationService _packingSynchronizationService;
+    private readonly ILogisticsSbdReportRepository _logisticsSbdReportRepository;
 
     public LogisticsController(
         IVehicleService vehicleService,
@@ -35,7 +36,8 @@ public sealed class LogisticsController : Controller
         ILogisticsDeliveryDataProvider deliveryDataProvider,
         IAddressRepository addressRepository,
         IDeliveryRouteService deliveryRouteService,
-        IPackingSynchronizationService packingSynchronizationService)
+        IPackingSynchronizationService packingSynchronizationService,
+        ILogisticsSbdReportRepository logisticsSbdReportRepository)
     {
         _vehicleService = vehicleService;
         _driverService = driverService;
@@ -45,6 +47,7 @@ public sealed class LogisticsController : Controller
         _addressRepository = addressRepository;
         _deliveryRouteService = deliveryRouteService;
         _packingSynchronizationService = packingSynchronizationService;
+        _logisticsSbdReportRepository = logisticsSbdReportRepository;
     }
 
     [HttpGet("")]
@@ -576,8 +579,17 @@ public sealed class LogisticsController : Controller
             PageSize = 5,
         });
         var pendingAddressesTask = _addressRepository.GetPendingAddressesAsync();
+        var sbdDispatchReportTask = _logisticsSbdReportRepository.GetDailyDispatchBoardAsync(
+            selectedDate.Date,
+            estimatedDeliveryWeightKg: 1.20m);
 
-        await Task.WhenAll(deliveriesTask, routesTask, vehicleSummaryTask, driverSummaryTask, pendingAddressesTask);
+        await Task.WhenAll(
+            deliveriesTask,
+            routesTask,
+            vehicleSummaryTask,
+            driverSummaryTask,
+            pendingAddressesTask,
+            sbdDispatchReportTask);
 
         var vehicleSummary = await vehicleSummaryTask;
         var driverSummary = await driverSummaryTask;
@@ -592,6 +604,7 @@ public sealed class LogisticsController : Controller
             ActiveDriversCount = driverSummary.ActiveCount,
             DriversWithVehicleCount = driverSummary.WithVehicleCount,
             PendingAddressesCount = (await pendingAddressesTask).Count(),
+            SbdDispatchReport = await sbdDispatchReportTask,
         };
     }
 
