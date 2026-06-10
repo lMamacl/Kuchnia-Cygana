@@ -72,8 +72,8 @@ services:
       - ConnectionStrings__MigrationConnection=Server=sqlserver,1433;Database=${MSSQL_DB_NAME:?MSSQL_DB_NAME is required};User Id=admin;Password=${MSSQL_ADMIN_PASSWORD:?MSSQL_ADMIN_PASSWORD is required};Encrypt=True;TrustServerCertificate=True;
       - DatabaseSeeding__Enabled=true
       - DatabaseSeeding__Mode=Both
-      - DatabaseSeeding__Profile=DemoData
-      - DatabaseSeeding__ResetDemoData=true
+      - DatabaseSeeding__Profile=VolumeDemo
+      - DatabaseSeeding__ResetVolumeDemo=true
       - Stripe__SecretKey=${STRIPE_SECRET}
       - Stripe__PublishableKey=${STRIPE_PUBLISHABLE}
       - OpenAI__ApiKey=${OPENAI_KEY}

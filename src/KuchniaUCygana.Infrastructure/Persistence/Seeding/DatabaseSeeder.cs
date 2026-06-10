@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using BCrypt.Net;
 using Dapper;
 using KuchniaUCygana.Domain.Entities.Notifications;
@@ -783,11 +783,11 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
         await db.ExecuteAsync(new CommandDefinition(
             """
-            DECLARE @prefix nvarchar(20) = @M2VolumePrefix;
-            DECLARE @now datetimeoffset = @Now;
-            DECLARE @auditUser nvarchar(100) = @AuditUser;
+            DECLARE @prefix nvarchar(20) = @SeedPrefix;
+            DECLARE @now datetimeoffset = @SeedNow;
+            DECLARE @auditUser nvarchar(100) = @SeedAuditUser;
             DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
-            DECLARE @days int = @Days;
+            DECLARE @days int = @SeedDays;
             DECLARE @planWindowDays int = @days * 2;
 
             IF NOT EXISTS (SELECT 1 FROM [Allergens] WHERE [Code] = N'VOL-GLU')
@@ -1507,10 +1507,10 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             """,
             new
             {
-                M2VolumePrefix,
-                Days = Math.Clamp(config.Days, 1, 45),
-                Now = now,
-                AuditUser = auditUser,
+                SeedPrefix = M2VolumePrefix,
+                SeedDays = Math.Clamp(config.Days, 1, 45),
+                SeedNow = now,
+                SeedAuditUser = auditUser,
             },
             transaction: transaction,
             commandTimeout: 180,
@@ -2029,12 +2029,12 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await ExecuteVolumeDemoSqlAsync(
             db,
             """
-            DECLARE @now datetimeoffset = @Now;
+            DECLARE @now datetimeoffset = @SeedNow;
             DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
             DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
-            DECLARE @days int = @Days;
-            DECLARE @activeCustomers int = @ActiveCustomers;
-            DECLARE @orderCount int = @OrderCount;
+            DECLARE @days int = @SeedDays;
+            DECLARE @activeCustomers int = @SeedActiveCustomers;
+            DECLARE @orderCount int = @SeedOrderCount;
 
             IF NOT EXISTS (SELECT 1 FROM [DeliveryWindows] WHERE [Name] = N'18:00-22:00')
                 INSERT INTO [DeliveryWindows] ([Name], [StartTime], [EndTime], [IsActive], [SortOrder], [CreatedAt], [UpdatedAt])
@@ -2394,11 +2394,11 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             """,
             new
             {
-                Now = now,
+                SeedNow = now,
                 PasswordHash = passwordHash,
-                Days = config.Days,
-                ActiveCustomers = config.ActiveCustomers,
-                OrderCount = orderCount,
+                SeedDays = config.Days,
+                SeedActiveCustomers = config.ActiveCustomers,
+                SeedOrderCount = orderCount,
                 Seed = config.Seed,
             },
             transaction,
@@ -2420,13 +2420,13 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await ExecuteVolumeDemoSqlAsync(
             db,
             """
-            DECLARE @now datetimeoffset = @Now;
+            DECLARE @now datetimeoffset = @SeedNow;
             DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
             DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
-            DECLARE @days int = @Days;
-            DECLARE @targetLogCount int = @TargetLogCount;
+            DECLARE @days int = @SeedDays;
+            DECLARE @targetLogCount int = @SeedTargetLogCount;
 
-            ;WITH Departments AS (
+            ;WITH NewDepartments AS (
                 SELECT * FROM (VALUES
                     (N'Kuchnia', N'Produkcja posilkow i sesje gotowania.'),
                     (N'Magazyn', N'Stany, przyjecia i HACCP.'),
@@ -2437,7 +2437,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             )
             INSERT INTO [Departments] ([Name], [Description], [HeadEmployeeId], [CreatedAt], [UpdatedAt])
             SELECT [Name], [Description], NULL, @now, NULL
-            FROM Departments d
+            FROM NewDepartments d
             WHERE NOT EXISTS (SELECT 1 FROM [Departments] existing WHERE existing.[Name] = d.[Name]);
 
             ;WITH Numbers AS (
@@ -2788,10 +2788,10 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             """,
             new
             {
-                Now = now,
+                SeedNow = now,
                 PasswordHash = passwordHash,
-                Days = config.Days,
-                TargetLogCount = targetLogCount,
+                SeedDays = config.Days,
+                SeedTargetLogCount = targetLogCount,
                 Seed = config.Seed,
             },
             transaction,
@@ -2811,10 +2811,10 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await ExecuteVolumeDemoSqlAsync(
             db,
             """
-            DECLARE @now datetimeoffset = @Now;
+            DECLARE @now datetimeoffset = @SeedNow;
             DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
             DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
-            DECLARE @days int = @Days;
+            DECLARE @days int = @SeedDays;
 
             INSERT INTO [RecipeComponentInstructionSections]
                 ([RecipeComponentVersionId], [Title], [SortOrder], [CreatedAt], [UpdatedAt],
@@ -3078,8 +3078,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             """,
             new
             {
-                Now = now,
-                Days = config.Days,
+                SeedNow = now,
+                SeedDays = config.Days,
             },
             transaction,
             cancellationToken);
@@ -3087,7 +3087,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await ExecuteVolumeDemoSqlAsync(
             db,
             """
-            DECLARE @now datetimeoffset = @Now;
+            DECLARE @now datetimeoffset = @SeedNow;
             DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
             DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
 
@@ -3314,17 +3314,17 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                       AND psl.[NewStatus] = transitions.[NewStatus]
                       AND psl.[Notes] = N'VOL-M3 status history');
             """,
-            new { Now = now },
+            new { SeedNow = now },
             transaction,
             cancellationToken);
 
         await ExecuteVolumeDemoSqlAsync(
             db,
             """
-            DECLARE @now datetimeoffset = @Now;
+            DECLARE @now datetimeoffset = @SeedNow;
             DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
             DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
-            DECLARE @days int = @Days;
+            DECLARE @days int = @SeedDays;
 
             INSERT INTO [InventoryTransactions]
                 ([BatchId], [TransactionType], [QuantityChanged], [Reason], [ReferenceDocument], [CreatedAt], [UpdatedAt])
@@ -3419,8 +3419,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             """,
             new
             {
-                Now = now,
-                Days = config.Days,
+                SeedNow = now,
+                SeedDays = config.Days,
             },
             transaction,
             cancellationToken);
@@ -3439,11 +3439,11 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         await ExecuteVolumeDemoSqlAsync(
             db,
             """
-            DECLARE @now datetimeoffset = @Now;
+            DECLARE @now datetimeoffset = @SeedNow;
             DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
             DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
 
-            ;WITH Vehicles AS (
+            ;WITH NewVehicles AS (
                 SELECT * FROM (VALUES
                     (1, N'VOL-M4-BI0001', N'Fiat Ducato Chlodnia', 650.00),
                     (2, N'VOL-M4-BI0002', N'Mercedes Sprinter Long', 900.00),
@@ -3470,7 +3470,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 0,
                 NULL,
                 NULL
-            FROM Vehicles v
+            FROM NewVehicles v
             WHERE NOT EXISTS (
                 SELECT 1 FROM [Vehicles] existing
                 WHERE existing.[RegistrationNumber] = v.[RegistrationNumber]
@@ -3688,7 +3688,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 DATEADD(hour, 7, CONVERT(datetime, CONVERT(date, r.[RouteDate]))),
                 @auditUser,
                 NULL,
-                du.[UserId],
+                du.[Id],
                 1,
                 NULL,
                 NULL,
@@ -3714,7 +3714,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                     SELECT 1 FROM [PackingManifests] pm
                     WHERE pm.[RouteId] = r.[Id]
                       AND pm.[ManifestNumber] LIKE N'VOL-M4-%')
-            GROUP BY r.[Id], r.[RouteDate], r.[Name], r.[VehicleId], v.[RegistrationNumber], du.[UserId];
+            GROUP BY r.[Id], r.[RouteDate], r.[Name], r.[VehicleId], v.[RegistrationNumber], du.[Id];
 
             ;WITH Stops AS (
                 SELECT rs.[Id] AS [RouteStopId], rs.[DeliveryCalendarId], r.[DriverId],
@@ -3754,7 +3754,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                   AND bml.[ThermalBagId] = b.[Id]
                   AND bml.[CreatedAt] = DATEADD(minute, moves.[MinuteOffset], DATEADD(hour, 6, CONVERT(datetimeoffset, CONVERT(date, @today)))));
             """,
-            new { Now = now },
+            new { SeedNow = now },
             transaction,
             cancellationToken);
 
@@ -4162,7 +4162,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
         CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
-        var demoDates = new[] { today, PresentationDemoDate }
+        var demoDates = new[] { today, PresentationDemoDate, today.AddDays(1) }
             .Distinct()
             .OrderBy(date => date)
             .ToArray();
@@ -4229,7 +4229,10 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 continue;
             }
 
-            await EnsureUnifiedDemoProductionPlanAsync(demoDate, auditUser, cancellationToken);
+            if (demoDate <= today)
+            {
+                await EnsureUnifiedDemoProductionPlanAsync(demoDate, auditUser, cancellationToken);
+            }
             await SeedModule5TicketOrderLinksAsync(db, demoDate, now, cancellationToken);
         }
 

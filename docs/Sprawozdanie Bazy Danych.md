@@ -12,7 +12,7 @@
 3. [Wymagania Funkcjonalne i Niefunkcjonalne (NFR)](#3-wymagania-funkcjonalne-i-niefunkcjonalne-nfr)
 4. [Infrastruktura i Architektura Sprzętowa](#4-infrastruktura-i-architektura-sprzętowa)
 5. [Elementy Słownikowe (Lookup Tables)](#5-elementy-słownikowe-lookup-tables)
-6. [Bezpieczeństwo, Ochrona Danych i Audytowalność](#6-bezpieczeństwo-ochrona-danych-i-audytowalność)
+6. [Spójność, Historia Zmian i Audytowalność Danych](#6-spójność-historia-zmian-i-audytowalność-danych)
 7. [Rozmiar Bazy Danych, Obciążenie i Przyrost Danych](#7-rozmiar-bazy-danych-obciążenie-i-przyrost-danych)
 8. [Relacyjny Model Logiczny i Diagram Fizyczny (ERD)](#8-relacyjny-model-logiczny-i-diagram-fizyczny-erd)
 9. [Logiczny Model Danych i Wymagania dotyczące przechowywania](#9-logiczny-model-danych-i-wymagania-dotyczące-przechowywania)
@@ -93,8 +93,8 @@ Podział odpowiedzialności w zespole:
 
 ### Wymagania Niefunkcjonalne (NFR)
 *   **NF1 (Wydajność)**: Czas generowania zapotrzebowania na surowce dla 1000 zamówień nie może przekroczyć 3 sekund (dzięki optymalnym indeksom i lekkiemu micro-ORM Dapper).
-*   **NF2 (Bezpieczeństwo)**: Hasła haszowane jednokierunkowo algorytmem o wysokiej odporności (np. BCrypt/Argon2). Dane wrażliwe (adresy, dane osobowe) chronione są na poziomie bazy danych (TDE - Transparent Data Encryption lub szyfrowanie kolumnowe).
-*   **NF3 (HACCP i Audytowalność)**: Każda edycja rekordów finansowych, magazynowych oraz zmian uprawnień musi zapisać ślad audytowy w tabeli `SystemLogs` zawierający stary i nowy stan rekordu w formacie JSON (`OldValue`, `NewValue`).
+*   **NF2 (Spójność i Transakcyjność)**: Wszystkie operacje magazynowe modyfikujące stan partii (FEFO) oraz rejestrujące transakcje muszą być wykonywane w ramach izolowanych transakcji bazodanowych w celu zapewnienia spójności danych.
+*   **NF3 (HACCP i Audytowalność)**: Każda modyfikacja stanów magazynowych oraz edycja rekordów finansowych musi zapisać ślad audytowy w tabeli `SystemLogs` zawierający stary i nowy stan rekordu w formacie JSON (`OldValue`, `NewValue`) w celu odtworzenia historii zmian.
 *   **NF4 (Responsywność)**: Interfejs webowy musi być dostosowany do urządzeń mobilnych (kierowcy) oraz tabletów dotykowych (kucharze i pakowacze w środowisku o podwyższonej wilgotności).
 *   **NF5 (Dostępność)**: System musi być odporny na awarie sieciowe. W przypadku utraty połączenia ze skanerami kodów QR na kompletacji, system musi umożliwiać ręczne odznaczanie pozycji w interfejsie webowym.
 
@@ -162,45 +162,24 @@ W celu optymalizacji struktury i uniknięcia redundancji danych, system posiada 
 
 ---
 
-## 6. Bezpieczeństwo, Ochrona Danych i Audytowalność
-W celu ochrony danych wrażliwych i zapewnienia pełnej rozliczalności personelu, wdrożono zaawansowane mechanizmy zabezpieczeń oraz mechanizmy audytowe.
+## 6. Spójność, Historia Zmian i Audytowalność Danych
+W celu zapewnienia pełnej rozliczalności operacji magazynowych oraz odtworzenia stanów historycznych bez obciążania głównej bazy operacyjnej, wdrożono zaawansowane mechanizmy śledzenia historii zmian oraz system archiwizacji logów.
 
-### 6.1. Ochrona danych wrażliwych (Szyfrowanie i Maskowanie)
-*   **Haszowanie haseł**: Zastosowanie funkcji haszującej opartej na soli (np. BCrypt z kosztem obliczeniowym równym 11 lub Argon2id), co zabezpiecza hasła przed atakami metodą słownikową i siłową w przypadku wycieku bazy.
-*   **Always Encrypted (SQL Server)**: Kolumny zawierające dane osobowe oraz adresowe klientów (`FirstName`, `LastName`, `Email`, `PhoneNumber`, `Street`, `HouseNumber`) w tabelach `Users`, `Addresses` i `Employees` są szyfrowane na poziomie bazy danych przy użyciu technologii *Always Encrypted*. Klucze deszyfrujące przechowywane są bezpiecznie w menedżerze certyfikatów serwera aplikacji (np. Azure Key Vault), co sprawia, że administrator bazy danych (DBA) nie ma wglądu do czystych danych tekstowych.
-*   **Maskowanie danych wrażliwych w logach**: System automatycznie filtruje wartości zapisywane w tabeli `SystemLogs`. Pola takie jak hasła, tokeny sesji czy klucze Stripe są podmieniane na maskę `********` na poziomie warstwy aplikacyjnej (kod walidatorów i interceptorów).
+### 6.1. Mechanizm historii zmian (Audit Trail)
+System realizuje zintegrowane i wielokanałowe śledzenie historii operacji bezpośrednio w relacyjnej strukturze danych:
+1.  **Auditable Entities (Miękkie Usuwanie i Metadane Rekordów)**:
+    Większość encji biznesowych w bazie danych dzieli wspólny zestaw pól audytowych: `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, `IsDeleted`, `DeletedAt`, `DeletedBy`. Usunięcie obiektów w systemie jest operacją logiczną (ustawienie flagi `IsDeleted = 1`), co zapobiega utracie spójności referencyjnej i pozwala na zachowanie historii dla raportów finansowych oraz stanów magazynowych z przeszłości.
+2.  **Tabela `SystemLogs` (Logi Zmian Struktury Obiektów) i Archiwizacja**:
+    Wszelkie operacje modyfikujące (Insert, Update, Delete) kluczowych encji generują zapis w tabeli `SystemLogs`. Przechowuje ona kompletny zrzut stanu obiektu przed i po modyfikacji w formacie JSON (`OldValue` oraz `NewValue`). Pozwala to na pełne odtworzenie historycznego stanu dowolnego wiersza bazy danych w dowolnym momencie w przeszłości.
+3.  **Dedykowane Dzienniki Zdarzeń Biznesowych**:
+    *   `InventoryTransactions` (Śledzenie Ilościowe Magazynu): Każdy ruch magazynowy (przyjęcie partii, rozchód FEFO, odpad) posiada unikalną referencję do partii (`BatchId`) oraz przypisany typ transakcji i ilość, co umożliwia pełną weryfikację historii bilansu magazynu.
+    *   `BatchExpiryChangeLogs` (Korekty Dat Ważności): Każda ręczna zmiana daty ważności surowca w tabeli `Batches` jest logowana w tej tabeli, dokumentując przyczynę techniczną, nową datę, starą datę i autora.
+    *   `PackingStatusLogs` (Logi kompletacji): Rejestruje czas i statusy pakowania dla każdego posiłku, co pozwala odtworzyć drogę każdego pudełka w łańcuchu kompletacji.
+    *   `HaccpTemperatureAlerts` (Logi Alertów HACCP): Rejestruje przekroczenia temperatur w chłodniach chwycone przez `TemperatureLogs`, przechowując czas oraz opis działań naprawczych podjętych przez personel.
 
-### 6.2. Mechanizm historii zmian (Audit Trail)
-System realizuje trójpoziomowe i wielokanałowe śledzenie historii operacji:
-1.  **Auditable Entities (Miękkie Usuwanie i Historia Rekordu)**:
-    Większość encji biznesowych dziedziczy po klasie bazowej `AuditableEntity`. Zawiera ona pola: `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, `IsDeleted`, `DeletedAt`, `DeletedBy`. Usunięcie obiektu jest operacją logiczną (ustawienie flagi `IsDeleted = 1`), co zapobiega utracie powiązań historycznych w raportach finansowych i produkcyjnych.
-2.  **Tabela `SystemLogs` (Logi Zdarzeń Systemowych) i archiwizacja**:
-    Każda akcja modyfikująca dane (Insert, Update, Delete) wyzwala zapis w tabeli `SystemLogs`. Zapisywane są stany obiektów przed i po modyfikacji w formacie JSON (`OldValue` oraz `NewValue`), co umożliwia odtworzenie historii zmian dowolnego obiektu w czasie. W celu zachowania wydajności bazy operacyjnej wdrożono tabelę `SystemLogsArchive` oraz procedurę składowaną `usp_ArchiveSystemLogs` wywoływaną cyklicznie (np. raz na dobę), przenoszącą rekordy starsze niż 180 dni do tabeli archiwalnej z zachowaniem optymalnego batchowania.
-3.  **Specjalistyczne Dzienniki Operacyjne**:
-    *   `InventoryTransactions` (Śledzenie Ilościowe Magazynu): Każdy ruch surowca na magazynie (przyjęcie dostawy, zużycie do planu produkcji, rejestracja odpadu, korekta inwentaryzacyjna) musi posiadać referencję do partii (`BatchId`) oraz wpisaną ilość i powód. Gwarantuje to pełną rozliczalność stanów magazynowych.
-    *   `BatchExpiryChangeLogs` (Zmiany Dat Ważności): Każda ręczna korekta daty ważności partii (`ExpiryDate` w tabeli `Batches`) wymusza zapis do tej tabeli, dokumentując przyczynę modyfikacji, poprzednią datę, nową datę i dane użytkownika wykonującego operację.
-    *   `PackingStatusLogs` (Śledzenie Kompletacji): Loguje kolejne etapy pakowania pudełek (Generowanie etykiety -> Przypisanie do torby -> Skanowanie -> Załadunek na trasę).
-    *   `HaccpTemperatureAlerts` (Logi Alertów): Rejestruje przekroczenia temperatur w chłodniach zarejestrowane przez `TemperatureLogs`, dokumentując czas trwania incydentu oraz podjęte działania korygujące.
+### 6.2. System Archiwizacji Logów w T-SQL
+Ciągłe logowanie zmian obiektów generuje bardzo duży przyrost danych w tabeli `SystemLogs` (szacowany na 4.6 GB rocznie). Aby utrzymać optymalny czas odpowiedzi bazy operacyjnej, wdrożono automatyczną procedurę `usp_ArchiveSystemLogs` wdrażaną przez FluentMigrator. Procedura ta przenosi wiersze starsze niż 180 dni do tabeli historycznej `SystemLogsArchive` z wykorzystaniem transakcyjnego podziału na paczki (Batching), co minimalizuje czas trwania blokad na tabelach operacyjnych.
 
-### 6.3. Role i uprawnienia użytkowników (Role-Based Access Control - RBAC)
-Dla zapewnienia bezpieczeństwa i separacji obowiązków (Separation of Duty), w systemie zaimplementowano model RBAC z następującymi rolami i przypisanymi do nich uprawnieniami:
-
-| Nazwa Roli | Moduł | Typowy Użytkownik | Zakres Uprawnień i Dostęp do Widoków |
-| :--- | :--- | :--- | :--- |
-| `Client` | M1 | Klient cateringu | Widok menu, składanie zamówień, płatności Stripe, książka adresowa, zawieszanie dostaw, ticketowanie (BOK). Brak dostępu do paneli pracowników. |
-| `Kitchen` | M3 | Kucharz / Personel kuchenny | Podgląd planu produkcji na dany dzień, rejestracja temperatur CCP, zaznaczanie dań jako ugotowane. |
-| `KitchenManager` | M3 | Szef Kuchni / Dietetyk | Zatwierdzanie planów produkcji, zarządzanie recepturami i posiłkami, generowanie zapotrzebowania, nadzór nad HACCP. |
-| `Warehouse` | M3 | Magazynier | Przyjmowanie dostaw, rejestracja partii (FEFO), kontrola stanów magazynowych, inwentaryzacja. |
-| `WarehouseManager` | M3 | Kierownik Magazynu | Zatwierdzanie korekt inwentaryzacyjnych, edycja dat ważności partii (wymaga podania przyczyny), zatwierdzanie receptur i surowców. |
-| `Packing` | M3 | Personel kompletacji | Obsługa stanowiska kompletacji, skanowanie QR pudełek, kompletowanie toreb, wydruk etykiet pudełkowym. |
-| `PackingManager` | M3 | Kierownik kompletacji | Autoryzacja awarii kompletacji, ponowny wydruk etykiet, zarządzanie manifestami załadunkowymi. |
-| `Driver` | M4 | Kurier / Dostawca | Mobilny podgląd trasy dostawy, skanowanie kodów toreb przy wydaniu i odbiorze, logowanie problemów na trasie. |
-| `Logistics` / `LogisticsManager` | M4 | Spedytor / Kierownik logistyki | Przypisywanie pojazdów i kierowców, generowanie tras dostaw (OSM/Google), generowanie manifestów załadunkowych. |
-| `HR` / `HRManager` | M5 | Kadrowy / Manager HR | Ewidencja pracowników, zarządzanie grafikami pracy (`WorkSchedules`), zatwierdzanie wniosków urlopowych (`LeaveRequests`). |
-| `BOK` / `BOKManager` | M5 | Pracownik biura obsługi | Obsługa zgłoszeń reklamacyjnych i ticketów BOK (`Tickets`), kontakt z klientem. |
-| `Admin` | Wszystkie | Administrator IT / Właściciel | Pełny dostęp do wszystkich modułów, edycja ról użytkowników, podgląd logów audytowych `SystemLogs`, zarządzanie ustawieniami globalnymi. |
-
----
 
 ## 7. Rozmiar Bazy Danych, Obciążenie i Przyrost Danych
 
@@ -1434,8 +1413,7 @@ sequenceDiagram
     Note over V: HTMX wysyła asynchroniczny POST<br/>hx-post="/Production/Approve"<br/>wraz z RequestVerificationToken (CSRF)
     V->>C: HTTP POST /Production/Approve { PlanId }
     
-    Note over C: Filtry ASP.NET Core MVC:<br/>1. Autoryzacja i weryfikacja roli (ClaimsPrincipal)<br/>2. Weryfikacja tokenu CSRF
-    C->>C: Sprawdzenie uprawnień: User.IsInRole("KitchenManager")
+    Note over C: Filtry ASP.NET Core MVC:<br/>Mapowanie żądania HTTP
     
     C->>C: Mapowanie żądania na DTO: ApproveProductionPlanRequest
     C->>Val: Wywołanie walidacji (FluentValidation)
@@ -1473,8 +1451,8 @@ sequenceDiagram
 
 ### 11.2. Opis Warstwowy i Rola Komponentów
 
-1.  **Warstwa Prezentacji (Web Layer - Razor + HTMX 2.x)**: Użytkownik wysyła żądanie asynchronicznie poprzez HTMX, wstrzykując token CSRF w nagłówku HTTP.
-2.  **Warstwa Kontrolera (Web Layer - Controllers)**: Kontroler `ProductionController` weryfikuje rolę użytkownika (Claims: `KitchenManager` lub `Admin`). Mapuje dane na obiekt żądania (DTO).
+1.  **Warstwa Prezentacji (Web Layer - Razor + HTMX 2.x)**: Użytkownik wysyła żądanie asynchronicznie poprzez HTMX, przekazując identyfikator planu.
+2.  **Warstwa Kontrolera (Web Layer - Controllers)**: Kontroler `ProductionController` odbiera żądanie HTTP POST i mapuje dane na obiekt żądania (DTO).
 3.  **Warstwa Walidacji (Application Layer - FluentValidation)**: Sprawdza formalne kryteria poprawności danych wejściowych, rzucając wyjątek `ValidationException` w przypadku niezgodności.
 4.  **Serwis Aplikacyjny (Application Layer - Services)**: Klasa koordynująca przepływ, otwierająca transakcję bazodanową (`TransactionScope`) i spajająca repozytoria oraz logikę domenową.
 5.  **Domena (Domain Layer - Entities & Domain Services)**: Klasa `FefoService` zawiera czystą logikę biznesową wydawania surowców metodą FEFO. Jest całkowicie uniezależniona od bazy danych.
