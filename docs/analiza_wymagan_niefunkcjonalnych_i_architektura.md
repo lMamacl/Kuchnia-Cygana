@@ -15,8 +15,8 @@
 6. [Bezpieczeństwo, Ochrona Danych i Audytowalność](#6-bezpieczeństwo-ochrona-danych-i-audytowalność)
 7. [Rozmiar Bazy Danych, Obciążenie i Przyrost Danych](#7-rozmiar-bazy-danych-obciążenie-i-przyrost-danych)
 8. [Relacyjny Model Logiczny i Diagram Fizyczny (ERD)](#8-relacyjny-model-logiczny-i-diagram-fizyczny-erd)
-9. [Specyfikacja Fizyczna Tabel Bazodanowych (M1–M5)](#9-specyfikacja-fizyczna-tabel-bazodanowych-m1m5)
-10. [Procedury Składowane, Widoki, Wyzwalacze (Database Objects)](#10-procedury-składowane-widoki-wyzwalacze-database-objects)
+9. [Logiczny Model Danych i Wymagania dotyczące przechowywania](#9-logiczny-model-danych-i-wymagania-dotyczące-przechowywania)
+10. [Wymagania dotyczące przetwarzania danych](#10-wymagania-dotyczące-przetwarzania-danych)
 11. [Przepływ Danych przy Zapytaniu (Request Data Flow Walkthrough)](#11-przepływ-danych-przy-zapytaniu-request-data-flow-walkthrough)
 12. [Potencjalne Trudności i Ryzyka Projektowe](#12-potencjalne-trudności-i-ryzyka-projektowe)
 
@@ -181,6 +181,24 @@ System realizuje trójpoziomowe i wielokanałowe śledzenie historii operacji:
     *   `BatchExpiryChangeLogs` (Zmiany Dat Ważności): Każda ręczna korekta daty ważności partii (`ExpiryDate` w tabeli `Batches`) wymusza zapis do tej tabeli, dokumentując przyczynę modyfikacji, poprzednią datę, nową datę i dane użytkownika wykonującego operację.
     *   `PackingStatusLogs` (Śledzenie Kompletacji): Loguje kolejne etapy pakowania pudełek (Generowanie etykiety -> Przypisanie do torby -> Skanowanie -> Załadunek na trasę).
     *   `HaccpTemperatureAlerts` (Logi Alertów): Rejestruje przekroczenia temperatur w chłodniach zarejestrowane przez `TemperatureLogs`, dokumentując czas trwania incydentu oraz podjęte działania korygujące.
+
+### 6.3. Role i uprawnienia użytkowników (Role-Based Access Control - RBAC)
+Dla zapewnienia bezpieczeństwa i separacji obowiązków (Separation of Duty), w systemie zaimplementowano model RBAC z następującymi rolami i przypisanymi do nich uprawnieniami:
+
+| Nazwa Roli | Moduł | Typowy Użytkownik | Zakres Uprawnień i Dostęp do Widoków |
+| :--- | :--- | :--- | :--- |
+| `Client` | M1 | Klient cateringu | Widok menu, składanie zamówień, płatności Stripe, książka adresowa, zawieszanie dostaw, ticketowanie (BOK). Brak dostępu do paneli pracowników. |
+| `Kitchen` | M3 | Kucharz / Personel kuchenny | Podgląd planu produkcji na dany dzień, rejestracja temperatur CCP, zaznaczanie dań jako ugotowane. |
+| `KitchenManager` | M3 | Szef Kuchni / Dietetyk | Zatwierdzanie planów produkcji, zarządzanie recepturami i posiłkami, generowanie zapotrzebowania, nadzór nad HACCP. |
+| `Warehouse` | M3 | Magazynier | Przyjmowanie dostaw, rejestracja partii (FEFO), kontrola stanów magazynowych, inwentaryzacja. |
+| `WarehouseManager` | M3 | Kierownik Magazynu | Zatwierdzanie korekt inwentaryzacyjnych, edycja dat ważności partii (wymaga podania przyczyny), zatwierdzanie receptur i surowców. |
+| `Packing` | M3 | Personel kompletacji | Obsługa stanowiska kompletacji, skanowanie QR pudełek, kompletowanie toreb, wydruk etykiet pudełkowym. |
+| `PackingManager` | M3 | Kierownik kompletacji | Autoryzacja awarii kompletacji, ponowny wydruk etykiet, zarządzanie manifestami załadunkowymi. |
+| `Driver` | M4 | Kurier / Dostawca | Mobilny podgląd trasy dostawy, skanowanie kodów toreb przy wydaniu i odbiorze, logowanie problemów na trasie. |
+| `Logistics` / `LogisticsManager` | M4 | Spedytor / Kierownik logistyki | Przypisywanie pojazdów i kierowców, generowanie tras dostaw (OSM/Google), generowanie manifestów załadunkowych. |
+| `HR` / `HRManager` | M5 | Kadrowy / Manager HR | Ewidencja pracowników, zarządzanie grafikami pracy (`WorkSchedules`), zatwierdzanie wniosków urlopowych (`LeaveRequests`). |
+| `BOK` / `BOKManager` | M5 | Pracownik biura obsługi | Obsługa zgłoszeń reklamacyjnych i ticketów BOK (`Tickets`), kontakt z klientem. |
+| `Admin` | Wszystkie | Administrator IT / Właściciel | Pełny dostęp do wszystkich modułów, edycja ról użytkowników, podgląd logów audytowych `SystemLogs`, zarządzanie ustawieniami globalnymi. |
 
 ---
 
@@ -772,6 +790,24 @@ erDiagram
         long FileSizeBytes
     }
 
+    PlanChangeAlert {
+        int Id PK
+        date PlanDate
+        int DietMenuPlanId FK
+        int DietMenuPlanItemId FK
+        int MealId FK
+        int RecipeComponentVersionId FK
+        string AlertType
+        string Severity
+        string Message
+        string Reason
+        bool RequiresAcknowledgement
+        datetimeoffset CreatedAt
+        string CreatedBy
+        datetimeoffset AcknowledgedAt
+        string AcknowledgedBy
+    }
+
     %% ==============================
     %% 6. MODUŁ MAGAZYNU (WMS) I HACCP
     %% ==============================
@@ -933,6 +969,30 @@ erDiagram
         decimal ActualValue
         string ActualUnit
         string Notes
+    }
+
+    ProductionAdjustmentApproval {
+        int Id PK
+        int ProductionPlanItemId FK
+        string AdjustmentType
+        string Status
+        decimal PlannedValue
+        decimal RequestedValue
+        string Unit
+        string Reason
+        string RequestedBy
+        datetimeoffset RequestedAt
+        string ApprovedBy
+        datetimeoffset ApprovedAt
+        string ApprovalNote
+        datetimeoffset AppliedAt
+        datetimeoffset CreatedAt
+        datetimeoffset UpdatedAt
+        string CreatedBy
+        string UpdatedBy
+        bool IsDeleted
+        datetimeoffset DeletedAt
+        string DeletedBy
     }
 
     %% ==============================
@@ -1221,6 +1281,11 @@ erDiagram
     Meal ||--|{ MealRecipeComponent : has_components
     RecipeComponentVersion ||--o{ MealRecipeComponent : uses_version
 
+    DietMenuPlan ||--o{ PlanChangeAlert : triggers
+    DietMenuPlanItem ||--o{ PlanChangeAlert : triggers
+    Meal ||--o{ PlanChangeAlert : triggers
+    RecipeComponentVersion ||--o{ PlanChangeAlert : triggers
+
     %% Relacje magazynu i HACCP
     WarehouseCategory ||--o{ StockItem : categorizes
     StockItem ||--|{ Batch : stocks
@@ -1240,6 +1305,7 @@ erDiagram
     RecipeComponentVersion ||--o{ CookingSession : cooked_in
     CookingSession ||--|{ CookingSessionStepCheck : steps_validation
     RecipeComponentInstructionStep ||--o{ CookingSessionStepCheck : validated_step
+    ProductionPlanItem ||--o{ ProductionAdjustmentApproval : has_approvals
 
     PackingSession ||--|{ PackingItem : contains
     PackingItem ||--|| Batch : haccp_trace
@@ -1269,10 +1335,10 @@ erDiagram
 | **Konta i klienci** | Użytkownicy (`User`), profile klientów (`CustomerProfile`), adresy (`Address`) | F1, F3 |
 | **HR i kadry** | Pracownicy (`Employee`), działy (`Department`), wnioski urlopowe (`LeaveRequest`) | (zakres modułu 5) |
 | **Zamówienia i płatności** | Zamówienia (`Order`), pozycje (`OrderItem`), kalendarz dostaw (`DeliveryCalendar`), kody rabatowe (`DiscountCode`), płatności Stripe (`Payment`), przedziały dostaw (`DeliveryWindow`) | F1–F3 |
-| **Katalog diet i posiłków** | Diety (`Diet`), warianty diet (`DietVariant`), posiłki (`Meal`), warianty posiłków (`MealVariant`), warianty dań w menu (`DietVariantMeal`), składniki (`Ingredient`), alergeny surowców i posiłków (`IngredientAllergen`, `MealVariantAllergen`), obrazy (`MealImage`), wartości odżywcze (`NutritionFact`), przepisy historyczne (`Recipe`), komponenty receptur (`RecipeComponent`), wersje komponentów (`RecipeComponentVersion`), składniki komponentu (`RecipeComponentIngredient`), sekcje instrukcji (`RecipeComponentInstructionSection`), kroki instrukcji (`RecipeComponentInstructionStep`), plany menu (`DietMenuPlan`/`DietMenuPlans`), pozycje planu menu (`DietMenuPlanItem`/`DietMenuPlanItems`), wymagania opakowaniowe (`PackagingRequirement`/`PackagingRequirements`), komponenty recepturowe posiłków (`MealRecipeComponent`/`MealRecipeComponents`) | F4 |
+| **Katalog diet i posiłków** | Diety (`Diet`), warianty diet (`DietVariant`), posiłki (`Meal`), warianty posiłków (`MealVariant`), warianty dań w menu (`DietVariantMeal`), składniki (`Ingredient`), alergeny surowców i posiłków (`IngredientAllergen`, `MealVariantAllergen`), obrazy (`MealImage`), wartości odżywcze (`NutritionFact`), przepisy historyczne (`Recipe`), komponenty receptur (`RecipeComponent`), wersje komponentów (`RecipeComponentVersion`), składniki komponentu (`RecipeComponentIngredient`), sekcje instrukcji (`RecipeComponentInstructionSection`), kroki instrukcji (`RecipeComponentInstructionStep`), plany menu (`DietMenuPlan`/`DietMenuPlans`), pozycje planu menu (`DietMenuPlanItem`/`DietMenuPlanItems`), wymagania opakowaniowe (`PackagingRequirement`/`PackagingRequirements`), komponenty recepturowe posiłków (`MealRecipeComponent`/`MealRecipeComponents`), alerty zmian w planach (`PlanChangeAlert`/`PlanChangeAlerts`) | F4 |
 | **Magazyn i WMS** | Składniki magazynowe (`StockItem`), kategorie magazynowe (`WarehouseCategory`), partie (FEFO) surowców (`Batch`), korekty dat ważności (`BatchExpiryChangeLog`), transakcje magazynowe (`InventoryTransaction`), korekty inwentaryzacyjne (`InventoryAdjustment`), jednostki miar (`UnitOfMeasure`) | F5–F6, NF3 |
 | **HACCP** | Lokalizacje HACCP (`HaccpLocation`), kategorie lokalizacji (`HaccpLocationCategory`), odczyty lodówek (`TemperatureLog`), alerty temperatur (`HaccpTemperatureAlert`) | NF3, F6 |
-| **Produkcja** | Plany produkcyjne (`ProductionPlan`), pozycje planu (`ProductionPlanItem`), partie gotowania (`ProductionBatch`), sesje gotowania (`CookingSession`), weryfikacje punktów krytycznych gotowania (`CookingSessionStepCheck`), etykiety pudełek (`BoxLabel`) | F5 |
+| **Produkcja** | Plany produkcyjne (`ProductionPlan`), pozycje planu (`ProductionPlanItem`), partie gotowania (`ProductionBatch`), sesje gotowania (`CookingSession`), weryfikacje punktów krytycznych gotowania (`CookingSessionStepCheck`), etykiety pudełek (`BoxLabel`), akceptacje korekt produkcyjnych (`ProductionAdjustmentApproval`/`ProductionAdjustmentApprovals`) | F5 |
 | **Kompletacja (packing)** | Sesje pakowania (`PackingSession`), pudełka (`PackingItem`), etykiety (`PackingLabel`), etykiety pudełek (`BoxLabel`/`BoxLabels`), manifesty załadunkowe (`PackingManifest`), błędy w manifestach (`PackingManifestIssue`), torby kompletacyjne (`PackingBag`), incydenty kompletacji (`PackingIncident`), logi statusów kompletacji (`PackingStatusLog`) | F7 |
 | **Logistyka** | Pojazdy (`Vehicle`), kierowcy (`Driver`), przypisania pojazdów (`DriverVehicleAssignment`), dyspozytorzy (`Dispatcher`), trasy dostaw (`DeliveryRoute`), przystanki (`DeliveryRouteStop`), torby termiczne (`ThermalBag`), logi ruchu toreb (`BagMovementLog`), problemy z dostawami (`DeliveryIssue`) | F8–F9 |
 
@@ -1325,7 +1391,13 @@ W celu spełnienia wymagań niefunkcjonalnych wydajności i bezpieczeństwa zaim
     CREATE FUNCTION [dbo].[fn_MealNutritionCost] (@MealId int) RETURNS TABLE AS ...
     ```
 
-#### 4. Krytyczne Indeksy Wydajnościowe (Zrealizowane w migracjach)
+#### 4. Widoki Bazodanowe (Database Views)
+W celu uproszczenia zapytań raportowych oraz odizolowania warstwy prezentacji od złożonych złączeń tabel zaimplementowano/przewidziano następujące widoki:
+*   `v_ActiveProductionPlans`: Agreguje aktywne plany produkcji na dany dzień (`ProductionPlans` + `ProductionPlanItems` + `Meals` + `DietVariants`), wyświetlając zsumowane liczby posiłków do ugotowania z podziałem na grupy produkcyjne.
+*   `v_DeliveryManifests`: Łączy dane tras dostaw, kierowców, przypisanych pojazdów, przystanków oraz adresów klientów (`DeliveryRoutes` + `DeliveryRouteStops` + `Addresses` + `CustomerProfiles`), służąc jako źródło danych do generowania PDF manifestów spedycyjnych.
+*   `v_HaccpTemperatureAlertsActive`: Łączy odczyty temperatur lodówek z lokalizacjami i alertami HACCP (`TemperatureLogs` + `HaccpLocations` + `HaccpTemperatureAlerts`), wyświetlając wyłącznie aktywne przekroczenia norm, które nie zostały jeszcze zamknięte przez personel (brak wpisu w `ActionTaken`).
+
+#### 5. Krytyczne Indeksy Wydajnościowe (Zrealizowane w migracjach)
 *   `IX_Batches_StockItem_Active_Expiry` na tabeli `Batches` (kolumny: `StockItemId`, `IsDeleted`, `IsDepleted`, `CurrentQuantity`, `ExpiryDate`): Kluczowy dla wydajnego działania algorytmu FEFO.
 *   `IX_SystemLogs_Timestamp_Action_TargetEntity_UserId` na tabeli `SystemLogs`: Pozwala na błyskawiczne filtrowanie i generowanie raportów audytowych.
 *   `IX_Meals_Category_Status_Name` na tabeli `Meals` oraz `IX_RecipeComponentVersions_Status_Component` na wersjach przepisów: Optymalizują odczyty podczas pobierania menu dla klientów i generowania zapotrzebowania.
@@ -1420,26 +1492,18 @@ sequenceDiagram
 2.  **Stan wyścigu (Race Condition) w algorytmie FEFO**:
     *   *Opis*: Jednoczesne zatwierdzanie gotowania lub pakowania przez dwóch pracowników może doprowadzić do przypisania tej samej partii ponad stan (ujemna ilość w `CurrentQuantity`).
     *   *Rozwiązanie*: Narzucenie poziomu izolacji transakcji `Repeatable Read` lub zastosowanie blokad pesymistycznych (`WITH (UPDLOCK)`) podczas pobierania partii surowców do alokacji FEFO w repozytorium.
-3.  **Szybki przyrost tabel logów (SystemLogs, TemperatureLogs)**:
+3.  **Czasowe zawieszenie diety w trakcie nocy produkcyjnej**:
+    *   *Opis*: Klient anuluje lub przesuwa dostawę o godzinie 22:00, podczas gdy kucharze od 20:00 przygotowują jedzenie na rano na podstawie planu z godziny 18:00.
+    *   *Rozwiązanie*: Określenie „punktu bez powrotu” (Lock Hour) na godzinę 18:00. Po tej godzinie kalendarz dostaw na dzień następny zostaje zamrożony dla klienta w panelu e-commerce.
+4.  **Szybki przyrost tabel logów (SystemLogs, TemperatureLogs)**:
     *   *Opis*: Tabele te generują setki tysięcy rekordów rocznie, spowalniając zapytania analityczne i raportowe.
     *   *Rozwiązanie*: Wdrożenie procedury `usp_ArchiveSystemLogs` i automatyczne przenoszenie danych do `SystemLogsArchive` oraz partycjonowanie tabeli `TemperatureLogs` po dacie.
-4.  **Złożoność relacji wersjonowanych przepisów**:
+5.  **Złożoność relacji wersjonowanych przepisów**:
     *   *Opis*: Konieczność śledzenia, która dokładnie wersja receptury (`RecipeComponentVersion`) została użyta w danym planie produkcji, komplikuje zapytania raportujące (np. food-cost).
     *   *Rozwiązanie*: Wykorzystanie zoptymalizowanej funkcji tabelarycznej `fn_MealNutritionCost` oraz agregowanie makroskładników na poziomie wariantów posiłków (`MealVariants`) podczas publikacji menu.
 
 ### 12.2. Elementy wymagające uszczegółowienia (Status: Do Opracowania)
 
-| Obszar Brakujący | Kto Odpowiada | Kiedy Zostanie Uzupełniony | Dlaczego Teraz Tego Nie Ma |
-| :--- | :--- | :--- | :--- |
-| **Dokładne stawki podatkowe VAT dla diet** | Dawid (M1) | Faza 5 (Integracja) | Wymaga decyzji biznesowej klienta odnośnie stawek (np. catering z dowozem 8% vs 23% VAT). |
-| **Integracja Geokodowania OSRM** | Tomasz (M4) | Faza 4 (Logistyka) | Wybór pomiędzy darmowym serwerem OSRM (OpenSource Routing Machine) a płatnym API Google Maps. |
-| **Mechanizm podpisu biometrycznego kuriera** | Tomasz (M4) | Faza 6 (Frontend) | Czekamy na decyzję, czy podpis będzie realizowany przez rysowanie na ekranie, czy kod PIN kuriera. |
-| **Obsługa załączników wideo w reklamacjach**| Paweł (M5) | Faza 5 (Integracja) | Ustalenie limitów rozmiaru plików (np. max 10MB) w celu ochrony przepustowości sieciowej serwera. |  *Rozwiązanie*: Wdrożenie transakcji o poziomie izolacji `Repeatable Read` przy pobieraniu partii lub wykorzystanie blokad pesymistycznych (`SELECT ... WITH (UPDLOCK)` w zapytaniach SQL do bazy SQL Server).
-3.  **Czasowe zawieszenie diety w trakcie nocy produkcyjnej**:
-    *   *Opis*: Klient anuluje lub przesuwa dostawę o godzinie 22:00, podczas gdy kucharze od 20:00 przygotowują jedzenie na rano na podstawie planu z godziny 18:00.
-    *   *Rozwiązanie*: Określenie „punktu bez powrotu” (Lock Hour) na godzinę 18:00. Po tej godzinie kalendarz dostaw na dzień następny zostaje zamrożony dla klienta w panelu e-commerce.
-
-### 11.2. Elementy wymagające uszczegółowienia (Status: Do Opracowania)
 Niektóre obszary integracji są w trakcie ustaleń. Poniższa tabela przedstawia brakujące informacje i termin ich uzupełnienia:
 
 | Obszar Brakujący | Kto Odpowiada | Kiedy Zostanie Uzupełniony | Dlaczego Teraz Tego Nie Ma |
@@ -1447,4 +1511,4 @@ Niektóre obszary integracji są w trakcie ustaleń. Poniższa tabela przedstawi
 | **Dokładne stawki podatkowe VAT dla diet** | Dawid (M1) | Faza 5 (Integracja) | Wymaga decyzji biznesowej klienta odnośnie stawek (np. catering z dowozem 8% vs 23% VAT). Obecnie zamodelowane jako jedna stawka. |
 | **Integracja Geokodowania OSRM** | Tomasz (M4) | Faza 4 (Logistyka) | Wybór pomiędzy darmowym serwerem OSRM (OpenSource Routing Machine) a płatnym API Google Maps. Trwa analiza kosztów zapytania. |
 | **Mechanizm podpisu biometrycznego kuriera** | Tomasz (M4) | Faza 6 (Frontend) | Weryfikacja załadunku w manifestach. Czekamy na decyzję, czy podpis będzie realizowany przez rysowanie na ekranie, czy kod PIN kuriera. |
-| **Obsługa załączników wideo w reklamacjach**| Paweł (M5) | Faza 5 (Integracja) | Ustalenie limitów rozmiaru plików (np. max 10MB) w celu ochrony przepustowości sieciowej serwera. |
+| **Obsługa załączników wideo w reklamacjach** | Paweł (M5) | Faza 5 (Integracja) | Ustalenie limitów rozmiaru plików (np. max 10MB) w celu ochrony przepustowości sieciowej serwera. |
