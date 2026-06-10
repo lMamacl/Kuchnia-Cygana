@@ -26,7 +26,19 @@ public static class DatabaseSeedingBootstrapper
             return;
         }
 
-        var profile = ResolveProfile(options.Profile);
+        var requestedProfile = ResolveProfile(options.Profile);
+        var profile = trigger == SeedingTrigger.Startup && requestedProfile == DatabaseSeedingProfile.VolumeDemo
+            ? DatabaseSeedingProfile.MinimalRealistic
+            : requestedProfile;
+
+        if (profile != requestedProfile)
+        {
+            logger.LogInformation(
+                "Database seeding profile {RequestedProfile} is command-only; using {EffectiveProfile} for startup.",
+                requestedProfile,
+                profile);
+        }
+
         using var scope = services.CreateScope();
         var seeder = scope.ServiceProvider.GetRequiredService<IDatabaseSeeder>();
         await seeder.SeedAsync(profile, options.ResetDemoData, cancellationToken, CreateVolumeDemoConfig(options));
@@ -43,12 +55,6 @@ public static class DatabaseSeedingBootstrapper
 
         var enabled = options.Enabled ?? true;
         if (!enabled)
-        {
-            return false;
-        }
-
-        var profile = ResolveProfile(options.Profile);
-        if (trigger == SeedingTrigger.Startup && profile == DatabaseSeedingProfile.VolumeDemo)
         {
             return false;
         }

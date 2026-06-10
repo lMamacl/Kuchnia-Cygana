@@ -812,6 +812,9 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             IF NOT EXISTS (SELECT 1 FROM [Categories] WHERE [Name] = @prefix + N'Meals')
                 INSERT INTO [Categories] ([Name], [Description], [SortOrder], [CreatedAt], [UpdatedAt])
                 VALUES (@prefix + N'Meals', N'VolumeDemo M2: posilki.', 702, @now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [Categories] WHERE [Name] = @prefix + N'Packaging')
+                INSERT INTO [Categories] ([Name], [Description], [SortOrder], [CreatedAt], [UpdatedAt])
+                VALUES (@prefix + N'Packaging', N'VolumeDemo M2: opakowania i pojemniki.', 703, @now, NULL);
 
             IF NOT EXISTS (SELECT 1 FROM [WarehouseCategories] WHERE [Code] = N'VOL-M2-FOOD')
                 INSERT INTO [WarehouseCategories] ([Code], [Name], [IsActive], [DisplayOrder], [CreatedAt], [UpdatedAt])
@@ -823,10 +826,46 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             DECLARE @ingredientCategoryId int = (SELECT TOP 1 [Id] FROM [Categories] WHERE [Name] = @prefix + N'Ingredients');
             DECLARE @recipeCategoryId int = (SELECT TOP 1 [Id] FROM [Categories] WHERE [Name] = @prefix + N'RecipeComponents');
             DECLARE @mealCategoryId int = (SELECT TOP 1 [Id] FROM [Categories] WHERE [Name] = @prefix + N'Meals');
+            DECLARE @packCatalogCategoryId int = (SELECT TOP 1 [Id] FROM [Categories] WHERE [Name] = @prefix + N'Packaging');
             DECLARE @foodWarehouseCategoryId int = (SELECT TOP 1 [Id] FROM [WarehouseCategories] WHERE [Code] = N'VOL-M2-FOOD');
             DECLARE @packWarehouseCategoryId int = (SELECT TOP 1 [Id] FROM [WarehouseCategories] WHERE [Code] = N'VOL-M2-PACK');
             DECLARE @gUnitId int = (SELECT TOP 1 [Id] FROM [UnitsOfMeasure] WHERE [Symbol] = N'g' ORDER BY [Id]);
             DECLARE @pcsUnitId int = (SELECT TOP 1 [Id] FROM [UnitsOfMeasure] WHERE [Symbol] = N'szt' ORDER BY [Id]);
+
+            DECLARE @PackagingCatalog TABLE
+            (
+                [SortOrder] int NOT NULL,
+                [Code] nvarchar(40) NOT NULL PRIMARY KEY,
+                [DisplayName] nvarchar(200) NOT NULL,
+                [ResourceType] nvarchar(40) NOT NULL,
+                [Description] nvarchar(2000) NOT NULL,
+                [Composition] nvarchar(2000) NOT NULL,
+                [CostPerUnit] decimal(10,4) NOT NULL,
+                [MinimumLevel] decimal(18,4) NOT NULL,
+                [LeadTimeDays] int NOT NULL,
+                [BatchQuantity] decimal(18,4) NOT NULL
+            );
+
+            INSERT INTO @PackagingCatalog
+                ([SortOrder], [Code], [DisplayName], [ResourceType], [Description], [Composition],
+                 [CostPerUnit], [MinimumLevel], [LeadTimeDays], [BatchQuantity])
+            VALUES
+                (1, N'BOX-250', N'Pudelko cateringowe 250 ml', N'Container', N'Maly pojemnik na dodatki i przekaski.', N'PP/CPET, zgrzewalne, do dan zimnych i cieplych.', CAST(0.42 AS decimal(10,4)), 900, 5, CAST(30000 AS decimal(18,4))),
+                (2, N'BOX-500', N'Pudelko cateringowe 500 ml', N'Container', N'Uniwersalny pojemnik na pojedyncza skladowa dania.', N'PP/CPET, zgrzewalne, do transportu w torbie termicznej.', CAST(0.58 AS decimal(10,4)), 1200, 5, CAST(45000 AS decimal(18,4))),
+                (3, N'BOX-750', N'Pudelko cateringowe 750 ml', N'Container', N'Pojemnik na dania glowne i wieksze porcje.', N'PP/CPET, zgrzewalne, odpornosc termiczna do standardu cateringu.', CAST(0.72 AS decimal(10,4)), 1200, 5, CAST(45000 AS decimal(18,4))),
+                (4, N'BOX-1000', N'Pudelko cateringowe 1000 ml', N'Container', N'Duzy pojemnik na dania glowne o wysokiej gramaturze.', N'PP/CPET, zgrzewalne, do porcji rodzinnych i wysokokalorycznych.', CAST(0.88 AS decimal(10,4)), 800, 5, CAST(30000 AS decimal(18,4))),
+                (5, N'BOWL-500', N'Miska salatkowa 500 ml', N'Container', N'Pojemnik na salatki, bowl i dania z dodatkami.', N'PET/rPET transparentny, z osobna pokrywka.', CAST(0.64 AS decimal(10,4)), 700, 4, CAST(26000 AS decimal(18,4))),
+                (6, N'SOUP-CUP-350', N'Kubek na zupe 350 ml', N'Container', N'Pojemnik na zupy i sosy cieple.', N'Papier powlekany, pokrywka wentylowana.', CAST(0.55 AS decimal(10,4)), 600, 4, CAST(22000 AS decimal(18,4))),
+                (7, N'SAUCE-80', N'Pojemnik sosowy 80 ml', N'Container', N'Maly pojemnik na sosy, dressingi i dodatki plynne.', N'PP transparentny, zatrzaskowa pokrywka.', CAST(0.16 AS decimal(10,4)), 1500, 3, CAST(50000 AS decimal(18,4))),
+                (8, N'LID-RECT-S', N'Pokrywka prostokatna mala', N'Packaging', N'Pokrywka do pudelek 250-500 ml.', N'PET transparentny, kompatybilna z pojemnikami prostokatnymi.', CAST(0.20 AS decimal(10,4)), 900, 4, CAST(30000 AS decimal(18,4))),
+                (9, N'LID-RECT-M', N'Pokrywka prostokatna srednia', N'Packaging', N'Pokrywka do pudelek 750-1000 ml.', N'PET transparentny, kompatybilna z pojemnikami prostokatnymi.', CAST(0.24 AS decimal(10,4)), 900, 4, CAST(30000 AS decimal(18,4))),
+                (10, N'LID-ROUND', N'Pokrywka okragla', N'Packaging', N'Pokrywka do misek i kubkow.', N'PET/PP transparentny, do pojemnikow okraglych.', CAST(0.18 AS decimal(10,4)), 900, 4, CAST(26000 AS decimal(18,4))),
+                (11, N'PAPER-BAG', N'Torba papierowa cateringowa', N'Packaging', N'Torba dla dziennego zestawu klienta.', N'Papier kraft, uchwyt skrecany, nadruk logistyczny.', CAST(0.70 AS decimal(10,4)), 1000, 5, CAST(25000 AS decimal(18,4))),
+                (12, N'THERMO-LABEL', N'Etykieta termiczna logistyczna', N'Packaging', N'Etykieta na torbe lub pojedynczy pojemnik.', N'Papier termiczny 58x40, klej do chlodni.', CAST(0.05 AS decimal(10,4)), 2500, 2, CAST(90000 AS decimal(18,4))),
+                (13, N'CUTLERY-SET', N'Zestaw sztuccow jednorazowych', N'Packaging', N'Sztucce do zamowien oznaczonych jako gotowe do spozycia.', N'Drewno/bio, widelec, noz, serwetka.', CAST(0.35 AS decimal(10,4)), 500, 5, CAST(18000 AS decimal(18,4))),
+                (14, N'NAPKIN', N'Serwetka papierowa', N'Packaging', N'Dodatkowa serwetka do zestawu.', N'Papier dwuwarstwowy, neutralny dla kontaktu z zywnoscia.', CAST(0.03 AS decimal(10,4)), 3000, 2, CAST(100000 AS decimal(18,4))),
+                (15, N'COOL-LINER', N'Wklad izolacyjny do torby', N'Packaging', N'Wklad separujacy dania chlodzone od cieplych.', N'Wklad papierowo-aluminiowy do transportu mieszanego.', CAST(0.48 AS decimal(10,4)), 600, 6, CAST(18000 AS decimal(18,4))),
+                (16, N'SEALING-FILM', N'Folia zgrzewalna do tacek', N'Packaging', N'Folia do szczelnego zamkniecia tacek CPET/PP.', N'Rolka folii zgrzewalnej, przeliczana na porcje.', CAST(0.09 AS decimal(10,4)), 5000, 4, CAST(120000 AS decimal(18,4)));
 
             ;WITH Numbers AS (
                 SELECT TOP (1000) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
@@ -952,20 +991,47 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                   WHERE b.[StockItemId] = si.[Id]
                     AND b.[SupplierBatchNumber] = @prefix + N'BATCH-' + CONVERT(nvarchar(20), si.[Id]));
 
-            ;WITH Numbers AS (
-                SELECT TOP (30) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
-                FROM sys.all_objects
-            )
+            INSERT INTO [Ingredients]
+                ([Name], [Unit], [CostPerUnit], [Notes], [IsActive], [CreatedAt], [UpdatedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [ResourceType], [FoodCategoryId],
+                 [Description], [ProductComposition], [WarehouseCategoryId], [YieldFactor],
+                 [RequiresCoreTemperatureCheck], [MinimumCoreTemperatureCelsius], [WarehouseCategoryFefoApproved])
+            SELECT
+                @prefix + N'PACK-' + pc.[Code],
+                N'szt',
+                pc.[CostPerUnit],
+                N'VolumeDemo M2 packaging/container catalog item.',
+                1,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                pc.[ResourceType],
+                @packCatalogCategoryId,
+                pc.[Description],
+                pc.[Composition],
+                @packWarehouseCategoryId,
+                1.0000,
+                0,
+                NULL,
+                1
+            FROM @PackagingCatalog pc
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Ingredients] existing
+                WHERE existing.[Name] = @prefix + N'PACK-' + pc.[Code]
+                  AND existing.[IsDeleted] = 0);
+
             INSERT INTO [StockItems]
                 ([Name], [BaseIngredientId], [DefaultUnitOfMeasureId], [WarehouseCategoryId], [MinimumLevel],
                  [LeadTimeDays], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
             SELECT
-                @prefix + N'PACK-' + RIGHT(N'000' + CONVERT(nvarchar(3), [N]), 3),
-                NULL,
+                i.[Name],
+                i.[Id],
                 @pcsUnitId,
                 @packWarehouseCategoryId,
-                500,
-                7,
+                pc.[MinimumLevel],
+                pc.[LeadTimeDays],
                 @auditUser,
                 NULL,
                 0,
@@ -973,11 +1039,23 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 NULL,
                 @now,
                 NULL
-            FROM Numbers n
+            FROM @PackagingCatalog pc
+            INNER JOIN [Ingredients] i ON i.[Name] = @prefix + N'PACK-' + pc.[Code]
+                AND i.[IsDeleted] = 0
             WHERE NOT EXISTS (
                 SELECT 1 FROM [StockItems] si
-                WHERE si.[Name] = @prefix + N'PACK-' + RIGHT(N'000' + CONVERT(nvarchar(3), n.[N]), 3)
+                WHERE si.[BaseIngredientId] = i.[Id]
                   AND si.[IsDeleted] = 0);
+
+            UPDATE i
+            SET [StockItemId] = si.[Id],
+                [WarehouseCategoryId] = @packWarehouseCategoryId,
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [Ingredients] i
+            INNER JOIN [StockItems] si ON si.[BaseIngredientId] = i.[Id] AND si.[IsDeleted] = 0
+            WHERE i.[Name] LIKE @prefix + N'PACK-%'
+              AND i.[IsDeleted] = 0;
 
             INSERT INTO [Batches]
                 ([StockItemId], [SupplierBatchNumber], [CurrentQuantity], [ExpiryDate], [ReceivedDate], [IsDepleted],
@@ -985,8 +1063,45 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             SELECT
                 si.[Id],
                 @prefix + N'PACK-BATCH-' + CONVERT(nvarchar(20), si.[Id]),
-                2500,
-                DATEADD(day, 180, CONVERT(datetime, @today)),
+                pc.[BatchQuantity],
+                DATEADD(day, 365, CONVERT(datetime, @today)),
+                CONVERT(datetime, @today),
+                0,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL
+            FROM @PackagingCatalog pc
+            INNER JOIN [StockItems] si ON si.[Name] = @prefix + N'PACK-' + pc.[Code]
+                AND si.[IsDeleted] = 0
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Batches] b
+                WHERE b.[StockItemId] = si.[Id]
+                  AND b.[SupplierBatchNumber] = @prefix + N'PACK-BATCH-' + CONVERT(nvarchar(20), si.[Id]));
+
+            UPDATE b
+            SET [CurrentQuantity] = CASE WHEN b.[CurrentQuantity] < pc.[BatchQuantity] THEN pc.[BatchQuantity] ELSE b.[CurrentQuantity] END,
+                [ExpiryDate] = CASE WHEN b.[ExpiryDate] < DATEADD(day, 180, CONVERT(datetime, @today)) THEN DATEADD(day, 365, CONVERT(datetime, @today)) ELSE b.[ExpiryDate] END,
+                [IsDepleted] = 0,
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [Batches] b
+            INNER JOIN [StockItems] si ON si.[Id] = b.[StockItemId] AND si.[IsDeleted] = 0
+            INNER JOIN @PackagingCatalog pc ON si.[Name] = @prefix + N'PACK-' + pc.[Code]
+            WHERE b.[SupplierBatchNumber] = @prefix + N'PACK-BATCH-' + CONVERT(nvarchar(20), si.[Id])
+              AND b.[IsDeleted] = 0;
+
+            INSERT INTO [Batches]
+                ([StockItemId], [SupplierBatchNumber], [CurrentQuantity], [ExpiryDate], [ReceivedDate], [IsDepleted],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                si.[Id],
+                @prefix + N'PACK-BATCH-' + CONVERT(nvarchar(20), si.[Id]),
+                25000,
+                DATEADD(day, 365, CONVERT(datetime, @today)),
                 CONVERT(datetime, @today),
                 0,
                 @auditUser,
@@ -998,6 +1113,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 NULL
             FROM [StockItems] si
             WHERE si.[Name] LIKE @prefix + N'PACK-%'
+              AND si.[BaseIngredientId] IS NULL
               AND NOT EXISTS (
                   SELECT 1 FROM [Batches] b
                   WHERE b.[StockItemId] = si.[Id]
@@ -1117,6 +1233,38 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                   AND rci.[IngredientId] = i.[Id]
                   AND rci.[IsDeleted] = 0);
 
+            ;WITH ComponentPackaging AS (
+                SELECT
+                    rcv.[Id] AS [RecipeComponentVersionId],
+                    pick.[Code],
+                    pick.[ContainerRole],
+                    pick.[Quantity],
+                    pick.[IsCustomerFacing]
+                FROM [RecipeComponentVersions] rcv
+                INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+                CROSS APPLY (VALUES
+                    (CASE
+                        WHEN rc.[Id] % 11 = 0 THEN N'SOUP-CUP-350'
+                        WHEN rc.[Id] % 7 = 0 THEN N'BOWL-500'
+                        WHEN rcv.[RawWeightGrams] <= 220 THEN N'BOX-250'
+                        WHEN rcv.[RawWeightGrams] <= 360 THEN N'BOX-500'
+                        WHEN rcv.[RawWeightGrams] <= 520 THEN N'BOX-750'
+                        ELSE N'BOX-1000'
+                    END,
+                    CASE
+                        WHEN rc.[Id] % 11 = 0 THEN N'soup-cup'
+                        WHEN rc.[Id] % 7 = 0 THEN N'bowl'
+                        ELSE N'component-container'
+                    END,
+                    CAST(1.000 AS decimal(10,3)),
+                    CAST(1 AS bit)),
+                    (CASE WHEN rc.[Id] % 4 = 0 THEN N'SAUCE-80' ELSE NULL END, N'sauce-cup', CAST(1.000 AS decimal(10,3)), CAST(1 AS bit)),
+                    (N'SEALING-FILM', N'sealing-film', CAST(1.000 AS decimal(10,3)), CAST(0 AS bit))
+                ) pick([Code], [ContainerRole], [Quantity], [IsCustomerFacing])
+                WHERE rc.[Name] LIKE @prefix + N'RC-%'
+                  AND rcv.[IsDeleted] = 0
+                  AND pick.[Code] IS NOT NULL
+            )
             INSERT INTO [PackagingRequirements]
                 ([OwnerType], [MealId], [MealVariantId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
                  [ResourceName], [Quantity], [Unit], [ContainerRole], [IsCustomerFacing], [CreatedAt], [UpdatedAt],
@@ -1125,35 +1273,29 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 N'RecipeComponentVersion',
                 NULL,
                 NULL,
-                rcv.[Id],
+                cp.[RecipeComponentVersionId],
                 pack.[Id],
                 @packWarehouseCategoryId,
                 pack.[Name],
-                1,
+                cp.[Quantity],
                 N'pcs',
-                N'component',
-                0,
+                cp.[ContainerRole],
+                cp.[IsCustomerFacing],
                 @now,
                 NULL,
                 @auditUser,
                 NULL,
                 0
-            FROM [RecipeComponentVersions] rcv
-            INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
-            CROSS APPLY (
-                SELECT TOP 1 si.[Id], si.[Name]
-                FROM [StockItems] si
-                WHERE si.[Name] LIKE @prefix + N'PACK-%'
-                  AND si.[IsDeleted] = 0
-                ORDER BY ABS(CHECKSUM(si.[Id], rcv.[Id]))
-            ) pack
-            WHERE rc.[Name] LIKE @prefix + N'RC-%'
-              AND rcv.[IsDeleted] = 0
-              AND NOT EXISTS (
-                  SELECT 1 FROM [PackagingRequirements] pr
-                  WHERE pr.[RecipeComponentVersionId] = rcv.[Id]
-                    AND pr.[OwnerType] = N'RecipeComponentVersion'
-                    AND pr.[IsDeleted] = 0);
+            FROM ComponentPackaging cp
+            INNER JOIN [StockItems] pack ON pack.[Name] = @prefix + N'PACK-' + cp.[Code]
+                AND pack.[IsDeleted] = 0
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [PackagingRequirements] pr
+                WHERE pr.[RecipeComponentVersionId] = cp.[RecipeComponentVersionId]
+                  AND pr.[OwnerType] = N'RecipeComponentVersion'
+                  AND pr.[StockItemId] = pack.[Id]
+                  AND ISNULL(pr.[ContainerRole], N'') = cp.[ContainerRole]
+                  AND pr.[IsDeleted] = 0);
 
             ;WITH Numbers AS (
                 SELECT TOP (60) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
@@ -1206,6 +1348,55 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             FROM [Meals] m
             WHERE m.[Name] LIKE @prefix + N'MEAL-%'
               AND NOT EXISTS (SELECT 1 FROM [NutritionFacts] nf WHERE nf.[MealId] = m.[Id]);
+
+            ;WITH MealPackaging AS (
+                SELECT
+                    m.[Id] AS [MealId],
+                    pick.[Code],
+                    pick.[ContainerRole],
+                    pick.[Quantity]
+                FROM [Meals] m
+                CROSS APPLY (VALUES
+                    (N'THERMO-LABEL', N'logistics-label', CAST(1.000 AS decimal(10,3))),
+                    (N'PAPER-BAG', N'delivery-bag-share', CAST(0.200 AS decimal(10,3))),
+                    (CASE WHEN m.[Id] % 5 = 0 THEN N'CUTLERY-SET' ELSE NULL END, N'cutlery', CAST(1.000 AS decimal(10,3))),
+                    (CASE WHEN m.[RequiresCoreTemperatureCheck] = 1 THEN N'COOL-LINER' ELSE NULL END, N'thermal-separator', CAST(1.000 AS decimal(10,3)))
+                ) pick([Code], [ContainerRole], [Quantity])
+                WHERE m.[Name] LIKE @prefix + N'MEAL-%'
+                  AND m.[IsDeleted] = 0
+                  AND pick.[Code] IS NOT NULL
+            )
+            INSERT INTO [PackagingRequirements]
+                ([OwnerType], [MealId], [MealVariantId], [RecipeComponentVersionId], [StockItemId], [WarehouseCategoryId],
+                 [ResourceName], [Quantity], [Unit], [ContainerRole], [IsCustomerFacing], [CreatedAt], [UpdatedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted])
+            SELECT
+                N'Meal',
+                mp.[MealId],
+                NULL,
+                NULL,
+                pack.[Id],
+                @packWarehouseCategoryId,
+                pack.[Name],
+                mp.[Quantity],
+                N'pcs',
+                mp.[ContainerRole],
+                1,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0
+            FROM MealPackaging mp
+            INNER JOIN [StockItems] pack ON pack.[Name] = @prefix + N'PACK-' + mp.[Code]
+                AND pack.[IsDeleted] = 0
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [PackagingRequirements] pr
+                WHERE pr.[MealId] = mp.[MealId]
+                  AND pr.[OwnerType] = N'Meal'
+                  AND pr.[StockItemId] = pack.[Id]
+                  AND ISNULL(pr.[ContainerRole], N'') = mp.[ContainerRole]
+                  AND pr.[IsDeleted] = 0);
 
             ;WITH MealNumbers AS (
                 SELECT m.[Id] AS [MealId], ROW_NUMBER() OVER (ORDER BY m.[Id]) AS [N]
@@ -1675,7 +1866,9 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             INSERT INTO @VolRoutes ([Id])
             SELECT [Id] FROM [DeliveryRoutes]
             WHERE [Name] LIKE N'VOL-M4-%'
-               OR [CreatedBy] = @auditUser;
+               OR [CreatedBy] = @auditUser
+               OR [VehicleId] IN (SELECT [Id] FROM [Vehicles] WHERE [RegistrationNumber] LIKE N'VOL-M4-%')
+               OR [DriverId] IN (SELECT [Id] FROM [Drivers] WHERE [LicenseNumber] LIKE N'VOL-M4-%');
 
             DECLARE @VolRouteStops TABLE ([Id] int PRIMARY KEY);
             INSERT INTO @VolRouteStops ([Id])
@@ -1717,7 +1910,13 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                OR [SourceType] LIKE N'VOL-%';
 
             DELETE FROM [UserNotifications]
-            WHERE [NotificationId] IN (SELECT [Id] FROM @VolNotifications);
+            WHERE [NotificationId] IN (SELECT [Id] FROM @VolNotifications)
+               OR [UserId] IN
+               (
+                   SELECT [Id] FROM [Users]
+                   WHERE [Email] LIKE N'vol-klient-%@kuchnia.local'
+                      OR [Email] LIKE N'vol-staff-%@kuchnia.local'
+               );
 
             DELETE FROM [Notifications]
             WHERE [Id] IN (SELECT [Id] FROM @VolNotifications);
@@ -1868,7 +2067,11 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
             DECLARE @VolMeals TABLE ([Id] int PRIMARY KEY);
             INSERT INTO @VolMeals ([Id])
-            SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'VOL-M2-MEAL-%';
+            SELECT m.[Id]
+            FROM [Meals] m
+            LEFT JOIN [Categories] c ON c.[Id] = m.[CategoryId]
+            WHERE m.[Name] LIKE N'VOL-M2-MEAL-%'
+               OR c.[Name] LIKE N'VOL-M2-%';
 
             DECLARE @VolMealVariants TABLE ([Id] int PRIMARY KEY);
             INSERT INTO @VolMealVariants ([Id])
@@ -1888,13 +2091,17 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
             DECLARE @VolIngredients TABLE ([Id] int PRIMARY KEY);
             INSERT INTO @VolIngredients ([Id])
-            SELECT [Id] FROM [Ingredients] WHERE [Name] LIKE N'VOL-M2-ING-%';
+            SELECT [Id]
+            FROM [Ingredients]
+            WHERE [Name] LIKE N'VOL-M2-ING-%'
+               OR [Name] LIKE N'VOL-M2-PACK-%';
 
             DECLARE @VolStockItems TABLE ([Id] int PRIMARY KEY);
             INSERT INTO @VolStockItems ([Id])
             SELECT [Id] FROM [StockItems]
             WHERE [Name] LIKE N'VOL-M2-%'
-               OR [BaseIngredientId] IN (SELECT [Id] FROM @VolIngredients);
+               OR [BaseIngredientId] IN (SELECT [Id] FROM @VolIngredients)
+               OR [WarehouseCategoryId] IN (SELECT [Id] FROM [WarehouseCategories] WHERE [Code] LIKE N'VOL-M2-%');
 
             DECLARE @VolBatches TABLE ([Id] int PRIMARY KEY);
             INSERT INTO @VolBatches ([Id])
@@ -1964,6 +2171,9 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             WHERE [MealId] IN (SELECT [Id] FROM @VolMeals)
                OR [IngredientId] IN (SELECT [Id] FROM @VolIngredients);
 
+            DELETE FROM [MealVariants]
+            WHERE [Id] IN (SELECT [Id] FROM @VolMealVariants);
+
             DELETE FROM [Meals]
             WHERE [Id] IN (SELECT [Id] FROM @VolMeals);
 
@@ -1993,6 +2203,11 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
 
             DELETE FROM [Batches]
             WHERE [Id] IN (SELECT [Id] FROM @VolBatches);
+
+            UPDATE [Ingredients]
+            SET [StockItemId] = NULL,
+                [WarehouseCategoryId] = NULL
+            WHERE [Id] IN (SELECT [Id] FROM @VolIngredients);
 
             DELETE FROM [StockItems]
             WHERE [Id] IN (SELECT [Id] FROM @VolStockItems);
