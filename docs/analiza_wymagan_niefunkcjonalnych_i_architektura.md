@@ -187,30 +187,53 @@ System realizuje trójpoziomowe i wielokanałowe śledzenie historii operacji:
 ## 7. Rozmiar Bazy Danych, Obciążenie i Przyrost Danych
 
 ### 7.1. Rozmiar początkowy (Initial Database Size)
-*   Rozmiar pustej bazy danych z migracjami: ok. **8 MB**.
-*   Rozmiar po załadowaniu danych słownikowych i seedu testowego (DemoData): ok. **15 MB**.
+Na podstawie obecnej implementacji i środowiska Docker (obraz `mssql/server:2022-latest`), rzeczywista wielkość bazy danych po wdrożeniu schematu i załadowaniu seedu wynosi:
+*   **Plik danych (`KuchniaUCygana.mdf`):** **72.00 MB** (w tym ok. **19.35 MB** zajmują same dane tabel, **5.90 MB** to indeksy, **12.10 MB** to nieużywane zarezerwowane strony, a **35.28 MB** to nieprzydzielona przestrzeń wolna).
+*   **Plik dziennika transakcji (`KuchniaUCygana_log.ldf`):** **200.00 MB** (rozmiar domyślny po załadowaniu seedu danych demonstracyjnych).
+*   **Łączny rozmiar bazy w kontenerze:** **272.00 MB**.
+*   **Liczba zdefiniowanych tabel:** **80** (79 tabel systemowych/domenowych + 1 tabela `VersionInfo` z FluentMigrator).
+
+Te metryki odzwierciedlają stan bazy po uruchomieniu pełnego zestawu migracji i wczytaniu profilu danych demonstracyjnych (`DemoData` z klasy `DatabaseSeeder`).
 
 ### 7.2. Szacowany przyrost danych (dla średniej wielkości cateringu - 500 klientów aktywnych)
-Założenia:
-*   500 aktywnych klientów dostaje 5 posiłków dziennie = **2500 pudełek dziennie**.
-*   Dostawy realizowane są przez 360 dni w roku.
-*   Każde pudełko generuje rekord kompletacji (`PackingItems`).
-*   Każdy posiłek przechodzi proces gotowania i kontroli krytycznych punktów (HACCP).
+Rewizja na podstawie faktycznych rozmiarów wierszy w bazie danych w Dockerze. Wykryto dwa kluczowe czynniki o wysokiej zajętości pamięci (Hotspots):
+1.  **`SystemLogs`**: Przechowuje JSON-owe różnice (`OldValue` i `NewValue`) zmodyfikowanych encji. Średni rzeczywisty rozmiar wiersza to aż **6.5 KB** (wcześniej szacowano 1 KB).
+2.  **`DietMenuPlanItems`**: Przechowuje pełne zrzuty JSON wariantu posiłków (`PublishedSnapshotJson`), które mają średnio **18.2 KB** (łącznie z narzutem wiersza ok. **20 KB**).
 
-| Tabela / Typ Danych | Średni rozmiar wiersza | Liczba wierszy (Rocznie) | Przyrost danych (Rocznie) | Opis |
-| :--- | :--- | :--- | :--- | :--- |
-| `PackingItems` | ~150 B | 900 000 | **135 MB** | Zapis kompletacji pudełek (traceability) |
-| `SystemLogs` / `Archive`| ~1000 B | 720 000 | **720 MB** | Logi audytowe zmian w systemie (przenoszone do archiwum) |
-| `TemperatureLogs` | ~80 B | 175 200 | **14 MB** | Odczyt z 5 lodówek co 15 minut |
-| `InventoryTransactions`| ~100 B | 250 000 | **25 MB** | Zapisy zmian ilościowych w partiach (FEFO) |
-| `BagMovementLogs` | ~80 B | 360 000 | **29 MB** | Rejestracja skanów i wydań toreb termicznych |
-| `CookingSessionStepChecks`| ~120 B | 450 000 | **54 MB** | Logi kontrolne etapów gotowania dań (critical points) |
-| `Orders` & `OrderItems`| ~120 B | 36 000 | **4.3 MB** | Zamówienia i pozycje zamówień |
-| Pozostałe tabele | - | - | **25 MB** | Warianty dań, słowniki, konta, incydenty, reklamacje |
-| **Suma (Dane + Indeksy)**| - | - | **ok. 1.25 GB / Rok** | Łączny przyrost przestrzeni dyskowej |
+Założenia do kalkulacji rocznej:
+*   500 aktywnych klientów generuje średnio 9 000 zamówień rocznie (średni cykl diety 20 dni) i dostaje 5 posiłków dziennie = **2500 pudełek dziennie (900 000 pudełek rocznie)**.
+*   Dostawy i kompletacja toreb realizowane są przez 360 dni w roku (**180 000 dostaw rocznie**).
+*   Menu (publikacje planu diet) zawiera ok. 50 pozycji dziennie (`DietMenuPlanItems`) z dużymi snapshotami JSON.
+*   Dla każdego pudełka generowane są etykiety z kodami QR i danymi JSON.
+*   Częsta telemetria chłodni (`TemperatureLogs`) oraz ruchy magazynowe (FEFO) i logistyczne.
+
+Poniższa tabela przedstawia szczegółowy roczny szacunek przyrostu bazy danych z podziałem na wszystkie moduły systemu:
+
+| Moduł | Tabela / Typ Danych | Średni rozmiar wiersza | Liczba wierszy (Rocznie) | Przyrost danych (Rocznie) | Opis / Uwagi |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **M5: Admin & HR** | `SystemLogs` / `Archive` | **~6.5 KB** | 720 000 | **4 680 MB (4.68 GB)** | Logi audytowe zmian (wysoka zajętość przez JSON). Wymaga ścisłej archiwizacji! |
+| **M3: WMS & Prod.**| `BoxLabels` & `PackingLabels` | **~1.5 KB** | 900 000 | **1 350 MB (1.35 GB)** | Wydruki etykiet pudełek z kodami QR i danymi JSON (`LabelDataJson`). Wskazana retencja do 30 dni. |
+| **M2: Katalog** | `DietMenuPlanItems` | **~20 KB** | 18 000 | **360 MB** | Snapshoty JSON opublikowanych diet (`PublishedSnapshotJson`). |
+| **M3: WMS & Prod.**| `PackingStatusLogs` | ~80 B | 2 700 000 | **216 MB** | Logowanie przejść statusów pudełek (średnio 3 zmiany na pudełko). |
+| **M3: WMS & Prod.**| `PackingItems` | ~150 B | 900 000 | **135 MB** | Zapis kompletacji pudełek (traceability) |
+| **M3: WMS & Prod.**| `CookingSessionStepChecks` | ~120 B | 450 000 | **54 MB** | Logi kontrolne etapów gotowania dań (critical points) |
+| **M4: Logistyka** | `BagMovementLogs` | ~80 B | 360 000 | **29 MB** | Rejestracja skanów i wydań toreb termicznych |
+| **M3: WMS & Prod.**| `PackingSessions` | ~150 B | 180 000 | **27 MB** | Sesje pakowania toreb klientów (1 sesja na klienta na dzień dostawy). |
+| **M3: WMS & Prod.**| `InventoryTransactions` | ~100 B | 250 000 | **25 MB** | Zapisy zmian ilościowych w partiach (FEFO) |
+| **M1: E-commerce** | `DeliveryCalendar` | ~120 B | 180 000 | **21.6 MB** | Kalendarz dostaw klientów (500 klientów * 360 dni). |
+| **M4: Logistyka** | `DeliveryRouteStops` | ~100 B | 180 000 | **18 MB** | Punkty na trasach kurierów. |
+| **M3: WMS & Prod.**| `TemperatureLogs` | ~80 B | 175 200 | **14 MB** | Odczyt temperatur chłodni co 15 minut |
+| **M1: E-commerce** | `Orders` & `OrderItems` | ~150 B | 45 000 | **6.8 MB** | 9 000 zamówień rocznie + 36 000 pozycji zamówień. |
+| **M5: Admin & HR** | `UserNotifications` | ~100 B | 25 000 | **2.5 MB** | Powiadomienia klientów i pracowników. |
+| **M5: Admin & HR** | `Tickets` (Helpdesk) | ~200 B | 12 000 | **2.4 MB** | Zgłoszenia reklamacyjne (bez załączników graficznych). |
+| **M1: E-commerce** | `Payments` | ~150 B | 10 000 | **1.5 MB** | Transakcje płatnicze Stripe i statusy. |
+| **M5: Admin & HR** | `WorkSchedules` | ~80 B | 16 000 | **1.3 MB** | Grafik pracy pracowników (30 pracowników * 360 dni * 1.5 zmiany). |
+| **Wszystkie** | Pozostałe tabele (słowniki, konta) | - | - | **30 MB** | Statyczne i słownikowe tabele w bazie danych. |
+| **Suma (Przed archiwizacją)**| | - | - | **ok. 7.30 GB / Rok** | Łączny roczny przyrost danych w bazie operacyjnej. |
+| **Suma (Po archiwizacji/retencji)**| | - | - | **ok. 1.15 GB / Rok** | Zakładając przeniesienie 90% `SystemLogs` do archiwum oraz retencję `BoxLabels` i logów statusów do 30 dni. |
 
 > [!IMPORTANT]
-> Pliki załączników do zgłoszeń reklamacyjnych (np. zdjęcia JPG/PNG o średnim rozmiarze 2MB) nie są przechowywane w bazie danych SQL. Baza przechowuje jedynie URL (np. `NVARCHAR(1000)`) wskazujący na Object Storage. Pozwala to zaoszczędzić około **720 GB** przestrzeni bazodanowej rocznie przy założeniu 1000 reklamacji ze zdjęciami miesięcznie.
+> Pliki załączników do zgłoszeń reklamacyjnych (zdjęcia JPG/PNG o rozmiarach ~2MB) oraz obrazy dań nie obciążają bazy SQL – są składowane w zewnętrznym Object Storage, a w bazie przechowywane są wyłącznie adresy URL. Pozwala to na oszczędność rzędu **720 GB** przestrzeni bazodanowej rocznie.
 
 ### 7.3. Identyfikacja tabel o największym obciążeniu (Hotspots)
 
@@ -667,6 +690,58 @@ erDiagram
         int SortOrder
     }
 
+    DietMenuPlan {
+        int Id PK
+        date PlanDate
+        string Status
+        string Notes
+        datetimeoffset PublishedAt
+        string PublishedBy
+        string PublishedSnapshotHash
+        int PublishedSnapshotItemCount
+    }
+
+    DietMenuPlanItem {
+        int Id PK
+        int DietMenuPlanId FK
+        int DietVariantId FK
+        int MealId FK
+        string MealSlot
+        decimal ServingSizeMultiplier
+        int SortOrder
+        bool IsActive
+        int MealVariantId FK
+        string PublishedSnapshotJson
+        string PublishedSnapshotHash
+        datetimeoffset PublishedSnapshotCreatedAt
+    }
+
+    PackagingRequirement {
+        int Id PK
+        string OwnerType
+        int MealId FK
+        int RecipeComponentVersionId FK
+        int StockItemId FK
+        int WarehouseCategoryId FK
+        string ResourceName
+        decimal Quantity
+        string Unit
+        string ContainerRole
+        bool IsCustomerFacing
+        int MealVariantId FK
+    }
+
+    MealRecipeComponent {
+        int Id PK
+        int MealId FK
+        int RecipeComponentVersionId FK
+        string Role
+        decimal QuantityPerServing
+        string Unit
+        int SortOrder
+        bool IsOptional
+    }
+
     Recipe {
         int Id PK
         int MealId FK
@@ -910,6 +985,17 @@ erDiagram
         string ReprintedBy
     }
 
+    BoxLabel {
+        int Id PK
+        int PackingItemId FK
+        string QrCode
+        string LabelDataJson
+        int PrintNumber
+        string ReprintReason
+        datetimeoffset PrintedAt
+        string PrintedBy
+    }
+
     PackingManifest {
         int Id PK
         date PackingDate
@@ -1121,6 +1207,20 @@ erDiagram
     MealVariant ||--o{ MealVariantAllergen : has
     Allergen ||--o{ MealVariantAllergen : maps
 
+    DietMenuPlan ||--|{ DietMenuPlanItem : contains
+    DietVariant ||--o{ DietMenuPlanItem : scheduled_in
+    Meal ||--o{ DietMenuPlanItem : meal_in_menu
+    MealVariant ||--o{ DietMenuPlanItem : variant_in_menu
+
+    Meal ||--o{ PackagingRequirement : has
+    MealVariant ||--o{ PackagingRequirement : has
+    RecipeComponentVersion ||--o{ PackagingRequirement : has
+    StockItem ||--o{ PackagingRequirement : uses_as_packaging
+    WarehouseCategory ||--o{ PackagingRequirement : stored_in_category
+
+    Meal ||--|{ MealRecipeComponent : has_components
+    RecipeComponentVersion ||--o{ MealRecipeComponent : uses_version
+
     %% Relacje magazynu i HACCP
     WarehouseCategory ||--o{ StockItem : categorizes
     StockItem ||--|{ Batch : stocks
@@ -1151,6 +1251,7 @@ erDiagram
     PackingSession ||--o{ PackingIncident : logs_session_incident
     PackingItem ||--o{ PackingIncident : logs_item_incident
     PackingItem ||--o{ PackingStatusLog : status_changes
+    PackingItem ||--o{ BoxLabel : prints
 
     PackingManifest ||--|| DeliveryRoute : references_route
     PackingManifest ||--|| Vehicle : references_vehicle
@@ -1168,11 +1269,11 @@ erDiagram
 | **Konta i klienci** | Użytkownicy (`User`), profile klientów (`CustomerProfile`), adresy (`Address`) | F1, F3 |
 | **HR i kadry** | Pracownicy (`Employee`), działy (`Department`), wnioski urlopowe (`LeaveRequest`) | (zakres modułu 5) |
 | **Zamówienia i płatności** | Zamówienia (`Order`), pozycje (`OrderItem`), kalendarz dostaw (`DeliveryCalendar`), kody rabatowe (`DiscountCode`), płatności Stripe (`Payment`), przedziały dostaw (`DeliveryWindow`) | F1–F3 |
-| **Katalog diet i posiłków** | Diety (`Diet`), warianty diet (`DietVariant`), posiłki (`Meal`), warianty posiłków (`MealVariant`), warianty dań w menu (`DietVariantMeal`), składniki (`Ingredient`), alergeny surowców i posiłków (`IngredientAllergen`, `MealVariantAllergen`), obrazy (`MealImage`), wartości odżywcze (`NutritionFact`), przepisy historyczne (`Recipe`), komponenty receptur (`RecipeComponent`), wersje komponentów (`RecipeComponentVersion`), składniki komponentu (`RecipeComponentIngredient`), sekcje instrukcji (`RecipeComponentInstructionSection`), kroki instrukcji (`RecipeComponentInstructionStep`) | F4 |
+| **Katalog diet i posiłków** | Diety (`Diet`), warianty diet (`DietVariant`), posiłki (`Meal`), warianty posiłków (`MealVariant`), warianty dań w menu (`DietVariantMeal`), składniki (`Ingredient`), alergeny surowców i posiłków (`IngredientAllergen`, `MealVariantAllergen`), obrazy (`MealImage`), wartości odżywcze (`NutritionFact`), przepisy historyczne (`Recipe`), komponenty receptur (`RecipeComponent`), wersje komponentów (`RecipeComponentVersion`), składniki komponentu (`RecipeComponentIngredient`), sekcje instrukcji (`RecipeComponentInstructionSection`), kroki instrukcji (`RecipeComponentInstructionStep`), plany menu (`DietMenuPlan`/`DietMenuPlans`), pozycje planu menu (`DietMenuPlanItem`/`DietMenuPlanItems`), wymagania opakowaniowe (`PackagingRequirement`/`PackagingRequirements`), komponenty recepturowe posiłków (`MealRecipeComponent`/`MealRecipeComponents`) | F4 |
 | **Magazyn i WMS** | Składniki magazynowe (`StockItem`), kategorie magazynowe (`WarehouseCategory`), partie (FEFO) surowców (`Batch`), korekty dat ważności (`BatchExpiryChangeLog`), transakcje magazynowe (`InventoryTransaction`), korekty inwentaryzacyjne (`InventoryAdjustment`), jednostki miar (`UnitOfMeasure`) | F5–F6, NF3 |
 | **HACCP** | Lokalizacje HACCP (`HaccpLocation`), kategorie lokalizacji (`HaccpLocationCategory`), odczyty lodówek (`TemperatureLog`), alerty temperatur (`HaccpTemperatureAlert`) | NF3, F6 |
 | **Produkcja** | Plany produkcyjne (`ProductionPlan`), pozycje planu (`ProductionPlanItem`), partie gotowania (`ProductionBatch`), sesje gotowania (`CookingSession`), weryfikacje punktów krytycznych gotowania (`CookingSessionStepCheck`), etykiety pudełek (`BoxLabel`) | F5 |
-| **Kompletacja (packing)** | Sesje pakowania (`PackingSession`), pudełka (`PackingItem`), etykiety (`PackingLabel`), manifesty załadunkowe (`PackingManifest`), błędy w manifestach (`PackingManifestIssue`), torby kompletacyjne (`PackingBag`), incydenty kompletacji (`PackingIncident`), logi statusów kompletacji (`PackingStatusLog`) | F7 |
+| **Kompletacja (packing)** | Sesje pakowania (`PackingSession`), pudełka (`PackingItem`), etykiety (`PackingLabel`), etykiety pudełek (`BoxLabel`/`BoxLabels`), manifesty załadunkowe (`PackingManifest`), błędy w manifestach (`PackingManifestIssue`), torby kompletacyjne (`PackingBag`), incydenty kompletacji (`PackingIncident`), logi statusów kompletacji (`PackingStatusLog`) | F7 |
 | **Logistyka** | Pojazdy (`Vehicle`), kierowcy (`Driver`), przypisania pojazdów (`DriverVehicleAssignment`), dyspozytorzy (`Dispatcher`), trasy dostaw (`DeliveryRoute`), przystanki (`DeliveryRouteStop`), torby termiczne (`ThermalBag`), logi ruchu toreb (`BagMovementLog`), problemy z dostawami (`DeliveryIssue`) | F8–F9 |
 
 ### 9.2. Kluczowe założenia dotyczące przechowywania danych
