@@ -105,7 +105,8 @@ else
         app.Configuration,
         app.Environment,
         app.Logger,
-        isSeedCommand ? SeedingTrigger.Command : SeedingTrigger.Startup);
+        isSeedCommand ? SeedingTrigger.Command : SeedingTrigger.Startup,
+        commandLineArgs: args);
 }
 
 if (isSeedCommand)

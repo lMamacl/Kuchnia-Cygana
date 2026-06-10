@@ -38,7 +38,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
     public async Task SeedAsync(
         DatabaseSeedingProfile profile,
         bool resetDemoData = false,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        VolumeDemoConfig? volumeDemoConfig = null)
     {
         switch (profile)
         {
@@ -56,9 +57,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 await BackfillPublishedDietMenuSnapshotsAsync(cancellationToken);
                 return;
             case DatabaseSeedingProfile.VolumeDemo:
-                await SeedMinimalRealisticAsync(cancellationToken);
-                await SeedM2VolumeDemoAsync(cancellationToken);
-                await BackfillPublishedDietMenuSnapshotsAsync(cancellationToken);
+                await SeedVolumeDemoFullAsync(volumeDemoConfig ?? VolumeDemoConfig.Default, cancellationToken);
                 return;
             default:
                 throw new InvalidOperationException($"Unsupported seeding profile: {profile}");
@@ -768,10 +767,19 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
     private async Task SeedM2VolumeDemoAsync(CancellationToken cancellationToken)
     {
         using var db = connectionFactory.CreateConnection();
+        await SeedM2VolumeDemoAsync(db, VolumeDemoConfig.Default, transaction: null, cancellationToken);
+    }
+
+    private async Task SeedM2VolumeDemoAsync(
+        IDbConnection db,
+        VolumeDemoConfig config,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
         var now = DateTimeOffset.UtcNow;
         var auditUser = "VolumeDemoSeeder";
 
-        await SeedUnitsOfMeasureAsync(db, now, cancellationToken);
+        await SeedUnitsOfMeasureForVolumeDemoAsync(db, now, transaction, cancellationToken);
 
         await db.ExecuteAsync(new CommandDefinition(
             """
@@ -779,6 +787,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
             DECLARE @now datetimeoffset = @Now;
             DECLARE @auditUser nvarchar(100) = @AuditUser;
             DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
+            DECLARE @days int = @Days;
+            DECLARE @planWindowDays int = @days * 2;
 
             IF NOT EXISTS (SELECT 1 FROM [Allergens] WHERE [Code] = N'VOL-GLU')
                 INSERT INTO [Allergens] ([Name], [Code], [IconUrl], [CreatedAt], [UpdatedAt])
@@ -1380,7 +1390,7 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                   AND dv.[IsDeleted] = 0);
 
             ;WITH Numbers AS (
-                SELECT TOP (14) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS [Offset]
+                SELECT TOP (@planWindowDays) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - @days - 1 AS [Offset]
                 FROM sys.all_objects
             )
             INSERT INTO [DietMenuPlans]
@@ -1409,8 +1419,8 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 [UpdatedBy] = @auditUser,
                 [IsDeleted] = 0
             FROM [DietMenuPlans] p
-            WHERE p.[PlanDate] >= @today
-              AND p.[PlanDate] < DATEADD(day, 14, @today);
+            WHERE p.[PlanDate] >= DATEADD(day, -@days, @today)
+              AND p.[PlanDate] < DATEADD(day, @days, @today);
 
             DECLARE @volumeDietVariantIds TABLE ([Id] int PRIMARY KEY);
             INSERT INTO @volumeDietVariantIds ([Id])
@@ -1430,16 +1440,17 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 [UpdatedBy] = @auditUser
             FROM [DietMenuPlanItems] dpi
             INNER JOIN [DietMenuPlans] p ON p.[Id] = dpi.[DietMenuPlanId]
-            WHERE p.[PlanDate] >= @today
-              AND p.[PlanDate] < DATEADD(day, 14, @today)
+            WHERE p.[PlanDate] >= DATEADD(day, -@days, @today)
+              AND p.[PlanDate] < DATEADD(day, @days, @today)
               AND dpi.[DietVariantId] IN (SELECT [Id] FROM @volumeDietVariantIds)
-              AND dpi.[IsDeleted] = 0;
+              AND dpi.[IsDeleted] = 0
+              AND NOT EXISTS (SELECT 1 FROM [Orders] WHERE [OrderNumber] LIKE N'VOL-M1-%');
 
             ;WITH PlanNumbers AS (
                 SELECT p.[Id] AS [PlanId], p.[PlanDate], ROW_NUMBER() OVER (ORDER BY p.[PlanDate]) AS [DayNo]
                 FROM [DietMenuPlans] p
-                WHERE p.[PlanDate] >= @today
-                  AND p.[PlanDate] < DATEADD(day, 14, @today)
+                WHERE p.[PlanDate] >= DATEADD(day, -@days, @today)
+                  AND p.[PlanDate] < DATEADD(day, @days, @today)
                   AND p.[IsDeleted] = 0
             ),
             VariantNumbers AS (
@@ -1479,18 +1490,2275 @@ public sealed class DatabaseSeeder : IDatabaseSeeder
                 0
             FROM PlanNumbers pn
             CROSS JOIN VariantNumbers vn
-            INNER JOIN MealVariantNumbers mvn ON mvn.[MealVariantNo] = ((pn.[DayNo] * 25 + vn.[VariantNo] - 1) % 150) + 1;
+            INNER JOIN MealVariantNumbers mvn ON mvn.[MealVariantNo] = ((pn.[DayNo] * 25 + vn.[VariantNo] - 1) % 150) + 1
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM [DietMenuPlanItems] existing
+                WHERE existing.[DietMenuPlanId] = pn.[PlanId]
+                  AND existing.[DietVariantId] = vn.[DietVariantId]
+                  AND existing.[MealSlot] = CASE ((pn.[DayNo] + vn.[VariantNo]) % 5)
+                        WHEN 0 THEN N'Breakfast'
+                        WHEN 1 THEN N'Snack1'
+                        WHEN 2 THEN N'Lunch'
+                        WHEN 3 THEN N'Snack2'
+                        ELSE N'Dinner'
+                    END
+                  AND existing.[IsDeleted] = 0);
             """,
             new
             {
                 M2VolumePrefix,
+                Days = Math.Clamp(config.Days, 1, 45),
                 Now = now,
                 AuditUser = auditUser,
             },
+            transaction: transaction,
             commandTimeout: 180,
             cancellationToken: cancellationToken));
 
         this.logger.LogInformation("Ensured M2 VolumeDemo dataset with prefix {Prefix}.", M2VolumePrefix);
+    }
+
+    private async Task SeedUnitsOfMeasureForVolumeDemoAsync(
+        IDbConnection db,
+        DateTimeOffset now,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync(new CommandDefinition(
+            """
+            IF NOT EXISTS (SELECT 1 FROM [UnitsOfMeasure] WHERE [Symbol] = N'kg')
+                INSERT INTO [UnitsOfMeasure] ([Symbol], [Name], [Description], [CreatedAt], [UpdatedAt])
+                VALUES (N'kg', N'Kilogram', N'Jednostka masy', @Now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [UnitsOfMeasure] WHERE [Symbol] = N'g')
+                INSERT INTO [UnitsOfMeasure] ([Symbol], [Name], [Description], [CreatedAt], [UpdatedAt])
+                VALUES (N'g', N'Gram', N'Jednostka masy', @Now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [UnitsOfMeasure] WHERE [Symbol] = N'L')
+                INSERT INTO [UnitsOfMeasure] ([Symbol], [Name], [Description], [CreatedAt], [UpdatedAt])
+                VALUES (N'L', N'Litr', N'Jednostka objetosci', @Now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [UnitsOfMeasure] WHERE [Symbol] = N'ml')
+                INSERT INTO [UnitsOfMeasure] ([Symbol], [Name], [Description], [CreatedAt], [UpdatedAt])
+                VALUES (N'ml', N'Mililitr', N'Jednostka objetosci', @Now, NULL);
+            IF NOT EXISTS (SELECT 1 FROM [UnitsOfMeasure] WHERE [Symbol] = N'szt')
+                INSERT INTO [UnitsOfMeasure] ([Symbol], [Name], [Description], [CreatedAt], [UpdatedAt])
+                VALUES (N'szt', N'Sztuka', N'Jednostka ilosciowa', @Now, NULL);
+            """,
+            new { Now = now },
+            transaction: transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    private async Task SeedVolumeDemoFullAsync(VolumeDemoConfig config, CancellationToken cancellationToken)
+    {
+        config = NormalizeVolumeDemoConfig(config);
+
+        using var db = connectionFactory.CreateConnection();
+        if (config.DryRun)
+        {
+            db.Open();
+            using var transaction = db.BeginTransaction();
+            try
+            {
+                if (config.ResetVolumeDemo)
+                {
+                    await ResetVolumeDemoDataAsync(db, transaction, cancellationToken);
+                }
+
+                await SeedM2VolumeDemoAsync(db, config, transaction, cancellationToken);
+                await SeedVolM1EcommerceAsync(db, config, transaction, cancellationToken);
+                await SeedVolM5HrAuditAsync(db, config, transaction, cancellationToken);
+                await SeedVolM3ProductionAsync(db, config, transaction, cancellationToken);
+                await SeedVolM4LogisticsAsync(db, config, transaction, cancellationToken);
+
+                transaction.Rollback();
+                this.logger.LogWarning(
+                    "VolumeDemo dry-run completed and rolled back. Days={Days}, ActiveCustomers={ActiveCustomers}, PeakOrders={PeakOrders}, Seed={Seed}.",
+                    config.Days,
+                    config.ActiveCustomers,
+                    config.PeakOrders,
+                    config.Seed);
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+
+            return;
+        }
+
+        await SeedMinimalRealisticAsync(cancellationToken);
+
+        if (config.ResetVolumeDemo)
+        {
+            await ResetVolumeDemoDataAsync(db, transaction: null, cancellationToken);
+        }
+
+        await SeedM2VolumeDemoAsync(db, config, transaction: null, cancellationToken);
+        await BackfillPublishedDietMenuSnapshotsAsync(cancellationToken);
+        await SeedVolM1EcommerceAsync(db, config, transaction: null, cancellationToken);
+        await SeedVolM5HrAuditAsync(db, config, transaction: null, cancellationToken);
+        await SeedVolM3ProductionAsync(db, config, transaction: null, cancellationToken);
+        await SeedVolM4LogisticsAsync(db, config, transaction: null, cancellationToken);
+        await BackfillPublishedDietMenuSnapshotsAsync(cancellationToken);
+
+        this.logger.LogInformation(
+            "VolumeDemo full seed completed. Days={Days}, ActiveCustomers={ActiveCustomers}, PeakOrders={PeakOrders}, Seed={Seed}.",
+            config.Days,
+            config.ActiveCustomers,
+            config.PeakOrders,
+            config.Seed);
+    }
+
+    private static VolumeDemoConfig NormalizeVolumeDemoConfig(VolumeDemoConfig config)
+        => config with
+        {
+            Days = Math.Clamp(config.Days, 1, 45),
+            ActiveCustomers = Math.Clamp(config.ActiveCustomers, 1, 1150),
+            PeakOrders = Math.Clamp(config.PeakOrders, 1, 2000),
+        };
+
+    private static Task<int> ExecuteVolumeDemoSqlAsync(
+        IDbConnection db,
+        string sql,
+        object parameters,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken,
+        int commandTimeout = 300)
+        => db.ExecuteAsync(new CommandDefinition(
+            sql,
+            parameters,
+            transaction: transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken));
+
+    private async Task ResetVolumeDemoDataAsync(
+        IDbConnection db,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        await ExecuteVolumeDemoSqlAsync(
+            db,
+            """
+            DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
+
+            DECLARE @VolOrders TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolOrders ([Id])
+            SELECT [Id] FROM [Orders] WHERE [OrderNumber] LIKE N'VOL-M1-%';
+
+            DECLARE @VolDeliveryCalendar TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolDeliveryCalendar ([Id])
+            SELECT [Id] FROM [DeliveryCalendar]
+            WHERE [OrderId] IN (SELECT [Id] FROM @VolOrders)
+               OR [CreatedBy] = @auditUser;
+
+            DECLARE @VolSessions TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolSessions ([Id])
+            SELECT [Id] FROM [PackingSessions]
+            WHERE [CreatedBy] = @auditUser
+               OR [OrderId] IN (SELECT [Id] FROM @VolOrders)
+               OR [DeliveryCalendarId] IN (SELECT [Id] FROM @VolDeliveryCalendar);
+
+            DECLARE @VolPackingBags TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolPackingBags ([Id])
+            SELECT [Id] FROM [PackingBags]
+            WHERE [PackingSessionId] IN (SELECT [Id] FROM @VolSessions)
+               OR [BagCode] LIKE N'VOL-M3-%';
+
+            DECLARE @VolPackingItems TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolPackingItems ([Id])
+            SELECT [Id] FROM [PackingItems]
+            WHERE [PackingSessionId] IN (SELECT [Id] FROM @VolSessions)
+               OR [BoxCode] LIKE N'VOL-M3-%';
+
+            DECLARE @VolRoutes TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolRoutes ([Id])
+            SELECT [Id] FROM [DeliveryRoutes]
+            WHERE [Name] LIKE N'VOL-M4-%'
+               OR [CreatedBy] = @auditUser;
+
+            DECLARE @VolRouteStops TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolRouteStops ([Id])
+            SELECT [Id] FROM [DeliveryRouteStops]
+            WHERE [RouteId] IN (SELECT [Id] FROM @VolRoutes)
+               OR [DeliveryCalendarId] IN (SELECT [Id] FROM @VolDeliveryCalendar)
+               OR [CreatedBy] = @auditUser;
+
+            DECLARE @VolProductionPlans TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolProductionPlans ([Id])
+            SELECT [Id] FROM [ProductionPlans]
+            WHERE [CreatedBy] = @auditUser
+               OR [Notes] LIKE N'VOL-M3-%';
+
+            DECLARE @VolProductionPlanItems TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolProductionPlanItems ([Id])
+            SELECT [Id] FROM [ProductionPlanItems]
+            WHERE [ProductionPlanId] IN (SELECT [Id] FROM @VolProductionPlans)
+               OR [CreatedBy] = @auditUser;
+
+            DECLARE @VolCookingSessions TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolCookingSessions ([Id])
+            SELECT [Id] FROM [CookingSessions]
+            WHERE [ProductionPlanItemId] IN (SELECT [Id] FROM @VolProductionPlanItems)
+               OR [CreatedBy] = @auditUser;
+
+            DECLARE @VolEmployees TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolEmployees ([Id])
+            SELECT e.[Id]
+            FROM [Employees] e
+            INNER JOIN [Users] u ON u.[Id] = e.[UserId]
+            WHERE u.[Email] LIKE N'vol-staff-%@kuchnia.local'
+               OR e.[CreatedBy] = @auditUser;
+
+            DECLARE @VolNotifications TABLE ([Id] bigint PRIMARY KEY);
+            INSERT INTO @VolNotifications ([Id])
+            SELECT [Id] FROM [Notifications]
+            WHERE [DeduplicationKey] LIKE N'VOL-%'
+               OR [SourceType] LIKE N'VOL-%';
+
+            DELETE FROM [UserNotifications]
+            WHERE [NotificationId] IN (SELECT [Id] FROM @VolNotifications);
+
+            DELETE FROM [Notifications]
+            WHERE [Id] IN (SELECT [Id] FROM @VolNotifications);
+
+            DELETE FROM [SystemLogs]
+            WHERE [IPAddress] = N'VOL-SEED'
+               OR [Action] LIKE N'VOL-%';
+
+            DELETE FROM [TicketAttachments]
+            WHERE [TicketId] IN
+            (
+                SELECT [Id] FROM [Tickets]
+                WHERE [CreatedBy] = @auditUser
+                   OR [Title] LIKE N'VOL-M5-%'
+            );
+
+            DELETE FROM [Tickets]
+            WHERE [CreatedBy] = @auditUser
+               OR [Title] LIKE N'VOL-M5-%';
+
+            DELETE FROM [LeaveRequests]
+            WHERE [EmployeeId] IN (SELECT [Id] FROM @VolEmployees)
+               OR [CreatedBy] = @auditUser;
+
+            DELETE FROM [WorkSchedules]
+            WHERE [UserId] IN (SELECT [Id] FROM [Users] WHERE [Email] LIKE N'vol-staff-%@kuchnia.local')
+               OR [CreatedBy] = @auditUser;
+
+            DELETE FROM [BoxLabels]
+            WHERE [PackingItemId] IN (SELECT [Id] FROM @VolPackingItems)
+               OR [QrCode] LIKE N'VOL-M3-%';
+
+            DELETE FROM [PackingLabels]
+            WHERE [PackingSessionId] IN (SELECT [Id] FROM @VolSessions)
+               OR [PackingBagId] IN (SELECT [Id] FROM @VolPackingBags)
+               OR [PackingItemId] IN (SELECT [Id] FROM @VolPackingItems)
+               OR [QrCode] LIKE N'VOL-M3-%';
+
+            DELETE FROM [PackingManifestIssues]
+            WHERE [RouteId] IN (SELECT [Id] FROM @VolRoutes)
+               OR [SourceType] LIKE N'VOL-%';
+
+            DELETE FROM [PackingManifests]
+            WHERE [RouteId] IN (SELECT [Id] FROM @VolRoutes)
+               OR [ManifestNumber] LIKE N'VOL-M4-%';
+
+            DELETE FROM [DeliveryIssues]
+            WHERE [RouteStopId] IN (SELECT [Id] FROM @VolRouteStops)
+               OR [CreatedBy] = @auditUser;
+
+            DELETE FROM [PackingIncidents]
+            WHERE [PackingSessionId] IN (SELECT [Id] FROM @VolSessions)
+               OR [PackingBagId] IN (SELECT [Id] FROM @VolPackingBags)
+               OR [PackingItemId] IN (SELECT [Id] FROM @VolPackingItems)
+               OR [DeliveryCalendarId] IN (SELECT [Id] FROM @VolDeliveryCalendar)
+               OR [CreatedBy] = @auditUser;
+
+            DELETE FROM [PackingStatusLogs]
+            WHERE [PackingSessionId] IN (SELECT [Id] FROM @VolSessions)
+               OR [Notes] LIKE N'VOL-M3-%';
+
+            DELETE FROM [PackingItems]
+            WHERE [Id] IN (SELECT [Id] FROM @VolPackingItems);
+
+            DELETE FROM [PackingBags]
+            WHERE [Id] IN (SELECT [Id] FROM @VolPackingBags);
+
+            DELETE FROM [PackingSessions]
+            WHERE [Id] IN (SELECT [Id] FROM @VolSessions);
+
+            DELETE FROM [BagMovementLogs]
+            WHERE [RouteStopId] IN (SELECT [Id] FROM @VolRouteStops)
+               OR [ThermalBagId] IN (SELECT [Id] FROM [ThermalBags] WHERE [SerialNumber] LIKE N'VOL-M4-%');
+
+            DELETE FROM [DeliveryRouteStops]
+            WHERE [Id] IN (SELECT [Id] FROM @VolRouteStops);
+
+            DELETE FROM [DeliveryRoutes]
+            WHERE [Id] IN (SELECT [Id] FROM @VolRoutes);
+
+            DELETE FROM [DriverVehicleAssignments]
+            WHERE [DriverId] IN (SELECT [Id] FROM [Drivers] WHERE [LicenseNumber] LIKE N'VOL-M4-%')
+               OR [VehicleId] IN (SELECT [Id] FROM [Vehicles] WHERE [RegistrationNumber] LIKE N'VOL-M4-%');
+
+            DELETE FROM [Drivers]
+            WHERE [LicenseNumber] LIKE N'VOL-M4-%';
+
+            DELETE FROM [Vehicles]
+            WHERE [RegistrationNumber] LIKE N'VOL-M4-%';
+
+            DELETE FROM [ThermalBags]
+            WHERE [SerialNumber] LIKE N'VOL-M4-%';
+
+            DELETE FROM [CookingSessionStepChecks]
+            WHERE [CookingSessionId] IN (SELECT [Id] FROM @VolCookingSessions)
+               OR [CreatedBy] = @auditUser;
+
+            DELETE FROM [CookingSessions]
+            WHERE [Id] IN (SELECT [Id] FROM @VolCookingSessions);
+
+            DELETE FROM [ProductionBatches]
+            WHERE [ProductionPlanId] IN (SELECT [Id] FROM @VolProductionPlans)
+               OR [CreatedBy] = @auditUser;
+
+            DELETE FROM [ProductionPlanItems]
+            WHERE [Id] IN (SELECT [Id] FROM @VolProductionPlanItems);
+
+            DELETE FROM [ProductionPlans]
+            WHERE [Id] IN (SELECT [Id] FROM @VolProductionPlans);
+
+            DELETE FROM [HaccpTemperatureAlerts]
+            WHERE [TemperatureLogId] IN (SELECT [Id] FROM [TemperatureLogs] WHERE [CreatedBy] = @auditUser);
+
+            DELETE FROM [TemperatureLogs]
+            WHERE [CreatedBy] = @auditUser
+               OR [DeviceNameOrLocation] LIKE N'VOL-M3-%';
+
+            DELETE FROM [InventoryTransactions]
+            WHERE [ReferenceDocument] LIKE N'VOL-M3-%';
+
+            DELETE FROM [Payments]
+            WHERE [OrderId] IN (SELECT [Id] FROM @VolOrders)
+               OR [StripePaymentIntentId] LIKE N'VOL-M1-%';
+
+            DELETE FROM [DeliveryCalendar]
+            WHERE [Id] IN (SELECT [Id] FROM @VolDeliveryCalendar);
+
+            DELETE FROM [OrderItems]
+            WHERE [OrderId] IN (SELECT [Id] FROM @VolOrders)
+               OR [CreatedBy] = @auditUser;
+
+            DELETE FROM [Orders]
+            WHERE [Id] IN (SELECT [Id] FROM @VolOrders);
+
+            DELETE FROM [Addresses]
+            WHERE [UserId] IN (SELECT [Id] FROM [Users] WHERE [Email] LIKE N'vol-klient-%@kuchnia.local')
+               OR [Label] LIKE N'VOL-M1-%';
+
+            DELETE FROM [CustomerProfiles]
+            WHERE [UserId] IN (SELECT [Id] FROM [Users] WHERE [Email] LIKE N'vol-klient-%@kuchnia.local');
+
+            DELETE FROM [Employees]
+            WHERE [Id] IN (SELECT [Id] FROM @VolEmployees);
+
+            DELETE FROM [Users]
+            WHERE [Email] LIKE N'vol-klient-%@kuchnia.local'
+               OR [Email] LIKE N'vol-staff-%@kuchnia.local';
+
+            DECLARE @VolMeals TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolMeals ([Id])
+            SELECT [Id] FROM [Meals] WHERE [Name] LIKE N'VOL-M2-MEAL-%';
+
+            DECLARE @VolMealVariants TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolMealVariants ([Id])
+            SELECT mv.[Id]
+            FROM [MealVariants] mv
+            WHERE mv.[Name] LIKE N'VOL-M2-VAR-%'
+               OR mv.[MealId] IN (SELECT [Id] FROM @VolMeals);
+
+            DECLARE @VolRecipeComponents TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolRecipeComponents ([Id])
+            SELECT [Id] FROM [RecipeComponents] WHERE [Name] LIKE N'VOL-M2-RC-%';
+
+            DECLARE @VolRecipeComponentVersions TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolRecipeComponentVersions ([Id])
+            SELECT [Id] FROM [RecipeComponentVersions]
+            WHERE [RecipeComponentId] IN (SELECT [Id] FROM @VolRecipeComponents);
+
+            DECLARE @VolIngredients TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolIngredients ([Id])
+            SELECT [Id] FROM [Ingredients] WHERE [Name] LIKE N'VOL-M2-ING-%';
+
+            DECLARE @VolStockItems TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolStockItems ([Id])
+            SELECT [Id] FROM [StockItems]
+            WHERE [Name] LIKE N'VOL-M2-%'
+               OR [BaseIngredientId] IN (SELECT [Id] FROM @VolIngredients);
+
+            DECLARE @VolBatches TABLE ([Id] int PRIMARY KEY);
+            INSERT INTO @VolBatches ([Id])
+            SELECT [Id] FROM [Batches]
+            WHERE [StockItemId] IN (SELECT [Id] FROM @VolStockItems)
+               OR [SupplierBatchNumber] LIKE N'VOL-M2-%';
+
+            DELETE FROM [DietMenuPlanItems]
+            WHERE [DietVariantId] IN
+            (
+                SELECT dv.[Id]
+                FROM [DietVariants] dv
+                INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
+                WHERE d.[Name] LIKE N'VOL-M2-DIET-%'
+            )
+               OR [MealId] IN (SELECT [Id] FROM @VolMeals)
+               OR [MealVariantId] IN (SELECT [Id] FROM @VolMealVariants);
+
+            DELETE FROM [DietMenuPlans]
+            WHERE [CreatedBy] = @auditUser
+               OR [Notes] LIKE N'VOL-M2%';
+
+            DELETE FROM [DietVariantMeals]
+            WHERE [MealId] IN (SELECT [Id] FROM @VolMeals)
+               OR [DietVariantId] IN
+               (
+                    SELECT dv.[Id]
+                    FROM [DietVariants] dv
+                    INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
+                    WHERE d.[Name] LIKE N'VOL-M2-DIET-%'
+               );
+
+            DELETE FROM [DietVariants]
+            WHERE [DietId] IN (SELECT [Id] FROM [Diets] WHERE [Name] LIKE N'VOL-M2-DIET-%');
+
+            DELETE FROM [Diets]
+            WHERE [Name] LIKE N'VOL-M2-DIET-%';
+
+            DELETE FROM [MealVariantAllergens]
+            WHERE [MealVariantId] IN (SELECT [Id] FROM @VolMealVariants);
+
+            DELETE FROM [MealVariantComponents]
+            WHERE [MealVariantId] IN (SELECT [Id] FROM @VolMealVariants)
+               OR [RecipeComponentVersionId] IN (SELECT [Id] FROM @VolRecipeComponentVersions);
+
+            DELETE FROM [PackagingRequirements]
+            WHERE [MealId] IN (SELECT [Id] FROM @VolMeals)
+               OR [MealVariantId] IN (SELECT [Id] FROM @VolMealVariants)
+               OR [RecipeComponentVersionId] IN (SELECT [Id] FROM @VolRecipeComponentVersions)
+               OR [StockItemId] IN (SELECT [Id] FROM @VolStockItems);
+
+            DELETE FROM [MealRecipeComponents]
+            WHERE [MealId] IN (SELECT [Id] FROM @VolMeals)
+               OR [RecipeComponentVersionId] IN (SELECT [Id] FROM @VolRecipeComponentVersions);
+
+            DELETE FROM [MealAllergens]
+            WHERE [MealId] IN (SELECT [Id] FROM @VolMeals);
+
+            DELETE FROM [NutritionFacts]
+            WHERE [MealId] IN (SELECT [Id] FROM @VolMeals)
+               OR [IngredientId] IN (SELECT [Id] FROM @VolIngredients);
+
+            DELETE FROM [MealImages]
+            WHERE [MealId] IN (SELECT [Id] FROM @VolMeals);
+
+            DELETE FROM [Recipes]
+            WHERE [MealId] IN (SELECT [Id] FROM @VolMeals)
+               OR [IngredientId] IN (SELECT [Id] FROM @VolIngredients);
+
+            DELETE FROM [Meals]
+            WHERE [Id] IN (SELECT [Id] FROM @VolMeals);
+
+            DELETE FROM [RecipeComponentInstructionSteps]
+            WHERE [RecipeComponentInstructionSectionId] IN
+            (
+                SELECT [Id] FROM [RecipeComponentInstructionSections]
+                WHERE [RecipeComponentVersionId] IN (SELECT [Id] FROM @VolRecipeComponentVersions)
+            );
+
+            DELETE FROM [RecipeComponentInstructionSections]
+            WHERE [RecipeComponentVersionId] IN (SELECT [Id] FROM @VolRecipeComponentVersions);
+
+            DELETE FROM [RecipeComponentIngredients]
+            WHERE [RecipeComponentVersionId] IN (SELECT [Id] FROM @VolRecipeComponentVersions)
+               OR [IngredientId] IN (SELECT [Id] FROM @VolIngredients);
+
+            DELETE FROM [RecipeComponentVersions]
+            WHERE [Id] IN (SELECT [Id] FROM @VolRecipeComponentVersions);
+
+            DELETE FROM [RecipeComponents]
+            WHERE [Id] IN (SELECT [Id] FROM @VolRecipeComponents);
+
+            DELETE FROM [IngredientAllergens]
+            WHERE [IngredientId] IN (SELECT [Id] FROM @VolIngredients)
+               OR [AllergenId] IN (SELECT [Id] FROM [Allergens] WHERE [Code] LIKE N'VOL-%');
+
+            DELETE FROM [Batches]
+            WHERE [Id] IN (SELECT [Id] FROM @VolBatches);
+
+            DELETE FROM [StockItems]
+            WHERE [Id] IN (SELECT [Id] FROM @VolStockItems);
+
+            DELETE FROM [Ingredients]
+            WHERE [Id] IN (SELECT [Id] FROM @VolIngredients);
+
+            DELETE FROM [WarehouseCategories]
+            WHERE [Code] LIKE N'VOL-M2-%';
+
+            DELETE FROM [Categories]
+            WHERE [Name] LIKE N'VOL-M2-%';
+
+            DELETE FROM [Allergens]
+            WHERE [Code] LIKE N'VOL-%';
+            """,
+            new { },
+            transaction,
+            cancellationToken);
+
+        this.logger.LogInformation("Reset VolumeDemo data completed.");
+    }
+
+    private async Task SeedVolM1EcommerceAsync(
+        IDbConnection db,
+        VolumeDemoConfig config,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var passwordHash = BCrypt.Net.BCrypt.HashPassword("VolumeDemo123!");
+        var orderCount = Math.Clamp(config.PeakOrders * 4, 2000, 4500);
+
+        await ExecuteVolumeDemoSqlAsync(
+            db,
+            """
+            DECLARE @now datetimeoffset = @Now;
+            DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
+            DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
+            DECLARE @days int = @Days;
+            DECLARE @activeCustomers int = @ActiveCustomers;
+            DECLARE @orderCount int = @OrderCount;
+
+            IF NOT EXISTS (SELECT 1 FROM [DeliveryWindows] WHERE [Name] = N'18:00-22:00')
+                INSERT INTO [DeliveryWindows] ([Name], [StartTime], [EndTime], [IsActive], [SortOrder], [CreatedAt], [UpdatedAt])
+                VALUES (N'18:00-22:00', N'18:00', N'22:00', 1, 4, @now, NULL);
+
+            ;WITH Numbers AS (
+                SELECT TOP (1150) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects a CROSS JOIN sys.all_objects b
+            ),
+            Names AS (
+                SELECT [N],
+                    CASE [N] % 20
+                        WHEN 0 THEN N'Anna' WHEN 1 THEN N'Michal' WHEN 2 THEN N'Katarzyna' WHEN 3 THEN N'Piotr'
+                        WHEN 4 THEN N'Magdalena' WHEN 5 THEN N'Tomasz' WHEN 6 THEN N'Alicja' WHEN 7 THEN N'Robert'
+                        WHEN 8 THEN N'Monika' WHEN 9 THEN N'Pawel' WHEN 10 THEN N'Natalia' WHEN 11 THEN N'Kamil'
+                        WHEN 12 THEN N'Joanna' WHEN 13 THEN N'Adam' WHEN 14 THEN N'Ewelina' WHEN 15 THEN N'Marcin'
+                        WHEN 16 THEN N'Patrycja' WHEN 17 THEN N'Grzegorz' WHEN 18 THEN N'Karolina' ELSE N'Bartosz'
+                    END AS [FirstName],
+                    CASE [N] % 24
+                        WHEN 0 THEN N'Nowak' WHEN 1 THEN N'Kowalski' WHEN 2 THEN N'Wisniewski' WHEN 3 THEN N'Wojcik'
+                        WHEN 4 THEN N'Kowalczyk' WHEN 5 THEN N'Kaminski' WHEN 6 THEN N'Lewandowski' WHEN 7 THEN N'Zielinski'
+                        WHEN 8 THEN N'Szymanski' WHEN 9 THEN N'Wozniak' WHEN 10 THEN N'Dabrowski' WHEN 11 THEN N'Kozlowski'
+                        WHEN 12 THEN N'Mazur' WHEN 13 THEN N'Kwiatkowski' WHEN 14 THEN N'Krawczyk' WHEN 15 THEN N'Piotrowski'
+                        WHEN 16 THEN N'Grabowski' WHEN 17 THEN N'Nowakowski' WHEN 18 THEN N'Pawlak' WHEN 19 THEN N'Michalski'
+                        WHEN 20 THEN N'Adamczyk' WHEN 21 THEN N'Dudek' WHEN 22 THEN N'Zajac' ELSE N'Jablonski'
+                    END AS [LastName]
+                FROM Numbers
+            )
+            INSERT INTO [Users] ([Email], [PasswordHash], [FirstName], [LastName], [Role], [CreatedAt], [UpdatedAt])
+            SELECT
+                N'vol-klient-' + RIGHT(N'0000' + CONVERT(nvarchar(4), [N]), 4) + N'@kuchnia.local',
+                @PasswordHash,
+                [FirstName],
+                [LastName],
+                N'Client',
+                @now,
+                NULL
+            FROM Names n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Users] u
+                WHERE u.[Email] = N'vol-klient-' + RIGHT(N'0000' + CONVERT(nvarchar(4), n.[N]), 4) + N'@kuchnia.local');
+
+            UPDATE u
+            SET [PasswordHash] = @PasswordHash,
+                [UpdatedAt] = @now
+            FROM [Users] u
+            WHERE u.[Email] LIKE N'vol-klient-%@kuchnia.local'
+              AND u.[PasswordHash] <> @PasswordHash;
+
+            INSERT INTO [CustomerProfiles]
+                ([UserId], [Phone], [DietaryNotes], [DefaultAddressId], [CreatedAt], [UpdatedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [PublicId])
+            SELECT
+                u.[Id],
+                N'+48510' + RIGHT(N'000000' + CONVERT(nvarchar(6), ROW_NUMBER() OVER (ORDER BY u.[Id])), 6),
+                CASE u.[Id] % 8
+                    WHEN 0 THEN N'Preferuje dostawy poranne, bez ostrej papryki.'
+                    WHEN 1 THEN N'Dieta treningowa, dodatkowa uwaga: bez laktozy.'
+                    WHEN 2 THEN N'Klient prosi o niskie IG i mniejsze porcje kolacji.'
+                    WHEN 3 THEN N'Bez ryb w poniedzialki, kontakt SMS przed dostawa.'
+                    ELSE N'Uwagi VolumeDemo: standardowa obsluga klienta.'
+                END,
+                NULL,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                NEWID()
+            FROM [Users] u
+            WHERE u.[Email] LIKE N'vol-klient-%@kuchnia.local'
+              AND NOT EXISTS (SELECT 1 FROM [CustomerProfiles] cp WHERE cp.[UserId] = u.[Id]);
+
+            ;WITH ClientRows AS (
+                SELECT u.[Id] AS [UserId], ROW_NUMBER() OVER (ORDER BY u.[Id]) AS [N]
+                FROM [Users] u
+                WHERE u.[Email] LIKE N'vol-klient-%@kuchnia.local'
+            ),
+            AddressRows AS (
+                SELECT [UserId], [N], CAST(1 AS int) AS [AddressNo], N'Dom' AS [LabelName]
+                FROM ClientRows
+                UNION ALL
+                SELECT [UserId], [N], 2, N'Praca'
+                FROM ClientRows
+                WHERE [N] % 2 = 0
+            )
+            INSERT INTO [Addresses]
+                ([UserId], [Label], [Street], [BuildingNumber], [ApartmentNumber], [City], [PostalCode], [IsDefault],
+                 [DeliveryNotes], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt],
+                 [DeletedBy], [Latitude], [Longitude])
+            SELECT
+                [UserId],
+                N'VOL-M1-' + CASE [AddressNo] WHEN 1 THEN N'HOME-' ELSE N'WORK-' END + RIGHT(N'0000' + CONVERT(nvarchar(4), [N]), 4),
+                CASE ([N] + [AddressNo]) % 12
+                    WHEN 0 THEN N'Lipowa' WHEN 1 THEN N'Sienkiewicza' WHEN 2 THEN N'Mickiewicza' WHEN 3 THEN N'Branickiego'
+                    WHEN 4 THEN N'Warszawska' WHEN 5 THEN N'Hetmanska' WHEN 6 THEN N'Zwierzyniecka' WHEN 7 THEN N'Antoniuk'
+                    WHEN 8 THEN N'Piastowska' WHEN 9 THEN N'Wasilkowska' WHEN 10 THEN N'Kawaleryjska' ELSE N'Produkcyjna'
+                END,
+                CONVERT(nvarchar(20), 1 + ([N] * 7 + [AddressNo]) % 128),
+                CASE WHEN [N] % 3 = 0 THEN CONVERT(nvarchar(20), 1 + ([N] % 60)) ELSE NULL END,
+                N'Bialystok',
+                N'15-' + RIGHT(N'000' + CONVERT(nvarchar(3), 1 + ([N] * 13) % 899), 3),
+                CASE WHEN [AddressNo] = 1 THEN 1 ELSE 0 END,
+                CASE WHEN [AddressNo] = 1 THEN N'Domofon opisany nazwiskiem.' ELSE N'Recepcja przy wejsciu.' END,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                CAST(53.080000 + (([N] * 17 + [AddressNo]) % 900) / 10000.0 AS float),
+                CAST(23.050000 + (([N] * 19 + [AddressNo]) % 1300) / 10000.0 AS float)
+            FROM AddressRows ar
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Addresses] a
+                WHERE a.[UserId] = ar.[UserId]
+                  AND a.[Label] = N'VOL-M1-' + CASE ar.[AddressNo] WHEN 1 THEN N'HOME-' ELSE N'WORK-' END + RIGHT(N'0000' + CONVERT(nvarchar(4), ar.[N]), 4)
+                  AND a.[IsDeleted] = 0);
+
+            UPDATE cp
+            SET [DefaultAddressId] = a.[Id],
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [CustomerProfiles] cp
+            INNER JOIN [Users] u ON u.[Id] = cp.[UserId]
+            INNER JOIN [Addresses] a ON a.[UserId] = u.[Id] AND a.[IsDefault] = 1 AND a.[IsDeleted] = 0
+            WHERE u.[Email] LIKE N'vol-klient-%@kuchnia.local'
+              AND (cp.[DefaultAddressId] IS NULL OR cp.[DefaultAddressId] <> a.[Id]);
+
+            ;WITH Numbers AS (
+                SELECT TOP (@orderCount) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects a CROSS JOIN sys.all_objects b
+            ),
+            ClientRows AS (
+                SELECT TOP (@activeCustomers) u.[Id] AS [CustomerId], ROW_NUMBER() OVER (ORDER BY u.[Id]) AS [CustomerNo]
+                FROM [Users] u
+                WHERE u.[Email] LIKE N'vol-klient-%@kuchnia.local'
+                ORDER BY u.[Id]
+            ),
+            OrderSource AS (
+                SELECT
+                    n.[N],
+                    c.[CustomerId],
+                    DATEADD(day, ((n.[N] - 1) % (@days * 2)) - @days, @today) AS [StartDate]
+                FROM Numbers n
+                INNER JOIN ClientRows c ON c.[CustomerNo] = ((n.[N] - 1) % @activeCustomers) + 1
+            )
+            INSERT INTO [Orders]
+                ([CustomerId], [OrderNumber], [Status], [TotalPrice], [DiscountAmount], [FinalPrice],
+                 [DiscountCodeId], [Notes], [StartDate], [EndDate], [CreatedAt], [UpdatedAt], [CreatedBy],
+                 [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                [CustomerId],
+                N'VOL-M1-ORD-' + RIGHT(N'000000' + CONVERT(nvarchar(6), [N]), 6),
+                CASE WHEN [N] % 20 = 0 THEN 4 WHEN [StartDate] < @today THEN 2 ELSE 3 END,
+                0,
+                CASE WHEN [N] % 11 = 0 THEN 12.50 ELSE 0 END,
+                0,
+                NULL,
+                CASE WHEN [N] % 9 = 0 THEN N'VOL-M1 aktywna subskrypcja z uwagami klienta.' ELSE N'VOL-M1 zamowienie VolumeDemo.' END,
+                [StartDate],
+                DATEADD(day, 1, [StartDate]),
+                DATEADD(hour, -1 * ([N] % 72), @now),
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM OrderSource os
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Orders] o
+                WHERE o.[OrderNumber] = N'VOL-M1-ORD-' + RIGHT(N'000000' + CONVERT(nvarchar(6), os.[N]), 6));
+
+            ;WITH DeliveryRows AS (
+                SELECT o.[Id] AS [OrderId], o.[CustomerId], o.[StartDate], d.[DayOffset],
+                    ROW_NUMBER() OVER (ORDER BY o.[Id], d.[DayOffset]) AS [N]
+                FROM [Orders] o
+                CROSS APPLY (VALUES (0), (1)) d([DayOffset])
+                WHERE o.[OrderNumber] LIKE N'VOL-M1-%'
+                  AND o.[Status] <> 4
+            )
+            INSERT INTO [DeliveryCalendar]
+                ([OrderId], [AddressId], [DeliveryWindowId], [DeliveryDate], [Status], [IsSkipped], [SkipReason],
+                 [CutoffTime], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                dr.[OrderId],
+                a.[Id],
+                dw.[Id],
+                dd.[DeliveryDate],
+                CASE
+                    WHEN wd.[IsWeekend] = 1 THEN 2
+                    WHEN dd.[DeliveryDate] < @today THEN 1
+                    ELSE 0
+                END,
+                CASE
+                    WHEN wd.[IsWeekend] = 1 THEN 1
+                    WHEN dr.[N] % 33 = 0 THEN 1
+                    ELSE 0
+                END,
+                CASE
+                    WHEN wd.[IsWeekend] = 1 THEN N'Weekend'
+                    WHEN dr.[N] % 33 = 0 THEN N'Zawieszenie dostawy przez klienta'
+                    ELSE NULL
+                END,
+                DATEADD(hour, 18, DATEADD(day, dr.[DayOffset] - 1, CONVERT(datetimeoffset, CONVERT(date, dr.[StartDate])))),
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM DeliveryRows dr
+            CROSS APPLY (
+                SELECT DATEADD(day, dr.[DayOffset], CONVERT(date, dr.[StartDate])) AS [DeliveryDate]
+            ) dd
+            CROSS APPLY (
+                SELECT CASE
+                    WHEN DATEDIFF(day, CONVERT(date, '19000101'), dd.[DeliveryDate]) % 7 IN (5, 6) THEN 1
+                    ELSE 0
+                END AS [IsWeekend]
+            ) wd
+            CROSS APPLY (
+                SELECT TOP 1 [Id]
+                FROM [Addresses] a
+                WHERE a.[UserId] = dr.[CustomerId]
+                  AND a.[IsDeleted] = 0
+                ORDER BY [IsDefault] DESC, [Id]
+            ) a
+            CROSS APPLY (
+                SELECT TOP 1 [Id]
+                FROM [DeliveryWindows]
+                WHERE [IsActive] = 1
+                ORDER BY ABS(CHECKSUM([Id], dr.[OrderId]))
+            ) dw
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [DeliveryCalendar] existing
+                WHERE existing.[OrderId] = dr.[OrderId]
+                  AND CONVERT(date, existing.[DeliveryDate]) = dd.[DeliveryDate]
+                  AND existing.[IsDeleted] = 0);
+
+            ;WITH Slots AS (
+                SELECT * FROM (VALUES
+                    (N'Breakfast', 1),
+                    (N'Snack1', 2),
+                    (N'Lunch', 3),
+                    (N'Snack2', 4),
+                    (N'Dinner', 5)
+                ) s([MealSlot], [SortOrder])
+            )
+            INSERT INTO [OrderItems]
+                ([OrderId], [DietId], [DietVariantId], [DietName], [VariantName], [CaloriesPerDay],
+                 [PricePerDay], [TotalDays], [TotalPrice], [CreatedAt], [UpdatedAt], [CreatedBy],
+                 [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [MealId], [MealVariantId],
+                 [DietMenuPlanItemId], [MealSlot], [DeliveryDate])
+            SELECT
+                o.[Id],
+                d.[Id],
+                dv.[Id],
+                d.[Name],
+                dv.[Name],
+                dv.[TargetCalories],
+                CAST(28.00 * dv.[PriceMultiplier] + (s.[SortOrder] * 1.25) AS decimal(10,2)),
+                1,
+                CAST(28.00 * dv.[PriceMultiplier] + (s.[SortOrder] * 1.25) AS decimal(10,2)),
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                dpi.[MealId],
+                dpi.[MealVariantId],
+                CASE WHEN ABS(CHECKSUM(o.[Id], s.[SortOrder], @Seed)) % 10 < 8 THEN dpi.[Id] ELSE NULL END,
+                s.[MealSlot],
+                CONVERT(date, dc.[DeliveryDate])
+            FROM [DeliveryCalendar] dc
+            INNER JOIN [Orders] o ON o.[Id] = dc.[OrderId]
+            CROSS JOIN Slots s
+            CROSS APPLY (
+                SELECT TOP 1 dpi.[Id], dpi.[DietVariantId], dpi.[MealId], dpi.[MealVariantId], dpi.[MealSlot]
+                FROM [DietMenuPlanItems] dpi
+                INNER JOIN [DietMenuPlans] p ON p.[Id] = dpi.[DietMenuPlanId]
+                WHERE dpi.[IsDeleted] = 0
+                  AND dpi.[IsActive] = 1
+                  AND p.[IsDeleted] = 0
+                  AND p.[Status] = N'Published'
+                ORDER BY
+                    CASE WHEN p.[PlanDate] = CONVERT(date, dc.[DeliveryDate]) AND dpi.[MealSlot] = s.[MealSlot] THEN 0 ELSE 1 END,
+                    ABS(CHECKSUM(dpi.[Id], o.[Id], s.[SortOrder], @Seed))
+            ) dpi
+            INNER JOIN [DietVariants] dv ON dv.[Id] = dpi.[DietVariantId]
+            INNER JOIN [Diets] d ON d.[Id] = dv.[DietId]
+            WHERE o.[OrderNumber] LIKE N'VOL-M1-%'
+              AND o.[Status] <> 4
+              AND dc.[IsSkipped] = 0
+              AND dc.[IsDeleted] = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM [OrderItems] oi
+                  WHERE oi.[OrderId] = o.[Id]
+                    AND oi.[MealSlot] = s.[MealSlot]
+                    AND CONVERT(date, oi.[DeliveryDate]) = CONVERT(date, dc.[DeliveryDate])
+                    AND oi.[IsDeleted] = 0);
+
+            ;WITH OrderTotals AS (
+                SELECT [OrderId], SUM([TotalPrice]) AS [TotalPrice]
+                FROM [OrderItems]
+                WHERE [OrderId] IN (SELECT [Id] FROM [Orders] WHERE [OrderNumber] LIKE N'VOL-M1-%')
+                  AND [IsDeleted] = 0
+                GROUP BY [OrderId]
+            )
+            UPDATE o
+            SET [TotalPrice] = ot.[TotalPrice],
+                [FinalPrice] = CASE WHEN ot.[TotalPrice] - o.[DiscountAmount] < 0 THEN 0 ELSE ot.[TotalPrice] - o.[DiscountAmount] END,
+                [UpdatedAt] = @now,
+                [UpdatedBy] = @auditUser
+            FROM [Orders] o
+            INNER JOIN OrderTotals ot ON ot.[OrderId] = o.[Id]
+            WHERE o.[OrderNumber] LIKE N'VOL-M1-%';
+
+            INSERT INTO [Payments]
+                ([OrderId], [StripePaymentIntentId], [StripeClientSecret], [Amount], [Currency], [Status], [AttemptCount],
+                 [LastAttemptAt], [ErrorMessage], [PaidAt], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy],
+                 [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                o.[Id],
+                N'VOL-M1-PI-' + o.[OrderNumber],
+                N'vol_secret_' + o.[OrderNumber],
+                o.[FinalPrice],
+                N'PLN',
+                CASE
+                    WHEN o.[Status] = 4 THEN 4
+                    WHEN ABS(CHECKSUM(o.[Id], @Seed)) % 100 < 90 THEN 1
+                    WHEN ABS(CHECKSUM(o.[Id], @Seed)) % 100 < 95 THEN 0
+                    WHEN ABS(CHECKSUM(o.[Id], @Seed)) % 100 < 98 THEN 2
+                    ELSE 4
+                END,
+                1 + ABS(CHECKSUM(o.[Id], @Seed)) % 3,
+                DATEADD(minute, -15, @now),
+                CASE WHEN ABS(CHECKSUM(o.[Id], @Seed)) % 100 BETWEEN 95 AND 97 THEN N'VOL-M1 symulowana odmowa platnosci' ELSE NULL END,
+                CASE WHEN o.[Status] <> 4 AND ABS(CHECKSUM(o.[Id], @Seed)) % 100 < 90 THEN @now ELSE NULL END,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM [Orders] o
+            WHERE o.[OrderNumber] LIKE N'VOL-M1-%'
+              AND NOT EXISTS (SELECT 1 FROM [Payments] p WHERE p.[OrderId] = o.[Id]);
+            """,
+            new
+            {
+                Now = now,
+                PasswordHash = passwordHash,
+                Days = config.Days,
+                ActiveCustomers = config.ActiveCustomers,
+                OrderCount = orderCount,
+                Seed = config.Seed,
+            },
+            transaction,
+            cancellationToken);
+
+        this.logger.LogInformation("Ensured VolumeDemo M1 ecommerce dataset with {OrderCount} target orders.", orderCount);
+    }
+
+    private async Task SeedVolM5HrAuditAsync(
+        IDbConnection db,
+        VolumeDemoConfig config,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var passwordHash = BCrypt.Net.BCrypt.HashPassword("VolumeDemo123!");
+        var targetLogCount = Math.Clamp(config.ActiveCustomers * 20, 5000, 20000);
+
+        await ExecuteVolumeDemoSqlAsync(
+            db,
+            """
+            DECLARE @now datetimeoffset = @Now;
+            DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
+            DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
+            DECLARE @days int = @Days;
+            DECLARE @targetLogCount int = @TargetLogCount;
+
+            ;WITH Departments AS (
+                SELECT * FROM (VALUES
+                    (N'Kuchnia', N'Produkcja posilkow i sesje gotowania.'),
+                    (N'Magazyn', N'Stany, przyjecia i HACCP.'),
+                    (N'Kompletacja', N'Pakowanie, etykiety i zaladunek.'),
+                    (N'Logistyka', N'Trasy, flota i kierowcy.'),
+                    (N'Biuro', N'Administracja, HR i BOK.')
+                ) d([Name], [Description])
+            )
+            INSERT INTO [Departments] ([Name], [Description], [HeadEmployeeId], [CreatedAt], [UpdatedAt])
+            SELECT [Name], [Description], NULL, @now, NULL
+            FROM Departments d
+            WHERE NOT EXISTS (SELECT 1 FROM [Departments] existing WHERE existing.[Name] = d.[Name]);
+
+            ;WITH Numbers AS (
+                SELECT TOP (50) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects
+            ),
+            Staff AS (
+                SELECT
+                    [N],
+                    N'vol-staff-' + RIGHT(N'000' + CONVERT(nvarchar(3), [N]), 3) + N'@kuchnia.local' AS [Email],
+                    CASE [N] % 18
+                        WHEN 0 THEN N'Marek' WHEN 1 THEN N'Joanna' WHEN 2 THEN N'Pawel' WHEN 3 THEN N'Karolina'
+                        WHEN 4 THEN N'Ewa' WHEN 5 THEN N'Lukasz' WHEN 6 THEN N'Monika' WHEN 7 THEN N'Kamil'
+                        WHEN 8 THEN N'Alicja' WHEN 9 THEN N'Beata' WHEN 10 THEN N'Natalia' WHEN 11 THEN N'Piotr'
+                        WHEN 12 THEN N'Tomasz' WHEN 13 THEN N'Adam' WHEN 14 THEN N'Katarzyna' WHEN 15 THEN N'Michal'
+                        WHEN 16 THEN N'Patrycja' ELSE N'Bartosz'
+                    END AS [FirstName],
+                    CASE [N] % 18
+                        WHEN 0 THEN N'Kowalski' WHEN 1 THEN N'Witkowska' WHEN 2 THEN N'Mazur' WHEN 3 THEN N'Lis'
+                        WHEN 4 THEN N'Kaczmarek' WHEN 5 THEN N'Dabrowski' WHEN 6 THEN N'Sokol' WHEN 7 THEN N'Nowicki'
+                        WHEN 8 THEN N'Nowak' WHEN 9 THEN N'Lewandowska' WHEN 10 THEN N'Wrona' WHEN 11 THEN N'Malec'
+                        WHEN 12 THEN N'Baran' WHEN 13 THEN N'Pawlak' WHEN 14 THEN N'Zielinska' WHEN 15 THEN N'Rutkowski'
+                        WHEN 16 THEN N'Sikora' ELSE N'Jablonski'
+                    END AS [LastName],
+                    CASE
+                        WHEN [N] <= 15 THEN CASE WHEN [N] = 1 THEN N'KitchenManager' ELSE N'Kitchen' END
+                        WHEN [N] <= 23 THEN CASE WHEN [N] = 16 THEN N'WarehouseManager' ELSE N'Warehouse' END
+                        WHEN [N] <= 33 THEN CASE WHEN [N] = 24 THEN N'PackingManager' ELSE N'Packing' END
+                        WHEN [N] <= 40 THEN CASE WHEN [N] = 34 THEN N'LogisticsManager' ELSE N'Driver' END
+                        WHEN [N] <= 43 THEN CASE WHEN [N] = 41 THEN N'HRManager' ELSE N'HR' END
+                        WHEN [N] <= 48 THEN CASE WHEN [N] = 44 THEN N'BOKManager' ELSE N'BOK' END
+                        ELSE N'Admin'
+                    END AS [Role],
+                    CASE
+                        WHEN [N] <= 15 THEN N'Kuchnia'
+                        WHEN [N] <= 23 THEN N'Magazyn'
+                        WHEN [N] <= 33 THEN N'Kompletacja'
+                        WHEN [N] <= 40 THEN N'Logistyka'
+                        ELSE N'Biuro'
+                    END AS [DepartmentName],
+                    CASE
+                        WHEN [N] <= 15 THEN N'Kucharz'
+                        WHEN [N] <= 23 THEN N'Magazynier'
+                        WHEN [N] <= 33 THEN N'Pakowacz'
+                        WHEN [N] <= 40 THEN N'Kierowca'
+                        WHEN [N] <= 43 THEN N'Specjalista HR'
+                        WHEN [N] <= 48 THEN N'Konsultant BOK'
+                        ELSE N'Administrator'
+                    END AS [Position]
+                FROM Numbers
+            )
+            INSERT INTO [Users] ([Email], [PasswordHash], [FirstName], [LastName], [Role], [CreatedAt], [UpdatedAt])
+            SELECT [Email], @PasswordHash, [FirstName], [LastName], [Role], @now, NULL
+            FROM Staff s
+            WHERE NOT EXISTS (SELECT 1 FROM [Users] u WHERE u.[Email] = s.[Email]);
+
+            ;WITH Staff AS (
+                SELECT
+                    u.[Id] AS [UserId],
+                    u.[Email],
+                    u.[FirstName],
+                    u.[LastName],
+                    ROW_NUMBER() OVER (ORDER BY u.[Id]) AS [N],
+                    CASE
+                        WHEN ROW_NUMBER() OVER (ORDER BY u.[Id]) <= 15 THEN N'Kuchnia'
+                        WHEN ROW_NUMBER() OVER (ORDER BY u.[Id]) <= 23 THEN N'Magazyn'
+                        WHEN ROW_NUMBER() OVER (ORDER BY u.[Id]) <= 33 THEN N'Kompletacja'
+                        WHEN ROW_NUMBER() OVER (ORDER BY u.[Id]) <= 40 THEN N'Logistyka'
+                        ELSE N'Biuro'
+                    END AS [DepartmentName],
+                    CASE
+                        WHEN ROW_NUMBER() OVER (ORDER BY u.[Id]) <= 15 THEN N'Kucharz'
+                        WHEN ROW_NUMBER() OVER (ORDER BY u.[Id]) <= 23 THEN N'Magazynier'
+                        WHEN ROW_NUMBER() OVER (ORDER BY u.[Id]) <= 33 THEN N'Pakowacz'
+                        WHEN ROW_NUMBER() OVER (ORDER BY u.[Id]) <= 40 THEN N'Kierowca'
+                        WHEN ROW_NUMBER() OVER (ORDER BY u.[Id]) <= 43 THEN N'Specjalista HR'
+                        WHEN ROW_NUMBER() OVER (ORDER BY u.[Id]) <= 48 THEN N'Konsultant BOK'
+                        ELSE N'Administrator'
+                    END AS [Position]
+                FROM [Users] u
+                WHERE u.[Email] LIKE N'vol-staff-%@kuchnia.local'
+            )
+            INSERT INTO [Employees]
+                ([UserId], [FirstName], [LastName], [Email], [PhoneNumber], [HireDate], [TerminationDate],
+                 [DepartmentId], [Position], [IsActive], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt],
+                 [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                s.[UserId],
+                s.[FirstName],
+                s.[LastName],
+                s.[Email],
+                N'+48500' + RIGHT(N'000000' + CONVERT(nvarchar(6), s.[N]), 6),
+                DATEADD(day, -365 - (s.[N] * 17) % 720, @today),
+                NULL,
+                d.[Id],
+                s.[Position],
+                1,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL
+            FROM Staff s
+            INNER JOIN [Departments] d ON d.[Name] = s.[DepartmentName]
+            WHERE NOT EXISTS (SELECT 1 FROM [Employees] e WHERE e.[UserId] = s.[UserId]);
+
+            ;WITH DateRows AS (
+                SELECT TOP (@days * 2) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - @days - 1 AS [Offset]
+                FROM sys.all_objects
+            ),
+            Staff AS (
+                SELECT u.[Id] AS [UserId], u.[Role], ROW_NUMBER() OVER (ORDER BY u.[Id]) AS [N]
+                FROM [Users] u
+                WHERE u.[Email] LIKE N'vol-staff-%@kuchnia.local'
+            )
+            INSERT INTO [WorkSchedules]
+                ([UserId], [ShiftDate], [Shift], [RoleAtShift], [CreatedBy], [UpdatedBy], [IsDeleted],
+                 [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                s.[UserId],
+                DATEADD(day, d.[Offset], @today),
+                CASE WHEN (s.[N] + d.[Offset]) % 9 = 0 THEN 2 ELSE 1 END,
+                s.[Role],
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL
+            FROM Staff s
+            CROSS JOIN DateRows d
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [WorkSchedules] ws
+                WHERE ws.[UserId] = s.[UserId]
+                  AND ws.[ShiftDate] = DATEADD(day, d.[Offset], @today)
+                  AND ws.[Shift] = CASE WHEN (s.[N] + d.[Offset]) % 9 = 0 THEN 2 ELSE 1 END);
+
+            ;WITH EmployeeRows AS (
+                SELECT TOP (28) e.[Id], ROW_NUMBER() OVER (ORDER BY e.[Id]) AS [N]
+                FROM [Employees] e
+                INNER JOIN [Users] u ON u.[Id] = e.[UserId]
+                WHERE u.[Email] LIKE N'vol-staff-%@kuchnia.local'
+                ORDER BY e.[Id]
+            ),
+            Approver AS (
+                SELECT TOP 1 e.[Id]
+                FROM [Employees] e
+                INNER JOIN [Users] u ON u.[Id] = e.[UserId]
+                WHERE u.[Role] IN (N'HRManager', N'Admin')
+                ORDER BY e.[Id]
+            )
+            INSERT INTO [LeaveRequests]
+                ([EmployeeId], [LeaveType], [StartDate], [EndDate], [Status], [ApprovedByEmployeeId],
+                 [RejectionReason], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy],
+                 [CreatedAt], [UpdatedAt])
+            SELECT
+                e.[Id],
+                1 + (e.[N] % 3),
+                DATEADD(day, (e.[N] % (@days * 2)) - @days, @today),
+                DATEADD(day, (e.[N] % (@days * 2)) - @days + 1 + (e.[N] % 4), @today),
+                CASE WHEN e.[N] % 10 < 6 THEN 1 WHEN e.[N] % 10 < 8 THEN 0 ELSE 2 END,
+                CASE WHEN e.[N] % 10 < 6 THEN a.[Id] ELSE NULL END,
+                CASE WHEN e.[N] % 10 >= 8 THEN N'Kolizja z grafikiem VolumeDemo.' ELSE NULL END,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                DATEADD(day, -e.[N], @now),
+                NULL
+            FROM EmployeeRows e
+            CROSS JOIN Approver a
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [LeaveRequests] lr
+                WHERE lr.[EmployeeId] = e.[Id]
+                  AND lr.[StartDate] = DATEADD(day, (e.[N] % (@days * 2)) - @days, @today)
+                  AND lr.[CreatedBy] = @auditUser);
+
+            ;WITH Numbers AS (
+                SELECT TOP (80) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects
+            ),
+            Clients AS (
+                SELECT u.[Id], ROW_NUMBER() OVER (ORDER BY u.[Id]) AS [N]
+                FROM [Users] u
+                WHERE u.[Email] LIKE N'vol-klient-%@kuchnia.local'
+            ),
+            Agents AS (
+                SELECT u.[Id], ROW_NUMBER() OVER (ORDER BY u.[Id]) AS [N]
+                FROM [Users] u
+                WHERE u.[Role] IN (N'BOK', N'BOKManager')
+            )
+            INSERT INTO [Tickets]
+                ([Title], [Description], [ClientUserId], [AssignedToUserId], [Status], [Priority],
+                 [ClosedAt], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy],
+                 [CreatedAt], [UpdatedAt], [OrderId], [DeliveryCalendarId])
+            SELECT
+                N'VOL-M5-TICKET-' + RIGHT(N'0000' + CONVERT(nvarchar(4), n.[N]), 4),
+                CASE n.[N] % 5
+                    WHEN 0 THEN N'Uszkodzone pudelko w torbie VolumeDemo.'
+                    WHEN 1 THEN N'Brak jednego dania w dostawie VolumeDemo.'
+                    WHEN 2 THEN N'Opozniona dostawa i prosba o kontakt.'
+                    WHEN 3 THEN N'Zmiana adresu w aktywnej subskrypcji.'
+                    ELSE N'Pytanie o alergeny i sklad dania.'
+                END,
+                c.[Id],
+                a.[Id],
+                CASE WHEN n.[N] % 10 < 4 THEN 4 WHEN n.[N] % 10 < 7 THEN 2 WHEN n.[N] % 10 < 9 THEN 1 ELSE 0 END,
+                CASE WHEN n.[N] % 12 = 0 THEN 3 WHEN n.[N] % 4 = 0 THEN 2 ELSE 1 END,
+                CASE WHEN n.[N] % 10 < 4 THEN DATEADD(hour, -n.[N], @now) ELSE NULL END,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                DATEADD(hour, -2 * n.[N], @now),
+                NULL,
+                o.[Id],
+                dc.[Id]
+            FROM Numbers n
+            INNER JOIN Clients c ON c.[N] = ((n.[N] - 1) % (SELECT COUNT(1) FROM Clients)) + 1
+            INNER JOIN Agents a ON a.[N] = ((n.[N] - 1) % (SELECT COUNT(1) FROM Agents)) + 1
+            OUTER APPLY (
+                SELECT TOP 1 [Id]
+                FROM [Orders]
+                WHERE [CustomerId] = c.[Id]
+                  AND [OrderNumber] LIKE N'VOL-M1-%'
+                ORDER BY ABS(CHECKSUM([Id], n.[N], @Seed))
+            ) o
+            OUTER APPLY (
+                SELECT TOP 1 [Id]
+                FROM [DeliveryCalendar]
+                WHERE [OrderId] = o.[Id]
+                ORDER BY ABS(CHECKSUM([Id], n.[N], @Seed))
+            ) dc
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Tickets] t
+                WHERE t.[Title] = N'VOL-M5-TICKET-' + RIGHT(N'0000' + CONVERT(nvarchar(4), n.[N]), 4));
+
+            ;WITH TicketRows AS (
+                SELECT TOP (30) [Id], [ClientUserId], ROW_NUMBER() OVER (ORDER BY [Id]) AS [N]
+                FROM [Tickets]
+                WHERE [Title] LIKE N'VOL-M5-TICKET-%'
+                ORDER BY [Id]
+            )
+            INSERT INTO [TicketAttachments]
+                ([TicketId], [FileName], [FilePath], [UploadedByUserId], [UploadedAt], [CreatedAt], [UpdatedAt])
+            SELECT
+                [Id],
+                N'vol-ticket-' + RIGHT(N'0000' + CONVERT(nvarchar(4), [N]), 4) + N'.jpg',
+                N'/uploads/volumedemo/tickets/vol-ticket-' + RIGHT(N'0000' + CONVERT(nvarchar(4), [N]), 4) + N'.jpg',
+                [ClientUserId],
+                DATEADD(minute, [N], DATEADD(hour, -4, @now)),
+                @now,
+                NULL
+            FROM TicketRows tr
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [TicketAttachments] ta
+                WHERE ta.[TicketId] = tr.[Id]
+                  AND ta.[FileName] = N'vol-ticket-' + RIGHT(N'0000' + CONVERT(nvarchar(4), tr.[N]), 4) + N'.jpg');
+
+            ;WITH Numbers AS (
+                SELECT TOP (120) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects
+            )
+            INSERT INTO [Notifications]
+                ([Type], [Severity], [Title], [Message], [LinkUrl], [DeduplicationKey], [SourceType],
+                 [SourceId], [CreatedAt], [UpdatedAt])
+            SELECT
+                CASE WHEN [N] % 3 = 0 THEN N'Warehouse' WHEN [N] % 3 = 1 THEN N'Packing' ELSE N'CustomerService' END,
+                CASE WHEN [N] % 10 = 0 THEN N'Warning' ELSE N'Info' END,
+                N'VOL-M5 powiadomienie ' + RIGHT(N'000' + CONVERT(nvarchar(3), [N]), 3),
+                N'Powiadomienie operacyjne VolumeDemo dla dashboardow.',
+                CASE WHEN [N] % 3 = 0 THEN N'/warehouse' WHEN [N] % 3 = 1 THEN N'/packing' ELSE N'/admin/tickets' END,
+                N'VOL-M5-NOTIF-' + RIGHT(N'000' + CONVERT(nvarchar(3), [N]), 3),
+                N'VOL-M5',
+                [N],
+                DATEADD(minute, -[N], @now),
+                NULL
+            FROM Numbers n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Notifications] existing
+                WHERE existing.[DeduplicationKey] = N'VOL-M5-NOTIF-' + RIGHT(N'000' + CONVERT(nvarchar(3), n.[N]), 3));
+
+            INSERT INTO [UserNotifications]
+                ([NotificationId], [UserId], [IsRead], [DeliveredAt], [ReadAt], [CreatedAt], [UpdatedAt])
+            SELECT
+                n.[Id],
+                u.[Id],
+                CASE WHEN ABS(CHECKSUM(n.[Id], u.[Id], @Seed)) % 3 = 0 THEN 1 ELSE 0 END,
+                n.[CreatedAt],
+                CASE WHEN ABS(CHECKSUM(n.[Id], u.[Id], @Seed)) % 3 = 0 THEN DATEADD(minute, 20, n.[CreatedAt]) ELSE NULL END,
+                n.[CreatedAt],
+                NULL
+            FROM [Notifications] n
+            INNER JOIN [Users] u ON u.[Email] LIKE N'vol-staff-%@kuchnia.local'
+            WHERE n.[DeduplicationKey] LIKE N'VOL-M5-NOTIF-%'
+              AND ABS(CHECKSUM(n.[Id], u.[Id], @Seed)) % 6 = 0
+              AND NOT EXISTS (
+                    SELECT 1 FROM [UserNotifications] un
+                    WHERE un.[NotificationId] = n.[Id]
+                      AND un.[UserId] = u.[Id]);
+
+            DECLARE @existingLogs int = (
+                SELECT COUNT(1) FROM [SystemLogs] WHERE [IPAddress] = N'VOL-SEED');
+            DECLARE @logsToCreate int = CASE WHEN @targetLogCount > @existingLogs THEN @targetLogCount - @existingLogs ELSE 0 END;
+
+            ;WITH Numbers AS (
+                SELECT TOP (@logsToCreate) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) + @existingLogs AS [N]
+                FROM sys.all_objects a CROSS JOIN sys.all_objects b
+            ),
+            Staff AS (
+                SELECT u.[Id], ROW_NUMBER() OVER (ORDER BY u.[Id]) AS [N]
+                FROM [Users] u
+                WHERE u.[Email] LIKE N'vol-staff-%@kuchnia.local'
+            )
+            INSERT INTO [SystemLogs]
+                ([UserId], [Action], [TargetEntity], [TargetId], [OldValue], [NewValue],
+                 [Timestamp], [IPAddress], [CreatedAt], [UpdatedAt])
+            SELECT
+                s.[Id],
+                N'VOL-AUDIT-' + CASE n.[N] % 5
+                    WHEN 0 THEN N'OrderUpdated'
+                    WHEN 1 THEN N'PackingScanned'
+                    WHEN 2 THEN N'RouteOptimized'
+                    WHEN 3 THEN N'HaccpChecked'
+                    ELSE N'TicketChanged'
+                END,
+                CASE n.[N] % 5
+                    WHEN 0 THEN N'Order'
+                    WHEN 1 THEN N'PackingItem'
+                    WHEN 2 THEN N'DeliveryRoute'
+                    WHEN 3 THEN N'TemperatureLog'
+                    ELSE N'Ticket'
+                END,
+                CONVERT(nvarchar(100), 100000 + n.[N]),
+                N'{"status":"before","source":"VolumeDemo"}',
+                N'{"status":"after","source":"VolumeDemo","sequence":' + CONVERT(nvarchar(20), n.[N]) + N'}',
+                DATEADD(minute, -1 * (n.[N] % (@days * 24 * 60)), @now),
+                N'VOL-SEED',
+                DATEADD(minute, -1 * (n.[N] % (@days * 24 * 60)), @now),
+                NULL
+            FROM Numbers n
+            INNER JOIN Staff s ON s.[N] = ((n.[N] - 1) % (SELECT COUNT(1) FROM Staff)) + 1;
+            """,
+            new
+            {
+                Now = now,
+                PasswordHash = passwordHash,
+                Days = config.Days,
+                TargetLogCount = targetLogCount,
+                Seed = config.Seed,
+            },
+            transaction,
+            cancellationToken);
+
+        this.logger.LogInformation("Ensured VolumeDemo M5 HR, tickets and audit logs.");
+    }
+
+    private async Task SeedVolM3ProductionAsync(
+        IDbConnection db,
+        VolumeDemoConfig config,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        await ExecuteVolumeDemoSqlAsync(
+            db,
+            """
+            DECLARE @now datetimeoffset = @Now;
+            DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
+            DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
+            DECLARE @days int = @Days;
+
+            INSERT INTO [RecipeComponentInstructionSections]
+                ([RecipeComponentVersionId], [Title], [SortOrder], [CreatedAt], [UpdatedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                rcv.[Id],
+                N'VOL-M3 CCP',
+                1,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM [RecipeComponentVersions] rcv
+            INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+            WHERE rc.[Name] LIKE N'VOL-M2-RC-%'
+              AND rcv.[IsDeleted] = 0
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentInstructionSections] s
+                    WHERE s.[RecipeComponentVersionId] = rcv.[Id]
+                      AND s.[IsDeleted] = 0);
+
+            INSERT INTO [RecipeComponentInstructionSteps]
+                ([RecipeComponentInstructionSectionId], [StepText], [SortOrder], [RequiresControl],
+                 [ControlType], [ExpectedValue], [ExpectedUnit], [IsCritical], [CreatedAt], [UpdatedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                s.[Id],
+                steps.[StepText],
+                steps.[SortOrder],
+                steps.[RequiresControl],
+                steps.[ControlType],
+                steps.[ExpectedValue],
+                steps.[ExpectedUnit],
+                steps.[IsCritical],
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM [RecipeComponentInstructionSections] s
+            INNER JOIN [RecipeComponentVersions] rcv ON rcv.[Id] = s.[RecipeComponentVersionId]
+            INNER JOIN [RecipeComponents] rc ON rc.[Id] = rcv.[RecipeComponentId]
+            CROSS APPLY (VALUES
+                (1, N'Przygotuj mise en place i zwaz porcje VolumeDemo.', 0, NULL, NULL, NULL, 0),
+                (2, N'Kontrola temperatury rdzenia CCP.', 1, N'Temperature', CAST(72.000 AS decimal(10,3)), N'C', 1),
+                (3, N'Zamknij partie i przekaz do kompletacji.', 0, NULL, NULL, NULL, 0)
+            ) steps([SortOrder], [StepText], [RequiresControl], [ControlType], [ExpectedValue], [ExpectedUnit], [IsCritical])
+            WHERE rc.[Name] LIKE N'VOL-M2-RC-%'
+              AND s.[IsDeleted] = 0
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [RecipeComponentInstructionSteps] existing
+                    WHERE existing.[RecipeComponentInstructionSectionId] = s.[Id]
+                      AND existing.[SortOrder] = steps.[SortOrder]
+                      AND existing.[IsDeleted] = 0);
+
+            ;WITH Dates AS (
+                SELECT TOP (@days * 2) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - @days - 1 AS [Offset]
+                FROM sys.all_objects
+            )
+            INSERT INTO [ProductionPlans]
+                ([ProductionDate], [Status], [Notes], [IsSharedWithLogistics], [SharedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                DATEADD(day, [Offset], @today),
+                CASE WHEN DATEADD(day, [Offset], @today) < @today THEN 3 ELSE 1 END,
+                N'VOL-M3-PP plan produkcji VolumeDemo.',
+                CASE WHEN DATEADD(day, [Offset], @today) < @today THEN 1 ELSE 0 END,
+                CASE WHEN DATEADD(day, [Offset], @today) < @today THEN DATEADD(hour, 8, CONVERT(datetime, DATEADD(day, [Offset], @today))) ELSE NULL END,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL
+            FROM Dates d
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [ProductionPlans] pp
+                WHERE pp.[ProductionDate] = DATEADD(day, d.[Offset], @today)
+                  AND pp.[CreatedBy] = @auditUser
+                  AND pp.[IsDeleted] = 0);
+
+            ;WITH Demand AS (
+                SELECT
+                    CONVERT(date, oi.[DeliveryDate]) AS [ProductionDate],
+                    oi.[MealId],
+                    oi.[DietVariantId],
+                    oi.[DietMenuPlanItemId],
+                    COUNT(1) AS [PlannedQuantity]
+                FROM [OrderItems] oi
+                INNER JOIN [Orders] o ON o.[Id] = oi.[OrderId]
+                WHERE o.[OrderNumber] LIKE N'VOL-M1-%'
+                  AND o.[Status] <> 4
+                  AND oi.[IsDeleted] = 0
+                  AND oi.[DeliveryDate] >= DATEADD(day, -@days, @today)
+                  AND oi.[DeliveryDate] < DATEADD(day, @days, @today)
+                GROUP BY CONVERT(date, oi.[DeliveryDate]), oi.[MealId], oi.[DietVariantId], oi.[DietMenuPlanItemId]
+            )
+            INSERT INTO [ProductionPlanItems]
+                ([ProductionPlanId], [MealId], [MealName], [DietVariantId], [PlannedQuantity],
+                 [CookedQuantity], [Status], [ProductionGroup], [EstimatedReadyTime], [ActualReadyTime],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt],
+                 [FefoDeductedAt], [FefoReferenceDocument], [DietMenuPlanItemId], [RecipeComponentVersionIds],
+                 [M2SnapshotHash], [M2SnapshotJson], [PackagingDeductedAt], [PackagingReferenceDocument])
+            SELECT
+                pp.[Id],
+                d.[MealId],
+                m.[Name],
+                d.[DietVariantId],
+                d.[PlannedQuantity],
+                CASE WHEN d.[ProductionDate] < @today THEN d.[PlannedQuantity] ELSE 0 END,
+                CASE WHEN d.[ProductionDate] < @today THEN 2 ELSE 0 END,
+                1 + ABS(CHECKSUM(d.[MealId], d.[DietVariantId])) % 4,
+                CONVERT(time, DATEADD(minute, 20 * (ABS(CHECKSUM(d.[MealId])) % 20), CAST('06:00' AS datetime))),
+                CASE WHEN d.[ProductionDate] < @today THEN CONVERT(time, DATEADD(minute, 20 * (ABS(CHECKSUM(d.[MealId])) % 20) + 35, CAST('06:00' AS datetime))) ELSE NULL END,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL,
+                CASE WHEN d.[ProductionDate] < @today THEN DATEADD(hour, 5, CONVERT(datetimeoffset, d.[ProductionDate])) ELSE NULL END,
+                CASE WHEN d.[ProductionDate] < @today THEN N'VOL-M3-FEFO-' + CONVERT(nvarchar(30), pp.[Id]) ELSE NULL END,
+                d.[DietMenuPlanItemId],
+                CONVERT(nvarchar(20), rcv.[RecipeComponentVersionId]),
+                COALESCE(dpi.[PublishedSnapshotHash], CONVERT(varchar(64), HASHBYTES('SHA2_256', CONVERT(nvarchar(100), d.[MealId]) + N':' + CONVERT(nvarchar(100), d.[DietVariantId])), 2)),
+                COALESCE(dpi.[PublishedSnapshotJson], N'{"source":"VolumeDemo","mealId":' + CONVERT(nvarchar(20), d.[MealId]) + N',"dietVariantId":' + CONVERT(nvarchar(20), d.[DietVariantId]) + N'}'),
+                CASE WHEN d.[ProductionDate] < @today THEN DATEADD(hour, 6, CONVERT(datetimeoffset, d.[ProductionDate])) ELSE NULL END,
+                CASE WHEN d.[ProductionDate] < @today THEN N'VOL-M3-PACK-' + CONVERT(nvarchar(30), pp.[Id]) ELSE NULL END
+            FROM Demand d
+            INNER JOIN [ProductionPlans] pp ON pp.[ProductionDate] = d.[ProductionDate] AND pp.[CreatedBy] = @auditUser AND pp.[IsDeleted] = 0
+            INNER JOIN [Meals] m ON m.[Id] = d.[MealId]
+            LEFT JOIN [DietMenuPlanItems] dpi ON dpi.[Id] = d.[DietMenuPlanItemId]
+            CROSS APPLY (
+                SELECT TOP 1 candidates.[RecipeComponentVersionId]
+                FROM
+                (
+                    SELECT mvc.[RecipeComponentVersionId], 0 AS [Priority]
+                    FROM [MealVariantComponents] mvc
+                    WHERE mvc.[MealVariantId] = (
+                        SELECT TOP 1 oi.[MealVariantId]
+                        FROM [OrderItems] oi
+                        INNER JOIN [Orders] o ON o.[Id] = oi.[OrderId]
+                        WHERE o.[OrderNumber] LIKE N'VOL-M1-%'
+                          AND oi.[MealId] = d.[MealId]
+                          AND oi.[DietVariantId] = d.[DietVariantId]
+                          AND CONVERT(date, oi.[DeliveryDate]) = d.[ProductionDate]
+                          AND oi.[MealVariantId] IS NOT NULL
+                        ORDER BY oi.[Id])
+                      AND mvc.[IsDeleted] = 0
+                    UNION ALL
+                    SELECT mrc.[RecipeComponentVersionId], 1
+                    FROM [MealRecipeComponents] mrc
+                    WHERE mrc.[MealId] = d.[MealId]
+                      AND mrc.[IsDeleted] = 0
+                ) candidates
+                ORDER BY candidates.[Priority], candidates.[RecipeComponentVersionId]
+            ) rcv
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [ProductionPlanItems] existing
+                WHERE existing.[ProductionPlanId] = pp.[Id]
+                  AND existing.[MealId] = d.[MealId]
+                  AND existing.[DietVariantId] = d.[DietVariantId]
+                  AND ISNULL(existing.[DietMenuPlanItemId], -1) = ISNULL(d.[DietMenuPlanItemId], -1)
+                  AND existing.[IsDeleted] = 0);
+
+            INSERT INTO [ProductionBatches]
+                ([ProductionPlanId], [MealId], [Name], [PlannedQuantity], [ProducedQuantity],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                ppi.[ProductionPlanId],
+                ppi.[MealId],
+                N'VOL-M3-BATCH-' + CONVERT(nvarchar(20), ppi.[Id]),
+                ppi.[PlannedQuantity],
+                ppi.[CookedQuantity],
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL
+            FROM [ProductionPlanItems] ppi
+            INNER JOIN [ProductionPlans] pp ON pp.[Id] = ppi.[ProductionPlanId]
+            WHERE pp.[CreatedBy] = @auditUser
+              AND NOT EXISTS (
+                    SELECT 1 FROM [ProductionBatches] pb
+                    WHERE pb.[Name] = N'VOL-M3-BATCH-' + CONVERT(nvarchar(20), ppi.[Id])
+                      AND pb.[IsDeleted] = 0);
+
+            INSERT INTO [CookingSessions]
+                ([RecipeComponentVersionId], [ProductionDate], [ProductionPlanItemId], [Status],
+                 [StartedAt], [StartedBy], [CompletedAt], [CompletedBy], [CreatedAt], [UpdatedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                TRY_CONVERT(int, ppi.[RecipeComponentVersionIds]),
+                pp.[ProductionDate],
+                ppi.[Id],
+                CASE WHEN pp.[ProductionDate] < @today THEN N'Completed' ELSE N'Scheduled' END,
+                CASE WHEN pp.[ProductionDate] < @today THEN DATEADD(hour, 5, CONVERT(datetimeoffset, pp.[ProductionDate])) ELSE NULL END,
+                CASE WHEN pp.[ProductionDate] < @today THEN N'vol-staff-kitchen' ELSE NULL END,
+                CASE WHEN pp.[ProductionDate] < @today THEN DATEADD(hour, 7, CONVERT(datetimeoffset, pp.[ProductionDate])) ELSE NULL END,
+                CASE WHEN pp.[ProductionDate] < @today THEN N'vol-staff-kitchen' ELSE NULL END,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM [ProductionPlanItems] ppi
+            INNER JOIN [ProductionPlans] pp ON pp.[Id] = ppi.[ProductionPlanId]
+            WHERE pp.[CreatedBy] = @auditUser
+              AND TRY_CONVERT(int, ppi.[RecipeComponentVersionIds]) IS NOT NULL
+              AND NOT EXISTS (
+                    SELECT 1 FROM [CookingSessions] cs
+                    WHERE cs.[ProductionPlanItemId] = ppi.[Id]
+                      AND cs.[IsDeleted] = 0);
+
+            INSERT INTO [CookingSessionStepChecks]
+                ([CookingSessionId], [RecipeComponentInstructionStepId], [Status], [CheckedAt], [CheckedBy],
+                 [ActualValue], [ActualUnit], [Notes], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy],
+                 [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                cs.[Id],
+                stepRows.[Id],
+                CASE WHEN cs.[ProductionDate] < @today THEN N'Completed' ELSE N'Pending' END,
+                CASE WHEN cs.[ProductionDate] < @today THEN DATEADD(minute, 15 * stepRows.[SortOrder], COALESCE(cs.[StartedAt], @now)) ELSE NULL END,
+                CASE WHEN cs.[ProductionDate] < @today THEN N'vol-staff-kitchen' ELSE NULL END,
+                CASE WHEN stepRows.[RequiresControl] = 1 AND cs.[ProductionDate] < @today THEN CAST(72.000 + (cs.[Id] % 4) AS decimal(10,3)) ELSE NULL END,
+                CASE WHEN stepRows.[RequiresControl] = 1 THEN N'C' ELSE NULL END,
+                CASE WHEN stepRows.[RequiresControl] = 1 THEN N'VOL-M3 CCP check' ELSE N'VOL-M3 step check' END,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM [CookingSessions] cs
+            INNER JOIN [RecipeComponentInstructionSections] sections
+                ON sections.[RecipeComponentVersionId] = cs.[RecipeComponentVersionId]
+               AND sections.[IsDeleted] = 0
+            INNER JOIN [RecipeComponentInstructionSteps] stepRows
+                ON stepRows.[RecipeComponentInstructionSectionId] = sections.[Id]
+               AND stepRows.[IsDeleted] = 0
+            WHERE cs.[CreatedBy] = @auditUser
+              AND NOT EXISTS (
+                    SELECT 1 FROM [CookingSessionStepChecks] csc
+                    WHERE csc.[CookingSessionId] = cs.[Id]
+                      AND csc.[RecipeComponentInstructionStepId] = stepRows.[Id]
+                      AND csc.[IsDeleted] = 0);
+            """,
+            new
+            {
+                Now = now,
+                Days = config.Days,
+            },
+            transaction,
+            cancellationToken);
+
+        await ExecuteVolumeDemoSqlAsync(
+            db,
+            """
+            DECLARE @now datetimeoffset = @Now;
+            DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
+            DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
+
+            INSERT INTO [PackingSessions]
+                ([PackingDate], [OrderId], [ClientName], [PackedBy], [Status], [CreatedBy], [UpdatedBy],
+                 [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt], [DeliveryCalendarId], [ClientPublicId])
+            SELECT
+                CONVERT(date, dc.[DeliveryDate]),
+                o.[Id],
+                u.[FirstName] + N' ' + u.[LastName],
+                N'vol-staff-packing',
+                3,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                DATEADD(hour, 4, CONVERT(datetime, CONVERT(date, dc.[DeliveryDate]))),
+                NULL,
+                dc.[Id],
+                CONVERT(nvarchar(50), cp.[PublicId])
+            FROM [DeliveryCalendar] dc
+            INNER JOIN [Orders] o ON o.[Id] = dc.[OrderId]
+            INNER JOIN [Users] u ON u.[Id] = o.[CustomerId]
+            LEFT JOIN [CustomerProfiles] cp ON cp.[UserId] = u.[Id]
+            WHERE o.[OrderNumber] LIKE N'VOL-M1-%'
+              AND dc.[IsSkipped] = 0
+              AND dc.[IsDeleted] = 0
+              AND CONVERT(date, dc.[DeliveryDate]) < @today
+              AND NOT EXISTS (
+                    SELECT 1 FROM [PackingSessions] ps
+                    WHERE ps.[DeliveryCalendarId] = dc.[Id]
+                      AND ps.[IsDeleted] = 0);
+
+            INSERT INTO [PackingBags]
+                ([PackingSessionId], [BagNumber], [BagCode], [Status], [PackedAt], [PackedBy],
+                 [LabeledAt], [ManifestedAt], [LoadedAt], [LoadedBy], [DispatchedAt], [CreatedBy],
+                 [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt],
+                 [DamageReason], [DamagedAt], [DamagedByUserId], [ReplacementPackingBagId])
+            SELECT
+                ps.[Id],
+                1,
+                N'VOL-M3-BAG-' + RIGHT(N'000000' + CONVERT(nvarchar(6), ps.[Id]), 6),
+                4,
+                DATEADD(hour, 5, CONVERT(datetimeoffset, ps.[PackingDate])),
+                N'vol-staff-packing',
+                DATEADD(hour, 5, DATEADD(minute, 20, CONVERT(datetimeoffset, ps.[PackingDate]))),
+                DATEADD(hour, 6, CONVERT(datetimeoffset, ps.[PackingDate])),
+                DATEADD(hour, 7, CONVERT(datetimeoffset, ps.[PackingDate])),
+                N'vol-staff-loader',
+                DATEADD(hour, 8, CONVERT(datetimeoffset, ps.[PackingDate])),
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                @now,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL
+            FROM [PackingSessions] ps
+            WHERE ps.[CreatedBy] = @auditUser
+              AND NOT EXISTS (
+                    SELECT 1 FROM [PackingBags] pb
+                    WHERE pb.[PackingSessionId] = ps.[Id]
+                      AND pb.[BagNumber] = 1
+                      AND pb.[IsDeleted] = 0);
+
+            ;WITH SessionItems AS (
+                SELECT
+                    ps.[Id] AS [PackingSessionId],
+                    pb.[Id] AS [PackingBagId],
+                    ps.[PackingDate],
+                    oi.[MealId],
+                    oi.[DietVariantId],
+                    oi.[MealSlot],
+                    m.[Name] AS [MealName],
+                    ROW_NUMBER() OVER (PARTITION BY ps.[Id] ORDER BY oi.[MealSlot], oi.[Id]) AS [BoxNo]
+                FROM [PackingSessions] ps
+                INNER JOIN [PackingBags] pb ON pb.[PackingSessionId] = ps.[Id] AND pb.[IsDeleted] = 0
+                INNER JOIN [OrderItems] oi ON oi.[OrderId] = ps.[OrderId] AND CONVERT(date, oi.[DeliveryDate]) = ps.[PackingDate] AND oi.[IsDeleted] = 0
+                INNER JOIN [Meals] m ON m.[Id] = oi.[MealId]
+                WHERE ps.[CreatedBy] = @auditUser
+                  AND ps.[IsDeleted] = 0
+            )
+            INSERT INTO [PackingItems]
+                ([PackingSessionId], [MealId], [MealName], [DietVariantId], [BatchId], [ExpiryDate],
+                 [IsDamaged], [Remarks], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy],
+                 [CreatedAt], [UpdatedAt], [BoxCode], [Status], [FoilPrintedAt], [PackedAt], [PackedBy],
+                 [PackingBagId], [ProductionPlanItemId], [ReplacementForPackingItemId], [IssueReportedAt],
+                 [IssueReportedByUserId])
+            SELECT
+                si.[PackingSessionId],
+                si.[MealId],
+                si.[MealName],
+                si.[DietVariantId],
+                batchRows.[Id],
+                DATEADD(hour, 48, CONVERT(datetime, si.[PackingDate])),
+                0,
+                N'VOL-M3 historical packed item.',
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                DATEADD(hour, 5, CONVERT(datetime, si.[PackingDate])),
+                NULL,
+                N'VOL-M3-BOX-' + RIGHT(N'000000' + CONVERT(nvarchar(6), si.[PackingSessionId]), 6) + N'-' + CONVERT(nvarchar(2), si.[BoxNo]),
+                2,
+                DATEADD(hour, 4, DATEADD(minute, si.[BoxNo] * 3, CONVERT(datetime, si.[PackingDate]))),
+                DATEADD(hour, 5, DATEADD(minute, si.[BoxNo] * 4, CONVERT(datetime, si.[PackingDate]))),
+                N'vol-staff-packing',
+                si.[PackingBagId],
+                ppi.[Id],
+                NULL,
+                NULL,
+                NULL
+            FROM SessionItems si
+            CROSS APPLY (
+                SELECT TOP 1 b.[Id]
+                FROM [Batches] b
+                INNER JOIN [StockItems] st ON st.[Id] = b.[StockItemId]
+                WHERE st.[Name] LIKE N'VOL-M2-ING-%'
+                  AND b.[IsDeleted] = 0
+                ORDER BY ABS(CHECKSUM(b.[Id], si.[MealId], si.[PackingSessionId]))
+            ) batchRows
+            OUTER APPLY (
+                SELECT TOP 1 ppi.[Id]
+                FROM [ProductionPlanItems] ppi
+                INNER JOIN [ProductionPlans] pp ON pp.[Id] = ppi.[ProductionPlanId]
+                WHERE pp.[ProductionDate] = si.[PackingDate]
+                  AND ppi.[MealId] = si.[MealId]
+                  AND ppi.[DietVariantId] = si.[DietVariantId]
+                  AND ppi.[IsDeleted] = 0
+                ORDER BY ppi.[Id]
+            ) ppi
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [PackingItems] existing
+                WHERE existing.[BoxCode] = N'VOL-M3-BOX-' + RIGHT(N'000000' + CONVERT(nvarchar(6), si.[PackingSessionId]), 6) + N'-' + CONVERT(nvarchar(2), si.[BoxNo])
+                  AND existing.[IsDeleted] = 0);
+
+            INSERT INTO [BoxLabels]
+                ([PackingItemId], [QrCode], [LabelDataJson], [PrintNumber], [ReprintReason], [PrintedAt],
+                 [PrintedBy], [CreatedAt], [UpdatedAt])
+            SELECT
+                pi.[Id],
+                N'VOL-M3-BOXQR-' + RIGHT(N'00000000' + CONVERT(nvarchar(8), pi.[Id]), 8),
+                N'{"source":"VolumeDemo","boxCode":"' + pi.[BoxCode] + N'","meal":"' + REPLACE(pi.[MealName], '"', '') + N'"}',
+                1,
+                NULL,
+                COALESCE(pi.[FoilPrintedAt], @now),
+                @auditUser,
+                @now,
+                NULL
+            FROM [PackingItems] pi
+            WHERE pi.[CreatedBy] = @auditUser
+              AND NOT EXISTS (SELECT 1 FROM [BoxLabels] bl WHERE bl.[PackingItemId] = pi.[Id]);
+
+            INSERT INTO [PackingLabels]
+                ([PackingItemId], [PackingSessionId], [LabelType], [QrCode], [DishName], [Allergens], [Kcal],
+                 [ClientName], [RouteInfo], [DeliveryWindow], [CreatedAt], [UpdatedAt], [PackingBagId],
+                 [PrintNumber], [LabelDataJson], [PrintedAt], [PrintedBy], [MealsList], [ReprintReason],
+                 [AttachedAt], [AttachedByUserId], [AttachedBy])
+            SELECT
+                NULL,
+                ps.[Id],
+                1,
+                N'VOL-M3-SHIPQR-' + RIGHT(N'00000000' + CONVERT(nvarchar(8), pb.[Id]), 8),
+                NULL,
+                NULL,
+                NULL,
+                ps.[ClientName],
+                N'VOL-M4 route pending/history',
+                N'06:00-10:00',
+                @now,
+                NULL,
+                pb.[Id],
+                1,
+                N'{"source":"VolumeDemo","bagCode":"' + pb.[BagCode] + N'"}',
+                COALESCE(pb.[LabeledAt], @now),
+                @auditUser,
+                STUFF((
+                    SELECT N', ' + pi2.[MealName]
+                    FROM [PackingItems] pi2
+                    WHERE pi2.[PackingBagId] = pb.[Id]
+                      AND pi2.[IsDeleted] = 0
+                    FOR XML PATH(''), TYPE).value('.', 'nvarchar(max)'), 1, 2, N''),
+                NULL,
+                COALESCE(pb.[LabeledAt], @now),
+                NULL,
+                @auditUser
+            FROM [PackingBags] pb
+            INNER JOIN [PackingSessions] ps ON ps.[Id] = pb.[PackingSessionId]
+            WHERE pb.[CreatedBy] = @auditUser
+              AND NOT EXISTS (
+                    SELECT 1 FROM [PackingLabels] pl
+                    WHERE pl.[PackingBagId] = pb.[Id]
+                      AND pl.[LabelType] = 1);
+
+            INSERT INTO [PackingStatusLogs]
+                ([PackingSessionId], [OldStatus], [NewStatus], [ChangedByUserId], [ChangedAt], [Notes],
+                 [CreatedAt], [UpdatedAt])
+            SELECT
+                ps.[Id],
+                transitions.[OldStatus],
+                transitions.[NewStatus],
+                NULL,
+                DATEADD(minute, transitions.[MinuteOffset], CONVERT(datetime, ps.[PackingDate])),
+                N'VOL-M3 status history',
+                @now,
+                NULL
+            FROM [PackingSessions] ps
+            CROSS APPLY (VALUES
+                (0, 1, 270),
+                (1, 3, 330),
+                (3, 4, 420)
+            ) transitions([OldStatus], [NewStatus], [MinuteOffset])
+            WHERE ps.[CreatedBy] = @auditUser
+              AND NOT EXISTS (
+                    SELECT 1 FROM [PackingStatusLogs] psl
+                    WHERE psl.[PackingSessionId] = ps.[Id]
+                      AND psl.[NewStatus] = transitions.[NewStatus]
+                      AND psl.[Notes] = N'VOL-M3 status history');
+            """,
+            new { Now = now },
+            transaction,
+            cancellationToken);
+
+        await ExecuteVolumeDemoSqlAsync(
+            db,
+            """
+            DECLARE @now datetimeoffset = @Now;
+            DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
+            DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
+            DECLARE @days int = @Days;
+
+            INSERT INTO [InventoryTransactions]
+                ([BatchId], [TransactionType], [QuantityChanged], [Reason], [ReferenceDocument], [CreatedAt], [UpdatedAt])
+            SELECT
+                batchRows.[Id],
+                2,
+                CAST(-1 * (50 + (ppi.[PlannedQuantity] % 80)) AS decimal(18,4)),
+                N'VOL-M3 FEFO production consumption',
+                N'VOL-M3-FEFO-' + CONVERT(nvarchar(20), ppi.[Id]),
+                DATEADD(hour, 5, CONVERT(datetimeoffset, pp.[ProductionDate])),
+                NULL
+            FROM [ProductionPlanItems] ppi
+            INNER JOIN [ProductionPlans] pp ON pp.[Id] = ppi.[ProductionPlanId]
+            CROSS APPLY (
+                SELECT TOP 1 b.[Id]
+                FROM [Batches] b
+                INNER JOIN [StockItems] st ON st.[Id] = b.[StockItemId]
+                WHERE st.[Name] LIKE N'VOL-M2-ING-%'
+                  AND b.[IsDeleted] = 0
+                ORDER BY b.[ExpiryDate], ABS(CHECKSUM(b.[Id], ppi.[Id]))
+            ) batchRows
+            WHERE pp.[CreatedBy] = @auditUser
+              AND pp.[ProductionDate] < @today
+              AND NOT EXISTS (
+                    SELECT 1 FROM [InventoryTransactions] it
+                    WHERE it.[ReferenceDocument] = N'VOL-M3-FEFO-' + CONVERT(nvarchar(20), ppi.[Id]));
+
+            ;WITH LocationRows AS (
+                SELECT [Id], [Code], [Name], [MinTemperatureCelsius], [MaxTemperatureCelsius]
+                FROM [HaccpLocations]
+                WHERE [IsActive] = 1
+            ),
+            Numbers AS (
+                SELECT TOP (@days * 24) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects a CROSS JOIN sys.all_objects b
+            )
+            INSERT INTO [TemperatureLogs]
+                ([DeviceNameOrLocation], [RecordedTemperatureCelsius], [RecordedAt], [Remarks], [CreatedBy],
+                 [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy], [CreatedAt], [UpdatedAt], [HaccpLocationId])
+            SELECT
+                N'VOL-M3-' + l.[Code],
+                CASE WHEN (n.[N] + l.[Id]) % 211 = 0
+                    THEN l.[MaxTemperatureCelsius] + 3.5000
+                    ELSE l.[MinTemperatureCelsius] + ((l.[MaxTemperatureCelsius] - l.[MinTemperatureCelsius]) / 2.0)
+                         + CAST(((n.[N] + l.[Id]) % 7) AS decimal(9,4)) / 10.0
+                END,
+                DATEADD(hour, -1 * n.[N], @now),
+                CASE WHEN (n.[N] + l.[Id]) % 211 = 0 THEN N'VOL-M3 alert threshold exceeded' ELSE N'VOL-M3 periodic reading' END,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                DATEADD(hour, -1 * n.[N], @now),
+                NULL,
+                l.[Id]
+            FROM LocationRows l
+            CROSS JOIN Numbers n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [TemperatureLogs] tl
+                WHERE tl.[DeviceNameOrLocation] = N'VOL-M3-' + l.[Code]
+                  AND tl.[RecordedAt] = DATEADD(hour, -1 * n.[N], @now)
+                  AND tl.[CreatedBy] = @auditUser);
+
+            INSERT INTO [HaccpTemperatureAlerts]
+                ([HaccpLocationId], [TemperatureLogId], [Status], [TriggeredTemperatureCelsius],
+                 [LastTemperatureCelsius], [MinTemperatureCelsius], [MaxTemperatureCelsius],
+                 [OpenedAt], [LastObservedAt], [ClosedAt], [Message], [CreatedAt], [UpdatedAt])
+            SELECT TOP (50)
+                l.[Id],
+                tl.[Id],
+                CASE WHEN tl.[RecordedAt] < DATEADD(day, -1, @now) THEN N'Closed' ELSE N'Open' END,
+                tl.[RecordedTemperatureCelsius],
+                tl.[RecordedTemperatureCelsius],
+                l.[MinTemperatureCelsius],
+                l.[MaxTemperatureCelsius],
+                tl.[RecordedAt],
+                tl.[RecordedAt],
+                CASE WHEN tl.[RecordedAt] < DATEADD(day, -1, @now) THEN DATEADD(hour, 2, tl.[RecordedAt]) ELSE NULL END,
+                N'VOL-M3 HACCP temperature alert.',
+                tl.[RecordedAt],
+                NULL
+            FROM [TemperatureLogs] tl
+            INNER JOIN [HaccpLocations] l ON l.[Id] = tl.[HaccpLocationId]
+            WHERE tl.[CreatedBy] = @auditUser
+              AND (tl.[RecordedTemperatureCelsius] < l.[MinTemperatureCelsius]
+                   OR tl.[RecordedTemperatureCelsius] > l.[MaxTemperatureCelsius])
+              AND NOT EXISTS (
+                    SELECT 1 FROM [HaccpTemperatureAlerts] a
+                    WHERE a.[TemperatureLogId] = tl.[Id])
+            ORDER BY tl.[RecordedAt] DESC;
+            """,
+            new
+            {
+                Now = now,
+                Days = config.Days,
+            },
+            transaction,
+            cancellationToken);
+
+        this.logger.LogInformation("Ensured VolumeDemo M3 production, packing, FEFO and HACCP dataset.");
+    }
+
+    private async Task SeedVolM4LogisticsAsync(
+        IDbConnection db,
+        VolumeDemoConfig config,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        await ExecuteVolumeDemoSqlAsync(
+            db,
+            """
+            DECLARE @now datetimeoffset = @Now;
+            DECLARE @today date = CONVERT(date, SYSUTCDATETIME());
+            DECLARE @auditUser nvarchar(100) = N'VolumeDemoSeeder';
+
+            ;WITH Vehicles AS (
+                SELECT * FROM (VALUES
+                    (1, N'VOL-M4-BI0001', N'Fiat Ducato Chlodnia', 650.00),
+                    (2, N'VOL-M4-BI0002', N'Mercedes Sprinter Long', 900.00),
+                    (3, N'VOL-M4-BI0003', N'Renault Master Izoterma', 850.00),
+                    (4, N'VOL-M4-BI0004', N'Iveco Daily Chlodnia', 950.00),
+                    (5, N'VOL-M4-BI0005', N'Ford Transit Custom', 700.00),
+                    (6, N'VOL-M4-BI0006', N'Volkswagen Crafter', 780.00),
+                    (7, N'VOL-M4-BI0007', N'Opel Movano', 720.00),
+                    (8, N'VOL-M4-BI0008', N'Peugeot Boxer', 760.00)
+                ) v([N], [RegistrationNumber], [Model], [MaxLoadKg])
+            )
+            INSERT INTO [Vehicles]
+                ([RegistrationNumber], [Model], [MaxLoadKg], [Status], [CreatedAt], [UpdatedAt],
+                 [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                [RegistrationNumber],
+                [Model],
+                [MaxLoadKg],
+                1,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM Vehicles v
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Vehicles] existing
+                WHERE existing.[RegistrationNumber] = v.[RegistrationNumber]
+                  AND existing.[IsDeleted] = 0);
+
+            ;WITH DriverUsers AS (
+                SELECT u.[Id], ROW_NUMBER() OVER (ORDER BY u.[Id]) AS [N]
+                FROM [Users] u
+                WHERE u.[Email] LIKE N'vol-staff-%@kuchnia.local'
+                  AND u.[Role] IN (N'Driver', N'DriverManager', N'LogisticsManager')
+            )
+            INSERT INTO [Drivers]
+                ([UserId], [LicenseNumber], [IsActive], [CreatedAt], [UpdatedAt], [CreatedBy],
+                 [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                [Id],
+                N'VOL-M4-LIC-' + RIGHT(N'000' + CONVERT(nvarchar(3), [N]), 3),
+                1,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM DriverUsers du
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [Drivers] d
+                WHERE d.[UserId] = du.[Id]
+                  AND d.[IsDeleted] = 0);
+
+            ;WITH DriverRows AS (
+                SELECT [Id], ROW_NUMBER() OVER (ORDER BY [Id]) AS [N]
+                FROM [Drivers]
+                WHERE [LicenseNumber] LIKE N'VOL-M4-%'
+                  AND [IsDeleted] = 0
+            ),
+            VehicleRows AS (
+                SELECT [Id], ROW_NUMBER() OVER (ORDER BY [Id]) AS [N]
+                FROM [Vehicles]
+                WHERE [RegistrationNumber] LIKE N'VOL-M4-%'
+                  AND [IsDeleted] = 0
+            )
+            INSERT INTO [DriverVehicleAssignments]
+                ([DriverId], [VehicleId], [AssignedAt], [UnassignedAt], [CreatedAt], [UpdatedAt])
+            SELECT
+                d.[Id],
+                v.[Id],
+                @now,
+                NULL,
+                @now,
+                NULL
+            FROM DriverRows d
+            INNER JOIN VehicleRows v ON v.[N] = ((d.[N] - 1) % (SELECT COUNT(1) FROM VehicleRows)) + 1
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [DriverVehicleAssignments] dva
+                WHERE (dva.[DriverId] = d.[Id] OR dva.[VehicleId] = v.[Id])
+                  AND dva.[UnassignedAt] IS NULL);
+
+            ;WITH Numbers AS (
+                SELECT TOP (300) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [N]
+                FROM sys.all_objects a CROSS JOIN sys.all_objects b
+            )
+            INSERT INTO [ThermalBags]
+                ([SerialNumber], [Status], [LastCustomerId], [CreatedAt], [UpdatedAt], [CreatedBy],
+                 [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                N'VOL-M4-BAG-' + RIGHT(N'0000' + CONVERT(nvarchar(4), [N]), 4),
+                0,
+                NULL,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM Numbers n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [ThermalBags] tb
+                WHERE tb.[SerialNumber] = N'VOL-M4-BAG-' + RIGHT(N'0000' + CONVERT(nvarchar(4), n.[N]), 4)
+                  AND tb.[IsDeleted] = 0);
+
+            DECLARE @RouteCandidates TABLE
+            (
+                [DeliveryCalendarId] int PRIMARY KEY,
+                [RouteDate] date NOT NULL,
+                [RouteNo] int NOT NULL,
+                [SequenceNumber] int NOT NULL
+            );
+
+            ;WITH Eligible AS (
+                SELECT
+                    dc.[Id] AS [DeliveryCalendarId],
+                    CONVERT(date, dc.[DeliveryDate]) AS [RouteDate],
+                    ROW_NUMBER() OVER (
+                        PARTITION BY CONVERT(date, dc.[DeliveryDate])
+                        ORDER BY a.[PostalCode], a.[Street], dc.[Id]) AS [N]
+                FROM [DeliveryCalendar] dc
+                INNER JOIN [Orders] o ON o.[Id] = dc.[OrderId]
+                INNER JOIN [Addresses] a ON a.[Id] = dc.[AddressId]
+                WHERE o.[OrderNumber] LIKE N'VOL-M1-%'
+                  AND dc.[IsSkipped] = 0
+                  AND dc.[IsDeleted] = 0
+                  AND CONVERT(date, dc.[DeliveryDate]) < @today
+                  AND NOT EXISTS (
+                        SELECT 1 FROM [DeliveryRouteStops] existing
+                        WHERE existing.[DeliveryCalendarId] = dc.[Id]
+                          AND existing.[IsDeleted] = 0)
+            )
+            INSERT INTO @RouteCandidates ([DeliveryCalendarId], [RouteDate], [RouteNo], [SequenceNumber])
+            SELECT
+                [DeliveryCalendarId],
+                [RouteDate],
+                (([N] - 1) / 25) + 1,
+                (([N] - 1) % 25) + 1
+            FROM Eligible;
+
+            ;WITH RouteRows AS (
+                SELECT DISTINCT [RouteDate], [RouteNo]
+                FROM @RouteCandidates
+            ),
+            DriverRows AS (
+                SELECT [Id], ROW_NUMBER() OVER (ORDER BY [Id]) AS [N]
+                FROM [Drivers]
+                WHERE [LicenseNumber] LIKE N'VOL-M4-%'
+                  AND [IsDeleted] = 0
+            ),
+            VehicleRows AS (
+                SELECT [Id], ROW_NUMBER() OVER (ORDER BY [Id]) AS [N]
+                FROM [Vehicles]
+                WHERE [RegistrationNumber] LIKE N'VOL-M4-%'
+                  AND [IsDeleted] = 0
+            ),
+            NumberedRoutes AS (
+                SELECT
+                    [RouteDate],
+                    [RouteNo],
+                    ROW_NUMBER() OVER (ORDER BY [RouteDate], [RouteNo]) AS [N]
+                FROM RouteRows
+            )
+            INSERT INTO [DeliveryRoutes]
+                ([RouteDate], [Name], [TotalDistanceKm], [Status], [VehicleId], [DriverId],
+                 [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                CONVERT(datetimeoffset, nr.[RouteDate]),
+                N'VOL-M4-ROUTE-' + CONVERT(nvarchar(8), nr.[RouteDate], 112) + N'-' + RIGHT(N'00' + CONVERT(nvarchar(2), nr.[RouteNo]), 2),
+                CAST(18.5 + nr.[RouteNo] * 7.25 AS float),
+                3,
+                v.[Id],
+                d.[Id],
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM NumberedRoutes nr
+            LEFT JOIN DriverRows d ON d.[N] = ((nr.[N] - 1) % NULLIF((SELECT COUNT(1) FROM DriverRows), 0)) + 1
+            LEFT JOIN VehicleRows v ON v.[N] = ((nr.[N] - 1) % NULLIF((SELECT COUNT(1) FROM VehicleRows), 0)) + 1
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [DeliveryRoutes] r
+                WHERE r.[Name] = N'VOL-M4-ROUTE-' + CONVERT(nvarchar(8), nr.[RouteDate], 112) + N'-' + RIGHT(N'00' + CONVERT(nvarchar(2), nr.[RouteNo]), 2)
+                  AND r.[IsDeleted] = 0);
+
+            INSERT INTO [DeliveryRouteStops]
+                ([RouteId], [DeliveryCalendarId], [SequenceNumber], [PlannedArrivalTime], [ActualArrivalTime],
+                 [Status], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted], [DeletedAt], [DeletedBy])
+            SELECT
+                r.[Id],
+                c.[DeliveryCalendarId],
+                c.[SequenceNumber],
+                DATEADD(minute, 20 * c.[SequenceNumber], DATEADD(hour, 6, CONVERT(datetimeoffset, c.[RouteDate]))),
+                DATEADD(minute, 20 * c.[SequenceNumber] + (c.[SequenceNumber] % 7), DATEADD(hour, 6, CONVERT(datetimeoffset, c.[RouteDate]))),
+                3,
+                @now,
+                NULL,
+                @auditUser,
+                NULL,
+                0,
+                NULL,
+                NULL
+            FROM @RouteCandidates c
+            INNER JOIN [DeliveryRoutes] r
+                ON r.[Name] = N'VOL-M4-ROUTE-' + CONVERT(nvarchar(8), c.[RouteDate], 112) + N'-' + RIGHT(N'00' + CONVERT(nvarchar(2), c.[RouteNo]), 2)
+               AND r.[IsDeleted] = 0
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [DeliveryRouteStops] existing
+                WHERE existing.[DeliveryCalendarId] = c.[DeliveryCalendarId]
+                  AND existing.[IsDeleted] = 0);
+
+            INSERT INTO [PackingManifests]
+                ([PackingDate], [ManifestNumber], [RouteCount], [BagCount], [GeneratedAt], [GeneratedBy],
+                 [PayloadJson], [CreatedAt], [UpdatedAt], [RouteId], [RouteName], [VehicleId],
+                 [VehicleRegistration], [IsVerified], [VerifiedAt], [VerifiedBy], [VerifiedByUserId],
+                 [DriverUserId], [ManifestVersion], [SupersedesManifestId], [ChangeReason], [IsSuperseded],
+                 [WorkerApprovedAt], [WorkerApprovedBy], [WorkerApprovedByUserId], [SentToLogisticsAt],
+                 [SentToLogisticsByUserId], [RequiresRegeneration], [RequiresRegenerationReason], [SnapshotHash])
+            SELECT
+                CONVERT(date, r.[RouteDate]),
+                N'VOL-M4-MAN-' + CONVERT(nvarchar(8), CONVERT(date, r.[RouteDate]), 112) + N'-' + RIGHT(N'0000' + CONVERT(nvarchar(4), r.[Id]), 4),
+                1,
+                COUNT(pb.[Id]),
+                DATEADD(hour, 7, CONVERT(datetime, CONVERT(date, r.[RouteDate]))),
+                @auditUser,
+                N'{"source":"VolumeDemo","routeId":' + CONVERT(nvarchar(20), r.[Id]) + N',"bagCount":' + CONVERT(nvarchar(20), COUNT(pb.[Id])) + N'}',
+                @now,
+                NULL,
+                r.[Id],
+                r.[Name],
+                r.[VehicleId],
+                v.[RegistrationNumber],
+                1,
+                DATEADD(hour, 7, CONVERT(datetime, CONVERT(date, r.[RouteDate]))),
+                @auditUser,
+                NULL,
+                du.[UserId],
+                1,
+                NULL,
+                NULL,
+                0,
+                DATEADD(hour, 7, CONVERT(datetimeoffset, CONVERT(date, r.[RouteDate]))),
+                @auditUser,
+                NULL,
+                DATEADD(hour, 7, DATEADD(minute, 30, CONVERT(datetimeoffset, CONVERT(date, r.[RouteDate])))),
+                NULL,
+                0,
+                NULL,
+                CONVERT(varchar(64), HASHBYTES('SHA2_256', r.[Name] + N':' + CONVERT(nvarchar(20), COUNT(pb.[Id]))), 2)
+            FROM [DeliveryRoutes] r
+            LEFT JOIN [Vehicles] v ON v.[Id] = r.[VehicleId]
+            LEFT JOIN [Drivers] d ON d.[Id] = r.[DriverId]
+            LEFT JOIN [Users] du ON du.[Id] = d.[UserId]
+            LEFT JOIN [DeliveryRouteStops] rs ON rs.[RouteId] = r.[Id] AND rs.[IsDeleted] = 0
+            LEFT JOIN [PackingSessions] ps ON ps.[DeliveryCalendarId] = rs.[DeliveryCalendarId] AND ps.[IsDeleted] = 0
+            LEFT JOIN [PackingBags] pb ON pb.[PackingSessionId] = ps.[Id] AND pb.[IsDeleted] = 0
+            WHERE r.[Name] LIKE N'VOL-M4-%'
+              AND r.[IsDeleted] = 0
+              AND NOT EXISTS (
+                    SELECT 1 FROM [PackingManifests] pm
+                    WHERE pm.[RouteId] = r.[Id]
+                      AND pm.[ManifestNumber] LIKE N'VOL-M4-%')
+            GROUP BY r.[Id], r.[RouteDate], r.[Name], r.[VehicleId], v.[RegistrationNumber], du.[UserId];
+
+            ;WITH Stops AS (
+                SELECT rs.[Id] AS [RouteStopId], rs.[DeliveryCalendarId], r.[DriverId],
+                    ROW_NUMBER() OVER (ORDER BY rs.[Id]) AS [N]
+                FROM [DeliveryRouteStops] rs
+                INNER JOIN [DeliveryRoutes] r ON r.[Id] = rs.[RouteId]
+                WHERE r.[Name] LIKE N'VOL-M4-%'
+                  AND rs.[IsDeleted] = 0
+            ),
+            Bags AS (
+                SELECT tb.[Id], ROW_NUMBER() OVER (ORDER BY tb.[Id]) AS [N]
+                FROM [ThermalBags] tb
+                WHERE tb.[SerialNumber] LIKE N'VOL-M4-%'
+                  AND tb.[IsDeleted] = 0
+            )
+            INSERT INTO [BagMovementLogs]
+                ([ThermalBagId], [FromStatus], [ToStatus], [DriverId], [RouteStopId], [CreatedAt], [UpdatedAt])
+            SELECT
+                b.[Id],
+                moves.[FromStatus],
+                moves.[ToStatus],
+                s.[DriverId],
+                s.[RouteStopId],
+                DATEADD(minute, moves.[MinuteOffset], DATEADD(hour, 6, CONVERT(datetimeoffset, CONVERT(date, @today)))),
+                NULL
+            FROM Stops s
+            INNER JOIN Bags b ON b.[N] = ((s.[N] - 1) % NULLIF((SELECT COUNT(1) FROM Bags), 0)) + 1
+            CROSS APPLY (VALUES
+                (0, 1, 0),
+                (1, 1, 15),
+                (1, 1, 30),
+                (1, 0, 45)
+            ) moves([FromStatus], [ToStatus], [MinuteOffset])
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [BagMovementLogs] bml
+                WHERE bml.[RouteStopId] = s.[RouteStopId]
+                  AND bml.[ThermalBagId] = b.[Id]
+                  AND bml.[CreatedAt] = DATEADD(minute, moves.[MinuteOffset], DATEADD(hour, 6, CONVERT(datetimeoffset, CONVERT(date, @today)))));
+            """,
+            new { Now = now },
+            transaction,
+            cancellationToken);
+
+        this.logger.LogInformation("Ensured VolumeDemo M4 logistics, route and bag movement dataset.");
     }
 
     private async Task BackfillPublishedDietMenuSnapshotsAsync(CancellationToken cancellationToken)
