@@ -47,15 +47,23 @@ public sealed class DeliveryRouteRepository : BaseRepository<DeliveryRoute>, IDe
     public async Task<List<DeliveryRoute>> GetRoutesWithStopsAsync(DateTimeOffset date)
     {
         using var db = Factory.CreateConnection();
-        var routeDate = date.Date;
+        var routeDateStart = new DateTimeOffset(date.Date, date.Offset);
+        var routeDateEnd = routeDateStart.AddDays(1);
         const string sqlRoutes = """
             SELECT *
             FROM [DeliveryRoutes]
-            WHERE CAST([RouteDate] AS date) = @RouteDate
+            WHERE [RouteDate] >= @RouteDateStart
+              AND [RouteDate] < @RouteDateEnd
               AND [IsDeleted] = 0
             ORDER BY [Id];
             """;
-        var routes = (await db.QueryAsync<DeliveryRoute>(sqlRoutes, new { RouteDate = routeDate })).ToList();
+        var routes = (await db.QueryAsync<DeliveryRoute>(
+            sqlRoutes,
+            new
+            {
+                RouteDateStart = routeDateStart,
+                RouteDateEnd = routeDateEnd,
+            })).ToList();
 
         if (routes.Count == 0)
         {
