@@ -1,7 +1,7 @@
 # Analiza Wymagań Niefunkcjonalnych, Architektura Sprzętowa i Opis Schematu Bazy Danych
 **Projekt:** System Zarządzania Platformą Cateringową „Kuchnia u Cygana”  
 **Wersja:** 2.0 (Rozszerzona Dokumentacja Techniczno-Analityczna)  
-**Status:** Gotowy do prezentacji  
+**Status:** Gotowy do oddania  
 **Autorzy:** Zespół Deweloperski (Dawid Janczyło, Gabriel Ostaszewski, Maciej Cyuńczyk, Tomasz Golonko, Paweł Trochimczyk)  
 
 ---
@@ -19,6 +19,7 @@
 10. [Wymagania dotyczące przetwarzania danych](#10-wymagania-dotyczące-przetwarzania-danych)
 11. [Przepływ Danych przy Zapytaniu (Request Data Flow Walkthrough)](#11-przepływ-danych-przy-zapytaniu-request-data-flow-walkthrough)
 12. [Potencjalne Trudności i Ryzyka Projektowe](#12-potencjalne-trudności-i-ryzyka-projektowe)
+13. [Podsumowanie realizacji wymagań SBD](#13-podsumowanie-realizacji-wymagań-sbd)
 
 ---
 
@@ -1498,3 +1499,33 @@ Niektóre obszary integracji są w trakcie ustaleń. Poniższa tabela przedstawi
 | **Rozszerzenie routingu o zewnętrzny silnik tras** | Tomasz (M4) | Dalszy rozwój logistyki | Geokodowanie przez OpenStreetMap/Nominatim istnieje w kodzie, natomiast pełny silnik optymalizacji tras OSRM/Google Directions pozostaje możliwym rozszerzeniem ponad obecną heurystykę aplikacyjną. |
 | **Mechanizm podpisu biometrycznego kuriera** | Tomasz (M4) | Faza 6 (Frontend) | Weryfikacja załadunku w manifestach. Czekamy na decyzję, czy podpis będzie realizowany przez rysowanie na ekranie, czy kod PIN kuriera. |
 | **Obsługa załączników wideo w reklamacjach** | Paweł (M5) | Faza 5 (Integracja) | Ustalenie limitów rozmiaru plików (np. max 10MB) w celu ochrony przepustowości sieciowej serwera. |
+
+---
+
+## 13. Podsumowanie realizacji wymagań SBD
+
+Poniższa tabela zbiera wymagania SBD i wskazuje ich realizację bezpośrednio w kodzie, migracjach, konfiguracji aplikacji albo obiektach bazy danych. Rozdział pełni rolę syntetycznej checklisty technicznej w sprawozdaniu.
+
+| Wymaganie SBD | Status | Realizacja / dowód w projekcie |
+| :--- | :---: | :--- |
+| Konta w bazie danych | Zrealizowane | Skrypt [sqlserver-init.sql](../docker/sqlserver-init.sql) tworzy konta `admin` i `pracownik`. `admin` posiada rolę `db_owner`, a `pracownik` wyłącznie role `db_datareader` i `db_datawriter`. |
+| Połączenie z serwerem | Zrealizowane | SQL Server działa w Dockerze, a aplikacja korzysta z dwóch connection stringów: `DefaultConnection` dla zwykłej pracy aplikacji i `MigrationConnection` dla migracji schematu. |
+| Analiza biznesowa | Zrealizowane | Rozdziały 1-3 opisują proces cateringu dietetycznego, podział na moduły i wymagania funkcjonalne oraz niefunkcjonalne. |
+| Projekt BD, encje i ERD | Zrealizowane | Rozdział 8 zawiera ERD, a rozdział 9 opisuje logiczny model danych i główne grupy encji. Encje domenowe znajdują się w katalogu [Entities](../src/KuchniaUCygana.Domain/Entities). |
+| Implementacja fizycznego projektu BD | Zrealizowane | Schemat fizyczny jest tworzony przez migracje FluentMigrator w katalogu [Migrations](../src/KuchniaUCygana.Infrastructure/Persistence/Migrations). Historia migracji jest widoczna w tabeli `VersionInfo`. |
+| Skrypt tworzący bazę danych | Zrealizowane | Projekt używa podejścia dwuczęściowego: [sqlserver-init.sql](../docker/sqlserver-init.sql) bootstrapuje bazę i konta, a wersjonowane migracje tworzą tabele, indeksy, triggery, funkcje i procedury. |
+| PL/SQL / T-SQL: trigger, procedura, funkcja | Zrealizowane | Rozdział 10.2 i 11 opisują `tr_Batches_UpdateIsDepleted`, `usp_ArchiveSystemLogs` oraz `fn_MealNutritionCost`. Obiekty są wdrażane migracją [507_AddSbdSqlObjectsAndIndexes.cs](../src/KuchniaUCygana.Infrastructure/Persistence/Migrations/507_AddSbdSqlObjectsAndIndexes.cs). |
+| Pakiet | Zrealizowane | Ponieważ SQL Server nie ma składni `CREATE PACKAGE`, zastosowano schemat `logistics_pkg` jako odpowiednik pakietu. Zawiera funkcję `fn_RouteLoadSummary` i procedurę `usp_GetDailyDispatchBoard`, wdrażane migracją [519_AddLogisticsSbdPackage.cs](../src/KuchniaUCygana.Infrastructure/Persistence/Migrations/519_AddLogisticsSbdPackage.cs). |
+| Użycie ORM | Zrealizowane | Aplikacja używa Dappera jako micro-ORM. Repozytoria mapują wyniki SQL na obiekty C#, używają parametrów i pracują na encjach/DTO zamiast ręcznego `SqlDataReader`. |
+| Wystawienie endpointów | Zrealizowane | Endpointy są realizowane przez kontrolery ASP.NET Core MVC, m.in. [LogisticsController.cs](../src/KuchniaUCygana.Web/Controllers/LogisticsController.cs), [DriverMobileController.cs](../src/KuchniaUCygana.Web/Controllers/DriverMobileController.cs), [AdminController.cs](../src/KuchniaUCygana.Web/Controllers/AdminController.cs). |
+| Dobre praktyki programowania | Zrealizowane | Projekt stosuje Clean Architecture, warstwy `Domain/Application/Infrastructure/Web`, dependency injection, walidację, parametryzowane zapytania, transakcje, audyt i migracje wersjonujące schemat bazy. |
+| Role systemowe | Zrealizowane | Role aplikacyjne są definiowane w [AppRoles.cs](../src/KuchniaUCygana.Domain/Constants/AppRoles.cs) oraz używane w atrybutach `[Authorize]` kontrolerów. Role bazodanowe są rozdzielone na `admin` i `pracownik`. |
+| Uwierzytelnianie | Zrealizowane | Logowanie użytkowników działa przez ASP.NET Core Cookie Authentication. Hasła są przechowywane jako hashe BCrypt, a role trafiają do claims użytkownika. |
+| Bezpieczeństwo danych | Zrealizowane | Zastosowano separację kont bazodanowych, parametryzację Dappera, hashe BCrypt, role i `[Authorize]`, ochronę anty-CSRF, bezpieczne cookie, soft delete i audyt w `SystemLogs`. |
+| Optymalizacja bazy danych | Zrealizowane | Rozdział 10.2 opisuje krytyczne indeksy, m.in. FEFO, logi systemowe, trasy i kalendarz dostaw. Dodatkowo zapytania logistyczne zostały przeformułowane na predykaty zakresowe przyjazne indeksom. |
+| Duże dane / Faker | Zrealizowane | Profil seedowania `VolumeDemo` generuje syntetyczne dane dla wszystkich modułów: klientów, zamówień, dostaw, składników, opakowań, produkcji, kompletacji, tras, pracowników i logów audytowych. Dane są oznaczane prefiksami `VOL-*`. |
+| Paginacja | Zrealizowane | Paginacja działa m.in. w logach, użytkownikach, magazynie, kompletacji i logistyce. Repozytoria używają `COUNT(*)` oraz `OFFSET ... FETCH NEXT`, a UI korzysta m.in. z [PagedList.cs](../src/KuchniaUCygana.Web/Models/PagedList.cs) i [_StaffPagination.cshtml](../src/KuchniaUCygana.Web/Views/Shared/_StaffPagination.cshtml). |
+| Analiza planów zapytań przed/po | Częściowo | Migracje indeksujące oraz repozytoria zawierają zapytania przygotowane pod analizę planów, m.in. indeksy dla `Batches`, `SystemLogs`, `DeliveryRoutes` i `DeliveryRouteStops`. Pełny eksperyment porównawczy planów wykonania przed i po optymalizacji nie został przygotowany jako osobny artefakt. |
+| Przeformułowanie zapytań | Częściowo / punktowo zrealizowane | W [DeliveryRouteRepository.cs](../src/KuchniaUCygana.Infrastructure/Persistence/Repositories/DeliveryRouteRepository.cs) zapytania po dacie trasy zostały zmienione z rzutowania kolumny (`CAST(RouteDate AS date)`) na zakres `RouteDate >= @start AND RouteDate < @end`, co pozwala lepiej wykorzystać indeks po dacie. |
+
+Podsumowując: większość wymagań SBD jest zrealizowana w kodzie, migracjach i konfiguracji aplikacji. Jedyny punkt, którego nie należy przedstawiać jako pełnej implementacji, to rozbudowana analiza planów zapytań „przed/po”; w projekcie mamy indeksy i punktowe przeformułowanie predykatów, ale nie przygotowano osobnego kompletnego eksperymentu porównawczego dla każdego modułu.
