@@ -42,7 +42,7 @@ Podział odpowiedzialności w zespole:
 1.  **Dawid Janczyło (Moduł 1 — Portal Klienta i E-commerce)**: Rejestracja, profile klientów, proces zakupowy, koszyk, kalendarz zawieszeń dostaw, płatności Stripe.
 2.  **Gabriel Ostaszewski (Moduł 2 — Katalog Diet i Receptur)**: Tworzenie oferty, struktura posiłków i makroskładników, receptury, słownik alergenów, OpenAI do automatycznych opisów dań.
 3.  **Maciej Cyuńczyk (Moduł 3 — System Produkcyjny i Magazyn)**: Zarządzanie magazynem surowców (FEFO), kontrola temperatur HACCP, kompletacja posiłków (pudełek do toreb), QR kody, plany produkcyjne i karty PDF (QuestPDF).
-4.  **Tomasz Golonko (Moduł 4 — Logistyka i Dostawy)**: Zarządzanie flotą i kurierami, wyznaczanie tras (routing OSM/Google), generowanie manifestów przewozowych, ewidencja i obieg toreb termicznych.
+4.  **Tomasz Golonko (Moduł 4 — Logistyka i Dostawy)**: Zarządzanie flotą i kurierami, geokodowanie adresów i wyznaczanie tras, integracja z manifestami załadunkowymi magazynu, ewidencja i obieg toreb termicznych.
 5.  **Paweł Trochimczyk (Moduł 5 — Administracja, HR i Obsługa Klienta)**: Grafik pracy personelu, wnioski urlopowe, system reklamacyjny (Helpdesk / Tickety) z załącznikami graficznymi, logi audytowe systemu.
 
 ---
@@ -67,7 +67,7 @@ Podział odpowiedzialności w zespole:
 
 ### Moduł 4 (Logistyka) — Tomasz
 *   **Optymalizacja Tras**: Grupowanie adresów dostaw w trasy kurierskie w celu minimalizacji czasu i kosztu paliwa.
-*   **Spedycja i Manifesty**: Kurier przed wyjazdem otrzymuje wydrukowany manifest załadunkowy (PDF z QuestPDF) zawierający podsumowanie toreb oraz trasę. Przy załadunku następuje weryfikacja ilościowa.
+*   **Spedycja i Manifesty**: Kurier przed wyjazdem otrzymuje trasę powiązaną z manifestem załadunkowym z modułu kompletacji. Przy załadunku następuje weryfikacja ilościowa i zatwierdzenie wydania.
 *   **Torby Termiczne (Thermal Bags)**: Torby termiczne są drogim zasobem zwrotnym. System ewidencjonuje każdą torbę (kod QR/kreskowy) i loguje jej ruch (Wydana kurierowi -> Pozostawiona u klienta -> Odebrana od klienta -> Zwrócona na magazyn).
 
 ### Moduł 5 (HR & Administracja) — Paweł
@@ -94,7 +94,7 @@ Podział odpowiedzialności w zespole:
 ### Wymagania Niefunkcjonalne (NFR)
 *   **NF1 (Wydajność)**: Czas generowania zapotrzebowania na surowce dla 1000 zamówień nie może przekroczyć 3 sekund (dzięki optymalnym indeksom i lekkiemu micro-ORM Dapper).
 *   **NF2 (Spójność i Transakcyjność)**: Wszystkie operacje magazynowe modyfikujące stan partii (FEFO) oraz rejestrujące transakcje muszą być wykonywane w ramach izolowanych transakcji bazodanowych w celu zapewnienia spójności danych.
-*   **NF3 (HACCP i Audytowalność)**: Każda modyfikacja stanów magazynowych oraz edycja rekordów finansowych musi zapisać ślad audytowy w tabeli `SystemLogs` zawierający stary i nowy stan rekordu w formacie JSON (`OldValue`, `NewValue`) w celu odtworzenia historii zmian.
+*   **NF3 (HACCP i Audytowalność)**: Kluczowe modyfikacje wykonywane przez warstwę repozytoriów i serwisów aplikacyjnych powinny zapisywać ślad audytowy w tabeli `SystemLogs`, zawierający stary i nowy stan rekordu w formacie JSON (`OldValue`, `NewValue`) w celu odtworzenia historii zmian.
 *   **NF4 (Responsywność)**: Interfejs webowy musi być dostosowany do urządzeń mobilnych (kierowcy) oraz tabletów dotykowych (kucharze i pakowacze w środowisku o podwyższonej wilgotności).
 *   **NF5 (Dostępność)**: System musi być odporny na awarie sieciowe. W przypadku utraty połączenia ze skanerami kodów QR na kompletacji, system musi umożliwiać ręczne odznaczanie pozycji w interfejsie webowym.
 
@@ -129,7 +129,7 @@ flowchart TD
     subgraph Zewn [Integracje Zewnętrzne]
         StripeAPI[Stripe Payment Gateway]
         OpenAIAPI[OpenAI API description generator]
-        OSM[OpenStreetMap Routing engine]
+        OSM[OpenStreetMap Nominatim / mapy]
     end
 
     PC & Tab & Mob <-->|HTTPS| Firewall
@@ -142,9 +142,11 @@ flowchart TD
 ```
 
 ### Wymagania Infrastrukturalne (Produkcja)
+Poniższe punkty opisują docelowe wymagania produkcyjne. Środowisko demonstracyjne uruchamiane lokalnie korzysta z pojedynczego kontenera aplikacji i pojedynczego kontenera MS SQL Server.
+
 1.  **Dystrybucja Ruchu**: Load balancer rozdzielający ruch pomiędzy dwie instancje kontenerów aplikacji w celu zapewnienia wysokiej dostępności (High Availability).
-2.  **Baza Danych**: Klastrowany MS SQL Server 2022 działający w architekturze Active-Passive z replikacją logów transakcyjnych w czasie rzeczywistym.
-3.  **Przechowywanie Plików (Object Storage)**: Wykorzystanie usługi chmurowej (np. AWS S3 lub Azure Blob Storage) do składowania plików o zmiennym rozmiarze (np. zdjęcia potraw z Modułu 2, zdjęcia uszkodzeń z Modułu 5, raporty PDF z Modułów 3 i 4). Zabezpiecza to bazę danych przed niekontrolowanym wzrostem rozmiaru pliku bazy (`.mdf`).
+2.  **Baza Danych**: Docelowo klastrowany MS SQL Server 2022 działający w architekturze Active-Passive z replikacją logów transakcyjnych w czasie rzeczywistym.
+3.  **Przechowywanie Plików (Object Storage)**: Docelowo wykorzystanie usługi chmurowej (np. AWS S3 lub Azure Blob Storage) do składowania plików o zmiennym rozmiarze (np. zdjęcia potraw z Modułu 2, zdjęcia uszkodzeń z Modułu 5, raporty PDF). W implementacji demonstracyjnej baza przechowuje ścieżki/URL plików, a nie binarną zawartość zdjęć, co zabezpiecza plik bazy (`.mdf`) przed niekontrolowanym wzrostem.
 
 ---
 
@@ -170,7 +172,7 @@ System realizuje zintegrowane i wielokanałowe śledzenie historii operacji bezp
 1.  **Auditable Entities (Miękkie Usuwanie i Metadane Rekordów)**:
     Większość encji biznesowych w bazie danych dzieli wspólny zestaw pól audytowych: `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, `IsDeleted`, `DeletedAt`, `DeletedBy`. Usunięcie obiektów w systemie jest operacją logiczną (ustawienie flagi `IsDeleted = 1`), co zapobiega utracie spójności referencyjnej i pozwala na zachowanie historii dla raportów finansowych oraz stanów magazynowych z przeszłości.
 2.  **Tabela `SystemLogs` (Logi Zmian Struktury Obiektów) i Archiwizacja**:
-    Wszelkie operacje modyfikujące (Insert, Update, Delete) kluczowych encji generują zapis w tabeli `SystemLogs`. Przechowuje ona kompletny zrzut stanu obiektu przed i po modyfikacji w formacie JSON (`OldValue` oraz `NewValue`). Pozwala to na pełne odtworzenie historycznego stanu dowolnego wiersza bazy danych w dowolnym momencie w przeszłości.
+    Operacje modyfikujące (Insert, Update, Delete) wykonywane przez generyczne repozytoria Dappera dla uwierzytelnionego użytkownika generują zapis w tabeli `SystemLogs`. Przechowuje ona zrzut stanu obiektu przed i po modyfikacji w formacie JSON (`OldValue` oraz `NewValue`). Pozwala to odtworzyć historię kluczowych zmian bez dopisywania osobnej tabeli audytowej dla każdej encji.
 3.  **Dedykowane Dzienniki Zdarzeń Biznesowych**:
     *   `InventoryTransactions` (Śledzenie Ilościowe Magazynu): Każdy ruch magazynowy (przyjęcie partii, rozchód FEFO, odpad) posiada unikalną referencję do partii (`BatchId`) oraz przypisany typ transakcji i ilość, co umożliwia pełną weryfikację historii bilansu magazynu.
     *   `BatchExpiryChangeLogs` (Korekty Dat Ważności): Każda ręczna zmiana daty ważności surowca w tabeli `Batches` jest logowana w tej tabeli, dokumentując przyczynę techniczną, nową datę, starą datę i autora.
@@ -184,13 +186,13 @@ Ciągłe logowanie zmian obiektów generuje bardzo duży przyrost danych w tabel
 ## 7. Rozmiar Bazy Danych, Obciążenie i Przyrost Danych
 
 ### 7.1. Rozmiar początkowy (Initial Database Size)
-Na podstawie obecnej implementacji i środowiska Docker (obraz `mssql/server:2022-latest`), rzeczywista wielkość bazy danych po wdrożeniu schematu i załadowaniu seedu wynosi:
+Na podstawie jednej z migawek środowiska Docker (obraz `mssql/server:2022-latest`), wielkość bazy danych po wdrożeniu schematu i załadowaniu profilu demonstracyjnego wynosiła:
 *   **Plik danych (`KuchniaUCygana.mdf`):** **72.00 MB** (w tym ok. **19.35 MB** zajmują same dane tabel, **5.90 MB** to indeksy, **12.10 MB** to nieużywane zarezerwowane strony, a **35.28 MB** to nieprzydzielona przestrzeń wolna).
 *   **Plik dziennika transakcji (`KuchniaUCygana_log.ldf`):** **200.00 MB** (rozmiar domyślny po załadowaniu seedu danych demonstracyjnych).
 *   **Łączny rozmiar bazy w kontenerze:** **272.00 MB**.
 *   **Liczba zdefiniowanych tabel:** **80** (79 tabel systemowych/domenowych + 1 tabela `VersionInfo` z FluentMigrator).
 
-Te metryki odzwierciedlają stan bazy po uruchomieniu pełnego zestawu migracji i wczytaniu profilu danych demonstracyjnych (`DemoData` z klasy `DatabaseSeeder`).
+Te metryki należy traktować jako pomiar przykładowy dla konkretnego profilu seedowania. Po uruchomieniu profilu `VolumeDemo` lub zmianie zakresu danych demonstracyjnych wartości mogą być większe.
 
 ### 7.2. Szacowany przyrost danych (dla średniej wielkości cateringu - 500 klientów aktywnych)
 Rewizja na podstawie faktycznych rozmiarów wierszy w bazie danych w Dockerze. Wykryto dwa kluczowe czynniki o wysokiej zajętości pamięci (Hotspots):
@@ -230,7 +232,7 @@ Poniższa tabela przedstawia szczegółowy roczny szacunek przyrostu bazy danych
 | **Suma (Po archiwizacji/retencji)**| | - | - | **ok. 1.15 GB / Rok** | Zakładając przeniesienie 90% `SystemLogs` do archiwum oraz retencję `BoxLabels` i logów statusów do 30 dni. |
 
 > [!IMPORTANT]
-> Pliki załączników do zgłoszeń reklamacyjnych (zdjęcia JPG/PNG o rozmiarach ~2MB) oraz obrazy dań nie obciążają bazy SQL – są składowane w zewnętrznym Object Storage, a w bazie przechowywane są wyłącznie adresy URL. Pozwala to na oszczędność rzędu **720 GB** przestrzeni bazodanowej rocznie.
+> Pliki załączników do zgłoszeń reklamacyjnych (zdjęcia JPG/PNG o rozmiarach ~2MB) oraz obrazy dań nie powinny obciążać bazy SQL – baza przechowuje ścieżki lub adresy URL, a docelowe środowisko produkcyjne powinno trzymać binaria w zewnętrznym Object Storage. Pozwala to uniknąć wzrostu pliku bazy o setki GB rocznie.
 
 ### 7.3. Identyfikacja tabel o największym obciążeniu (Hotspots)
 
@@ -1328,7 +1330,7 @@ erDiagram
 3. **Śledzenie partii (FEFO, HACCP)** – Każdy składnik magazynowy (`StockItem`) składa się z wielu partii (`Batch`) z datą ważności. Każde wydanie jest rejestrowane jako `InventoryTransaction` z referencją do partii, co zapewnia pełną identyfikowalność od dostawcy do gotowego pudełka.
 4. **Traceability posiłku (Kompletacja)** – Każde spakowane pudełko (`PackingItem`) zawiera `BatchId` surowców/półproduktów, co pozwala odtworzyć, z jakich partii surowców pochodzi dany posiłek (wymóg HACCP).
 5. **Denormalizacja dla wydajności** – Wybrane pola (np. `MealName` w `ProductionPlanItem`, `ClientName` w `PackingSession`) są denormalizowane, aby uniknąć kosztownych złączeń w krytycznych ścieżkach.
-6. **Pliki (załączniki, obrazy)** – Nie są przechowywane w bazie danych, lecz w zewnętrznym magazynie obiektów (np. AWS S3 / Azure Blob Storage). Baza przechowuje jedynie odnośniki URL.
+6. **Pliki (załączniki, obrazy)** – Nie są przechowywane w bazie danych jako binaria. Baza przechowuje ścieżki lub odnośniki URL; w środowisku produkcyjnym naturalnym rozwinięciem jest zewnętrzny magazyn obiektów (np. AWS S3 / Azure Blob Storage).
 
 ### 9.3. Zasady integralności i wydajności
 
@@ -1348,8 +1350,8 @@ erDiagram
 | Unikalność powiązań alergenów w wariantach dań (`MealVariantAllergens`). | Indeks unikalny złożony `IX_MealVariantAllergens_Unique` na kolumnach (`MealVariantId`, `AllergenId`). |
 | Unikalność wpisów w grafiku pracy (`WorkSchedules`). | Unikalny klucz złożony zapobiega planowaniu pracownika na tę samą zmianę (`UserId`, `ShiftDate`, `Shift`). |
 | Blokada usunięcia zamówienia w toku. | Nie można usunąć zamówienia o statusie `Paid`, `InProduction` lub `Completed` (więzy spójności i walidatory aplikacyjne). |
-| Walidacja logiczna daty ważności partii. | `ExpiryDate` >= `ReceivedDate` (wymuszane na poziomie FluentValidation oraz CHECK constraint). |
-| Unikalność kodu QR etykiet kompletacyjnych. | Indeks unikalny na `PackingLabels.QrCode`. |
+| Walidacja logiczna daty ważności partii. | Walidacja aplikacyjna FluentValidation wymusza, aby data ważności nowo przyjmowanej partii była poprawna biznesowo. W obecnej wersji nie dodano osobnego `CHECK constraint` dla relacji `ExpiryDate`/`ReceivedDate`. |
+| Wyszukiwanie kodu QR etykiet kompletacyjnych. | Indeks `IX_PackingLabels_QrCode` przyspiesza odczyt po kodzie QR. Indeks nie jest unikalny, ponieważ system dopuszcza reprinty etykiet. |
 
 ### 10.2. Obszary wymagające zoptymalizowanego przetwarzania po stronie bazy danych
 
@@ -1385,13 +1387,7 @@ EXEC logistics_pkg.usp_GetDailyDispatchBoard
     @EstimatedDeliveryWeightKg = 1.20;
 ```
 
-#### 5. Widoki Bazodanowe (Database Views)
-W celu uproszczenia zapytań raportowych oraz odizolowania warstwy prezentacji od złożonych złączeń tabel zaimplementowano/przewidziano następujące widoki:
-*   `v_ActiveProductionPlans`: Agreguje aktywne plany produkcji na dany dzień (`ProductionPlans` + `ProductionPlanItems` + `Meals` + `DietVariants`), wyświetlając zsumowane liczby posiłków do ugotowania z podziałem na grupy produkcyjne.
-*   `v_DeliveryManifests`: Łączy dane tras dostaw, kierowców, przypisanych pojazdów, przystanków oraz adresów klientów (`DeliveryRoutes` + `DeliveryRouteStops` + `Addresses` + `CustomerProfiles`), służąc jako źródło danych do generowania PDF manifestów spedycyjnych.
-*   `v_HaccpTemperatureAlertsActive`: Łączy odczyty temperatur lodówek z lokalizacjami i alertami HACCP (`TemperatureLogs` + `HaccpLocations` + `HaccpTemperatureAlerts`), wyświetlając wyłącznie aktywne przekroczenia norm, które nie zostały jeszcze zamknięte przez personel (brak wpisu w `ActionTaken`).
-
-#### 6. Krytyczne Indeksy Wydajnościowe (Zrealizowane w migracjach)
+#### 5. Krytyczne Indeksy Wydajnościowe (Zrealizowane w migracjach)
 *   `IX_Batches_StockItem_Active_Expiry` na tabeli `Batches` (kolumny: `StockItemId`, `IsDeleted`, `IsDepleted`, `CurrentQuantity`, `ExpiryDate`): Kluczowy dla wydajnego działania algorytmu FEFO.
 *   `IX_SystemLogs_Timestamp_Action_TargetEntity_UserId` na tabeli `SystemLogs`: Pozwala na błyskawiczne filtrowanie i generowanie raportów audytowych.
 *   `IX_Meals_Category_Status_Name` na tabeli `Meals` oraz `IX_RecipeComponentVersions_Status_Component` na wersjach przepisów: Optymalizują odczyty podczas pobierania menu dla klientów i generowania zapotrzebowania.
@@ -1400,7 +1396,7 @@ W celu uproszczenia zapytań raportowych oraz odizolowania warstwy prezentacji o
 
 ### 10.3. Zapewnienie integralności danych
 
-- Spójność transakcyjna: Wszystkie operacje magazynowe modyfikujące stan partii (`Batches.CurrentQuantity`) oraz dodające transakcję (`InventoryTransactions`) są owinięte w transakcję bazodanową (`TransactionScope` w C#).
+- Spójność transakcyjna: Operacje magazynowe modyfikujące stan partii (`Batches.CurrentQuantity`) oraz dodające transakcję (`InventoryTransactions`) są wykonywane w transakcji bazodanowej w repozytoriach infrastruktury (`BeginTransaction` / `IDbTransaction`).
 - Ręczna korekta daty ważności partii wymusza logowanie zdarzenia w `BatchExpiryChangeLogs` z podaniem przyczyny tekstowej (`Reason`).
 - Zmiany stanów kompletacji w bazie są logowane chronologicznie w `PackingStatusLogs`.
 
@@ -1408,7 +1404,7 @@ W celu uproszczenia zapytań raportowych oraz odizolowania warstwy prezentacji o
 
 ## 11. Przepływ Danych przy Zapytaniu (Request Data Flow Walkthrough)
 
-Architektura Clean Architecture odcina odpowiedzialności poszczególnych warstw. Poniżej przedstawiono szczegółowy przepływ danych zapytania zatwierdzenia planu produkcji i automatycznego wydania surowców (FEFO).
+Architektura Clean Architecture odcina odpowiedzialności poszczególnych warstw. Poniżej przedstawiono szczegółowy przepływ danych zapytania zatwierdzenia gotowania pozycji planu produkcji i automatycznego wydania surowców metodą FEFO.
 
 ### 11.1. Schemat Sekwencyjny Przepływu (Mermaid)
 
@@ -1418,60 +1414,57 @@ sequenceDiagram
     actor U as Pracownik (Kuchnia / Manager)
     participant V as Web: Razor View (HTMX)
     participant C as Web: ProductionController
-    participant Val as Application: ApproveProductionPlanValidator
+    participant Val as Application: walidacja danych
     participant S as Application: ProductionService (IProductionService)
     participant D as Domain: FefoService / ProductionPlan (Entity)
-    participant R as Infrastructure: BatchRepository (IBatchRepository)
+    participant R as Infrastructure: WarehouseCommandRepository
     participant DB as Database: MS SQL Server 2022
 
-    U->>V: Kliknięcie "Zatwierdź Plan"
-    Note over V: HTMX wysyła asynchroniczny POST<br/>hx-post="/Production/Approve"<br/>wraz z RequestVerificationToken (CSRF)
-    V->>C: HTTP POST /Production/Approve { PlanId }
+    U->>V: Kliknięcie "Zatwierdź gotowanie"
+    Note over V: Formularz wysyła POST<br/>wraz z RequestVerificationToken (CSRF)
+    V->>C: HTTP POST /Production/ApproveCooking { PlanItemId, ActualQuantity }
     
     Note over C: Filtry ASP.NET Core MVC:<br/>Mapowanie żądania HTTP
     
-    C->>C: Mapowanie żądania na DTO: ApproveProductionPlanRequest
+    C->>C: Mapowanie żądania na parametry akcji
     C->>Val: Wywołanie walidacji (FluentValidation)
     Val-->>C: Wynik walidacji: OK (brak błędów)
     
-    C->>S: Wywołanie serwisu (DI: IProductionService): ApprovePlanAsync(dto)
+    C->>S: Wywołanie serwisu (DI: IProductionService): ApproveCookingAsync(planItemId, actualQuantity)
     
-    Note over S: Warstwa Aplikacyjna spina transakcję:<br/>using var transaction = new TransactionScope();
-    S->>R: Pobranie planu z bazy (Dapper)
-    R-->>S: Zwrócenie encji planu: ProductionPlan
+    Note over S: Warstwa Aplikacyjna koordynuje proces:<br/>sprawdza plan, pozycję i ewentualne korekty ilości
     
     S->>D: Wywołanie logiki biznesowej domeny:<br/>FefoService.DeductByFefoAsync(stockItemId, qty, reason)
     
-    Note over D: Domena (FefoService) realizuje algorytm FEFO:<br/>- pobiera aktywne partie surowca<br/>- rozdziela ilość na partie od najkrótszej daty ważności
-    D->>R: GetActiveBatchesByStockItemAsync(stockItemId)
-    R->>DB: SELECT * FROM Batches WHERE StockItemId = X AND IsDepleted = 0 ORDER BY ExpiryDate ASC, ReceivedDate ASC
+    Note over D: Domena deleguje atomowe zdjęcie stanu<br/>do repozytorium komend magazynowych
+    D->>R: DeductStockAsync(WarehouseDeductionCommand)
+    R->>DB: BEGIN TRANSACTION
+    R->>DB: SELECT partie WITH (UPDLOCK, ROWLOCK)<br/>ORDER BY ExpiryDate ASC, Id ASC
     DB-->>R: Zwrócenie partii surowców
-    R-->>D: Aktywne partie (Batches)
     
-    D->>D: Zmniejszenie ilości na partiach (CurrentQuantity -= toDeduct)
-    D->>R: UpdateAsync(batch)
-    R->>DB: UPDATE Batches SET CurrentQuantity = X WHERE Id = Z
+    R->>DB: UPDATE Batches SET CurrentQuantity = ...
+    R->>DB: INSERT INTO InventoryTransactions (...)
     
     Note over DB: Wyzwalacz (Trigger):<br/>tr_Batches_UpdateIsDepleted ustawia IsDepleted = 1<br/>jeśli CurrentQuantity <= 0
     
-    D->>R: InsertAsync(InventoryTransaction)
-    R->>DB: INSERT INTO InventoryTransactions (...)
+    R->>DB: COMMIT TRANSACTION
+    R-->>D: Lista transakcji magazynowych
     
-    S-->>C: Wynik operacji: Sukces (plan zatwierdzony)
+    S-->>C: Wynik operacji: Sukces (gotowanie zatwierdzone)
     
     Note over C: Mapowanie encji na DTO wyjściowe:<br/>ProductionPlanDto (AutoMapper)
-    C->>V: Renderowanie Partial View: _PlanStatus.cshtml (zwrócenie fragmentu HTML)
-    V-->>U: HTMX podmienia fragment strony w przeglądarce
+    C->>V: Przekierowanie lub odświeżenie widoku karty gotowania
+    V-->>U: Użytkownik widzi zaktualizowany status pozycji planu
 ```
 
 ### 11.2. Opis Warstwowy i Rola Komponentów
 
-1.  **Warstwa Prezentacji (Web Layer - Razor + HTMX 2.x)**: Użytkownik wysyła żądanie asynchronicznie poprzez HTMX, przekazując identyfikator planu.
-2.  **Warstwa Kontrolera (Web Layer - Controllers)**: Kontroler `ProductionController` odbiera żądanie HTTP POST i mapuje dane na obiekt żądania (DTO).
-3.  **Warstwa Walidacji (Application Layer - FluentValidation)**: Sprawdza formalne kryteria poprawności danych wejściowych, rzucając wyjątek `ValidationException` w przypadku niezgodności.
-4.  **Serwis Aplikacyjny (Application Layer - Services)**: Klasa koordynująca przepływ, otwierająca transakcję bazodanową (`TransactionScope`) i spajająca repozytoria oraz logikę domenową.
-5.  **Domena (Domain Layer - Entities & Domain Services)**: Klasa `FefoService` zawiera czystą logikę biznesową wydawania surowców metodą FEFO. Jest całkowicie uniezależniona od bazy danych.
-6.  **Infrastruktura i Dostęp do Danych (Infrastructure Layer - Repositories)**: Klasa `BatchRepository` realizuje faktyczne zapytania SQL do MS SQL Server przy użyciu Dapper.
+1.  **Warstwa Prezentacji (Web Layer - Razor + HTMX/formularze)**: Użytkownik wysyła żądanie zatwierdzenia wykonania pozycji planu produkcji.
+2.  **Warstwa Kontrolera (Web Layer - Controllers)**: Kontroler `ProductionController` odbiera żądanie HTTP POST i przekazuje parametry do serwisu aplikacyjnego.
+3.  **Warstwa Walidacji (Application Layer - FluentValidation / logika serwisu)**: Sprawdza formalne i biznesowe kryteria poprawności danych wejściowych.
+4.  **Serwis Aplikacyjny (Application Layer - Services)**: `ProductionService` koordynuje proces zatwierdzenia gotowania oraz wywołuje logikę FEFO dla wymaganych składników.
+5.  **Domena (Domain Layer - Entities & Domain Services)**: `FefoService` opisuje przypadek użycia wydawania surowców metodą FEFO i deleguje atomową zmianę stanów do repozytorium komend magazynowych.
+6.  **Infrastruktura i Dostęp do Danych (Infrastructure Layer - Repositories)**: `WarehouseCommandRepository` realizuje faktyczne zapytania SQL do MS SQL Server przy użyciu Dappera, transakcji `IDbTransaction` oraz blokad `UPDLOCK`/`ROWLOCK` na partiach.
 
 ---
 
@@ -1502,6 +1495,6 @@ Niektóre obszary integracji są w trakcie ustaleń. Poniższa tabela przedstawi
 | Obszar Brakujący | Kto Odpowiada | Kiedy Zostanie Uzupełniony | Dlaczego Teraz Tego Nie Ma |
 | :--- | :--- | :--- | :--- |
 | **Dokładne stawki podatkowe VAT dla diet** | Dawid (M1) | Faza 5 (Integracja) | Wymaga decyzji biznesowej klienta odnośnie stawek (np. catering z dowozem 8% vs 23% VAT). Obecnie zamodelowane jako jedna stawka. |
-| **Integracja Geokodowania OSRM** | Tomasz (M4) | Faza 4 (Logistyka) | Wybór pomiędzy darmowym serwerem OSRM (OpenSource Routing Machine) a płatnym API Google Maps. Trwa analiza kosztów zapytania. |
+| **Rozszerzenie routingu o zewnętrzny silnik tras** | Tomasz (M4) | Dalszy rozwój logistyki | Geokodowanie przez OpenStreetMap/Nominatim istnieje w kodzie, natomiast pełny silnik optymalizacji tras OSRM/Google Directions pozostaje możliwym rozszerzeniem ponad obecną heurystykę aplikacyjną. |
 | **Mechanizm podpisu biometrycznego kuriera** | Tomasz (M4) | Faza 6 (Frontend) | Weryfikacja załadunku w manifestach. Czekamy na decyzję, czy podpis będzie realizowany przez rysowanie na ekranie, czy kod PIN kuriera. |
 | **Obsługa załączników wideo w reklamacjach** | Paweł (M5) | Faza 5 (Integracja) | Ustalenie limitów rozmiaru plików (np. max 10MB) w celu ochrony przepustowości sieciowej serwera. |
