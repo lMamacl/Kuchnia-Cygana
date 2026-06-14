@@ -101,11 +101,11 @@ public sealed class AdminController : Controller
         try
         {
             var archivedCount = await auditLogService.ArchiveLogsAsync(olderThanDays, batchSize);
-            TempData["Success"] = $"Pomyslnie zarchiwizowano {archivedCount} logow.";
+            TempData["Success"] = $"Pomyślnie zarchiwizowano {archivedCount} logów.";
         }
         catch (Exception ex)
         {
-            TempData["Error"] = $"Blad podczas archiwizacji: {ex.Message}";
+            TempData["Error"] = $"Błąd podczas archiwizacji: {ex.Message}";
         }
 
         return RedirectToAction(nameof(Logs));
