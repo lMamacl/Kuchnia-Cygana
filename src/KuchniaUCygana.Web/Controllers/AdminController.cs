@@ -609,6 +609,12 @@ public sealed class AdminController : Controller
 
     private static readonly string[] AdminNotificationRoles = [AppRoles.Admin];
 
+    [HttpGet("swagger")]
+    public IActionResult Swagger()
+    {
+        return Redirect("/swagger/index.html");
+    }
+
     private static Notification BuildNotification(
         string type,
         string severity,

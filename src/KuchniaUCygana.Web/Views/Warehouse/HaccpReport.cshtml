@@ -11,15 +11,6 @@
     var logReq = ViewBag.LogRequest as KuchniaUCygana.Application.DTOs.Warehouse.LogTemperatureRequest
                  ?? new KuchniaUCygana.Application.DTOs.Warehouse.LogTemperatureRequest();
 
-    var devices = new[]
-    {
-        "Lodówka #1 - Nabiał (Limit: 2°C do 6°C)",
-        "Chłodnia #2 - Mięso (Limit: 0°C do 4°C)",
-        "Zamrażarka #3 - Ryby (Limit: -22°C do -18°C)",
-        "Lodówka #4 - Warzywa (Limit: 4°C do 8°C)",
-        "Witryna Wydawcza (Limit: 2°C do 8°C)"
-    };
-
     // Helper do pobierania limitów
     (decimal Min, decimal Max) GetDeviceLimits(string deviceName)
     {
@@ -30,46 +21,14 @@
             return (configuredLocation.MinTemperatureCelsius, configuredLocation.MaxTemperatureCelsius);
         }
 
-        var name = deviceName.ToLower();
-        decimal minLimit = -25.0m;
-        decimal maxLimit = 8.0m;
+        var reading = Model.Readings.FirstOrDefault(r =>
+            string.Equals(r.DeviceNameOrLocation, deviceName, StringComparison.OrdinalIgnoreCase));
+        if (reading is not null)
+        {
+            return (reading.MinTemperatureCelsius, reading.MaxTemperatureCelsius);
+        }
 
-        if (name.Contains("zamrażarka") || name.Contains("freezer"))
-        {
-            minLimit = -22.0m;
-            maxLimit = -18.0m;
-        }
-        else if (name.Contains("mięso"))
-        {
-            minLimit = 0.0m;
-            maxLimit = 4.0m;
-        }
-        else if (name.Contains("nabiał"))
-        {
-            minLimit = 2.0m;
-            maxLimit = 6.0m;
-        }
-        else if (name.Contains("warzywa"))
-        {
-            minLimit = 4.0m;
-            maxLimit = 8.0m;
-        }
-        else if (name.Contains("chłodnia"))
-        {
-            minLimit = 2.0m;
-            maxLimit = 8.0m;
-        }
-        else if (name.Contains("witryna"))
-        {
-            minLimit = 2.0m;
-            maxLimit = 8.0m;
-        }
-        else if (name.Contains("suchy"))
-        {
-            minLimit = 15.0m;
-            maxLimit = 25.0m;
-        }
-        return (minLimit, maxLimit);
+        return (-25.0m, 8.0m);
     }
 
     // Grupowanie pomiarów i obliczanie limitów dla urządzeń
@@ -487,34 +446,7 @@
                     max: configured.maxTemperatureCelsius
                 };
             }
-
-            const name = deviceName.toLowerCase();
-            let minLimit = -25.0;
-            let maxLimit = 8.0;
-
-            if (name.includes("zamrażarka") || name.includes("freezer")) {
-                minLimit = -22.0;
-                maxLimit = -18.0;
-            } else if (name.includes("mięso")) {
-                minLimit = 0.0;
-                maxLimit = 4.0;
-            } else if (name.includes("nabiał")) {
-                minLimit = 2.0;
-                maxLimit = 6.0;
-            } else if (name.includes("warzywa")) {
-                minLimit = 4.0;
-                maxLimit = 8.0;
-            } else if (name.includes("chłodnia")) {
-                minLimit = 2.0;
-                maxLimit = 8.0;
-            } else if (name.includes("witryna")) {
-                minLimit = 2.0;
-                maxLimit = 8.0;
-            } else if (name.includes("suchy")) {
-                minLimit = 15.0;
-                maxLimit = 25.0;
-            }
-            return { min: minLimit, max: maxLimit };
+            return { min: -25.0, max: 8.0 };
         }
 
         // JS Client-side Paginator

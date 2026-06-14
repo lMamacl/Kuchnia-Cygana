@@ -95,7 +95,6 @@ public static class StaffNavigationCatalog
                 new("Historia transakcji", "Warehouse", "TransactionHistory", "clipboard", "Operacyjna historia ruchów magazynowych.", "historia transakcje magazyn ruchy"),
                 new("Odpady", "Warehouse", "Waste", "trash", "Rejestr odpadów i strat.", "odpady straty magazyn"),
                 new("Inwentaryzacja", "Warehouse", "Inventory", "checklist", "Ekran inwentaryzacji.", "inwentaryzacja remanent"),
-                new("Temperatury HACCP", "Warehouse", "Temperatures", "temperature", "Monitoring temperatur HACCP.", "temperatury haccp"),
                 new("Raport HACCP", "Warehouse", "HaccpReport", "report", "Raport kontrolny HACCP.", "raport haccp"),
                 new("Lokalizacje HACCP", "Warehouse", "HaccpLocations", "map", "Punkty pomiarowe HACCP i przypisane kategorie.", "lokalizacje haccp punkty pomiarowe"),
                 new("Plan z M2", "Production", "M2Plan", "calendar", "Podgląd opublikowanego planu M2 z perspektywy magazynu.", "plan m2 7 dni snapshot refresh", [UserRoles.Warehouse, UserRoles.WarehouseManager]),
@@ -190,6 +189,7 @@ public static class StaffNavigationCatalog
                 new("Logi systemowe", "Admin", "Logs", "report", "Audyt zmian i zdarzeń systemowych.", "logi audyt zmiany"),
                 new("Awarie kompletacji", "Admin", "PackingIncidents", "alert", "Obsługa zgłoszeń z kompletacji.", "awarie kompletacji incydenty packing"),
                 new("Ustawienia", "Admin", "Settings", "settings", "Ustawienia systemowe.", "ustawienia konfiguracja"),
+                new("Dokumentacja API (Swagger)", "Admin", "Swagger", "report", "Spis i interaktywna dokumentacja API.", "swagger api dokumentacja"),
             ]),
         new(
             "mobile",

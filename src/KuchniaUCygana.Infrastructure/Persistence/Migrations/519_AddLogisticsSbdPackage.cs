@@ -169,6 +169,9 @@ public sealed class AddLogisticsSbdPackage : Migration
                 IF @EstimatedDeliveryWeightKg IS NULL OR @EstimatedDeliveryWeightKg <= 0
                     THROW 51902, '@EstimatedDeliveryWeightKg must be greater than zero.', 1;
 
+                IF @EstimatedDeliveryWeightKg > 100.00
+                    THROW 51903, '@EstimatedDeliveryWeightKg cannot exceed 100.00 kg.', 1;
+
                 SELECT
                     summary.[RouteDate],
                     summary.[RouteId],

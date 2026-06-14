@@ -48,6 +48,7 @@ builder.Services
             options.Events.OnRedirectToLogin = context =>
             {
                 if (context.Request.Path.StartsWithSegments("/api") ||
+                    context.Request.Path.StartsWithSegments("/swagger") ||
                     context.Request.Headers.XRequestedWith == "XMLHttpRequest")
                 {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -60,6 +61,7 @@ builder.Services
             options.Events.OnRedirectToAccessDenied = context =>
             {
                 if (context.Request.Path.StartsWithSegments("/api") ||
+                    context.Request.Path.StartsWithSegments("/swagger") ||
                     context.Request.Headers.XRequestedWith == "XMLHttpRequest")
                 {
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -86,6 +88,17 @@ builder.Services.AddControllersWithViews(options =>
         options.ModelBinderProviders.Insert(0, new FlexibleDecimalModelBinderProvider());
     })
     .AddFluentValidation(fv => fv.RegisterValidatorsFromAssemblyContaining<Program>());
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "Kuchnia U Cygana API",
+        Version = "v1",
+        Description = "Interaktywna dokumentacja i spis endpointów platformy cateringowej Kuchnia U Cygana."
+    });
+});
 
 var app = builder.Build();
 
@@ -126,6 +139,13 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Kuchnia U Cygana API v1");
+    c.RoutePrefix = "swagger";
+});
+
 var supportedCultures = new[] { "pl-PL" };
 var localizationOptions = new RequestLocalizationOptions()
     .SetDefaultCulture(supportedCultures[0])
@@ -137,6 +157,11 @@ app.UseRouting();
 app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapGet("/swagger", async context =>
+{
+    context.Response.Redirect("/swagger/index.html", permanent: false);
+}).ExcludeFromDescription();
 
 app.MapControllerRoute(
     name: "default",
