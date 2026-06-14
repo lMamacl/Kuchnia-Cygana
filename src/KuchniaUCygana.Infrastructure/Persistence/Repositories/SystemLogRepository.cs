@@ -352,4 +352,12 @@ public sealed class SystemLogRepository : BaseRepository<SystemLog>, ISystemLogR
 
         return where.Count == 0 ? "1 = 1" : string.Join(" AND ", where);
     }
+
+    public async Task<int> ArchiveOldLogsAsync(int olderThanDays, int batchSize)
+    {
+        using var db = Factory.CreateConnection();
+        return await db.ExecuteScalarAsync<int>(
+            "EXEC [dbo].[usp_ArchiveSystemLogs] @OlderThanDays, @BatchSize",
+            new { OlderThanDays = olderThanDays, BatchSize = batchSize });
+    }
 }

@@ -121,6 +121,11 @@ public sealed class AuditLogService : IAuditLogService
         };
     }
 
+    public async Task<int> ArchiveLogsAsync(int olderThanDays, int batchSize)
+    {
+        return await systemLogRepository.ArchiveOldLogsAsync(olderThanDays, batchSize);
+    }
+
     private static DateTimeOffset ToDateTimeOffset(DateTime value)
     {
         return new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Local));

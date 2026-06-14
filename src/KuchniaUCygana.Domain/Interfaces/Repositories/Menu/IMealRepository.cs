@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using KuchniaUCygana.Domain.Entities.Menu;
 
@@ -13,6 +13,8 @@ public interface IMealRepository : IRepository<Meal>
     Task<IEnumerable<Meal>> GetPublishedAsync();
 
     Task<Meal?> GetWithRecipeAsync(int mealId);
+
+    Task<MealNutritionCost?> GetMealNutritionCostAsync(int mealId);
 }
 
 public sealed class MealSearchQuery
@@ -96,4 +98,21 @@ public sealed class MealListRow
     public bool MissingPackaging { get; set; }
 
     public bool MissingPublicationData { get; set; }
+}
+
+public sealed class MealNutritionCost
+{
+    public int MealId { get; set; }
+
+    public decimal EstimatedCost { get; set; }
+
+    public decimal Calories { get; set; }
+
+    public decimal Protein { get; set; }
+
+    public decimal Carbohydrates { get; set; }
+
+    public decimal Fat { get; set; }
+
+    public decimal Fiber { get; set; }
 }

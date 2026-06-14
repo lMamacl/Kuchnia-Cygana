@@ -122,6 +122,22 @@ public sealed class MealManagementService : IMealManagementService
 
         var images = await this.mealImageRepository.GetByMealIdAsync(mealId);
         detail.Images = this.mapper.Map<List<MealImageDto>>(images);
+
+        var nutritionCost = await this.mealRepository.GetMealNutritionCostAsync(mealId);
+        if (nutritionCost is not null)
+        {
+            detail.NutritionCost = new MealNutritionCostDto
+            {
+                MealId = nutritionCost.MealId,
+                EstimatedCost = nutritionCost.EstimatedCost,
+                Calories = nutritionCost.Calories,
+                Protein = nutritionCost.Protein,
+                Carbohydrates = nutritionCost.Carbohydrates,
+                Fat = nutritionCost.Fat,
+                Fiber = nutritionCost.Fiber
+            };
+        }
+
         return detail;
     }
 

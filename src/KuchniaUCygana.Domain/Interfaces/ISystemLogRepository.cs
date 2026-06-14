@@ -13,6 +13,8 @@ public interface ISystemLogRepository : IRepository<SystemLog>
     Task<IReadOnlyList<SystemLogRow>> GetByTargetAsync(string targetEntity, string targetId, int limit);
 
     Task<SystemLogRow?> GetRowByIdAsync(int id);
+
+    Task<int> ArchiveOldLogsAsync(int olderThanDays, int batchSize);
 }
 
 public sealed class SystemLogSearchQuery

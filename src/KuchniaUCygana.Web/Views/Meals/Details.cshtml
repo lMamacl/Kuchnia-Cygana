@@ -88,6 +88,55 @@
             </div>
         </div>
 
+        @if (Model.NutritionCost is not null && Model.NutritionCost.EstimatedCost > 0)
+        {
+            <div class="card card-premium mt-3">
+                <div class="card-header bg-success-lt">
+                    <h3 class="card-title text-success">Koszty i Wartości Odżywcze (Kalkulator Bazowy SQL)</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-sm-6 col-md-4">
+                            <div class="border rounded p-3 text-center bg-light">
+                                <div class="text-secondary small mb-1">Szacowany koszt składników</div>
+                                <div class="h2 mb-0 text-success">@Model.NutritionCost.EstimatedCost.ToString("C")</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-4">
+                            <div class="border rounded p-3 text-center bg-light">
+                                <div class="text-secondary small mb-1">Kaloryczność (Kcal)</div>
+                                <div class="h2 mb-0 text-primary">@Model.NutritionCost.Calories.ToString("0.##") kcal</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-4">
+                            <div class="border rounded p-3 text-center bg-light">
+                                <div class="text-secondary small mb-1">Białko</div>
+                                <div class="h2 mb-0 text-indigo">@Model.NutritionCost.Protein.ToString("0.##") g</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-4">
+                            <div class="border rounded p-3 text-center bg-light">
+                                <div class="text-secondary small mb-1">Węglowodany</div>
+                                <div class="h2 mb-0 text-azure">@Model.NutritionCost.Carbohydrates.ToString("0.##") g</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-4">
+                            <div class="border rounded p-3 text-center bg-light">
+                                <div class="text-secondary small mb-1">Tłuszcz</div>
+                                <div class="h2 mb-0 text-purple">@Model.NutritionCost.Fat.ToString("0.##") g</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-4">
+                            <div class="border rounded p-3 text-center bg-light">
+                                <div class="text-secondary small mb-1">Błonnik</div>
+                                <div class="h2 mb-0 text-orange">@Model.NutritionCost.Fiber.ToString("0.##") g</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
         <div class="card card-premium mt-3">
             <div class="card-header">
                 <h3 class="card-title">Przepisy-skladowe posilku</h3>

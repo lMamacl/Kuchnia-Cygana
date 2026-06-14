@@ -88,6 +88,29 @@ public sealed class AdminController : Controller
         return View(await BuildLogsModelAsync(filter));
     }
 
+    [HttpPost("logs/archive")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ArchiveLogs(int olderThanDays = 180, int batchSize = 1000)
+    {
+        if (olderThanDays < 0 || batchSize <= 0)
+        {
+            TempData["Error"] = "Niepoprawne parametry archiwizacji.";
+            return RedirectToAction(nameof(Logs));
+        }
+
+        try
+        {
+            var archivedCount = await auditLogService.ArchiveLogsAsync(olderThanDays, batchSize);
+            TempData["Success"] = $"Pomyslnie zarchiwizowano {archivedCount} logow.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = $"Blad podczas archiwizacji: {ex.Message}";
+        }
+
+        return RedirectToAction(nameof(Logs));
+    }
+
     [HttpGet("packing-incidents")]
     public async Task<IActionResult> PackingIncidents([FromQuery] PackingIncidentListFilterViewModel filter)
     {

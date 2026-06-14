@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 using KuchniaUCygana.Domain.Entities.Menu;
 using KuchniaUCygana.Domain.Enums;
 using KuchniaUCygana.Domain.Interfaces.Repositories.Menu;
@@ -252,6 +252,13 @@ public sealed class MealRepository : BaseRepository<Meal>, IMealRepository
         if (meal is null) return null;
         // recipes nie są używane w tej metodzie poza sprawdzeniem – można pominąć lub załadować osobno
         return meal;
+    }
+
+    public async Task<MealNutritionCost?> GetMealNutritionCostAsync(int mealId)
+    {
+        using var db = this.Factory.CreateConnection();
+        const string sql = "SELECT * FROM [dbo].[fn_MealNutritionCost](@MealId);";
+        return await db.QuerySingleOrDefaultAsync<MealNutritionCost>(sql, new { MealId = mealId });
     }
 
     private const string MealRowsCte = """

@@ -15,4 +15,6 @@ public interface IAuditLogService
     Task<SystemLogDto?> GetSystemLogByIdAsync(int id);
 
     Task<SystemLogDto> CreateSystemLogAsync(CreateSystemLogRequest request);
+
+    Task<int> ArchiveLogsAsync(int olderThanDays, int batchSize);
 }

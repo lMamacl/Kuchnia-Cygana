@@ -25,4 +25,23 @@ public sealed class MealDetailDto : MealDto
     public List<MealVariantDto> Variants { get; set; } = new();
 
     public List<MealImageDto> Images { get; set; } = new();
+
+    public MealNutritionCostDto? NutritionCost { get; set; }
+}
+
+public sealed class MealNutritionCostDto
+{
+    public int MealId { get; set; }
+
+    public decimal EstimatedCost { get; set; }
+
+    public decimal Calories { get; set; }
+
+    public decimal Protein { get; set; }
+
+    public decimal Carbohydrates { get; set; }
+
+    public decimal Fat { get; set; }
+
+    public decimal Fiber { get; set; }
 }
