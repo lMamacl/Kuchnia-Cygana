@@ -79,6 +79,12 @@
         </div>
         <span class="badge bg-indigo-lt text-indigo">logistics_pkg</span>
     </div>
+    @if (ViewData["SbdReportError"] != null)
+    {
+        <div class="alert alert-danger mx-3 mt-3 mb-0">
+            <strong>Błąd procedury SQL (logistics_pkg):</strong> @ViewData["SbdReportError"]
+        </div>
+    }
     <div class="card-body border-bottom">
         <div class="row g-3">
             <div class="col-6 col-lg-3">

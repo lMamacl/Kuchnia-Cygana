@@ -51,13 +51,14 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(DateTimeOffset? date)
+    public async Task<IActionResult> Index(DateTimeOffset? date, decimal? weight)
     {
         var selectedDate = date ?? DateTimeOffset.Now;
+        var estWeight = weight ?? 1.20m;
         ViewData["Title"] = "Logistyka";
         ViewData["Section"] = "Logistyka";
         ViewData["Description"] = $"Gotowość dostaw na {selectedDate:dd.MM.yyyy}.";
-        return View(await BuildDashboardViewModelAsync(selectedDate));
+        return View(await BuildDashboardViewModelAsync(selectedDate, estWeight));
     }
 
     [HttpPost("geocode")]
@@ -564,7 +565,7 @@ public sealed class LogisticsController : Controller
         };
     }
 
-    private async Task<LogisticsDashboardViewModel> BuildDashboardViewModelAsync(DateTimeOffset selectedDate)
+    private async Task<LogisticsDashboardViewModel> BuildDashboardViewModelAsync(DateTimeOffset selectedDate, decimal estimatedDeliveryWeightKg)
     {
         var deliveriesTask = _deliveryDataProvider.GetDeliveriesForDateAsync(selectedDate.Date);
         var routesTask = _deliveryRouteService.GetRoutesForDateAsync(selectedDate);
@@ -581,7 +582,7 @@ public sealed class LogisticsController : Controller
         var pendingAddressesTask = _addressRepository.GetPendingAddressesAsync();
         var sbdDispatchReportTask = _logisticsSbdReportRepository.GetDailyDispatchBoardAsync(
             selectedDate.Date,
-            estimatedDeliveryWeightKg: 1.20m);
+            estimatedDeliveryWeightKg: estimatedDeliveryWeightKg);
 
         await Task.WhenAll(
             deliveriesTask,
@@ -589,10 +590,21 @@ public sealed class LogisticsController : Controller
             vehicleSummaryTask,
             driverSummaryTask,
             pendingAddressesTask,
-            sbdDispatchReportTask);
+            sbdDispatchReportTask.ContinueWith(_ => { }));
 
         var vehicleSummary = await vehicleSummaryTask;
         var driverSummary = await driverSummaryTask;
+
+        LogisticsDailyDispatchBoardReport sbdDispatchReport;
+        try
+        {
+            sbdDispatchReport = await sbdDispatchReportTask;
+        }
+        catch (System.Exception ex)
+        {
+            sbdDispatchReport = new LogisticsDailyDispatchBoardReport();
+            ViewData["SbdReportError"] = ex.Message;
+        }
 
         return new LogisticsDashboardViewModel
         {
@@ -604,7 +616,7 @@ public sealed class LogisticsController : Controller
             ActiveDriversCount = driverSummary.ActiveCount,
             DriversWithVehicleCount = driverSummary.WithVehicleCount,
             PendingAddressesCount = (await pendingAddressesTask).Count(),
-            SbdDispatchReport = await sbdDispatchReportTask,
+            SbdDispatchReport = sbdDispatchReport,
         };
     }
 
