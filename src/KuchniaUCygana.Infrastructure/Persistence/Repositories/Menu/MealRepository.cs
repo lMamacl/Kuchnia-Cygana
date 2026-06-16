@@ -139,6 +139,7 @@ public sealed class MealRepository : BaseRepository<Meal>, IMealRepository
                 WHERE r.[MealId] = m.[Id]
                   AND i.[IsActive] = 1
                   AND i.[IsDeleted] = 0
+                  AND r.[IsDeleted] = 0
             ) legacyComponentStats
             OUTER APPLY (
                 SELECT COUNT(1) AS [ComponentGapCount]

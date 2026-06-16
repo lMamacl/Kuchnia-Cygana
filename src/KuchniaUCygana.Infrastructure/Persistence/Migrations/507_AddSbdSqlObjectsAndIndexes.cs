@@ -167,6 +167,9 @@ public sealed class AddSbdSqlObjectsAndIndexes : Migration
                 INNER JOIN [dbo].[Ingredients] i ON i.[Id] = r.[IngredientId]
                 LEFT JOIN [dbo].[NutritionFacts] nf ON nf.[IngredientId] = r.[IngredientId]
                 WHERE r.[MealId] = @MealId
+                  AND r.[IsDeleted] = 0
+                  AND i.[IsDeleted] = 0
+                  AND i.[IsActive] = 1
             );
             """);
     }
