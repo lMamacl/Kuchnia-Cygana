@@ -10,6 +10,8 @@ public sealed class AddM2CatalogArchitecture : Migration
         Alter.Table("Recipes")
             .AddColumn("IsDeleted").AsBoolean().NotNullable().WithDefaultValue(false);
 
+        CreateOrReplaceMealNutritionCostFunctionWithRecipeSoftDelete();
+
         Alter.Table("RecipeComponents")
             .AddColumn("CategoryId").AsInt32().Nullable()
             .AddColumn("ImageUrl").AsString(500).Nullable()
@@ -303,7 +305,63 @@ public sealed class AddM2CatalogArchitecture : Migration
         Delete.Column("PreparationTimeMinutes").FromTable("RecipeComponents");
         Delete.Column("ImageUrl").FromTable("RecipeComponents");
         Delete.Column("CategoryId").FromTable("RecipeComponents");
+        CreateOrReplaceMealNutritionCostFunctionWithoutRecipeSoftDelete();
         Delete.Column("IsDeleted").FromTable("Recipes");
+    }
+
+    private void CreateOrReplaceMealNutritionCostFunctionWithRecipeSoftDelete()
+    {
+        Execute.Sql(
+            """
+            CREATE OR ALTER FUNCTION [dbo].[fn_MealNutritionCost] (@MealId int)
+            RETURNS TABLE
+            AS
+            RETURN
+            (
+                SELECT
+                    @MealId AS [MealId],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * i.[CostPerUnit]), 0) AS decimal(18, 4)) AS [EstimatedCost],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * nf.[CaloriesPer100g]), 0) AS decimal(18, 2)) AS [Calories],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * nf.[ProteinPer100g]), 0) AS decimal(18, 2)) AS [Protein],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * nf.[CarbohydratesPer100g]), 0) AS decimal(18, 2)) AS [Carbohydrates],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * nf.[FatPer100g]), 0) AS decimal(18, 2)) AS [Fat],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * nf.[FiberPer100g]), 0) AS decimal(18, 2)) AS [Fiber]
+                FROM [dbo].[Recipes] r
+                INNER JOIN [dbo].[Ingredients] i ON i.[Id] = r.[IngredientId]
+                LEFT JOIN [dbo].[NutritionFacts] nf ON nf.[IngredientId] = r.[IngredientId]
+                WHERE r.[MealId] = @MealId
+                  AND r.[IsDeleted] = 0
+                  AND i.[IsDeleted] = 0
+                  AND i.[IsActive] = 1
+            );
+            """);
+    }
+
+    private void CreateOrReplaceMealNutritionCostFunctionWithoutRecipeSoftDelete()
+    {
+        Execute.Sql(
+            """
+            CREATE OR ALTER FUNCTION [dbo].[fn_MealNutritionCost] (@MealId int)
+            RETURNS TABLE
+            AS
+            RETURN
+            (
+                SELECT
+                    @MealId AS [MealId],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * i.[CostPerUnit]), 0) AS decimal(18, 4)) AS [EstimatedCost],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * nf.[CaloriesPer100g]), 0) AS decimal(18, 2)) AS [Calories],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * nf.[ProteinPer100g]), 0) AS decimal(18, 2)) AS [Protein],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * nf.[CarbohydratesPer100g]), 0) AS decimal(18, 2)) AS [Carbohydrates],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * nf.[FatPer100g]), 0) AS decimal(18, 2)) AS [Fat],
+                    CAST(COALESCE(SUM((r.[WeightInGrams] / 100.0) * nf.[FiberPer100g]), 0) AS decimal(18, 2)) AS [Fiber]
+                FROM [dbo].[Recipes] r
+                INNER JOIN [dbo].[Ingredients] i ON i.[Id] = r.[IngredientId]
+                LEFT JOIN [dbo].[NutritionFacts] nf ON nf.[IngredientId] = r.[IngredientId]
+                WHERE r.[MealId] = @MealId
+                  AND i.[IsDeleted] = 0
+                  AND i.[IsActive] = 1
+            );
+            """);
     }
 
     private void CreateSearchIndexes()
